@@ -116,8 +116,6 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder
             .HasIndex(x => x.SourceImportFclRateId)
-            .HasDatabaseName("ix_rate_headers_source_import_fcl_rate_id_unique")
-            .IsUnique()
-            .HasFilter("source_import_fcl_rate_id IS NOT NULL AND is_deleted = false");
+            .HasDatabaseName("ix_rate_headers_source_import_fcl_rate_id");
     }
 }

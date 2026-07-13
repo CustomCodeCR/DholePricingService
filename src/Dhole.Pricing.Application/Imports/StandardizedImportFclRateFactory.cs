@@ -9,7 +9,7 @@ namespace Dhole.Pricing.Application.Imports;
 
 public static class StandardizedImportFclRateFactory
 {
-    private static readonly HashSet<string> ReviewableEmailIssueCodes = new(
+    private static readonly HashSet<string> ReviewableImportIssueCodes = new(
         StringComparer.OrdinalIgnoreCase
     )
     {
@@ -39,7 +39,6 @@ public static class StandardizedImportFclRateFactory
         }
 
         var profile = extraction.ProfileReference;
-
         if (profile is null && sourceType != ImportSourceType.Email)
         {
             throw new InvalidOperationException(
@@ -57,10 +56,7 @@ public static class StandardizedImportFclRateFactory
 
         foreach (var row in extraction.Rows)
         {
-            var canPersist =
-                sourceType == ImportSourceType.Email
-                    ? CanPersistEmailRow(row, blockingIssuesByRecordId)
-                    : CanPersistStrictRow(row, blockingIssuesByRecordId);
+            var canPersist = CanPersistReviewableRow(row, blockingIssuesByRecordId);
 
             if (!canPersist)
             {
@@ -126,26 +122,14 @@ public static class StandardizedImportFclRateFactory
         return new StandardizedImportFclRateMappingResult(rates, skippedRows);
     }
 
-    private static bool CanPersistStrictRow(
-        DataExtractionFclPricingRow row,
-        IReadOnlyDictionary<Guid, DataExtractionFclPricingIssue[]> blockingIssuesByRecordId
-    )
-    {
-        return !blockingIssuesByRecordId.ContainsKey(row.Id)
-            && string.Equals(row.Status, "Valid", StringComparison.OrdinalIgnoreCase)
-            && row.HasAllRequiredCatalogReferences
-            && row.ValidFrom.HasValue
-            && row.ValidTo.HasValue;
-    }
-
-    private static bool CanPersistEmailRow(
+    private static bool CanPersistReviewableRow(
         DataExtractionFclPricingRow row,
         IReadOnlyDictionary<Guid, DataExtractionFclPricingIssue[]> blockingIssuesByRecordId
     )
     {
         var hasNonReviewableBlockingIssue =
             blockingIssuesByRecordId.TryGetValue(row.Id, out var rowIssues)
-            && rowIssues.Any(x => !ReviewableEmailIssueCodes.Contains(x.Code));
+            && rowIssues.Any(x => !ReviewableImportIssueCodes.Contains(x.Code));
 
         return !hasNonReviewableBlockingIssue
             && HasText(row.OriginPort)
@@ -184,17 +168,13 @@ public static class StandardizedImportFclRateFactory
     )
     {
         var hasRawValue = HasText(rawValue);
-
         var name = hasRawValue ? rawValue!.Trim() : fallbackName ?? "Por asignar";
-
         var normalized = NormalizeCatalogValue(name);
-
         var code =
             hasRawValue
                 ? normalized.Replace("-", string.Empty, StringComparison.Ordinal).ToUpperInvariant()
             : HasText(fallbackCode) ? fallbackCode!.Trim().ToUpperInvariant()
             : normalized.Replace("-", string.Empty, StringComparison.Ordinal).ToUpperInvariant();
-
         var slug = string.IsNullOrWhiteSpace(normalized) ? "pending" : normalized;
 
         code = Limit(
@@ -206,14 +186,12 @@ public static class StandardizedImportFclRateFactory
                 _ => 100,
             }
         );
-
         name = Limit(name, catalogGroupSlug is "currencies" or "container-types" ? 150 : 250);
-
         slug = Limit(slug, 200);
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{catalogGroupSlug}:{slug}"));
-
-        var id = new Guid(hash.AsSpan(0, 16).ToArray());
+        var idBytes = hash.AsSpan(0, 16).ToArray();
+        var id = new Guid(idBytes);
 
         return CatalogSnapshot.Create(id, name, code, slug);
     }
@@ -221,9 +199,7 @@ public static class StandardizedImportFclRateFactory
     private static string NormalizeCatalogValue(string value)
     {
         var decomposed = value.Trim().Normalize(NormalizationForm.FormD);
-
         var builder = new StringBuilder(decomposed.Length);
-
         var appendSeparator = false;
 
         foreach (var character in decomposed)
@@ -241,7 +217,6 @@ public static class StandardizedImportFclRateFactory
                 }
 
                 builder.Append(char.ToLowerInvariant(character));
-
                 appendSeparator = false;
             }
             else
@@ -253,20 +228,12 @@ public static class StandardizedImportFclRateFactory
         return builder.ToString();
     }
 
-    private static bool HasText(string? value)
-    {
-        return !string.IsNullOrWhiteSpace(value);
-    }
+    private static bool HasText(string? value) => !string.IsNullOrWhiteSpace(value);
 
-    private static bool IsNonNegative(decimal? value)
-    {
-        return !value.HasValue || value.Value >= 0m;
-    }
+    private static bool IsNonNegative(decimal? value) => !value.HasValue || value.Value >= 0m;
 
-    private static string Limit(string value, int maxLength)
-    {
-        return value.Length <= maxLength ? value : value[..maxLength];
-    }
+    private static string Limit(string value, int maxLength) =>
+        value.Length <= maxLength ? value : value[..maxLength];
 
     private static CatalogSnapshot ToSnapshot(DataExtractionCatalogReference reference)
     {

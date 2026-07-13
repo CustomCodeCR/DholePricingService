@@ -54,14 +54,16 @@ public sealed class UpdateRateCommandHandler(
             return Result.Failure(PricingErrors.RateInvalidStatus);
         }
 
-        foreach (var id in updatedIds)
+        foreach (var requestedDetail in extraDetails.Where(x => x.Id.HasValue))
         {
+            var id = requestedDetail.Id!.Value;
+
             if (!existingDetails.TryGetValue(id, out var detail))
             {
                 return Result.Failure(PricingErrors.RateCostDetailNotFound);
             }
 
-            if (IsAutomaticFixed(detail))
+            if (IsAutomaticFixed(detail) && detail.CostId != requestedDetail.CostId)
             {
                 return Result.Failure(PricingErrors.RateCostDetailFixedLocked);
             }
@@ -112,6 +114,7 @@ public sealed class UpdateRateCommandHandler(
         var selectorsChanged =
             rate.AgentId != command.AgentId
             || rate.CarrierId != command.CarrierId
+            || rate.PolId != command.PolId
             || rate.PoeId != command.PoeId
             || rate.PodId != command.PodId;
 

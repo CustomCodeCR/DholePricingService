@@ -75,14 +75,16 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             dbContext.ImportFclRates.AsNoTracking().Where(x => !x.IsDeleted),
             search: null,
             importBatchId: null,
-            sourceType,
-            status,
-            pol,
-            pod,
-            carrier,
-            containerType,
-            currency,
-            quoteDate,
+            sourceType: sourceType,
+            status: status,
+            agent: null,
+            carrier: carrier,
+            pol: pol,
+            poe: null,
+            pod: pod,
+            containerType: containerType,
+            currency: currency,
+            quoteDate: quoteDate,
             validFrom: null,
             validTo: null
         );
@@ -102,9 +104,11 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
         Guid? importBatchId = null,
         ImportSourceType? sourceType = null,
         ImportStatus? status = null,
-        string? pol = null,
-        string? pod = null,
+        string? agent = null,
         string? carrier = null,
+        string? pol = null,
+        string? poe = null,
+        string? pod = null,
         string? containerType = null,
         string? currency = null,
         DateTime? quoteDate = null,
@@ -119,14 +123,16 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             importBatchId,
             sourceType,
             status,
-            pol,
-            pod,
+            agent,
             carrier,
+            pol,
+            poe,
+            pod,
             containerType,
             currency,
-            quoteDate,
-            validFrom,
-            validTo
+            quoteDate: quoteDate,
+            validFrom: validFrom,
+            validTo: validTo
         );
 
         var total = await query.CountAsync(cancellationToken);
@@ -139,23 +145,63 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             .ThenBy(x => x.ContainerType)
             .Skip(page.Skip)
             .Take(page.PageSize)
-            .Select(x => new ImportRateDto(
-                x.Id,
-                x.ImportBatchId,
-                x.SourceType.ToString(),
-                x.Pol,
-                x.Pod,
-                x.Carrier,
-                x.ContainerType,
-                x.Currency,
-                x.Freight,
-                x.FreeDays,
-                x.ValidFrom,
-                x.ValidTo,
-                x.Status.ToString(),
-                x.RawDataJson ?? "{}",
-                x.UsedAsRateCount
-            ))
+            .Select(x => new ImportRateDto
+            {
+                Id = x.Id,
+                ImportBatchId = x.ImportBatchId,
+                ExtractionRecordId = x.ExtractionRecordId,
+                SourceType = x.SourceType.ToString(),
+                ImportProfileId = x.ImportProfileId,
+                ImportProfileName = x.ImportProfileName,
+                ImportProfileCode = x.ImportProfileCode,
+                ImportProfileSlug = x.ImportProfileSlug,
+                PolId = x.PolId,
+                Pol = x.PolName,
+                PolCode = x.PolCode,
+                PolSlug = x.PolSlug,
+                PoeId = x.PoeId,
+                Poe = x.PoeName,
+                PoeCode = x.PoeCode,
+                PoeSlug = x.PoeSlug,
+                PodId = x.PodId,
+                Pod = x.PodName,
+                PodCode = x.PodCode,
+                PodSlug = x.PodSlug,
+                CarrierId = x.CarrierId,
+                Carrier = x.CarrierName,
+                CarrierCode = x.CarrierCode,
+                CarrierSlug = x.CarrierSlug,
+                AgentId = x.AgentId,
+                Agent = x.AgentName,
+                AgentCode = x.AgentCode,
+                AgentSlug = x.AgentSlug,
+                ContainerTypeId = x.ContainerTypeId,
+                ContainerType = x.ContainerTypeName,
+                ContainerTypeCode = x.ContainerTypeCode,
+                ContainerTypeSlug = x.ContainerTypeSlug,
+                CurrencyId = x.CurrencyId,
+                Currency = x.CurrencyName,
+                CurrencyCode = x.CurrencyCode,
+                CurrencySlug = x.CurrencySlug,
+                Commodity = x.Commodity,
+                Freight = x.OceanFreight ?? x.Freight,
+                OceanFreight = x.OceanFreight,
+                OriginCharges = x.OriginCharges,
+                DestinationCharges = x.DestinationCharges,
+                Surcharges = x.Surcharges,
+                TotalCost = x.TotalCost,
+                TotalSale = x.TotalSale,
+                Profit = x.Profit,
+                Margin = x.Margin,
+                FreeDays = x.FreeDays,
+                TransitDays = x.TransitDays,
+                ValidFrom = x.ValidFrom,
+                ValidTo = x.ValidTo,
+                RawDataJson = x.RawDataJson ?? "{}",
+                Status = x.Status.ToString(),
+                UsedAsRateCount = x.UsedAsRateCount,
+                CreatedAsRateHeaderId = x.CreatedAsRateHeaderId,
+            })
             .ToListAsync(cancellationToken);
 
         return PagedResult<ImportRateDto>.Create(items, page.PageNumber, page.PageSize, total);
@@ -166,9 +212,11 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
         Guid? importBatchId = null,
         ImportSourceType? sourceType = null,
         ImportStatus? status = null,
-        string? pol = null,
-        string? pod = null,
+        string? agent = null,
         string? carrier = null,
+        string? pol = null,
+        string? poe = null,
+        string? pod = null,
         string? containerType = null,
         string? currency = null,
         DateTime? quoteDate = null,
@@ -181,12 +229,14 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             importBatchId,
             sourceType,
             status,
-            pol,
-            pod,
+            agent,
             carrier,
+            pol,
+            poe,
+            pod,
             containerType,
             currency,
-            quoteDate,
+            quoteDate: quoteDate,
             validFrom: null,
             validTo: null
         );
@@ -202,12 +252,12 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
                 x.Id,
                 x.ImportBatchId,
                 x.SourceType.ToString(),
-                x.Pol,
-                x.Pod,
-                x.Carrier,
-                x.ContainerType,
-                x.Currency,
-                x.Freight,
+                x.PolName,
+                x.PodName,
+                x.CarrierName,
+                x.ContainerTypeName,
+                x.CurrencyName,
+                x.OceanFreight ?? x.Freight,
                 x.FreeDays,
                 x.ValidFrom,
                 x.ValidTo,
@@ -224,9 +274,11 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
         Guid? importBatchId,
         ImportSourceType? sourceType,
         ImportStatus? status,
-        string? pol,
-        string? pod,
+        string? agent,
         string? carrier,
+        string? pol,
+        string? poe,
+        string? pod,
         string? containerType,
         string? currency,
         DateTime? quoteDate,
@@ -240,10 +292,19 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
 
             query = query.Where(x =>
                 x.Pol.ToLower().Contains(value)
+                || x.PolName.ToLower().Contains(value)
+                || x.Poe.ToLower().Contains(value)
+                || x.PoeName.ToLower().Contains(value)
                 || x.Pod.ToLower().Contains(value)
+                || x.PodName.ToLower().Contains(value)
                 || x.Carrier.ToLower().Contains(value)
+                || x.CarrierName.ToLower().Contains(value)
+                || x.Agent.ToLower().Contains(value)
+                || x.AgentName.ToLower().Contains(value)
                 || x.ContainerType.ToLower().Contains(value)
+                || x.ContainerTypeName.ToLower().Contains(value)
                 || x.Currency.ToLower().Contains(value)
+                || x.CurrencyName.ToLower().Contains(value)
                 || x.SourceType.ToString().ToLower().Contains(value)
                 || x.Status.ToString().ToLower().Contains(value)
                 || (x.RawDataJson != null && x.RawDataJson.ToLower().Contains(value))
@@ -265,39 +326,88 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             query = query.Where(x => x.Status == status.Value);
         }
 
-        if (!string.IsNullOrWhiteSpace(pol))
+        if (!string.IsNullOrWhiteSpace(agent))
         {
-            var value = NormalizeSearchValue(pol);
+            var (primary, secondary) = ParseFilterValues(agent);
 
-            query = query.Where(x => x.Pol.ToLower().Contains(value));
-        }
-
-        if (!string.IsNullOrWhiteSpace(pod))
-        {
-            var value = NormalizeSearchValue(pod);
-
-            query = query.Where(x => x.Pod.ToLower().Contains(value));
+            query = query.Where(x =>
+                x.Agent.ToLower().Contains(primary)
+                || x.AgentName.ToLower().Contains(primary)
+                || (secondary != null && x.Agent.ToLower().Contains(secondary))
+                || (secondary != null && x.AgentName.ToLower().Contains(secondary))
+            );
         }
 
         if (!string.IsNullOrWhiteSpace(carrier))
         {
-            var value = NormalizeSearchValue(carrier);
+            var (primary, secondary) = ParseFilterValues(carrier);
 
-            query = query.Where(x => x.Carrier.ToLower().Contains(value));
+            query = query.Where(x =>
+                x.Carrier.ToLower().Contains(primary)
+                || x.CarrierName.ToLower().Contains(primary)
+                || (secondary != null && x.Carrier.ToLower().Contains(secondary))
+                || (secondary != null && x.CarrierName.ToLower().Contains(secondary))
+            );
+        }
+
+        if (!string.IsNullOrWhiteSpace(pol))
+        {
+            var (primary, secondary) = ParseFilterValues(pol);
+
+            query = query.Where(x =>
+                x.Pol.ToLower().Contains(primary)
+                || x.PolName.ToLower().Contains(primary)
+                || (secondary != null && x.Pol.ToLower().Contains(secondary))
+                || (secondary != null && x.PolName.ToLower().Contains(secondary))
+            );
+        }
+
+        if (!string.IsNullOrWhiteSpace(poe))
+        {
+            var (primary, secondary) = ParseFilterValues(poe);
+
+            query = query.Where(x =>
+                x.Poe.ToLower().Contains(primary)
+                || x.PoeName.ToLower().Contains(primary)
+                || (secondary != null && x.Poe.ToLower().Contains(secondary))
+                || (secondary != null && x.PoeName.ToLower().Contains(secondary))
+            );
+        }
+
+        if (!string.IsNullOrWhiteSpace(pod))
+        {
+            var (primary, secondary) = ParseFilterValues(pod);
+
+            query = query.Where(x =>
+                x.Pod.ToLower().Contains(primary)
+                || x.PodName.ToLower().Contains(primary)
+                || (secondary != null && x.Pod.ToLower().Contains(secondary))
+                || (secondary != null && x.PodName.ToLower().Contains(secondary))
+            );
         }
 
         if (!string.IsNullOrWhiteSpace(containerType))
         {
-            var value = NormalizeSearchValue(containerType);
+            var (primary, secondary) = ParseFilterValues(containerType);
 
-            query = query.Where(x => x.ContainerType.ToLower().Contains(value));
+            query = query.Where(x =>
+                x.ContainerType.ToLower().Contains(primary)
+                || x.ContainerTypeName.ToLower().Contains(primary)
+                || (secondary != null && x.ContainerType.ToLower().Contains(secondary))
+                || (secondary != null && x.ContainerTypeName.ToLower().Contains(secondary))
+            );
         }
 
         if (!string.IsNullOrWhiteSpace(currency))
         {
-            var value = NormalizeSearchValue(currency);
+            var (primary, secondary) = ParseFilterValues(currency);
 
-            query = query.Where(x => x.Currency.ToLower().Contains(value));
+            query = query.Where(x =>
+                x.Currency.ToLower().Contains(primary)
+                || x.CurrencyName.ToLower().Contains(primary)
+                || (secondary != null && x.Currency.ToLower().Contains(secondary))
+                || (secondary != null && x.CurrencyName.ToLower().Contains(secondary))
+            );
         }
 
         if (quoteDate.HasValue)
@@ -323,5 +433,19 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
     private static string NormalizeSearchValue(string value)
     {
         return value.Trim().ToLowerInvariant();
+    }
+
+    private static (string Primary, string? Secondary) ParseFilterValues(string value)
+    {
+        var values = value
+            .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(NormalizeSearchValue)
+            .Distinct(StringComparer.Ordinal)
+            .Take(2)
+            .ToArray();
+
+        var primary = values.FirstOrDefault() ?? NormalizeSearchValue(value);
+
+        return (primary, values.Length > 1 ? values[1] : null);
     }
 }

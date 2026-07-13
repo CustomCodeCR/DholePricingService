@@ -72,7 +72,38 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
 
         var cost = await costs.GetByIdAsync(input.CostId.Value, cancellationToken);
 
-        if (cost is null || cost.IsDeleted)
+        if (cost is null)
+        {
+            return RateExtraDetailResolution.Failure(PricingErrors.CostNotFound);
+        }
+
+        if (cost.CostType == CostType.Fixed)
+        {
+            if (!input.Id.HasValue)
+            {
+                return RateExtraDetailResolution.Failure(PricingErrors.RateCostDetailFixedLocked);
+            }
+
+            var saleAmount = cost.AgentId.HasValue ? 0m : input.SaleAmount;
+
+            return RateExtraDetailResolution.Success(
+                new ResolvedRateExtraDetail(
+                    input.Id,
+                    cost.Id,
+                    cost.Name,
+                    cost.CostDetailType,
+                    cost.CostType,
+                    cost.CurrencyId,
+                    cost.CurrencyName,
+                    cost.CurrencyCode,
+                    input.CostAmount,
+                    saleAmount,
+                    Normalize(input.Notes) ?? cost.Notes
+                )
+            );
+        }
+
+        if (cost.IsDeleted)
         {
             return RateExtraDetailResolution.Failure(PricingErrors.CostNotFound);
         }
@@ -80,11 +111,6 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
         if (!cost.IsActive)
         {
             return RateExtraDetailResolution.Failure(PricingErrors.CostIsInactive);
-        }
-
-        if (cost.CostType == CostType.Fixed)
-        {
-            return RateExtraDetailResolution.Failure(PricingErrors.RateCostDetailFixedLocked);
         }
 
         return RateExtraDetailResolution.Success(

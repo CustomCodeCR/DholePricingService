@@ -73,16 +73,6 @@ public sealed class CreateRateCommandHandler(
                 return Result.Failure<Guid>(PricingErrors.ImportFclRateNotFound);
             }
 
-            var alreadyCreated = await rateHeaders.ExistsBySourceImportFclRateIdAsync(
-                sourceId,
-                cancellationToken
-            );
-
-            if (alreadyCreated || importedRate.CreatedAsRateHeaderId.HasValue)
-            {
-                return Result.Failure<Guid>(PricingErrors.ImportFclRateAlreadyCreatedAsRate);
-            }
-
             if (importedRate.Status == ImportStatus.Pending)
             {
                 if (!command.CanApproveImportedRate)
@@ -106,11 +96,11 @@ public sealed class CreateRateCommandHandler(
         {
             rate = importedRate is null
                 ? CreateManualRate(command)
-                : CreateFromImportedRate(importedRate, command.CreatedBy);
+                : CreateFromImportedRate(command, importedRate.Id);
 
             if (importedRate is not null)
             {
-                AddImportedFreight(rate, importedRate, command.CreatedBy);
+                AddImportedFreight(rate, importedRate, command, command.CreatedBy);
             }
 
             foreach (var detail in resolvedDetails)
@@ -277,41 +267,42 @@ public sealed class CreateRateCommandHandler(
         );
     }
 
-    private static RateHeader CreateFromImportedRate(ImportFclRates importedRate, Guid? createdBy)
+    private static RateHeader CreateFromImportedRate(CreateRateCommand command, Guid importedRateId)
     {
         return RateHeader.Create(
-            importedRate.Id,
-            importedRate.AgentId,
-            importedRate.AgentName,
-            importedRate.AgentCode,
-            importedRate.CarrierId,
-            importedRate.CarrierName,
-            importedRate.CarrierCode,
-            importedRate.PolId,
-            importedRate.PolName,
-            importedRate.PolCode,
-            importedRate.PoeId,
-            importedRate.PoeName,
-            importedRate.PoeCode,
-            importedRate.PodId,
-            importedRate.PodName,
-            importedRate.PodCode,
-            importedRate.ContainerTypeId,
-            importedRate.ContainerTypeName,
-            importedRate.ContainerTypeCode,
-            importedRate.CurrencyId,
-            importedRate.CurrencyName,
-            importedRate.CurrencyCode,
-            importedRate.FreeDays,
-            importedRate.ValidFrom,
-            importedRate.ValidTo,
-            createdBy
+            importedRateId,
+            command.AgentId,
+            command.AgentName,
+            command.AgentCode,
+            command.CarrierId,
+            command.CarrierName,
+            command.CarrierCode,
+            command.PolId,
+            command.PolName,
+            command.PolCode,
+            command.PoeId,
+            command.PoeName,
+            command.PoeCode,
+            command.PodId,
+            command.PodName,
+            command.PodCode,
+            command.ContainerTypeId,
+            command.ContainerTypeName,
+            command.ContainerTypeCode,
+            command.CurrencyId,
+            command.CurrencyName,
+            command.CurrencyCode,
+            command.FreeDays,
+            command.ValidFrom,
+            command.ValidTo,
+            command.CreatedBy
         );
     }
 
     private static void AddImportedFreight(
         RateHeader rate,
         ImportFclRates importedRate,
+        CreateRateCommand command,
         Guid? createdBy
     )
     {
@@ -326,9 +317,9 @@ public sealed class CreateRateCommandHandler(
             name: "Flete internacional",
             CostDetailType.Freight,
             CostType.Variable,
-            importedRate.CurrencyId,
-            importedRate.CurrencyName,
-            importedRate.CurrencyCode,
+            command.CurrencyId,
+            command.CurrencyName,
+            command.CurrencyCode,
             costAmount,
             saleAmount,
             importedRate.RawDataJson,

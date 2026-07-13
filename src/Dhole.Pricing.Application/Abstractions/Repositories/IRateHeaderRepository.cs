@@ -13,16 +13,6 @@ public interface IRateHeaderRepository : IRepository<RateHeader, Guid>
         CancellationToken cancellationToken = default
     );
 
-    Task<RateHeader?> GetBySourceImportFclRateIdAsync(
-        Guid sourceImportFclRateId,
-        CancellationToken cancellationToken = default
-    );
-
-    Task<bool> ExistsBySourceImportFclRateIdAsync(
-        Guid sourceImportFclRateId,
-        CancellationToken cancellationToken = default
-    );
-
     Task<IReadOnlyCollection<RateHeader>> GetValidRateHeadersAsync(
         Guid? agentId = null,
         Guid? carrierId = null,

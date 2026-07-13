@@ -10,9 +10,11 @@ public sealed record GetImportRatesForSelectQuery(
     Guid? ImportBatchId = null,
     ImportSourceType? SourceType = null,
     ImportStatus? Status = null,
-    string? Pol = null,
-    string? Pod = null,
+    string? Agent = null,
     string? Carrier = null,
+    string? Pol = null,
+    string? Poe = null,
+    string? Pod = null,
     string? ContainerType = null,
     string? Currency = null,
     DateTime? QuoteDate = null

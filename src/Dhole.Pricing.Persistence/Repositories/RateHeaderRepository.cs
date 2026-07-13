@@ -23,30 +23,6 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
     }
 
-    public Task<RateHeader?> GetBySourceImportFclRateIdAsync(
-        Guid sourceImportFclRateId,
-        CancellationToken cancellationToken = default
-    )
-    {
-        return dbContext
-            .RateHeaders.Include(x => x.RateDetails)
-            .FirstOrDefaultAsync(
-                x => x.SourceImportFclRateId == sourceImportFclRateId && !x.IsDeleted,
-                cancellationToken
-            );
-    }
-
-    public Task<bool> ExistsBySourceImportFclRateIdAsync(
-        Guid sourceImportFclRateId,
-        CancellationToken cancellationToken = default
-    )
-    {
-        return dbContext.RateHeaders.AnyAsync(
-            x => x.SourceImportFclRateId == sourceImportFclRateId && !x.IsDeleted,
-            cancellationToken
-        );
-    }
-
     public async Task<IReadOnlyCollection<RateHeader>> GetValidRateHeadersAsync(
         Guid? agentId = null,
         Guid? carrierId = null,
@@ -189,6 +165,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             .Take(page.PageSize)
             .Select(x => new RateDto(
                 x.Id,
+                x.SourceImportFclRateId,
                 x.AgentId,
                 x.AgentName,
                 x.AgentCode,

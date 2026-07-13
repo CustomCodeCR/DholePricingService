@@ -5,11 +5,12 @@ namespace Dhole.Pricing.Infrastructure.Cache;
 
 internal static class ImportRateCacheKeys
 {
-    public const string QueryVersion = "pricing:imports:rates:queries:version";
+    private const string ContractVersion = "v3";
+    public const string QueryVersion = $"pricing:imports:rates:{ContractVersion}:queries:version";
 
     public static string ImportRateById(Guid importRateId)
     {
-        return $"pricing:imports:rates:id:{GuidPart(importRateId)}";
+        return $"pricing:imports:rates:{ContractVersion}:id:{GuidPart(importRateId)}";
     }
 
     public static string ImportRatesByBatch(string version, Guid importBatchId)

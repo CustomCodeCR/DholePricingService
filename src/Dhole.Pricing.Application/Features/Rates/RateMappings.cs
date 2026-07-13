@@ -9,6 +9,7 @@ internal static class RateMappings
     {
         return new RateDto(
             rate.Id,
+            rate.SourceImportFclRateId,
             rate.AgentId,
             rate.AgentName,
             rate.AgentCode,

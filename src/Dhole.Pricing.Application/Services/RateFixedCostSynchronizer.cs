@@ -14,6 +14,18 @@ public sealed class RateFixedCostSynchronizer(ICostRepository costs) : IRateFixe
         CancellationToken cancellationToken = default
     )
     {
+        var existingAmounts = rate
+            .RateDetails.Where(x => x.CostId.HasValue && x.CostType == CostType.Fixed)
+            .GroupBy(x => x.CostId!.Value)
+            .ToDictionary(
+                group => group.Key,
+                group =>
+                {
+                    var detail = group.First();
+                    return (detail.CostAmount, detail.SaleAmount);
+                }
+            );
+
         rate.RemoveAutomaticFixedDetails(updatedBy);
 
         var resolvedCosts = new List<Cost>();
@@ -47,7 +59,13 @@ public sealed class RateFixedCostSynchronizer(ICostRepository costs) : IRateFixe
 
         foreach (var cost in resolvedCosts.GroupBy(x => x.Id).Select(group => group.First()))
         {
-            var saleAmount = cost.AgentId.HasValue ? 0m : cost.SaleAmount;
+            var hasExistingAmount = existingAmounts.TryGetValue(cost.Id, out var existingAmount);
+            var costAmount = hasExistingAmount ? existingAmount.CostAmount : cost.CostAmount;
+            var saleAmount = cost.AgentId.HasValue
+                ? 0m
+                : hasExistingAmount
+                    ? existingAmount.SaleAmount
+                    : cost.SaleAmount;
 
             rate.AddRateDetail(
                 rate.Id,
@@ -58,7 +76,7 @@ public sealed class RateFixedCostSynchronizer(ICostRepository costs) : IRateFixe
                 cost.CurrencyId,
                 cost.CurrencyName,
                 cost.CurrencyCode,
-                cost.CostAmount,
+                costAmount,
                 saleAmount,
                 cost.Notes,
                 updatedBy
