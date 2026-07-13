@@ -307,7 +307,6 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
                 || x.CurrencyName.ToLower().Contains(value)
                 || x.SourceType.ToString().ToLower().Contains(value)
                 || x.Status.ToString().ToLower().Contains(value)
-                || (x.RawDataJson != null && x.RawDataJson.ToLower().Contains(value))
             );
         }
 
@@ -331,9 +330,9 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             var (primary, secondary) = ParseFilterValues(agent);
 
             query = query.Where(x =>
-                x.Agent.ToLower().Contains(primary)
+                x.AgentCode.ToLower().Contains(primary)
                 || x.AgentName.ToLower().Contains(primary)
-                || (secondary != null && x.Agent.ToLower().Contains(secondary))
+                || (secondary != null && x.AgentCode.ToLower().Contains(secondary))
                 || (secondary != null && x.AgentName.ToLower().Contains(secondary))
             );
         }
@@ -343,9 +342,9 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             var (primary, secondary) = ParseFilterValues(carrier);
 
             query = query.Where(x =>
-                x.Carrier.ToLower().Contains(primary)
+                x.CarrierCode.ToLower().Contains(primary)
                 || x.CarrierName.ToLower().Contains(primary)
-                || (secondary != null && x.Carrier.ToLower().Contains(secondary))
+                || (secondary != null && x.CarrierCode.ToLower().Contains(secondary))
                 || (secondary != null && x.CarrierName.ToLower().Contains(secondary))
             );
         }
@@ -355,10 +354,10 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             var (primary, secondary) = ParseFilterValues(pol);
 
             query = query.Where(x =>
-                x.Pol.ToLower().Contains(primary)
-                || x.PolName.ToLower().Contains(primary)
-                || (secondary != null && x.Pol.ToLower().Contains(secondary))
-                || (secondary != null && x.PolName.ToLower().Contains(secondary))
+                primary.ToLower().Contains(x.PolCode.ToLower())
+                || primary.ToLower().Contains(x.PolName.ToLower())
+                || (secondary != null && secondary.ToLower().Contains(x.PolCode.ToLower()))
+                || (secondary != null && secondary.ToLower().Contains(x.PolName.ToLower()))
             );
         }
 
@@ -367,10 +366,10 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             var (primary, secondary) = ParseFilterValues(poe);
 
             query = query.Where(x =>
-                x.Poe.ToLower().Contains(primary)
-                || x.PoeName.ToLower().Contains(primary)
-                || (secondary != null && x.Poe.ToLower().Contains(secondary))
-                || (secondary != null && x.PoeName.ToLower().Contains(secondary))
+                primary.ToLower().Contains(x.PoeCode.ToLower())
+                || primary.ToLower().Contains(x.PoeName.ToLower())
+                || (secondary != null && secondary.ToLower().Contains(x.PoeCode.ToLower()))
+                || (secondary != null && secondary.ToLower().Contains(x.PoeName.ToLower()))
             );
         }
 
@@ -379,10 +378,10 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             var (primary, secondary) = ParseFilterValues(pod);
 
             query = query.Where(x =>
-                x.Pod.ToLower().Contains(primary)
-                || x.PodName.ToLower().Contains(primary)
-                || (secondary != null && x.Pod.ToLower().Contains(secondary))
-                || (secondary != null && x.PodName.ToLower().Contains(secondary))
+                primary.ToLower().Contains(x.PodCode.ToLower())
+                || primary.ToLower().Contains(x.PodName.ToLower())
+                || (secondary != null && secondary.ToLower().Contains(x.PodCode.ToLower()))
+                || (secondary != null && secondary.ToLower().Contains(x.PodName.ToLower()))
             );
         }
 
@@ -391,9 +390,9 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             var (primary, secondary) = ParseFilterValues(containerType);
 
             query = query.Where(x =>
-                x.ContainerType.ToLower().Contains(primary)
+                x.ContainerTypeCode.ToLower().Contains(primary)
                 || x.ContainerTypeName.ToLower().Contains(primary)
-                || (secondary != null && x.ContainerType.ToLower().Contains(secondary))
+                || (secondary != null && x.ContainerTypeCode.ToLower().Contains(secondary))
                 || (secondary != null && x.ContainerTypeName.ToLower().Contains(secondary))
             );
         }
@@ -403,9 +402,9 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             var (primary, secondary) = ParseFilterValues(currency);
 
             query = query.Where(x =>
-                x.Currency.ToLower().Contains(primary)
+                x.CurrencyCode.ToLower().Contains(primary)
                 || x.CurrencyName.ToLower().Contains(primary)
-                || (secondary != null && x.Currency.ToLower().Contains(secondary))
+                || (secondary != null && x.CurrencyCode.ToLower().Contains(secondary))
                 || (secondary != null && x.CurrencyName.ToLower().Contains(secondary))
             );
         }
