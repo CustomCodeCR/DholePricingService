@@ -18,12 +18,16 @@ public sealed class ExtractAndPersistFclPricingImportService(
     )
     {
         if (request.FileContent.Length == 0)
+        {
             throw new InvalidOperationException("El archivo de importación está vacío.");
+        }
 
         if (string.IsNullOrWhiteSpace(request.ProfileSlug))
+        {
             throw new InvalidOperationException(
                 "Debe seleccionar un perfil de pricing-imports-profiles."
             );
+        }
 
         var correlationId = string.IsNullOrWhiteSpace(request.CorrelationId)
             ? Guid.NewGuid().ToString()
@@ -59,19 +63,72 @@ public sealed class ExtractAndPersistFclPricingImportService(
             );
         }
 
-        var mapped = StandardizedImportFclRateFactory.CreateRates(
+        return await PersistExtractionAsync(
             request.ImportBatchId,
             request.SourceType,
             extraction,
-            request.RequestedBy
+            request.RequestedBy,
+            cancellationToken
+        );
+    }
+
+    public async Task<ExtractAndPersistFclPricingImportResult> PersistExtractionAsync(
+        Guid importBatchId,
+        ImportSourceType sourceType,
+        DataExtractionFclPricingResult extraction,
+        Guid? requestedBy,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (importBatchId == Guid.Empty)
+        {
+            throw new InvalidOperationException(
+                "El identificador del lote de Pricing es requerido."
+            );
+        }
+
+        if (!extraction.Success)
+        {
+            return new ExtractAndPersistFclPricingImportResult(
+                false,
+                extraction.ExtractionExecutionId,
+                0,
+                extraction.Summary.InvalidRows,
+                extraction.Issues,
+                extraction.ErrorCode,
+                extraction.ErrorMessage
+            );
+        }
+
+        var mapped = StandardizedImportFclRateFactory.CreateRates(
+            importBatchId,
+            sourceType,
+            extraction,
+            requestedBy
         );
 
-        foreach (var rate in mapped.Rates)
+        var existingExtractionRecordIds = (
+            await importFclRateRepository.GetByImportFclBatchIdAsync(
+                importBatchId,
+                cancellationToken
+            )
+        )
+            .Select(x => x.ExtractionRecordId)
+            .ToHashSet();
+
+        var newRates = mapped
+            .Rates.Where(x => !existingExtractionRecordIds.Contains(x.ExtractionRecordId))
+            .ToArray();
+
+        foreach (var rate in newRates)
         {
             await importFclRateRepository.AddAsync(rate, cancellationToken);
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        if (newRates.Length > 0)
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
 
         return new ExtractAndPersistFclPricingImportResult(
             true,

@@ -80,6 +80,7 @@ app.UseMiddleware<AuditEndpointMiddleware>();
 app.MapCostEndpoints();
 app.MapImportRateEndpoints();
 app.MapRateEndpoints();
+app.MapDataExtractionImportEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {

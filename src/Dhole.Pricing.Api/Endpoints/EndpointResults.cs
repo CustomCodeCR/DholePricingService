@@ -86,4 +86,12 @@ internal static class EndpointResults
             )
         );
     }
+
+    public static IResult Unauthorized(string code, string message, HttpContext httpContext)
+    {
+        return Results.Json(
+            ApiErrorResponse.Create(code, message, httpContext.TraceIdentifier),
+            statusCode: StatusCodes.Status401Unauthorized
+        );
+    }
 }
