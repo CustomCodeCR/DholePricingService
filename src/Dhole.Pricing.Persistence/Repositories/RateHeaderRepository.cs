@@ -154,7 +154,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         var total = await query.CountAsync(cancellationToken);
 
         var items = await query
-            .OrderByDescending(x => x.ValidFrom)
+            .OrderByDescending(x => x.CreatedAtUtc)
             .ThenBy(x => x.AgentName)
             .ThenBy(x => x.CarrierName)
             .ThenBy(x => x.PolName)

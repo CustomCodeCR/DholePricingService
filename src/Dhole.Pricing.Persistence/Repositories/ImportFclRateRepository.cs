@@ -242,7 +242,7 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
         );
 
         return await query
-            .OrderByDescending(x => x.ValidFrom)
+            .OrderByDescending(x => x.CreatedAtUtc)
             .ThenBy(x => x.Carrier)
             .ThenBy(x => x.Pol)
             .ThenBy(x => x.Pod)
