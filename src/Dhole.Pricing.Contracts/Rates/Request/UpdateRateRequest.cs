@@ -1,0 +1,30 @@
+namespace Dhole.Pricing.Contracts.Rates.Request;
+
+public sealed record UpdateRateRequest(
+    Guid AgentId,
+    string AgentName,
+    string AgentCode,
+    Guid CarrierId,
+    string CarrierName,
+    string CarrierCode,
+    Guid PolId,
+    string PolName,
+    string PolCode,
+    Guid PoeId,
+    string PoeName,
+    string PoeCode,
+    Guid PodId,
+    string PodName,
+    string PodCode,
+    Guid ContainerTypeId,
+    string ContainerTypeName,
+    string ContainerTypeCode,
+    Guid CurrencyId,
+    string CurrencyName,
+    string CurrencyCode,
+    int FreeDays,
+    DateTime ValidFrom,
+    DateTime ValidTo,
+    IReadOnlyCollection<UpsertRateExtraDetailRequest> ExtraDetails,
+    IReadOnlyCollection<Guid> RemovedExtraDetailIds
+);
