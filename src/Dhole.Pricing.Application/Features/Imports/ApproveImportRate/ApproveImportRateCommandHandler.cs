@@ -26,7 +26,9 @@ public sealed class ApproveImportRateCommandHandler(
         var ids = command.Ids.Where(x => x != Guid.Empty).Distinct().ToArray();
 
         if (ids.Length == 0)
+        {
             return Result.Failure(PricingErrors.InvalidImportFclRate);
+        }
 
         var entities = new List<ImportFclRates>(ids.Length);
 
@@ -35,20 +37,25 @@ public sealed class ApproveImportRateCommandHandler(
             var importRate = await importRates.GetByIdAsync(id, cancellationToken);
 
             if (importRate is null || importRate.IsDeleted)
+            {
                 return Result.Failure(PricingErrors.ImportFclRateNotFound);
+            }
+
+            if (importRate.Status is not (ImportStatus.Pending or ImportStatus.Approved))
+            {
+                return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
+            }
 
             entities.Add(importRate);
         }
 
-        foreach (var importRate in entities)
+        var pendingEntities = entities
+            .Where(importRate => importRate.Status == ImportStatus.Pending)
+            .ToArray();
+
+        foreach (var importRate in pendingEntities)
         {
             var before = PricingAuditSnapshots.From(importRate);
-
-            if (importRate.Status == ImportStatus.Approved)
-                return Result.Success();
-
-            if (importRate.Status != ImportStatus.Pending)
-                return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
 
             importRate.Approve(command.ApprovedBy);
 
@@ -72,9 +79,14 @@ public sealed class ApproveImportRateCommandHandler(
             );
         }
 
+        if (pendingEntities.Length == 0)
+        {
+            return Result.Success();
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        foreach (var importRate in entities)
+        foreach (var importRate in pendingEntities)
         {
             await cache.RemoveImportRateCacheAsync(
                 importRate.Id,

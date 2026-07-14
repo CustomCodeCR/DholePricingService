@@ -48,11 +48,19 @@ public static class ImportRateEndpoints
             .RequireScope(PricingConstants.Scopes.ImportFclRateCreate);
 
         group
-            .MapPost("/approve", ApproveImportRateAsync)
+            .MapPost("/approve", ApproveImportRatesAsync)
             .RequireScope(PricingConstants.Scopes.ImportFclRateApprove);
 
         group
-            .MapPost("/reject", RejectImportRateAsync)
+            .MapPost("/{importRateId:guid}/approve", ApproveImportRateAsync)
+            .RequireScope(PricingConstants.Scopes.ImportFclRateApprove);
+
+        group
+            .MapPost("/reject", RejectImportRatesAsync)
+            .RequireScope(PricingConstants.Scopes.ImportFclRateReject);
+
+        group
+            .MapPost("/{importRateId:guid}/reject", RejectImportRateAsync)
             .RequireScope(PricingConstants.Scopes.ImportFclRateReject);
 
         group
@@ -271,8 +279,8 @@ public static class ImportRateEndpoints
         return EndpointResults.FromResult(result, httpContext);
     }
 
-    private static async Task<IResult> ApproveImportRateAsync(
-        ApproveImportRateBatchRequest request,
+    private static async Task<IResult> ApproveImportRatesAsync(
+        [FromBody] ApproveImportRateBatchRequest request,
         ICommandDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -286,8 +294,23 @@ public static class ImportRateEndpoints
         return EndpointResults.FromResult(result, httpContext);
     }
 
-    private static async Task<IResult> RejectImportRateAsync(
-        RejectImportRateBatchRequest request,
+    private static async Task<IResult> ApproveImportRateAsync(
+        Guid importRateId,
+        ICommandDispatcher dispatcher,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await dispatcher.DispatchAsync(
+            new ApproveImportRateCommand([importRateId], httpContext.GetCurrentUserId()),
+            cancellationToken
+        );
+
+        return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static async Task<IResult> RejectImportRatesAsync(
+        [FromBody] RejectImportRateBatchRequest request,
         ICommandDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -296,6 +319,26 @@ public static class ImportRateEndpoints
         var result = await dispatcher.DispatchAsync(
             new RejectImportRateCommand(
                 request.Ids,
+                request.Reason,
+                httpContext.GetCurrentUserId()
+            ),
+            cancellationToken
+        );
+
+        return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static async Task<IResult> RejectImportRateAsync(
+        Guid importRateId,
+        [FromBody] RejectImportRateRequest request,
+        ICommandDispatcher dispatcher,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await dispatcher.DispatchAsync(
+            new RejectImportRateCommand(
+                [importRateId],
                 request.Reason,
                 httpContext.GetCurrentUserId()
             ),

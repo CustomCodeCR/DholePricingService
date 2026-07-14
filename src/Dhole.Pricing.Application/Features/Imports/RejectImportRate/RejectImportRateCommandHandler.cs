@@ -24,9 +24,17 @@ public sealed class RejectImportRateCommandHandler(
     )
     {
         var ids = command.Ids.Where(x => x != Guid.Empty).Distinct().ToArray();
+        var reason = command.Reason?.Trim();
 
         if (ids.Length == 0)
+        {
             return Result.Failure(PricingErrors.InvalidImportFclRate);
+        }
+
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            return Result.Failure(PricingErrors.ImportFclRateRejectReasonIsRequired);
+        }
 
         var entities = new List<ImportFclRates>(ids.Length);
 
@@ -35,21 +43,25 @@ public sealed class RejectImportRateCommandHandler(
             var importRate = await importRates.GetByIdAsync(id, cancellationToken);
 
             if (importRate is null || importRate.IsDeleted)
+            {
                 return Result.Failure(PricingErrors.ImportFclRateNotFound);
+            }
+
+            if (importRate.Status is not (ImportStatus.Pending or ImportStatus.Rejected))
+            {
+                return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
+            }
 
             entities.Add(importRate);
         }
 
-        foreach (var importRate in entities)
+        var pendingEntities = entities
+            .Where(importRate => importRate.Status == ImportStatus.Pending)
+            .ToArray();
+
+        foreach (var importRate in pendingEntities)
         {
-            var reason = command.Reason;
             var before = PricingAuditSnapshots.From(importRate);
-
-            if (importRate.Status == ImportStatus.Rejected)
-                return Result.Success();
-
-            if (importRate.Status != ImportStatus.Pending)
-                return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
 
             importRate.Reject(command.RejectedBy);
 
@@ -74,9 +86,14 @@ public sealed class RejectImportRateCommandHandler(
             );
         }
 
+        if (pendingEntities.Length == 0)
+        {
+            return Result.Success();
+        }
+
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        foreach (var importRate in entities)
+        foreach (var importRate in pendingEntities)
         {
             await cache.RemoveImportRateCacheAsync(
                 importRate.Id,
