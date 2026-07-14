@@ -253,6 +253,7 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
                 x.ImportBatchId,
                 x.SourceType.ToString(),
                 x.PolName,
+                x.PoeName,
                 x.PodName,
                 x.CarrierName,
                 x.ContainerTypeName,
