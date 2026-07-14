@@ -116,6 +116,11 @@ public sealed class ExtractAndPersistFclPricingImportService(
             .Select(x => x.ExtractionRecordId)
             .ToHashSet();
 
+        var duplicateExtractionRecordIds = mapped
+            .Rates.Where(x => existingExtractionRecordIds.Contains(x.ExtractionRecordId))
+            .Select(x => x.ExtractionRecordId)
+            .ToHashSet();
+
         var newRates = mapped
             .Rates.Where(x => !existingExtractionRecordIds.Contains(x.ExtractionRecordId))
             .ToArray();
@@ -133,8 +138,8 @@ public sealed class ExtractAndPersistFclPricingImportService(
         return new ExtractAndPersistFclPricingImportResult(
             true,
             extraction.ExtractionExecutionId,
-            mapped.Rates.Count,
-            mapped.SkippedExtractionRowIds.Count,
+            newRates.Length,
+            mapped.SkippedExtractionRowIds.Count + duplicateExtractionRecordIds.Count,
             extraction.Issues,
             null,
             null
