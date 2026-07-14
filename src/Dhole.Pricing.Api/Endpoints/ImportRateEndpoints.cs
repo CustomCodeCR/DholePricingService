@@ -195,7 +195,7 @@ public static class ImportRateEndpoints
                     sourceType,
                     ToSnapshot(request.Profile),
                     ToSnapshot(request.Pol),
-                    ToSnapshot(request.Poe),
+                    ToPoeSnapshot(request.Poe, request.Pod),
                     ToSnapshot(request.Pod),
                     ToSnapshot(request.Carrier),
                     ToSnapshot(request.Agent),
@@ -361,6 +361,20 @@ public static class ImportRateEndpoints
         );
 
         return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static CatalogSnapshot ToPoeSnapshot(
+        ImportCatalogSnapshotRequest? poe,
+        ImportCatalogSnapshotRequest pod
+    )
+    {
+        return poe is null
+            || poe.Id == Guid.Empty
+            || string.IsNullOrWhiteSpace(poe.Name)
+            || string.IsNullOrWhiteSpace(poe.Code)
+            || string.IsNullOrWhiteSpace(poe.Slug)
+            ? ToSnapshot(pod)
+            : ToSnapshot(poe);
     }
 
     private static CatalogSnapshot ToSnapshot(ImportCatalogSnapshotRequest request)

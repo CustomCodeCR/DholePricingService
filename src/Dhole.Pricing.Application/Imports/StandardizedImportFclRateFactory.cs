@@ -81,7 +81,9 @@ public static class StandardizedImportFclRateFactory
                     ResolveSnapshot(
                         row.PortOfExitReference,
                         "poe",
-                        row.PortOfExit ?? row.OriginPortReference?.Name ?? row.OriginPort,
+                        HasText(row.PortOfExit)
+                            ? row.PortOfExit
+                            : row.DestinationPortReference?.Name ?? row.DestinationPort,
                         "PENDING",
                         "Por asignar"
                     ),

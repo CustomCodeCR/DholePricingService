@@ -6,7 +6,7 @@ public sealed record CreateImportRateRequest(
     string SourceType,
     ImportCatalogSnapshotRequest Profile,
     ImportCatalogSnapshotRequest Pol,
-    ImportCatalogSnapshotRequest Poe,
+    ImportCatalogSnapshotRequest? Poe,
     ImportCatalogSnapshotRequest Pod,
     ImportCatalogSnapshotRequest Carrier,
     ImportCatalogSnapshotRequest Agent,
