@@ -48,11 +48,11 @@ public static class ImportRateEndpoints
             .RequireScope(PricingConstants.Scopes.ImportFclRateCreate);
 
         group
-            .MapPost("/{importRateId:guid}/approve", ApproveImportRateAsync)
+            .MapPost("/approve", ApproveImportRateAsync)
             .RequireScope(PricingConstants.Scopes.ImportFclRateApprove);
 
         group
-            .MapPost("/{importRateId:guid}/reject", RejectImportRateAsync)
+            .MapPost("/reject", RejectImportRateAsync)
             .RequireScope(PricingConstants.Scopes.ImportFclRateReject);
 
         group
@@ -272,14 +272,14 @@ public static class ImportRateEndpoints
     }
 
     private static async Task<IResult> ApproveImportRateAsync(
-        Guid importRateId,
+        ApproveImportRateBatchRequest request,
         ICommandDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
     {
         var result = await dispatcher.DispatchAsync(
-            new ApproveImportRateCommand(importRateId, httpContext.GetCurrentUserId()),
+            new ApproveImportRateCommand(request.Ids, httpContext.GetCurrentUserId()),
             cancellationToken
         );
 
@@ -287,8 +287,7 @@ public static class ImportRateEndpoints
     }
 
     private static async Task<IResult> RejectImportRateAsync(
-        Guid importRateId,
-        RejectImportRateRequest request,
+        RejectImportRateBatchRequest request,
         ICommandDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -296,7 +295,7 @@ public static class ImportRateEndpoints
     {
         var result = await dispatcher.DispatchAsync(
             new RejectImportRateCommand(
-                importRateId,
+                request.Ids,
                 request.Reason,
                 httpContext.GetCurrentUserId()
             ),

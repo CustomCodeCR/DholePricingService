@@ -3,4 +3,5 @@ using CustomCodeFramework.Cqrs.Commands;
 
 namespace Dhole.Pricing.Application.Features.Imports.ApproveImportRate;
 
-public sealed record ApproveImportRateCommand(Guid Id, Guid? ApprovedBy) : ICommand<Result>;
+public sealed record ApproveImportRateCommand(IReadOnlyCollection<Guid> Ids, Guid? ApprovedBy)
+    : ICommand<Result>;
