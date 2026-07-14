@@ -36,6 +36,8 @@ public sealed class RejectImportRateCommandHandler(
 
             if (importRate is null || importRate.IsDeleted)
                 return Result.Failure(PricingErrors.ImportFclRateNotFound);
+
+            entities.Add(importRate);
         }
 
         foreach (var importRate in entities)
