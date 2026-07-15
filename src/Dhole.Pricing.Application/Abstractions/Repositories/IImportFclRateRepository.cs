@@ -54,6 +54,12 @@ public interface IImportFclRateRepository : IRepository<ImportFclRates, Guid>
         CancellationToken cancellationToken = default
     );
 
+    Task<PricingDecisionDashboardDto> GetDecisionDashboardAsync(
+        DateTime? dateFrom = null,
+        DateTime? dateTo = null,
+        CancellationToken cancellationToken = default
+    );
+
     Task<IReadOnlyCollection<ImportRateSelectDto>> GetForSelectAsync(
         string? search = null,
         Guid? importBatchId = null,

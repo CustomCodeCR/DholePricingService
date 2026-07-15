@@ -207,6 +207,204 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
         return PagedResult<ImportRateDto>.Create(items, page.PageNumber, page.PageSize, total);
     }
 
+    public async Task<PricingDecisionDashboardDto> GetDecisionDashboardAsync(
+        DateTime? dateFrom = null,
+        DateTime? dateTo = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        const decimal multimodalLandFreight = 2140m;
+
+        Console.WriteLine(dateFrom);
+        Console.WriteLine(dateTo);
+
+        var startDate = dateFrom?.Date;
+        var endDateExclusive = dateTo?.Date.AddDays(1);
+
+        var query = dbContext
+            .ImportFclRates.AsNoTracking()
+            .Where(x => !x.IsDeleted && x.Status != ImportStatus.Rejected);
+
+        if (startDate.HasValue)
+        {
+            query = query.Where(x => x.ValidFrom >= startDate.Value);
+        }
+
+        if (endDateExclusive.HasValue)
+        {
+            query = query.Where(x => x.ValidTo < endDateExclusive.Value);
+        }
+
+        query = query.Where(x =>
+            (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("limon")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("limón")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("moin")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("moín")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("caldera")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("manzanillo")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("colon")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("colón")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("rodman")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("cristobal")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("cristóbal")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("panama")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
+                .ToLower()
+                .Contains("panamá")
+        );
+
+        var importedRates = await query
+            .OrderBy(x => x.OceanFreight ?? x.Freight)
+            .ThenBy(x => x.CarrierName)
+            .ThenBy(x => x.ContainerTypeName)
+            .ThenBy(x => x.PolName)
+            .Select(x => new
+            {
+                x.Id,
+                x.ImportBatchId,
+                x.CarrierName,
+                OceanFreight = x.OceanFreight ?? x.Freight,
+                Currency = x.CurrencyName,
+                x.ContainerTypeName,
+                x.PolName,
+                x.PoeName,
+                x.ValidFrom,
+                x.ValidTo,
+            })
+            .ToListAsync(cancellationToken);
+
+        var limonMoinRates = new List<PricingDecisionRateDto>();
+        var calderaRates = new List<PricingDecisionRateDto>();
+        var multimodalRates = new List<PricingDecisionRateDto>();
+
+        foreach (var rate in importedRates)
+        {
+            var lane = ResolveDecisionLane(rate.PoeName);
+            if (lane is null)
+            {
+                continue;
+            }
+
+            var item = new PricingDecisionRateDto(
+                rate.Id,
+                rate.CarrierName,
+                rate.OceanFreight,
+                lane == DecisionLane.Multimodal ? multimodalLandFreight : null,
+                rate.Currency,
+                rate.ContainerTypeName,
+                rate.PolName,
+                rate.PoeName,
+                rate.ValidFrom,
+                rate.ValidTo
+            );
+
+            switch (lane)
+            {
+                case DecisionLane.LimonMoin:
+                    limonMoinRates.Add(item);
+                    break;
+                case DecisionLane.Caldera:
+                    calderaRates.Add(item);
+                    break;
+                case DecisionLane.Multimodal:
+                    multimodalRates.Add(item);
+                    break;
+            }
+        }
+
+        var lanes = new PricingDecisionLaneDto[]
+        {
+            new("limon-moin", "Limón / Moín", limonMoinRates.Count, limonMoinRates),
+            new("puerto-caldera", "Puerto Caldera", calderaRates.Count, calderaRates),
+            new("multimodal", "Multimodal", multimodalRates.Count, multimodalRates),
+        };
+
+        return new PricingDecisionDashboardDto(
+            startDate,
+            dateTo?.Date,
+            lanes.Sum(x => x.TotalOptions),
+            lanes
+        );
+    }
+
+    private static DecisionLane? ResolveDecisionLane(string poe)
+    {
+        var value = RemoveDiacritics(poe).ToLowerInvariant();
+
+        if (value.Contains("limon") || value.Contains("moin"))
+        {
+            return DecisionLane.LimonMoin;
+        }
+
+        if (value.Contains("caldera"))
+        {
+            return DecisionLane.Caldera;
+        }
+
+        if (
+            value.Contains("manzanillo")
+            || value.Contains("colon")
+            || value.Contains("rodman")
+            || value.Contains("cristobal")
+            || value.Contains("panama")
+        )
+        {
+            return DecisionLane.Multimodal;
+        }
+
+        return null;
+    }
+
+    private static string RemoveDiacritics(string value)
+    {
+        var normalized = value.Normalize(System.Text.NormalizationForm.FormD);
+        var builder = new System.Text.StringBuilder(normalized.Length);
+
+        foreach (var character in normalized)
+        {
+            if (
+                System.Globalization.CharUnicodeInfo.GetUnicodeCategory(character)
+                != System.Globalization.UnicodeCategory.NonSpacingMark
+            )
+            {
+                builder.Append(character);
+            }
+        }
+
+        return builder.ToString().Normalize(System.Text.NormalizationForm.FormC);
+    }
+
+    private enum DecisionLane
+    {
+        LimonMoin,
+        Caldera,
+        Multimodal,
+    }
+
     public async Task<IReadOnlyCollection<ImportRateSelectDto>> GetForSelectAsync(
         string? search = null,
         Guid? importBatchId = null,
@@ -253,7 +451,6 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
                 x.ImportBatchId,
                 x.SourceType.ToString(),
                 x.PolName,
-                x.PoeName,
                 x.PodName,
                 x.CarrierName,
                 x.ContainerTypeName,

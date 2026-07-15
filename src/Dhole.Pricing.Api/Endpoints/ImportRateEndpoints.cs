@@ -9,6 +9,7 @@ using Dhole.Pricing.Application.Features.Imports.ExtractImportRateFromFile;
 using Dhole.Pricing.Application.Features.Imports.GetImportRateById;
 using Dhole.Pricing.Application.Features.Imports.GetImportRates;
 using Dhole.Pricing.Application.Features.Imports.GetImportRatesForSelect;
+using Dhole.Pricing.Application.Features.Imports.GetPricingDecisionDashboard;
 using Dhole.Pricing.Application.Features.Imports.RejectImportRate;
 using Dhole.Pricing.Contracts.Imports.Request;
 using Dhole.Pricing.Domain.Imports.Entities;
@@ -33,6 +34,10 @@ public static class ImportRateEndpoints
         group
             .MapGet("/select", GetImportRatesForSelectAsync)
             .RequireScope(PricingConstants.Scopes.ImportFclRateView);
+
+        group
+            .MapGet("/decision-dashboard", GetPricingDecisionDashboardAsync)
+            .RequireScope(PricingConstants.Scopes.FclDecisionView);
 
         group
             .MapGet("/{importRateId:guid}", GetImportRateByIdAsync)
@@ -114,6 +119,31 @@ public static class ImportRateEndpoints
         );
 
         return EndpointResults.FromPaged(result, httpContext);
+    }
+
+    private static async Task<IResult> GetPricingDecisionDashboardAsync(
+        DateTime? dateFrom,
+        DateTime? dateTo,
+        IQueryDispatcher dispatcher,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        if (dateFrom.HasValue && dateTo.HasValue && dateFrom.Value.Date > dateTo.Value.Date)
+        {
+            return EndpointResults.BadRequest(
+                "Pricing.InvalidDecisionDateRange",
+                "La fecha desde no puede ser mayor que la fecha hasta.",
+                httpContext
+            );
+        }
+
+        var result = await dispatcher.DispatchAsync(
+            new GetPricingDecisionDashboardQuery(dateFrom?.Date, dateTo?.Date),
+            cancellationToken
+        );
+
+        return EndpointResults.FromResult(result, httpContext);
     }
 
     private static async Task<IResult> GetImportRatesForSelectAsync(

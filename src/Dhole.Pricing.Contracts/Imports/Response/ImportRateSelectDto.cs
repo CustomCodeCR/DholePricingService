@@ -5,7 +5,6 @@ public sealed record ImportRateSelectDto(
     Guid ImportBatchId,
     string SourceType,
     string Pol,
-    string Poe,
     string Pod,
     string Carrier,
     string ContainerType,
