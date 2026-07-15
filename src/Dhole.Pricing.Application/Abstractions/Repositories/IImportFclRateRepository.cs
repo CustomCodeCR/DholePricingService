@@ -57,6 +57,7 @@ public interface IImportFclRateRepository : IRepository<ImportFclRates, Guid>
     Task<PricingDecisionDashboardDto> GetDecisionDashboardAsync(
         DateTime? dateFrom = null,
         DateTime? dateTo = null,
+        string? containerType = null,
         CancellationToken cancellationToken = default
     );
 

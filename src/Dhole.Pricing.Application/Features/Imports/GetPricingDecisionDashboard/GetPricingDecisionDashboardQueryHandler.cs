@@ -16,6 +16,7 @@ public sealed class GetPricingDecisionDashboardQueryHandler(IImportFclRateReposi
         var dashboard = await importRates.GetDecisionDashboardAsync(
             query.DateFrom,
             query.DateTo,
+            query.ContainerType,
             cancellationToken
         );
 

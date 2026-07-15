@@ -124,6 +124,7 @@ public static class ImportRateEndpoints
     private static async Task<IResult> GetPricingDecisionDashboardAsync(
         DateTime? dateFrom,
         DateTime? dateTo,
+        string? containerType,
         IQueryDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -139,7 +140,7 @@ public static class ImportRateEndpoints
         }
 
         var result = await dispatcher.DispatchAsync(
-            new GetPricingDecisionDashboardQuery(dateFrom?.Date, dateTo?.Date),
+            new GetPricingDecisionDashboardQuery(dateFrom?.Date, dateTo?.Date, containerType!),
             cancellationToken
         );
 
@@ -398,7 +399,8 @@ public static class ImportRateEndpoints
         ImportCatalogSnapshotRequest pod
     )
     {
-        return poe is null
+        return
+            poe is null
             || poe.Id == Guid.Empty
             || string.IsNullOrWhiteSpace(poe.Name)
             || string.IsNullOrWhiteSpace(poe.Code)

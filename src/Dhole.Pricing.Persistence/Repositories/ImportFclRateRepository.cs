@@ -210,13 +210,11 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
     public async Task<PricingDecisionDashboardDto> GetDecisionDashboardAsync(
         DateTime? dateFrom = null,
         DateTime? dateTo = null,
+        string? containerType = null,
         CancellationToken cancellationToken = default
     )
     {
         const decimal multimodalLandFreight = 2140m;
-
-        Console.WriteLine(dateFrom);
-        Console.WriteLine(dateTo);
 
         var startDate = dateFrom?.Date;
         var endDateExclusive = dateTo?.Date.AddDays(1);
@@ -226,14 +224,13 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
             .Where(x => !x.IsDeleted && x.Status != ImportStatus.Rejected);
 
         if (startDate.HasValue)
-        {
             query = query.Where(x => x.ValidFrom >= startDate.Value);
-        }
 
         if (endDateExclusive.HasValue)
-        {
             query = query.Where(x => x.ValidTo < endDateExclusive.Value);
-        }
+
+        if (containerType is not null)
+            query = query.Where(x => x.ContainerTypeName.Contains(containerType));
 
         query = query.Where(x =>
             (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
@@ -278,7 +275,7 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
         );
 
         var importedRates = await query
-            .OrderBy(x => x.OceanFreight ?? x.Freight)
+            .OrderByDescending(x => x.OceanFreight ?? x.Freight)
             .ThenBy(x => x.CarrierName)
             .ThenBy(x => x.ContainerTypeName)
             .ThenBy(x => x.PolName)
