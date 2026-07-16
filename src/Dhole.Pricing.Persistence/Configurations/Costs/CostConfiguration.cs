@@ -37,13 +37,17 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
 
         builder.Property(x => x.AgentCode).HasMaxLength(80).IsRequired(false);
 
-        builder.Property(x => x.PortId).IsRequired();
+        builder.Property(x => x.PortId).IsRequired(false);
 
-        builder.Property(x => x.PortName).HasMaxLength(250).IsRequired();
+        builder.Property(x => x.PortName).HasMaxLength(250).IsRequired(false);
 
-        builder.Property(x => x.PortCode).HasMaxLength(80).IsRequired();
+        builder.Property(x => x.PortCode).HasMaxLength(80).IsRequired(false);
 
-        builder.Property(x => x.PortRole).HasConversion<string>().HasMaxLength(50).IsRequired();
+        builder
+            .Property(x => x.PortRole)
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .IsRequired(false);
 
         builder.Property(x => x.CurrencyId).IsRequired();
 
@@ -59,6 +63,8 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
 
         builder.Property(x => x.Notes).HasColumnType("text").IsRequired(false);
 
+        builder.Property(x => x.IsAccountant).IsRequired().HasDefaultValue(false);
+
         builder.Property(x => x.IsActive).IsRequired().HasDefaultValue(true);
 
         builder.HasIndex(x => x.Name);
@@ -69,6 +75,7 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
         builder.HasIndex(x => x.PortId);
         builder.HasIndex(x => x.PortRole);
         builder.HasIndex(x => x.CurrencyId);
+        builder.HasIndex(x => x.IsAccountant);
         builder.HasIndex(x => x.IsActive);
 
         builder
@@ -80,6 +87,7 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
                 x.AgentId,
                 x.PortId,
                 x.PortRole,
+                x.IsAccountant,
                 x.Name,
                 x.CurrencyId,
             })

@@ -165,6 +165,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             .Take(page.PageSize)
             .Select(x => new RateDto(
                 x.Id,
+                x.RateCode,
+                x.RateName,
                 x.SourceImportFclRateId,
                 x.AgentId,
                 x.AgentName,
@@ -184,6 +186,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.ContainerTypeId,
                 x.ContainerTypeName,
                 x.ContainerTypeCode,
+                x.ContainerQuantity,
                 x.CurrencyId,
                 x.CurrencyName,
                 x.CurrencyCode,
@@ -211,6 +214,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                         d.CostAmount,
                         d.SaleAmount,
                         d.UtilityAmount,
+                        d.Quantity,
                         d.Notes
                     ))
                     .ToList()
@@ -306,7 +310,9 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             var value = NormalizeSearchValue(search);
 
             query = query.Where(x =>
-                x.AgentName!.ToLower().Contains(value)
+                x.RateCode.ToLower().Contains(value)
+                || x.RateName.ToLower().Contains(value)
+                || x.AgentName!.ToLower().Contains(value)
                 || x.AgentCode!.ToLower().Contains(value)
                 || x.CarrierName!.ToLower().Contains(value)
                 || x.CarrierCode!.ToLower().Contains(value)

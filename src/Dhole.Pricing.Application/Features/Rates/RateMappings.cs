@@ -9,6 +9,8 @@ internal static class RateMappings
     {
         return new RateDto(
             rate.Id,
+            rate.RateCode,
+            rate.RateName,
             rate.SourceImportFclRateId,
             rate.AgentId,
             rate.AgentName,
@@ -28,6 +30,7 @@ internal static class RateMappings
             rate.ContainerTypeId,
             rate.ContainerTypeName,
             rate.ContainerTypeCode,
+            rate.ContainerQuantity,
             rate.CurrencyId,
             rate.CurrencyName,
             rate.CurrencyCode,
@@ -55,6 +58,7 @@ internal static class RateMappings
                     x.CostAmount,
                     x.SaleAmount,
                     x.UtilityAmount,
+                    x.Quantity,
                     x.Notes
                 ))
                 .ToList()

@@ -19,16 +19,17 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         Guid? agentId,
         string? agentName,
         string? agentCode,
-        Guid portId,
-        string portName,
-        string portCode,
-        CostPortRole portRole,
+        Guid? portId,
+        string? portName,
+        string? portCode,
+        CostPortRole? portRole,
         Guid currencyId,
         string currencyName,
         string currencyCode,
         decimal costAmount,
         decimal saleAmount,
         string? notes,
+        bool isAccountant,
         Guid? createdBy
     )
         : base(id)
@@ -55,6 +56,8 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         UtilityAmount = saleAmount - costAmount;
         Notes = notes;
 
+        IsAccountant = isAccountant;
+
         IsActive = true;
 
         MarkAsCreated(DateTime.UtcNow, createdBy?.ToString());
@@ -73,11 +76,11 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
     public string? AgentName { get; private set; }
     public string? AgentCode { get; private set; }
 
-    public Guid PortId { get; private set; }
-    public string PortName { get; private set; } = string.Empty;
-    public string PortCode { get; private set; } = string.Empty;
+    public Guid? PortId { get; private set; }
+    public string? PortName { get; private set; } = string.Empty;
+    public string? PortCode { get; private set; } = string.Empty;
 
-    public CostPortRole PortRole { get; private set; }
+    public CostPortRole? PortRole { get; private set; }
 
     public Guid CurrencyId { get; private set; }
     public string CurrencyName { get; private set; } = string.Empty;
@@ -88,6 +91,8 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
     public decimal UtilityAmount { get; private set; }
 
     public string? Notes { get; private set; }
+
+    public bool IsAccountant { get; private set; }
 
     public bool IsActive { get; private set; }
 
@@ -101,16 +106,17 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         Guid? agentId,
         string? agentName,
         string? agentCode,
-        Guid portId,
-        string portName,
-        string portCode,
-        CostPortRole portRole,
+        Guid? portId,
+        string? portName,
+        string? portCode,
+        CostPortRole? portRole,
         Guid currencyId,
         string currencyName,
         string currencyCode,
         decimal costAmount,
         decimal saleAmount,
         string? notes,
+        bool isAccountant,
         Guid? createdBy
     )
     {
@@ -135,6 +141,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
             costAmount,
             saleAmount,
             notes,
+            isAccountant,
             createdBy
         );
 
@@ -153,16 +160,17 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         Guid? agentId,
         string? agentName,
         string? agentCode,
-        Guid portId,
-        string portName,
-        string portCode,
-        CostPortRole portRole,
+        Guid? portId,
+        string? portName,
+        string? portCode,
+        CostPortRole? portRole,
         Guid currencyId,
         string currencyName,
         string currencyCode,
         decimal costAmount,
         decimal saleAmount,
         string? notes,
+        bool isAccountant,
         Guid? updatedBy
     )
     {
@@ -186,6 +194,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         SaleAmount = saleAmount;
         UtilityAmount = saleAmount - costAmount;
         Notes = notes;
+        IsAccountant = isAccountant;
 
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
 

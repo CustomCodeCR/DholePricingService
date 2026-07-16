@@ -188,6 +188,9 @@ public sealed class UpdateRateCommandHandler(
                         detail.CostAmount,
                         detail.SaleAmount,
                         detail.Notes,
+                        existingDetails[detail.Id.Value].Quantity > 0
+                            ? existingDetails[detail.Id.Value].Quantity
+                            : 1,
                         command.UpdatedBy
                     );
 
@@ -207,6 +210,7 @@ public sealed class UpdateRateCommandHandler(
                         detail.CostAmount,
                         detail.SaleAmount,
                         detail.Notes,
+                        quantity: 1,
                         command.UpdatedBy
                     );
 

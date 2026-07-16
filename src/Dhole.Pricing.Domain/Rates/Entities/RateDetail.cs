@@ -19,7 +19,8 @@ public sealed class RateDetail : Entity<Guid>
         string currencyCode,
         decimal costAmount,
         decimal saleAmount,
-        string? notes
+        string? notes,
+        int quantity
     )
         : base(id)
     {
@@ -34,6 +35,8 @@ public sealed class RateDetail : Entity<Guid>
         CostAmount = costAmount;
         SaleAmount = saleAmount;
         UtilityAmount = saleAmount - costAmount;
+
+        Quantity = quantity;
 
         Notes = notes;
     }
@@ -58,6 +61,8 @@ public sealed class RateDetail : Entity<Guid>
 
     public string? Notes { get; private set; }
 
+    public int Quantity { get; private set; }
+
     internal static RateDetail Create(
         Guid rateHeaderId,
         Guid? costId,
@@ -69,7 +74,8 @@ public sealed class RateDetail : Entity<Guid>
         string currencyCode,
         decimal costAmount,
         decimal saleAmount,
-        string? notes
+        string? notes,
+        int quantity
     )
     {
         return new RateDetail(
@@ -84,7 +90,8 @@ public sealed class RateDetail : Entity<Guid>
             currencyCode,
             costAmount,
             saleAmount,
-            notes
+            notes,
+            quantity
         );
     }
 
@@ -98,7 +105,8 @@ public sealed class RateDetail : Entity<Guid>
         string currencyCode,
         decimal costAmount,
         decimal saleAmount,
-        string? notes
+        string? notes,
+        int quantity
     )
     {
         CostId = costId;
@@ -113,5 +121,7 @@ public sealed class RateDetail : Entity<Guid>
         UtilityAmount = saleAmount - costAmount;
 
         Notes = notes;
+
+        Quantity = quantity;
     }
 }

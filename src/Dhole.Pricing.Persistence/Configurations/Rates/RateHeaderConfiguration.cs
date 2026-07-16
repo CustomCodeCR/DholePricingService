@@ -17,6 +17,8 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.SourceImportFclRateId).IsRequired(false);
 
+        builder.Ignore(x => x.ClientName);
+
         builder.Property(x => x.AgentId).IsRequired();
 
         builder.Property(x => x.AgentName).HasMaxLength(250).IsRequired();
@@ -65,6 +67,12 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.ValidTo).IsRequired();
 
+        builder.Property(x => x.RateCode).HasMaxLength(10).IsRequired();
+
+        builder.Property(x => x.RateName).HasMaxLength(500).IsRequired();
+
+        builder.Property(x => x.ContainerQuantity).IsRequired().HasDefaultValue(1);
+
         builder.Property(x => x.TotalCostAmount).HasPrecision(18, 2).IsRequired();
 
         builder.Property(x => x.TotalSaleAmount).HasPrecision(18, 2).IsRequired();
@@ -97,6 +105,11 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.HasIndex(x => x.RequiredApproval);
         builder.HasIndex(x => x.ValidFrom);
         builder.HasIndex(x => x.ValidTo);
+
+        builder
+            .HasIndex(x => x.RateCode)
+            .IsUnique()
+            .HasDatabaseName("ux_rate_headers_rate_code");
 
         builder
             .HasIndex(x => new

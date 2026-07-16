@@ -15,6 +15,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
     private RateHeader(
         Guid id,
+        long rateConsecutive,
         Guid? sourceImportFclRateId,
         Guid? agentId,
         string? agentName,
@@ -40,6 +41,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         int freeDays,
         DateTime validFrom,
         DateTime validTo,
+        int containerQuantity,
         Guid? createdBy
     )
         : base(id)
@@ -105,7 +107,18 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         ValidFrom = validFrom;
         ValidTo = validTo;
 
-        Status = RateStatus.Draft;
+        ContainerQuantity = containerQuantity;
+
+        RateCode = CreateRateCode(rateConsecutive);
+
+        RateName = CreateRateName(
+            RateCode,
+            ContainerQuantity,
+            ContainerTypeName,
+            PolName,
+            PoeName,
+            PodName
+        );
 
         MarkAsCreated(DateTime.UtcNow, createdBy?.ToString());
     }
@@ -145,6 +158,13 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public DateTime ValidFrom { get; private set; }
     public DateTime ValidTo { get; private set; }
 
+    public string RateCode { get; private set; } = string.Empty;
+    public string RateName { get; private set; } = string.Empty;
+
+    public int ContainerQuantity { get; private set; }
+
+    public string? ClientName { get; private set; }
+
     public decimal TotalCostAmount { get; private set; }
     public decimal TotalSaleAmount { get; private set; }
     public decimal TotalUtilityAmount { get; private set; }
@@ -157,6 +177,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public IReadOnlyCollection<RateDetail> RateDetails => _rateDetails.AsReadOnly();
 
     public static RateHeader Create(
+        long rateConsecutive,
         Guid? sourceImportFclRateId,
         Guid? agentId,
         string? agentName,
@@ -182,11 +203,13 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         int freeDays,
         DateTime validFrom,
         DateTime validTo,
+        int containerQuantity,
         Guid? createdBy
     )
     {
         var rate = new RateHeader(
             Guid.NewGuid(),
+            rateConsecutive,
             sourceImportFclRateId,
             agentId,
             agentName,
@@ -212,6 +235,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             freeDays,
             validFrom,
             validTo,
+            containerQuantity,
             createdBy
         );
 
@@ -307,6 +331,15 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         ValidFrom = validFrom;
         ValidTo = validTo;
 
+        RateName = CreateRateName(
+            RateCode,
+            ContainerQuantity,
+            ContainerTypeName,
+            PolName,
+            PoeName,
+            PodName
+        );
+
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
 
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
@@ -324,6 +357,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         decimal costAmount,
         decimal saleAmount,
         string? notes,
+        int quantity,
         Guid? updatedBy
     )
     {
@@ -345,7 +379,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             currencyCode.Trim(),
             costAmount,
             saleAmount,
-            Normalize(notes)
+            Normalize(notes),
+            quantity
         );
 
         _rateDetails.Add(detail);
@@ -367,6 +402,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         decimal costAmount,
         decimal saleAmount,
         string? notes,
+        int quantity,
         Guid? updatedBy
     )
     {
@@ -389,7 +425,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             currencyCode.Trim(),
             costAmount,
             saleAmount,
-            Normalize(notes)
+            Normalize(notes),
+            quantity
         );
 
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
@@ -490,6 +527,61 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         MarkAsDeleted(DateTime.UtcNow, deletedBy?.ToString());
 
         AddDomainEvent(new RateHeaderDeletedDomainEvent(Id, deletedBy));
+    }
+
+    private static string CreateRateCode(long consecutive)
+    {
+        const string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const long maximumConsecutive = 2_176_782_335L; // 36^6 - 1
+
+        if (consecutive is < 1 or > maximumConsecutive)
+        {
+            throw new InvalidOperationException(
+                "El consecutivo de la tarifa está fuera del rango permitido."
+            );
+        }
+
+        Span<char> code = stackalloc char[6];
+        var value = consecutive;
+
+        for (var index = code.Length - 1; index >= 0; index--)
+        {
+            code[index] = alphabet[(int)(value % alphabet.Length)];
+            value /= alphabet.Length;
+        }
+
+        return $"QUO-{new string(code)}";
+    }
+
+    private static string CreateRateName(
+        string rateCode,
+        int containerQuantity,
+        string containerTypeName,
+        string polName,
+        string poeName,
+        string podName
+    )
+    {
+        var via = poeName switch
+        {
+            string name when name.Contains("caldera", StringComparison.OrdinalIgnoreCase) =>
+                "Caldera",
+
+            string name
+                when name.Contains("limon", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("moín", StringComparison.OrdinalIgnoreCase) => "Limón/Moín",
+
+            string name
+                when name.Contains("manzanillo", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("colon", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("rodman", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("cristobal", StringComparison.OrdinalIgnoreCase) =>
+                "Multimodal",
+
+            _ => "Desconocida",
+        };
+
+        return $"{rateCode} - Tarifa {containerQuantity} x {containerTypeName} - FOB - {polName} To {podName} Via {via}";
     }
 
     private static void ValidateHeader(

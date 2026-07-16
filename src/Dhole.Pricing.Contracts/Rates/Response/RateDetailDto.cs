@@ -13,5 +13,6 @@ public sealed record RateDetailDto(
     decimal CostAmount,
     decimal SaleAmount,
     decimal UtilityAmount,
+    int Quantity,
     string? Notes
 );

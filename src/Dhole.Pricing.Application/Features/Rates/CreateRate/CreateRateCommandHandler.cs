@@ -17,6 +17,7 @@ namespace Dhole.Pricing.Application.Features.Rates.CreateRate;
 public sealed class CreateRateCommandHandler(
     IRateHeaderRepository rateHeaders,
     IImportFclRateRepository importedRates,
+    IRateCodeGenerator rateCodeGenerator,
     IRateFixedCostSynchronizer fixedCostSynchronizer,
     IRateExtraDetailResolver extraDetailResolver,
     IPricingAuditService audit,
@@ -90,13 +91,15 @@ public sealed class CreateRateCommandHandler(
             }
         }
 
+        var rateConsecutive = await rateCodeGenerator.GetNextAsync(cancellationToken);
+
         RateHeader rate;
 
         try
         {
             rate = importedRate is null
-                ? CreateManualRate(command)
-                : CreateFromImportedRate(command, importedRate.Id);
+                ? CreateManualRate(command, rateConsecutive)
+                : CreateFromImportedRate(command, importedRate.Id, rateConsecutive);
 
             if (importedRate is not null)
             {
@@ -117,6 +120,7 @@ public sealed class CreateRateCommandHandler(
                     detail.CostAmount,
                     detail.SaleAmount,
                     detail.Notes,
+                    quantity: 1,
                     command.CreatedBy
                 );
             }
@@ -235,9 +239,10 @@ public sealed class CreateRateCommandHandler(
         return Result.Success(rate.Id);
     }
 
-    private static RateHeader CreateManualRate(CreateRateCommand command)
+    private static RateHeader CreateManualRate(CreateRateCommand command, long rateConsecutive)
     {
         return RateHeader.Create(
+            rateConsecutive,
             sourceImportFclRateId: null,
             command.AgentId,
             command.AgentName,
@@ -263,13 +268,19 @@ public sealed class CreateRateCommandHandler(
             command.FreeDays,
             command.ValidFrom,
             command.ValidTo,
+            containerQuantity: 1,
             command.CreatedBy
         );
     }
 
-    private static RateHeader CreateFromImportedRate(CreateRateCommand command, Guid importedRateId)
+    private static RateHeader CreateFromImportedRate(
+        CreateRateCommand command,
+        Guid importedRateId,
+        long rateConsecutive
+    )
     {
         return RateHeader.Create(
+            rateConsecutive,
             importedRateId,
             command.AgentId,
             command.AgentName,
@@ -295,6 +306,7 @@ public sealed class CreateRateCommandHandler(
             command.FreeDays,
             command.ValidFrom,
             command.ValidTo,
+            containerQuantity: 1,
             command.CreatedBy
         );
     }
@@ -323,6 +335,7 @@ public sealed class CreateRateCommandHandler(
             costAmount,
             saleAmount,
             importedRate.RawDataJson,
+            quantity: 1,
             createdBy
         );
     }

@@ -51,6 +51,7 @@ public sealed class GetCostByIdQueryHandler(ICostRepository costs, ICostCacheSer
             cost.SaleAmount,
             cost.UtilityAmount,
             cost.Notes!,
+            cost.IsAccountant,
             cost.IsActive
         );
 

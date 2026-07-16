@@ -63,6 +63,7 @@ public sealed class CreateCostCommandHandler(
                 command.CostAmount,
                 command.SaleAmount,
                 command.Notes,
+                command.IsAccountant,
                 command.CreatedBy
             );
         }

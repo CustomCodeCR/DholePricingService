@@ -14,6 +14,7 @@ namespace Dhole.Pricing.Application.Features.Rates.DuplicateRate;
 
 public sealed class DuplicateRateCommandHandler(
     IRateHeaderRepository rateHeaders,
+    IRateCodeGenerator rateCodeGenerator,
     IRateFixedCostSynchronizer fixedCostSynchronizer,
     IPricingAuditService audit,
     IRateHeaderCacheService cache,
@@ -32,11 +33,14 @@ public sealed class DuplicateRateCommandHandler(
             return Result.Failure<Guid>(PricingErrors.RateHeaderNotFound);
         }
 
+        var rateConsecutive = await rateCodeGenerator.GetNextAsync(cancellationToken);
+
         RateHeader duplicate;
 
         try
         {
             duplicate = RateHeader.Create(
+                rateConsecutive,
                 sourceImportFclRateId: null,
                 source.AgentId,
                 source.AgentName,
@@ -62,6 +66,7 @@ public sealed class DuplicateRateCommandHandler(
                 source.FreeDays,
                 command.ValidFrom ?? source.ValidFrom,
                 command.ValidTo ?? source.ValidTo,
+                source.ContainerQuantity > 0 ? source.ContainerQuantity : 1,
                 command.CreatedBy
             );
 
@@ -83,6 +88,7 @@ public sealed class DuplicateRateCommandHandler(
                     detail.CostAmount,
                     detail.SaleAmount,
                     detail.Notes,
+                    detail.Quantity > 0 ? detail.Quantity : 1,
                     command.CreatedBy
                 );
             }

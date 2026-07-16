@@ -157,11 +157,36 @@ public static class CostEndpoints
             );
         }
 
-        if (!TryParseDefinedEnum(request.PortRole, out CostPortRole portRole))
+        CostPortRole? portRole = null;
+
+        if (!string.IsNullOrWhiteSpace(request.PortRole))
+        {
+            if (!TryParseDefinedEnum(request.PortRole, out CostPortRole parsedPortRole))
+            {
+                return EndpointResults.BadRequest(
+                    "Pricing.InvalidCostPortRole",
+                    "El rol del puerto no es válido.",
+                    httpContext
+                );
+            }
+
+            portRole = parsedPortRole;
+        }
+
+        if (
+            !request.IsAccountant
+            && (
+                !request.PortId.HasValue
+                || request.PortId == Guid.Empty
+                || string.IsNullOrWhiteSpace(request.PortName)
+                || string.IsNullOrWhiteSpace(request.PortCode)
+                || !portRole.HasValue
+            )
+        )
         {
             return EndpointResults.BadRequest(
-                "Pricing.InvalidCostPortRole",
-                "El rol del puerto no es válido.",
+                "Pricing.CostPortRequired",
+                "El puerto y su rol son obligatorios para costos no contables.",
                 httpContext
             );
         }
@@ -187,6 +212,7 @@ public static class CostEndpoints
                 request.CostAmount,
                 request.SaleAmount,
                 request.Notes,
+                request.IsAccountant,
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken
@@ -221,11 +247,36 @@ public static class CostEndpoints
             );
         }
 
-        if (!TryParseDefinedEnum(request.PortRole, out CostPortRole portRole))
+        CostPortRole? portRole = null;
+
+        if (!string.IsNullOrWhiteSpace(request.PortRole))
+        {
+            if (!TryParseDefinedEnum(request.PortRole, out CostPortRole parsedPortRole))
+            {
+                return EndpointResults.BadRequest(
+                    "Pricing.InvalidCostPortRole",
+                    "El rol del puerto no es válido.",
+                    httpContext
+                );
+            }
+
+            portRole = parsedPortRole;
+        }
+
+        if (
+            !request.IsAccountant
+            && (
+                !request.PortId.HasValue
+                || request.PortId == Guid.Empty
+                || string.IsNullOrWhiteSpace(request.PortName)
+                || string.IsNullOrWhiteSpace(request.PortCode)
+                || !portRole.HasValue
+            )
+        )
         {
             return EndpointResults.BadRequest(
-                "Pricing.InvalidCostPortRole",
-                "El rol del puerto no es válido.",
+                "Pricing.CostPortRequired",
+                "El puerto y su rol son obligatorios para costos no contables.",
                 httpContext
             );
         }
@@ -252,6 +303,7 @@ public static class CostEndpoints
                 request.CostAmount,
                 request.SaleAmount,
                 request.Notes,
+                request.IsAccountant,
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken

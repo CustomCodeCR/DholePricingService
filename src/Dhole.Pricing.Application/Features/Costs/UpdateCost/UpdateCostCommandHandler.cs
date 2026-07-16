@@ -69,6 +69,7 @@ public sealed class UpdateCostCommandHandler(
                 command.CostAmount,
                 command.SaleAmount,
                 command.Notes,
+                command.IsAccountant,
                 command.UpdatedBy
             );
         }

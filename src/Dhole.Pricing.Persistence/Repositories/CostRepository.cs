@@ -17,8 +17,8 @@ public sealed class CostRepository(ServiceDbContext dbContext)
         string name,
         CostType costType,
         CostDetailType costDetailType,
-        Guid portId,
-        CostPortRole portRole,
+        Guid? portId,
+        CostPortRole? portRole,
         Guid? carrierId = null,
         Guid? agentId = null,
         Guid? excludeId = null,
@@ -138,6 +138,7 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.SaleAmount,
                 x.UtilityAmount,
                 x.Notes!,
+                x.IsAccountant,
                 x.IsActive
             ))
             .ToListAsync(cancellationToken);
@@ -201,7 +202,8 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.CostAmount,
                 x.SaleAmount,
                 x.UtilityAmount,
-                x.Notes!
+                x.Notes!,
+                x.IsAccountant
             ))
             .ToListAsync(cancellationToken);
     }

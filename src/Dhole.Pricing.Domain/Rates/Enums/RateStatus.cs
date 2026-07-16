@@ -7,4 +7,6 @@ public enum RateStatus
     Rejected = 2,
     Draft = 3,
     Send = 4,
+    AcceptedForClient = 5,
+    RejectedForClient = 6,
 }

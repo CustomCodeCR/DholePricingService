@@ -22,7 +22,7 @@ public sealed class RateFixedCostSynchronizer(ICostRepository costs) : IRateFixe
                 group =>
                 {
                     var detail = group.First();
-                    return (detail.CostAmount, detail.SaleAmount);
+                    return (detail.CostAmount, detail.SaleAmount, detail.Quantity);
                 }
             );
 
@@ -79,6 +79,9 @@ public sealed class RateFixedCostSynchronizer(ICostRepository costs) : IRateFixe
                 costAmount,
                 saleAmount,
                 cost.Notes,
+                hasExistingAmount && existingAmount.Quantity > 0
+                    ? existingAmount.Quantity
+                    : 1,
                 updatedBy
             );
         }

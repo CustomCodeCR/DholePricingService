@@ -10,14 +10,15 @@ public sealed record UpdateCostRequest(
     Guid? AgentId,
     string? AgentName,
     string? AgentCode,
-    Guid PortId,
-    string PortName,
-    string PortCode,
-    string PortRole,
+    Guid? PortId,
+    string? PortName,
+    string? PortCode,
+    string? PortRole,
     Guid CurrencyId,
     string CurrencyName,
     string CurrencyCode,
     decimal CostAmount,
     decimal SaleAmount,
-    string? Notes
+    string? Notes,
+    bool IsAccountant = false
 );

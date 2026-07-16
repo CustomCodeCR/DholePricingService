@@ -431,6 +431,7 @@ internal sealed class PricingCacheWarmupWorker(
             cost.SaleAmount,
             cost.UtilityAmount,
             cost.Notes!,
+            cost.IsAccountant,
             cost.IsActive
         );
     }
@@ -458,7 +459,8 @@ internal sealed class PricingCacheWarmupWorker(
             cost.CostAmount,
             cost.SaleAmount,
             cost.UtilityAmount,
-            cost.Notes!
+            cost.Notes!,
+            cost.IsAccountant
         );
     }
 
@@ -529,6 +531,8 @@ internal sealed class PricingCacheWarmupWorker(
     {
         return new RateDto(
             rate.Id,
+            rate.RateCode,
+            rate.RateName,
             rate.SourceImportFclRateId,
             rate.AgentId,
             rate.AgentName,
@@ -548,6 +552,7 @@ internal sealed class PricingCacheWarmupWorker(
             rate.ContainerTypeId,
             rate.ContainerTypeName,
             rate.ContainerTypeCode,
+            rate.ContainerQuantity,
             rate.CurrencyId,
             rate.CurrencyName,
             rate.CurrencyCode,
@@ -583,6 +588,7 @@ internal sealed class PricingCacheWarmupWorker(
             detail.CostAmount,
             detail.SaleAmount,
             detail.UtilityAmount,
+            detail.Quantity,
             detail.Notes
         );
     }

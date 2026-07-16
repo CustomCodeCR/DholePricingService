@@ -7,11 +7,12 @@ public sealed record CostSummaryDto(
     string CostDetailType,
     string? CarrierName,
     string? AgentName,
-    string PortName,
-    string PortRole,
+    string? PortName,
+    string? PortRole,
     string CurrencyName,
     decimal CostAmount,
     decimal SaleAmount,
     string Notes,
+    bool IsAccountant,
     bool IsActive
 );

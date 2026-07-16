@@ -37,6 +37,7 @@ public static class PricingAuditSnapshots
             cost.UtilityAmount,
 
             cost.Notes,
+            cost.IsAccountant,
             cost.IsActive,
         };
 
@@ -71,6 +72,8 @@ public static class PricingAuditSnapshots
         new
         {
             rateHeader.Id,
+            rateHeader.RateCode,
+            rateHeader.RateName,
 
             rateHeader.SourceImportFclRateId,
 
@@ -97,6 +100,7 @@ public static class PricingAuditSnapshots
             rateHeader.ContainerTypeId,
             rateHeader.ContainerTypeName,
             rateHeader.ContainerTypeCode,
+            rateHeader.ContainerQuantity,
 
             rateHeader.CurrencyId,
             rateHeader.CurrencyName,
@@ -136,6 +140,7 @@ public static class PricingAuditSnapshots
             detail.CostAmount,
             detail.SaleAmount,
             detail.UtilityAmount,
+            detail.Quantity,
 
             detail.Notes,
         };

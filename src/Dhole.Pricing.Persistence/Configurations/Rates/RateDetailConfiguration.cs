@@ -43,6 +43,8 @@ internal sealed class RateDetailConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.Notes).HasColumnType("text").IsRequired(false);
 
+        builder.Property(x => x.Quantity).IsRequired().HasDefaultValue(1);
+
         builder.HasIndex(x => x.RateHeaderId);
         builder.HasIndex(x => x.CostId);
         builder.HasIndex(x => x.CostDetailType);

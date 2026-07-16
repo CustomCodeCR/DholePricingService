@@ -247,6 +247,12 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
 
+                    b.Property<bool>("IsAccountant")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_accountant");
+
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -268,23 +274,20 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnName("notes");
 
                     b.Property<string>("PortCode")
-                        .IsRequired()
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
                         .HasColumnName("port_code");
 
-                    b.Property<Guid>("PortId")
+                    b.Property<Guid?>("PortId")
                         .HasColumnType("uuid")
                         .HasColumnName("port_id");
 
                     b.Property<string>("PortName")
-                        .IsRequired()
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)")
                         .HasColumnName("port_name");
 
                     b.Property<string>("PortRole")
-                        .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("port_role");
@@ -320,6 +323,8 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasIndex("CurrencyId");
 
+                    b.HasIndex("IsAccountant");
+
                     b.HasIndex("IsActive");
 
                     b.HasIndex("Name");
@@ -328,7 +333,7 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasIndex("PortRole");
 
-                    b.HasIndex("CostType", "CostDetailType", "CarrierId", "AgentId", "PortId", "PortRole", "Name", "CurrencyId")
+                    b.HasIndex("CostType", "CostDetailType", "CarrierId", "AgentId", "PortId", "PortRole", "IsAccountant", "Name", "CurrencyId")
                         .IsUnique()
                         .HasDatabaseName("ix_costs_template_unique")
                         .HasFilter("is_deleted = false");
@@ -759,6 +764,12 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("notes");
 
+                    b.Property<int>("Quantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("quantity");
+
                     b.Property<Guid>("RateHeaderId")
                         .HasColumnType("uuid")
                         .HasColumnName("rate_header_id");
@@ -846,6 +857,12 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
                         .HasColumnName("container_type_name");
+
+                    b.Property<int>("ContainerQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("container_quantity");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -940,6 +957,18 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(250)")
                         .HasColumnName("pol_name");
 
+                    b.Property<string>("RateCode")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("rate_code");
+
+                    b.Property<string>("RateName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("rate_name");
+
                     b.Property<bool>("RequiredApproval")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1003,6 +1032,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.HasIndex("PoeId");
 
                     b.HasIndex("PolId");
+
+                    b.HasIndex("RateCode")
+                        .IsUnique()
+                        .HasDatabaseName("ux_rate_headers_rate_code");
 
                     b.HasIndex("RequiredApproval");
 

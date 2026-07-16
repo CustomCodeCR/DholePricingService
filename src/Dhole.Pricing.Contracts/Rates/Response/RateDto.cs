@@ -2,6 +2,8 @@ namespace Dhole.Pricing.Contracts.Rates.Response;
 
 public sealed record RateDto(
     Guid Id,
+    string RateCode,
+    string RateName,
     Guid? SourceImportFclRateId,
     Guid? AgentId,
     string? AgentName,
@@ -21,6 +23,7 @@ public sealed record RateDto(
     Guid ContainerTypeId,
     string ContainerTypeName,
     string ContainerTypeCode,
+    int ContainerQuantity,
     Guid CurrencyId,
     string CurrencyName,
     string CurrencyCode,
