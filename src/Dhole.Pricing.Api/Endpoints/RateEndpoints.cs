@@ -10,6 +10,7 @@ using Dhole.Pricing.Application.Features.Rates.DuplicateRate;
 using Dhole.Pricing.Application.Features.Rates.GetRateById;
 using Dhole.Pricing.Application.Features.Rates.GetRates;
 using Dhole.Pricing.Application.Features.Rates.RejectRateMargin;
+using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
 using Dhole.Pricing.Application.Features.Rates.UpdateRate;
 using Dhole.Pricing.Contracts.Rates.Request;
 using Dhole.Pricing.Domain.Costs.Enums;
@@ -49,6 +50,10 @@ public static class RateEndpoints
             .MapPost("/{rateId:guid}/margin/reject", RejectRateMarginAsync)
             .RequireScope(PricingConstants.Scopes.RateApproveLowMargin);
 
+        group
+            .MapPatch("/{rateId:guid}/status", SetRateStatusAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
+
         group.MapDelete("/", DeleteRatesAsync).RequireScope(PricingConstants.Scopes.RateDelete);
 
         return app;
@@ -58,6 +63,8 @@ public static class RateEndpoints
         int? pageNumber,
         int? pageSize,
         string? search,
+        string? idtraNumber,
+        string? quoNumber,
         Guid? sourceImportFclRateId,
         Guid? agentId,
         Guid? carrierId,
@@ -80,6 +87,8 @@ public static class RateEndpoints
             new GetRatesQuery(
                 PageRequest.Create(pageNumber ?? 1, pageSize ?? 20),
                 search,
+                idtraNumber,
+                quoNumber,
                 sourceImportFclRateId,
                 agentId,
                 carrierId,
@@ -204,6 +213,14 @@ public static class RateEndpoints
                 request.FreeDays,
                 request.ValidFrom,
                 request.ValidTo,
+                request.ContainerQuantity,
+                request.ClientName,
+                request.IdtraNumber,
+                request.QuoNumber,
+                request.Includes,
+                request.SubjectTo,
+                request.Excludes,
+                request.TransitDays,
                 details,
                 canApproveImportedRate,
                 httpContext.GetCurrentUserId()
@@ -288,6 +305,14 @@ public static class RateEndpoints
                 request.FreeDays,
                 request.ValidFrom,
                 request.ValidTo,
+                request.ContainerQuantity,
+                request.ClientName,
+                request.IdtraNumber,
+                request.QuoNumber,
+                request.Includes,
+                request.SubjectTo,
+                request.Excludes,
+                request.TransitDays,
                 extraDetails,
                 request.RemovedExtraDetailIds,
                 httpContext.GetCurrentUserId()
@@ -344,6 +369,32 @@ public static class RateEndpoints
     {
         var result = await dispatcher.DispatchAsync(
             new RejectRateMarginCommand(rateId, request.Reason, httpContext.GetCurrentUserId()),
+            cancellationToken
+        );
+
+        return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static async Task<IResult> SetRateStatusAsync(
+        Guid rateId,
+        SetRateStatusRequest request,
+        ICommandDispatcher dispatcher,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!TryParseDefinedEnum(request.Status, out RateStatus status)
+            || status is not (RateStatus.Sent or RateStatus.AcceptedByClient or RateStatus.RejectedByClient))
+        {
+            return EndpointResults.BadRequest(
+                "Pricing.InvalidRateStatus",
+                "El estado comercial de la tarifa no es válido.",
+                httpContext
+            );
+        }
+
+        var result = await dispatcher.DispatchAsync(
+            new SetRateStatusCommand(rateId, status, httpContext.GetCurrentUserId()),
             cancellationToken
         );
 

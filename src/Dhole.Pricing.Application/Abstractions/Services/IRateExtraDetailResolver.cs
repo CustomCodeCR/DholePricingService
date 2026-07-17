@@ -28,7 +28,8 @@ public sealed record ResolvedRateExtraDetail(
     string CurrencyCode,
     decimal CostAmount,
     decimal SaleAmount,
-    string? Notes
+    string? Notes,
+    bool IsAccountant
 );
 
 public sealed record RateExtraDetailResolution(ResolvedRateExtraDetail? Detail, Error? Error)

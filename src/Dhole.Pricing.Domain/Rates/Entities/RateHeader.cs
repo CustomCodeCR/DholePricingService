@@ -8,7 +8,6 @@ namespace Dhole.Pricing.Domain.Rates.Entities;
 public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 {
     private const decimal MinimumMarginPercentage = 12m;
-
     private readonly List<RateDetail> _rateDetails = [];
 
     private RateHeader() { }
@@ -42,6 +41,13 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         DateTime validFrom,
         DateTime validTo,
         int containerQuantity,
+        string? clientName,
+        string? idtraNumber,
+        string? quoNumber,
+        string? includes,
+        string? subjectTo,
+        string? excludes,
+        int? transitDays,
         Guid? createdBy
     )
         : base(id)
@@ -70,56 +76,56 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             currencyCode,
             freeDays,
             validFrom,
-            validTo
+            validTo,
+            containerQuantity,
+            transitDays
         );
 
         SourceImportFclRateId = sourceImportFclRateId;
-
         AgentId = agentId;
-        AgentName = agentName!.Trim();
-        AgentCode = agentCode!.Trim();
-
+        AgentName = agentName?.Trim();
+        AgentCode = agentCode?.Trim();
         CarrierId = carrierId;
-        CarrierName = carrierName!.Trim();
-        CarrierCode = carrierCode!.Trim();
-
+        CarrierName = carrierName?.Trim();
+        CarrierCode = carrierCode?.Trim();
         PolId = polId;
         PolName = polName.Trim();
         PolCode = polCode.Trim();
-
         PoeId = poeId;
         PoeName = poeName.Trim();
         PoeCode = poeCode.Trim();
-
         PodId = podId;
         PodName = podName.Trim();
         PodCode = podCode.Trim();
-
         ContainerTypeId = containerTypeId;
         ContainerTypeName = containerTypeName.Trim();
         ContainerTypeCode = containerTypeCode.Trim();
-
         CurrencyId = currencyId;
         CurrencyName = currencyName.Trim();
         CurrencyCode = currencyCode.Trim();
-
         FreeDays = freeDays;
         ValidFrom = validFrom;
         ValidTo = validTo;
-
         ContainerQuantity = containerQuantity;
-
+        ClientName = Normalize(clientName);
+        IdtraNumber = Normalize(idtraNumber);
+        QuoNumber = Normalize(quoNumber);
+        Includes = Normalize(includes);
+        SubjectTo = Normalize(subjectTo);
+        Excludes = Normalize(excludes);
+        TransitDays = transitDays;
         RateCode = CreateRateCode(rateConsecutive);
-
         RateName = CreateRateName(
             RateCode,
             ContainerQuantity,
             ContainerTypeName,
             PolName,
             PoeName,
-            PodName
+            PodName,
+            ClientName
         );
 
+        Status = RateStatus.Draft;
         MarkAsCreated(DateTime.UtcNow, createdBy?.ToString());
     }
 
@@ -154,24 +160,26 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string CurrencyCode { get; private set; } = string.Empty;
 
     public int FreeDays { get; private set; }
-
     public DateTime ValidFrom { get; private set; }
     public DateTime ValidTo { get; private set; }
 
     public string RateCode { get; private set; } = string.Empty;
     public string RateName { get; private set; } = string.Empty;
-
     public int ContainerQuantity { get; private set; }
 
     public string? ClientName { get; private set; }
+    public string? IdtraNumber { get; private set; }
+    public string? QuoNumber { get; private set; }
+    public string? Includes { get; private set; }
+    public string? SubjectTo { get; private set; }
+    public string? Excludes { get; private set; }
+    public int? TransitDays { get; private set; }
 
     public decimal TotalCostAmount { get; private set; }
     public decimal TotalSaleAmount { get; private set; }
     public decimal TotalUtilityAmount { get; private set; }
     public decimal MarginPercentage { get; private set; }
-
     public bool RequiredApproval { get; private set; }
-
     public RateStatus Status { get; private set; }
 
     public IReadOnlyCollection<RateDetail> RateDetails => _rateDetails.AsReadOnly();
@@ -204,6 +212,13 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         DateTime validFrom,
         DateTime validTo,
         int containerQuantity,
+        string? clientName,
+        string? idtraNumber,
+        string? quoNumber,
+        string? includes,
+        string? subjectTo,
+        string? excludes,
+        int? transitDays,
         Guid? createdBy
     )
     {
@@ -236,11 +251,17 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             validFrom,
             validTo,
             containerQuantity,
+            clientName,
+            idtraNumber,
+            quoNumber,
+            includes,
+            subjectTo,
+            excludes,
+            transitDays,
             createdBy
         );
 
         rate.AddDomainEvent(new RateHeaderCreatedDomainEvent(rate.Id, createdBy));
-
         return rate;
     }
 
@@ -269,6 +290,14 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         int freeDays,
         DateTime validFrom,
         DateTime validTo,
+        int containerQuantity,
+        string? clientName,
+        string? idtraNumber,
+        string? quoNumber,
+        string? includes,
+        string? subjectTo,
+        string? excludes,
+        int? transitDays,
         Guid? updatedBy
     )
     {
@@ -296,40 +325,44 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             currencyCode,
             freeDays,
             validFrom,
-            validTo
+            validTo,
+            containerQuantity,
+            transitDays
         );
 
         AgentId = agentId;
         AgentName = agentName.Trim();
         AgentCode = agentCode.Trim();
-
         CarrierId = carrierId;
         CarrierName = carrierName.Trim();
         CarrierCode = carrierCode.Trim();
-
         PolId = polId;
         PolName = polName.Trim();
         PolCode = polCode.Trim();
-
         PoeId = poeId;
         PoeName = poeName.Trim();
         PoeCode = poeCode.Trim();
-
         PodId = podId;
         PodName = podName.Trim();
         PodCode = podCode.Trim();
-
         ContainerTypeId = containerTypeId;
         ContainerTypeName = containerTypeName.Trim();
         ContainerTypeCode = containerTypeCode.Trim();
-
         CurrencyId = currencyId;
         CurrencyName = currencyName.Trim();
         CurrencyCode = currencyCode.Trim();
-
         FreeDays = freeDays;
         ValidFrom = validFrom;
         ValidTo = validTo;
+        ContainerQuantity = containerQuantity;
+        SynchronizeFreightQuantities();
+        ClientName = Normalize(clientName);
+        IdtraNumber = Normalize(idtraNumber);
+        QuoNumber = Normalize(quoNumber);
+        Includes = Normalize(includes);
+        SubjectTo = Normalize(subjectTo);
+        Excludes = Normalize(excludes);
+        TransitDays = transitDays;
 
         RateName = CreateRateName(
             RateCode,
@@ -337,11 +370,11 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             ContainerTypeName,
             PolName,
             PoeName,
-            PodName
+            PodName,
+            ClientName
         );
 
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
-
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
     }
 
@@ -368,6 +401,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
 
+        var effectiveQuantity = ResolveDetailQuantity(costDetailType, quantity);
+
         var detail = RateDetail.Create(
             Id,
             costId,
@@ -380,13 +415,11 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             costAmount,
             saleAmount,
             Normalize(notes),
-            quantity
+            effectiveQuantity
         );
 
         _rateDetails.Add(detail);
-
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
-
         return detail;
     }
 
@@ -415,6 +448,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
 
+        var effectiveQuantity = ResolveDetailQuantity(costDetailType, quantity);
+
         detail.Update(
             costId,
             name.Trim(),
@@ -426,7 +461,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             costAmount,
             saleAmount,
             Normalize(notes),
-            quantity
+            effectiveQuantity
         );
 
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
@@ -435,12 +470,10 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public void RemoveRateDetail(Guid rateDetailId, Guid? updatedBy)
     {
         var detail = _rateDetails.FirstOrDefault(x => x.Id == rateDetailId);
-
         if (detail is null)
             return;
 
         _rateDetails.Remove(detail);
-
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
     }
 
@@ -455,20 +488,17 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             _rateDetails.Remove(detail);
         }
 
-        if (automaticDetails.Length == 0)
-            return;
-
-        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+        if (automaticDetails.Length > 0)
+        {
+            MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+        }
     }
 
     public void SetAmounts(Guid? updatedBy)
     {
-        TotalCostAmount = _rateDetails.Sum(x => x.CostAmount);
-
-        TotalSaleAmount = _rateDetails.Sum(x => x.SaleAmount);
-
+        TotalCostAmount = _rateDetails.Sum(x => x.CostAmount * x.Quantity);
+        TotalSaleAmount = _rateDetails.Sum(x => x.SaleAmount * x.Quantity);
         TotalUtilityAmount = TotalSaleAmount - TotalCostAmount;
-
         MarginPercentage =
             TotalSaleAmount <= 0m
                 ? 0m
@@ -488,6 +518,11 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             RequiredApproval = false;
             Status = RateStatus.Approved;
         }
+        else if (IdtraNumber is not null || QuoNumber is not null)
+        {
+            RequiredApproval = false;
+            Status = RateStatus.AcceptedByClient;
+        }
         else
         {
             RequiredApproval = true;
@@ -495,7 +530,6 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         }
 
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
-
         AddDomainEvent(
             new RateHeaderAmountsChangedDomainEvent(
                 Id,
@@ -516,23 +550,43 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         }
 
         Status = isApproved ? RateStatus.Approved : RateStatus.Rejected;
-
         RequiredApproval = false;
-
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
+    public void SetCommercialStatus(RateStatus status, Guid? updatedBy)
+    {
+        if (
+            status
+            is not (RateStatus.Sent or RateStatus.AcceptedByClient or RateStatus.RejectedByClient)
+        )
+        {
+            throw new InvalidOperationException("El estado comercial solicitado no es válido.");
+        }
+
+        if (Status is RateStatus.Draft or RateStatus.PendingApproval or RateStatus.Rejected)
+        {
+            throw new InvalidOperationException(
+                "La tarifa debe estar aprobada antes de cambiar su estado comercial."
+            );
+        }
+
+        Status = status;
+        RequiredApproval = false;
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
     }
 
     public void Delete(Guid? deletedBy)
     {
         MarkAsDeleted(DateTime.UtcNow, deletedBy?.ToString());
-
         AddDomainEvent(new RateHeaderDeletedDomainEvent(Id, deletedBy));
     }
 
     private static string CreateRateCode(long consecutive)
     {
         const string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        const long maximumConsecutive = 2_176_782_335L; // 36^6 - 1
+        const long maximumConsecutive = 2_176_782_335L;
 
         if (consecutive is < 1 or > maximumConsecutive)
         {
@@ -559,29 +613,33 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         string containerTypeName,
         string polName,
         string poeName,
-        string podName
+        string podName,
+        string? clientName
     )
     {
         var via = poeName switch
         {
             string name when name.Contains("caldera", StringComparison.OrdinalIgnoreCase) =>
                 "Caldera",
-
             string name
                 when name.Contains("limon", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("limón", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("moin", StringComparison.OrdinalIgnoreCase)
                     || name.Contains("moín", StringComparison.OrdinalIgnoreCase) => "Limón/Moín",
-
             string name
                 when name.Contains("manzanillo", StringComparison.OrdinalIgnoreCase)
                     || name.Contains("colon", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("colón", StringComparison.OrdinalIgnoreCase)
                     || name.Contains("rodman", StringComparison.OrdinalIgnoreCase)
-                    || name.Contains("cristobal", StringComparison.OrdinalIgnoreCase) =>
+                    || name.Contains("cristobal", StringComparison.OrdinalIgnoreCase)
+                    || name.Contains("cristóbal", StringComparison.OrdinalIgnoreCase) =>
                 "Multimodal",
-
-            _ => "Desconocida",
+            _ => poeName,
         };
 
-        return $"{rateCode} - Tarifa {containerQuantity} x {containerTypeName} - FOB - {polName} To {podName} Via {via}";
+        var baseName =
+            $"{rateCode} - Tarifa {containerQuantity} x {containerTypeName} - FOB - {polName} To {podName} Via {via}";
+        return string.IsNullOrWhiteSpace(clientName) ? baseName : $"{baseName} - {clientName}";
     }
 
     private static void ValidateHeader(
@@ -608,11 +666,14 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         string currencyCode,
         int freeDays,
         DateTime validFrom,
-        DateTime validTo
+        DateTime validTo,
+        int containerQuantity,
+        int? transitDays
     )
     {
         if (
-            agentId == Guid.Empty
+            !agentId.HasValue
+            || agentId.Value == Guid.Empty
             || string.IsNullOrWhiteSpace(agentName)
             || string.IsNullOrWhiteSpace(agentCode)
         )
@@ -621,7 +682,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         }
 
         if (
-            carrierId == Guid.Empty
+            !carrierId.HasValue
+            || carrierId.Value == Guid.Empty
             || string.IsNullOrWhiteSpace(carrierName)
             || string.IsNullOrWhiteSpace(carrierCode)
         )
@@ -674,9 +736,18 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             throw new InvalidOperationException("La moneda es obligatoria.");
         }
 
-        if (freeDays < 0)
+        if (freeDays < 0 || transitDays is < 0)
         {
-            throw new InvalidOperationException("Los días libres no pueden ser negativos.");
+            throw new InvalidOperationException(
+                "Los días libres y el tiempo de tránsito no pueden ser negativos."
+            );
+        }
+
+        if (containerQuantity <= 0)
+        {
+            throw new InvalidOperationException(
+                "La cantidad de contenedores debe ser mayor que cero."
+            );
         }
 
         if (validTo.Date < validFrom.Date)
@@ -686,6 +757,27 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             );
         }
     }
+
+    private void SynchronizeFreightQuantities()
+    {
+        foreach (var detail in _rateDetails.Where(x => IsFreightPerContainer(x.CostDetailType)))
+        {
+            detail.SetQuantity(ContainerQuantity);
+        }
+    }
+
+    private int ResolveDetailQuantity(CostDetailType costDetailType, int requestedQuantity)
+    {
+        if (requestedQuantity <= 0)
+        {
+            throw new InvalidOperationException("La cantidad del detalle debe ser mayor que cero.");
+        }
+
+        return IsFreightPerContainer(costDetailType) ? ContainerQuantity : requestedQuantity;
+    }
+
+    private static bool IsFreightPerContainer(CostDetailType costDetailType) =>
+        costDetailType is CostDetailType.Freight or CostDetailType.InlandTransport;
 
     private static void ValidateDetail(
         string name,

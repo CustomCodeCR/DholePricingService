@@ -9,6 +9,8 @@ namespace Dhole.Pricing.Application.Features.Rates.GetRates;
 public sealed record GetRatesQuery(
     PageRequest Page,
     string? Search = null,
+    string? IdtraNumber = null,
+    string? QuoNumber = null,
     Guid? SourceImportFclRateId = null,
     Guid? AgentId = null,
     Guid? CarrierId = null,

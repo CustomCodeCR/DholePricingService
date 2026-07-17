@@ -67,6 +67,13 @@ public sealed class DuplicateRateCommandHandler(
                 command.ValidFrom ?? source.ValidFrom,
                 command.ValidTo ?? source.ValidTo,
                 source.ContainerQuantity > 0 ? source.ContainerQuantity : 1,
+                source.ClientName,
+                null,
+                null,
+                source.Includes,
+                source.SubjectTo,
+                source.Excludes,
+                source.TransitDays,
                 command.CreatedBy
             );
 

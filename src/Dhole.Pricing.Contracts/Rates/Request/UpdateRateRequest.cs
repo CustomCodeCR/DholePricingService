@@ -26,5 +26,13 @@ public sealed record UpdateRateRequest(
     DateTime ValidFrom,
     DateTime ValidTo,
     IReadOnlyCollection<UpsertRateExtraDetailRequest> ExtraDetails,
-    IReadOnlyCollection<Guid> RemovedExtraDetailIds
+    IReadOnlyCollection<Guid> RemovedExtraDetailIds,
+    int ContainerQuantity = 1,
+    string? ClientName = null,
+    string? IdtraNumber = null,
+    string? QuoNumber = null,
+    string? Includes = null,
+    string? SubjectTo = null,
+    string? Excludes = null,
+    int? TransitDays = null
 );

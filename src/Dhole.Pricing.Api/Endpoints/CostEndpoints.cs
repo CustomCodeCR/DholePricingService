@@ -173,24 +173,6 @@ public static class CostEndpoints
             portRole = parsedPortRole;
         }
 
-        if (
-            !request.IsAccountant
-            && (
-                !request.PortId.HasValue
-                || request.PortId == Guid.Empty
-                || string.IsNullOrWhiteSpace(request.PortName)
-                || string.IsNullOrWhiteSpace(request.PortCode)
-                || !portRole.HasValue
-            )
-        )
-        {
-            return EndpointResults.BadRequest(
-                "Pricing.CostPortRequired",
-                "El puerto y su rol son obligatorios para costos no contables.",
-                httpContext
-            );
-        }
-
         var result = await dispatcher.DispatchAsync(
             new CreateCostCommand(
                 request.Name,
@@ -261,24 +243,6 @@ public static class CostEndpoints
             }
 
             portRole = parsedPortRole;
-        }
-
-        if (
-            !request.IsAccountant
-            && (
-                !request.PortId.HasValue
-                || request.PortId == Guid.Empty
-                || string.IsNullOrWhiteSpace(request.PortName)
-                || string.IsNullOrWhiteSpace(request.PortCode)
-                || !portRole.HasValue
-            )
-        )
-        {
-            return EndpointResults.BadRequest(
-                "Pricing.CostPortRequired",
-                "El puerto y su rol son obligatorios para costos no contables.",
-                httpContext
-            );
         }
 
         var result = await dispatcher.DispatchAsync(

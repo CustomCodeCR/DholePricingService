@@ -137,8 +137,10 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.CostAmount,
                 x.SaleAmount,
                 x.UtilityAmount,
-                x.Notes!,
-                x.IsAccountant,
+                x.Notes,
+                x.IsAccountant
+                    || x.CostDetailType == CostDetailType.Freight
+                    || x.CostDetailType == CostDetailType.InlandTransport,
                 x.IsActive
             ))
             .ToListAsync(cancellationToken);
@@ -180,7 +182,6 @@ public sealed class CostRepository(ServiceDbContext dbContext)
             .ThenBy(x => x.PortRole)
             .ThenBy(x => x.PortName)
             .ThenBy(x => x.Name)
-            .Take(100)
             .Select(x => new CostSelectDto(
                 x.Id,
                 x.Name,
@@ -202,8 +203,10 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.CostAmount,
                 x.SaleAmount,
                 x.UtilityAmount,
-                x.Notes!,
+                x.Notes,
                 x.IsAccountant
+                    || x.CostDetailType == CostDetailType.Freight
+                    || x.CostDetailType == CostDetailType.InlandTransport
             ))
             .ToListAsync(cancellationToken);
     }
@@ -233,8 +236,8 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 || (x.CarrierCode ?? string.Empty).ToLower().Contains(value)
                 || (x.AgentName ?? string.Empty).ToLower().Contains(value)
                 || (x.AgentCode ?? string.Empty).ToLower().Contains(value)
-                || x.PortName.ToLower().Contains(value)
-                || x.PortCode.ToLower().Contains(value)
+                || (x.PortName ?? string.Empty).ToLower().Contains(value)
+                || (x.PortCode ?? string.Empty).ToLower().Contains(value)
                 || x.PortRole.ToString().ToLower().Contains(value)
                 || x.CurrencyName.ToLower().Contains(value)
                 || x.CurrencyCode.ToLower().Contains(value)

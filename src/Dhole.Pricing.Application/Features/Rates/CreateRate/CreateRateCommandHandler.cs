@@ -33,7 +33,12 @@ public sealed class CreateRateCommandHandler(
     {
         var resolvedDetails = new List<ResolvedRateExtraDetail>();
 
-        foreach (var detail in command.Details)
+        foreach (
+            var detail in command.Details.Where(detail =>
+                !command.SourceImportFclRateId.HasValue
+                || detail.CostDetailType != CostDetailType.Freight
+            )
+        )
         {
             var resolution = await extraDetailResolver.ResolveAsync(
                 new RateExtraDetailInput(
@@ -74,6 +79,18 @@ public sealed class CreateRateCommandHandler(
                 return Result.Failure<Guid>(PricingErrors.ImportFclRateNotFound);
             }
 
+            var today = DateTime.UtcNow.Date;
+            importedRate.ExpireIfNeeded(today, command.CreatedBy);
+
+            if (
+                importedRate.Status == ImportStatus.Expired
+                || importedRate.ValidFrom.Date < today
+                || importedRate.ValidTo.Date < today
+            )
+            {
+                return Result.Failure<Guid>(PricingErrors.ImportFclRateInvalidStatus);
+            }
+
             if (importedRate.Status == ImportStatus.Pending)
             {
                 if (!command.CanApproveImportedRate)
@@ -99,11 +116,11 @@ public sealed class CreateRateCommandHandler(
         {
             rate = importedRate is null
                 ? CreateManualRate(command, rateConsecutive)
-                : CreateFromImportedRate(command, importedRate.Id, rateConsecutive);
+                : CreateFromImportedRate(command, importedRate, rateConsecutive);
 
             if (importedRate is not null)
             {
-                AddImportedFreight(rate, importedRate, command, command.CreatedBy);
+                AddImportedFreight(rate, importedRate, command.CreatedBy);
             }
 
             foreach (var detail in resolvedDetails)
@@ -120,7 +137,7 @@ public sealed class CreateRateCommandHandler(
                     detail.CostAmount,
                     detail.SaleAmount,
                     detail.Notes,
-                    quantity: 1,
+                    quantity: detail.IsAccountant ? rate.ContainerQuantity : 1,
                     command.CreatedBy
                 );
             }
@@ -268,20 +285,27 @@ public sealed class CreateRateCommandHandler(
             command.FreeDays,
             command.ValidFrom,
             command.ValidTo,
-            containerQuantity: 1,
+            command.ContainerQuantity,
+            command.ClientName,
+            command.IdtraNumber,
+            command.QuoNumber,
+            command.Includes,
+            command.SubjectTo,
+            command.Excludes,
+            command.TransitDays,
             command.CreatedBy
         );
     }
 
     private static RateHeader CreateFromImportedRate(
         CreateRateCommand command,
-        Guid importedRateId,
+        ImportFclRates importedRate,
         long rateConsecutive
     )
     {
         return RateHeader.Create(
             rateConsecutive,
-            importedRateId,
+            importedRate.Id,
             command.AgentId,
             command.AgentName,
             command.AgentCode,
@@ -303,10 +327,17 @@ public sealed class CreateRateCommandHandler(
             command.CurrencyId,
             command.CurrencyName,
             command.CurrencyCode,
-            command.FreeDays,
-            command.ValidFrom,
-            command.ValidTo,
-            containerQuantity: 1,
+            importedRate.FreeDays,
+            importedRate.ValidFrom,
+            importedRate.ValidTo,
+            command.ContainerQuantity,
+            command.ClientName,
+            command.IdtraNumber,
+            command.QuoNumber,
+            command.Includes,
+            command.SubjectTo,
+            command.Excludes,
+            command.TransitDays,
             command.CreatedBy
         );
     }
@@ -314,12 +345,10 @@ public sealed class CreateRateCommandHandler(
     private static void AddImportedFreight(
         RateHeader rate,
         ImportFclRates importedRate,
-        CreateRateCommand command,
         Guid? createdBy
     )
     {
         var costAmount = importedRate.OceanFreight ?? importedRate.Freight;
-
         var saleAmount =
             importedRate.TotalSale ?? importedRate.OceanFreight ?? importedRate.Freight;
 
@@ -329,14 +358,14 @@ public sealed class CreateRateCommandHandler(
             name: "Flete internacional",
             CostDetailType.Freight,
             CostType.Variable,
-            command.CurrencyId,
-            command.CurrencyName,
-            command.CurrencyCode,
+            importedRate.CurrencyId,
+            importedRate.CurrencyName,
+            importedRate.CurrencyCode,
             costAmount,
             saleAmount,
-            importedRate.RawDataJson,
-            quantity: 1,
-            createdBy
+            notes: null,
+            quantity: rate.ContainerQuantity,
+            updatedBy: createdBy
         );
     }
 }

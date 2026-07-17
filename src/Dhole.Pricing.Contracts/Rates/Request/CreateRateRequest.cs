@@ -26,5 +26,13 @@ public sealed record CreateRateRequest(
     int FreeDays,
     DateTime ValidFrom,
     DateTime ValidTo,
-    IReadOnlyCollection<CreateRateDetailRequest> Details
+    IReadOnlyCollection<CreateRateDetailRequest> Details,
+    int ContainerQuantity = 1,
+    string? ClientName = null,
+    string? IdtraNumber = null,
+    string? QuoNumber = null,
+    string? Includes = null,
+    string? SubjectTo = null,
+    string? Excludes = null,
+    int? TransitDays = null
 );

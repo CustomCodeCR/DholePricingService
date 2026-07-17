@@ -40,6 +40,8 @@ public interface IRateHeaderRepository : IRepository<RateHeader, Guid>
     Task<PagedResult<RateDto>> GetPagedAsync(
         PageRequest page,
         string? search = null,
+        string? idtraNumber = null,
+        string? quoNumber = null,
         Guid? sourceImportFclRateId = null,
         Guid? agentId = null,
         Guid? carrierId = null,

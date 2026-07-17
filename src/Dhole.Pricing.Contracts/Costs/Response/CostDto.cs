@@ -21,7 +21,7 @@ public sealed record CostDto(
     decimal CostAmount,
     decimal SaleAmount,
     decimal UtilityAmount,
-    string Notes,
+    string? Notes,
     bool IsAccountant,
     bool IsActive
 );

@@ -34,7 +34,7 @@ public sealed class RateDetail : Entity<Guid>
         CurrencyCode = currencyCode;
         CostAmount = costAmount;
         SaleAmount = saleAmount;
-        UtilityAmount = saleAmount - costAmount;
+        UtilityAmount = (saleAmount - costAmount) * quantity;
 
         Quantity = quantity;
 
@@ -95,6 +95,17 @@ public sealed class RateDetail : Entity<Guid>
         );
     }
 
+    internal void SetQuantity(int quantity)
+    {
+        if (quantity <= 0)
+        {
+            throw new InvalidOperationException("La cantidad del detalle debe ser mayor que cero.");
+        }
+
+        Quantity = quantity;
+        UtilityAmount = (SaleAmount - CostAmount) * quantity;
+    }
+
     internal void Update(
         Guid? costId,
         string name,
@@ -118,7 +129,7 @@ public sealed class RateDetail : Entity<Guid>
         CurrencyCode = currencyCode;
         CostAmount = costAmount;
         SaleAmount = saleAmount;
-        UtilityAmount = saleAmount - costAmount;
+        UtilityAmount = (saleAmount - costAmount) * quantity;
 
         Notes = notes;
 

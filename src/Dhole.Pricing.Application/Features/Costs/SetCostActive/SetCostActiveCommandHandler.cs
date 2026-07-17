@@ -61,7 +61,7 @@ public sealed class SetCostActiveCommandHandler(
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await cache.RemoveCostsSelectAsync(cancellationToken);
+        await cache.RemoveCostCacheAsync(cost.Id, cancellationToken);
 
         return Result.Success();
     }

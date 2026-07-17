@@ -17,6 +17,8 @@ public sealed class GetRatesQueryHandler(IRateHeaderRepository rateHeaders)
         var result = await rateHeaders.GetPagedAsync(
             query.Page,
             query.Search,
+            query.IdtraNumber,
+            query.QuoNumber,
             query.SourceImportFclRateId,
             query.AgentId,
             query.CarrierId,

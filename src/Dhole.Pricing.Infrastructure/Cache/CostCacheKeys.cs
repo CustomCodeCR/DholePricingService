@@ -9,12 +9,12 @@ internal static class CostCacheKeys
 
     public static string CostById(Guid costId)
     {
-        return $"pricing:costs:id:{GuidPart(costId)}";
+        return $"pricing:costs:id:v2:{GuidPart(costId)}";
     }
 
     public static string CostsSelect()
     {
-        return "pricing:costs:select";
+        return "pricing:costs:select:v2-operational-notes";
     }
 
     public static string ActiveCosts(

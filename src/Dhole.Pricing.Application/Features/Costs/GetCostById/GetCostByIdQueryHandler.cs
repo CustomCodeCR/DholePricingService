@@ -43,7 +43,7 @@ public sealed class GetCostByIdQueryHandler(ICostRepository costs, ICostCacheSer
             cost.PortId,
             cost.PortName,
             cost.PortCode,
-            cost.PortRole.ToString(),
+            cost.PortRole.HasValue ? cost.PortRole.Value.ToString() : null,
             cost.CurrencyId,
             cost.CurrencyName,
             cost.CurrencyCode,

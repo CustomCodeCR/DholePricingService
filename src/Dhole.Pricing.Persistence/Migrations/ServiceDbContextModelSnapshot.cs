@@ -842,6 +842,11 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(250)")
                         .HasColumnName("carrier_name");
 
+                    b.Property<string>("ClientName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("client_name");
+
                     b.Property<string>("ContainerTypeCode")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -896,6 +901,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("deleted_by");
 
+                    b.Property<string>("Excludes")
+                        .HasColumnType("text")
+                        .HasColumnName("excludes");
+
                     b.Property<int>("FreeDays")
                         .HasColumnType("integer")
                         .HasColumnName("free_days");
@@ -903,6 +912,15 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
+
+                    b.Property<string>("IdtraNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("idtra_number");
+
+                    b.Property<string>("Includes")
+                        .HasColumnType("text")
+                        .HasColumnName("includes");
 
                     b.Property<decimal>("MarginPercentage")
                         .HasPrecision(18, 4)
@@ -957,6 +975,11 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(250)")
                         .HasColumnName("pol_name");
 
+                    b.Property<string>("QuoNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("quo_number");
+
                     b.Property<string>("RateCode")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -984,6 +1007,14 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("status");
+
+                    b.Property<string>("SubjectTo")
+                        .HasColumnType("text")
+                        .HasColumnName("subject_to");
+
+                    b.Property<int?>("TransitDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("transit_days");
 
                     b.Property<decimal>("TotalCostAmount")
                         .HasPrecision(18, 2)
@@ -1027,11 +1058,15 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasIndex("CurrencyId");
 
+                    b.HasIndex("IdtraNumber");
+
                     b.HasIndex("PodId");
 
                     b.HasIndex("PoeId");
 
                     b.HasIndex("PolId");
+
+                    b.HasIndex("QuoNumber");
 
                     b.HasIndex("RateCode")
                         .IsUnique()

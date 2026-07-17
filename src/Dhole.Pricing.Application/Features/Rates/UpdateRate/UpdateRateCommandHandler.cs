@@ -111,12 +111,42 @@ public sealed class UpdateRateCommandHandler(
             resolvedDetails.Add(resolution.Detail!);
         }
 
+        var agentId = command.AgentId;
+        var agentName = command.AgentName;
+        var agentCode = command.AgentCode;
+        var carrierId = command.CarrierId;
+        var carrierName = command.CarrierName;
+        var carrierCode = command.CarrierCode;
+        var polId = command.PolId;
+        var polName = command.PolName;
+        var polCode = command.PolCode;
+        var poeId = command.PoeId;
+        var poeName = command.PoeName;
+        var poeCode = command.PoeCode;
+        var podId = command.PodId;
+        var podName = command.PodName;
+        var podCode = command.PodCode;
+        var containerTypeId = command.ContainerTypeId;
+        var containerTypeName = command.ContainerTypeName;
+        var containerTypeCode = command.ContainerTypeCode;
+        var currencyId = command.CurrencyId;
+        var currencyName = command.CurrencyName;
+        var currencyCode = command.CurrencyCode;
+        var freeDays = command.FreeDays;
+        var validFrom = command.ValidFrom;
+        var validTo = command.ValidTo;
+        var containerQuantity = command.ContainerQuantity;
+        var transitDays = command.TransitDays;
+
         var selectorsChanged =
-            rate.AgentId != command.AgentId
-            || rate.CarrierId != command.CarrierId
-            || rate.PolId != command.PolId
-            || rate.PoeId != command.PoeId
-            || rate.PodId != command.PodId;
+            rate.AgentId != agentId
+            || rate.CarrierId != carrierId
+            || rate.PolId != polId
+            || rate.PoeId != poeId
+            || rate.PodId != podId
+            || rate.ContainerTypeId != containerTypeId
+            || rate.CurrencyId != currencyId
+            || rate.ContainerQuantity != containerQuantity;
 
         var headerBefore = PricingAuditSnapshots.From(rate);
 
@@ -131,30 +161,38 @@ public sealed class UpdateRateCommandHandler(
         try
         {
             rate.Update(
-                command.AgentId,
-                command.AgentName,
-                command.AgentCode,
-                command.CarrierId,
-                command.CarrierName,
-                command.CarrierCode,
-                command.PolId,
-                command.PolName,
-                command.PolCode,
-                command.PoeId,
-                command.PoeName,
-                command.PoeCode,
-                command.PodId,
-                command.PodName,
-                command.PodCode,
-                command.ContainerTypeId,
-                command.ContainerTypeName,
-                command.ContainerTypeCode,
-                command.CurrencyId,
-                command.CurrencyName,
-                command.CurrencyCode,
-                command.FreeDays,
-                command.ValidFrom,
-                command.ValidTo,
+                agentId,
+                agentName,
+                agentCode,
+                carrierId,
+                carrierName,
+                carrierCode,
+                polId,
+                polName,
+                polCode,
+                poeId,
+                poeName,
+                poeCode,
+                podId,
+                podName,
+                podCode,
+                containerTypeId,
+                containerTypeName,
+                containerTypeCode,
+                currencyId,
+                currencyName,
+                currencyCode,
+                freeDays,
+                validFrom,
+                validTo,
+                containerQuantity,
+                command.ClientName,
+                command.IdtraNumber,
+                command.QuoNumber,
+                command.Includes,
+                command.SubjectTo,
+                command.Excludes,
+                transitDays,
                 command.UpdatedBy
             );
 
@@ -188,9 +226,7 @@ public sealed class UpdateRateCommandHandler(
                         detail.CostAmount,
                         detail.SaleAmount,
                         detail.Notes,
-                        existingDetails[detail.Id.Value].Quantity > 0
-                            ? existingDetails[detail.Id.Value].Quantity
-                            : 1,
+                        detail.IsAccountant ? containerQuantity : 1,
                         command.UpdatedBy
                     );
 
@@ -210,7 +246,7 @@ public sealed class UpdateRateCommandHandler(
                         detail.CostAmount,
                         detail.SaleAmount,
                         detail.Notes,
-                        quantity: 1,
+                        quantity: detail.IsAccountant ? containerQuantity : 1,
                         command.UpdatedBy
                     );
 

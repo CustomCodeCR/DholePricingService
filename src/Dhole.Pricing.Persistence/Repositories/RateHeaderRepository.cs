@@ -42,6 +42,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 .Include(x => x.RateDetails)
                 .Where(x => !x.IsDeleted),
             search: null,
+            idtraNumber: null,
+            quoNumber: null,
             sourceImportFclRateId: null,
             agentId,
             carrierId,
@@ -89,6 +91,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 .Include(x => x.RateDetails)
                 .Where(x => !x.IsDeleted),
             search: null,
+            idtraNumber: null,
+            quoNumber: null,
             sourceImportFclRateId: null,
             agentId,
             carrierId,
@@ -117,6 +121,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
     public async Task<PagedResult<RateDto>> GetPagedAsync(
         PageRequest page,
         string? search = null,
+        string? idtraNumber = null,
+        string? quoNumber = null,
         Guid? sourceImportFclRateId = null,
         Guid? agentId = null,
         Guid? carrierId = null,
@@ -136,6 +142,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         var query = ApplyFilters(
             dbContext.RateHeaders.AsNoTracking().Where(x => !x.IsDeleted),
             search,
+            idtraNumber,
+            quoNumber,
             sourceImportFclRateId,
             agentId,
             carrierId,
@@ -193,6 +201,13 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.FreeDays,
                 x.ValidFrom,
                 x.ValidTo,
+                x.ClientName,
+                x.IdtraNumber,
+                x.QuoNumber,
+                x.Includes,
+                x.SubjectTo,
+                x.Excludes,
+                x.TransitDays,
                 x.TotalCostAmount,
                 x.TotalSaleAmount,
                 x.TotalUtilityAmount,
@@ -242,6 +257,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         var query = ApplyFilters(
             dbContext.RateHeaders.AsNoTracking().Where(x => !x.IsDeleted),
             search,
+            idtraNumber: null,
+            quoNumber: null,
             sourceImportFclRateId: null,
             agentId,
             carrierId,
@@ -290,6 +307,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
     private static IQueryable<RateHeader> ApplyFilters(
         IQueryable<RateHeader> query,
         string? search,
+        string? idtraNumber,
+        string? quoNumber,
         Guid? sourceImportFclRateId,
         Guid? agentId,
         Guid? carrierId,
@@ -312,10 +331,13 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             query = query.Where(x =>
                 x.RateCode.ToLower().Contains(value)
                 || x.RateName.ToLower().Contains(value)
-                || x.AgentName!.ToLower().Contains(value)
-                || x.AgentCode!.ToLower().Contains(value)
-                || x.CarrierName!.ToLower().Contains(value)
-                || x.CarrierCode!.ToLower().Contains(value)
+                || (x.ClientName ?? string.Empty).ToLower().Contains(value)
+                || (x.IdtraNumber ?? string.Empty).ToLower().Contains(value)
+                || (x.QuoNumber ?? string.Empty).ToLower().Contains(value)
+                || (x.AgentName ?? string.Empty).ToLower().Contains(value)
+                || (x.AgentCode ?? string.Empty).ToLower().Contains(value)
+                || (x.CarrierName ?? string.Empty).ToLower().Contains(value)
+                || (x.CarrierCode ?? string.Empty).ToLower().Contains(value)
                 || x.PolName.ToLower().Contains(value)
                 || x.PolCode.ToLower().Contains(value)
                 || x.PoeName.ToLower().Contains(value)
@@ -328,6 +350,18 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 || x.CurrencyCode.ToLower().Contains(value)
                 || x.Status.ToString().ToLower().Contains(value)
             );
+        }
+
+        if (!string.IsNullOrWhiteSpace(idtraNumber))
+        {
+            var value = NormalizeSearchValue(idtraNumber);
+            query = query.Where(x => (x.IdtraNumber ?? string.Empty).ToLower().Contains(value));
+        }
+
+        if (!string.IsNullOrWhiteSpace(quoNumber))
+        {
+            var value = NormalizeSearchValue(quoNumber);
+            query = query.Where(x => (x.QuoNumber ?? string.Empty).ToLower().Contains(value));
         }
 
         if (sourceImportFclRateId.HasValue)

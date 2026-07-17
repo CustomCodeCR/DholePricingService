@@ -41,6 +41,13 @@ public sealed class ApproveImportRateCommandHandler(
                 return Result.Failure(PricingErrors.ImportFclRateNotFound);
             }
 
+            importRate.ExpireIfNeeded(DateTime.UtcNow.Date, command.ApprovedBy);
+
+            if (importRate.Status == ImportStatus.Expired)
+            {
+                return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
+            }
+
             if (importRate.Status is not (ImportStatus.Pending or ImportStatus.Approved))
             {
                 return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);

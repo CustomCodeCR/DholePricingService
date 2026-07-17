@@ -65,7 +65,8 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
                     input.CurrencyCode.Trim(),
                     input.CostAmount,
                     input.SaleAmount,
-                    Normalize(input.Notes)
+                    Normalize(input.Notes),
+                    IsAccountant: false
                 )
             );
         }
@@ -98,7 +99,8 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
                     cost.CurrencyCode,
                     input.CostAmount,
                     saleAmount,
-                    Normalize(input.Notes) ?? cost.Notes
+                    Normalize(input.Notes) ?? cost.Notes,
+                    cost.IsAccountant
                 )
             );
         }
@@ -125,7 +127,8 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
                 cost.CurrencyCode,
                 input.CostAmount,
                 input.SaleAmount,
-                Normalize(input.Notes) ?? cost.Notes
+                Normalize(input.Notes) ?? cost.Notes,
+                cost.IsAccountant
             )
         );
     }

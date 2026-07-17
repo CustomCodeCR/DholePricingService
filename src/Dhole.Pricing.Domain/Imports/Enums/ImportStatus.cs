@@ -6,4 +6,5 @@ public enum ImportStatus
     Approved = 1,
     Rejected = 2,
     Created = 3,
+    Expired = 4,
 }

@@ -71,8 +71,18 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
         CancellationToken cancellationToken = default
     )
     {
+        var today = DateTime.UtcNow.Date;
+        await ExpireOutdatedAsync(today, cancellationToken);
+
         var query = ApplyFilters(
-            dbContext.ImportFclRates.AsNoTracking().Where(x => !x.IsDeleted),
+            dbContext
+                .ImportFclRates.AsNoTracking()
+                .Where(x =>
+                    !x.IsDeleted
+                    && x.Status != ImportStatus.Expired
+                    && x.ValidFrom.Date <= today
+                    && x.ValidTo.Date >= today
+                ),
             search: null,
             importBatchId: null,
             sourceType: sourceType,
@@ -117,8 +127,18 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
         CancellationToken cancellationToken = default
     )
     {
+        var today = DateTime.UtcNow.Date;
+        await ExpireOutdatedAsync(today, cancellationToken);
+
         var query = ApplyFilters(
-            dbContext.ImportFclRates.AsNoTracking().Where(x => !x.IsDeleted),
+            dbContext
+                .ImportFclRates.AsNoTracking()
+                .Where(x =>
+                    !x.IsDeleted
+                    && x.Status != ImportStatus.Expired
+                    && x.ValidFrom.Date >= today
+                    && x.ValidTo.Date >= today
+                ),
             search,
             importBatchId,
             sourceType,
@@ -216,12 +236,21 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
     {
         const decimal multimodalLandFreight = 2140m;
 
+        var today = DateTime.UtcNow.Date;
+        await ExpireOutdatedAsync(today, cancellationToken);
+
         var startDate = dateFrom?.Date;
         var endDateExclusive = dateTo?.Date.AddDays(1);
 
         var query = dbContext
             .ImportFclRates.AsNoTracking()
-            .Where(x => !x.IsDeleted && x.Status != ImportStatus.Rejected);
+            .Where(x =>
+                !x.IsDeleted
+                && x.Status != ImportStatus.Rejected
+                && x.Status != ImportStatus.Expired
+                && x.ValidFrom.Date >= today
+                && x.ValidTo.Date >= today
+            );
 
         if (startDate.HasValue)
             query = query.Where(x => x.ValidFrom >= startDate.Value);
@@ -418,8 +447,18 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
         CancellationToken cancellationToken = default
     )
     {
+        var today = DateTime.UtcNow.Date;
+        await ExpireOutdatedAsync(today, cancellationToken);
+
         var query = ApplyFilters(
-            dbContext.ImportFclRates.AsNoTracking().Where(x => !x.IsDeleted),
+            dbContext
+                .ImportFclRates.AsNoTracking()
+                .Where(x =>
+                    !x.IsDeleted
+                    && x.Status != ImportStatus.Expired
+                    && x.ValidFrom.Date <= today
+                    && x.ValidTo.Date >= today
+                ),
             search,
             importBatchId,
             sourceType,
@@ -461,6 +500,21 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
                 x.UsedAsRateCount
             ))
             .ToListAsync(cancellationToken);
+    }
+
+    private Task<int> ExpireOutdatedAsync(DateTime today, CancellationToken cancellationToken)
+    {
+        return dbContext
+            .ImportFclRates.Where(x =>
+                !x.IsDeleted && x.Status != ImportStatus.Expired && x.ValidTo.Date < today.Date
+            )
+            .ExecuteUpdateAsync(
+                setters =>
+                    setters
+                        .SetProperty(x => x.Status, ImportStatus.Expired)
+                        .SetProperty(x => x.UpdatedAtUtc, DateTime.UtcNow),
+                cancellationToken
+            );
     }
 
     private static IQueryable<ImportFclRates> ApplyFilters(

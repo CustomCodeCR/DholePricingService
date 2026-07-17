@@ -17,7 +17,19 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.SourceImportFclRateId).IsRequired(false);
 
-        builder.Ignore(x => x.ClientName);
+        builder.Property(x => x.ClientName).HasMaxLength(250).IsRequired(false);
+
+        builder.Property(x => x.IdtraNumber).HasMaxLength(100).IsRequired(false);
+
+        builder.Property(x => x.QuoNumber).HasMaxLength(100).IsRequired(false);
+
+        builder.Property(x => x.Includes).HasColumnType("text").IsRequired(false);
+
+        builder.Property(x => x.SubjectTo).HasColumnType("text").IsRequired(false);
+
+        builder.Property(x => x.Excludes).HasColumnType("text").IsRequired(false);
+
+        builder.Property(x => x.TransitDays).IsRequired(false);
 
         builder.Property(x => x.AgentId).IsRequired();
 
@@ -105,6 +117,8 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.HasIndex(x => x.RequiredApproval);
         builder.HasIndex(x => x.ValidFrom);
         builder.HasIndex(x => x.ValidTo);
+        builder.HasIndex(x => x.IdtraNumber);
+        builder.HasIndex(x => x.QuoNumber);
 
         builder
             .HasIndex(x => x.RateCode)

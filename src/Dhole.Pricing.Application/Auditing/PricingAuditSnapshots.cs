@@ -109,6 +109,13 @@ public static class PricingAuditSnapshots
             rateHeader.FreeDays,
             rateHeader.ValidFrom,
             rateHeader.ValidTo,
+            rateHeader.ClientName,
+            rateHeader.IdtraNumber,
+            rateHeader.QuoNumber,
+            rateHeader.Includes,
+            rateHeader.SubjectTo,
+            rateHeader.Excludes,
+            rateHeader.TransitDays,
 
             rateHeader.TotalCostAmount,
             rateHeader.TotalSaleAmount,

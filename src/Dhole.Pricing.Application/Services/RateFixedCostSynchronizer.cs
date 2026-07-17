@@ -28,36 +28,12 @@ public sealed class RateFixedCostSynchronizer(ICostRepository costs) : IRateFixe
 
         rate.RemoveAutomaticFixedDetails(updatedBy);
 
-        var resolvedCosts = new List<Cost>();
-
-        await AddRouteCostsAsync(
-            resolvedCosts,
-            rate.AgentId,
-            rate.CarrierId,
-            rate.PolId,
-            CostPortRole.Pol,
-            cancellationToken
+        var activeFixedCosts = await costs.GetActiveCostsAsync(
+            costType: CostType.Fixed,
+            cancellationToken: cancellationToken
         );
 
-        await AddRouteCostsAsync(
-            resolvedCosts,
-            rate.AgentId,
-            rate.CarrierId,
-            rate.PoeId,
-            CostPortRole.Poe,
-            cancellationToken
-        );
-
-        await AddRouteCostsAsync(
-            resolvedCosts,
-            rate.AgentId,
-            rate.CarrierId,
-            rate.PodId,
-            CostPortRole.Pod,
-            cancellationToken
-        );
-
-        foreach (var cost in resolvedCosts.GroupBy(x => x.Id).Select(group => group.First()))
+        foreach (var cost in activeFixedCosts.Where(cost => MatchesRate(cost, rate)))
         {
             var hasExistingAmount = existingAmounts.TryGetValue(cost.Id, out var existingAmount);
             var costAmount = hasExistingAmount ? existingAmount.CostAmount : cost.CostAmount;
@@ -79,59 +55,32 @@ public sealed class RateFixedCostSynchronizer(ICostRepository costs) : IRateFixe
                 costAmount,
                 saleAmount,
                 cost.Notes,
-                hasExistingAmount && existingAmount.Quantity > 0
-                    ? existingAmount.Quantity
-                    : 1,
+                cost.IsAccountant ? rate.ContainerQuantity : 1,
                 updatedBy
             );
         }
     }
 
-    private async Task AddRouteCostsAsync(
-        ICollection<Cost> destination,
-        Guid? agentId,
-        Guid? carrierId,
-        Guid portId,
-        CostPortRole portRole,
-        CancellationToken cancellationToken
-    )
+    private static bool MatchesRate(Cost cost, RateHeader rate)
     {
-        if (agentId.HasValue)
+        var matchesAgent = !cost.AgentId.HasValue || cost.AgentId == rate.AgentId;
+        var matchesCarrier = !cost.CarrierId.HasValue || cost.CarrierId == rate.CarrierId;
+
+        if (!matchesAgent || !matchesCarrier)
+            return false;
+
+        if (!cost.PortId.HasValue)
+            return true;
+
+        return cost.PortRole switch
         {
-            var agentCosts = await costs.GetActiveCostsAsync(
-                costType: CostType.Fixed,
-                costDetailType: null,
-                carrierId: null,
-                agentId: agentId.Value,
-                portId: portId,
-                portRole: portRole,
-                currencyId: null,
-                cancellationToken: cancellationToken
-            );
-
-            foreach (var cost in agentCosts)
-            {
-                destination.Add(cost);
-            }
-        }
-
-        if (carrierId.HasValue)
-        {
-            var carrierCosts = await costs.GetActiveCostsAsync(
-                costType: CostType.Fixed,
-                costDetailType: null,
-                carrierId: carrierId.Value,
-                agentId: null,
-                portId: portId,
-                portRole: portRole,
-                currencyId: null,
-                cancellationToken: cancellationToken
-            );
-
-            foreach (var cost in carrierCosts)
-            {
-                destination.Add(cost);
-            }
-        }
+            CostPortRole.Pol => cost.PortId == rate.PolId,
+            CostPortRole.Poe => cost.PortId == rate.PoeId,
+            CostPortRole.Pod => cost.PortId == rate.PodId,
+            CostPortRole.Any =>
+                cost.PortId == rate.PolId || cost.PortId == rate.PoeId || cost.PortId == rate.PodId,
+            null => cost.PortId == rate.PolId || cost.PortId == rate.PoeId || cost.PortId == rate.PodId,
+            _ => false,
+        };
     }
 }

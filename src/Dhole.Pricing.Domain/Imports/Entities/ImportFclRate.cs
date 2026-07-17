@@ -249,6 +249,16 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         );
     }
 
+
+    public void ExpireIfNeeded(DateTime today, Guid? updatedBy = null)
+    {
+        if (Status == ImportStatus.Expired || ValidTo.Date >= today.Date)
+            return;
+
+        Status = ImportStatus.Expired;
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
     public void Delete(Guid? deletedBy = null)
     {
         MarkAsDeleted(DateTime.UtcNow, deletedBy?.ToString());
