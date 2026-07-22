@@ -13,15 +13,8 @@ public static class StandardizedImportFclRateFactory
         StringComparer.OrdinalIgnoreCase
     )
     {
-        "missing_port_of_exit",
         "missing_agent",
-        "unknown_origin_port",
-        "unknown_port_of_exit",
-        "unknown_destination_port",
-        "unknown_container_type",
-        "unknown_carrier",
         "unknown_agent",
-        "unknown_currency",
     };
 
     public static StandardizedImportFclRateMappingResult CreateRates(
@@ -77,31 +70,19 @@ public static class StandardizedImportFclRateFactory
                             "EMAIL",
                             "Importación desde correo"
                         ),
-                    ResolveSnapshot(row.OriginPortReference, "pol", row.OriginPort),
-                    ResolveSnapshot(
-                        row.PortOfExitReference,
-                        "poe",
-                        HasText(row.PortOfExit)
-                            ? row.PortOfExit
-                            : row.DestinationPortReference?.Name ?? row.DestinationPort,
-                        "PENDING",
-                        "Por asignar"
-                    ),
-                    ResolveSnapshot(row.DestinationPortReference, "pod", row.DestinationPort),
-                    ResolveSnapshot(row.CarrierReference, "carriers", row.Carrier),
-                    ResolveSnapshot(
+                    RequireSnapshot(row.OriginPortReference, "POL"),
+                    RequireSnapshot(row.PortOfExitReference, "POE"),
+                    RequireSnapshot(row.DestinationPortReference, "POD"),
+                    RequireSnapshot(row.CarrierReference, "naviera"),
+                    ResolveOptionalSnapshot(
                         row.AgentReference,
                         "agents",
-                        row.Agent,
+                        null,
                         "PENDING",
                         "Por asignar"
                     ),
-                    ResolveSnapshot(
-                        row.ContainerTypeReference,
-                        "container-types",
-                        row.ContainerType
-                    ),
-                    ResolveSnapshot(row.CurrencyReference, "currencies", row.Currency),
+                    RequireSnapshot(row.ContainerTypeReference, "tipo de contenedor"),
+                    RequireSnapshot(row.CurrencyReference, "moneda"),
                     row.Commodity,
                     row.OceanFreight,
                     row.OriginCharges,
@@ -134,11 +115,12 @@ public static class StandardizedImportFclRateFactory
             && rowIssues.Any(x => !ReviewableImportIssueCodes.Contains(x.Code));
 
         return !hasNonReviewableBlockingIssue
-            && HasText(row.OriginPort)
-            && HasText(row.DestinationPort)
-            && HasText(row.ContainerType)
-            && HasText(row.Carrier)
-            && HasText(row.Currency)
+            && row.OriginPortReference is not null
+            && row.PortOfExitReference is not null
+            && row.DestinationPortReference is not null
+            && row.ContainerTypeReference is not null
+            && row.CarrierReference is not null
+            && row.CurrencyReference is not null
             && row.ValidFrom.HasValue
             && row.ValidTo.HasValue
             && row.ValidTo.Value >= row.ValidFrom.Value
@@ -149,7 +131,22 @@ public static class StandardizedImportFclRateFactory
             && IsNonNegative(row.Surcharges);
     }
 
-    private static CatalogSnapshot ResolveSnapshot(
+    private static CatalogSnapshot RequireSnapshot(
+        DataExtractionCatalogReference? reference,
+        string fieldName
+    )
+    {
+        if (reference is null)
+        {
+            throw new InvalidOperationException(
+                $"Data Extraction intentó guardar una fila sin una referencia válida de Config para {fieldName}."
+            );
+        }
+
+        return ToSnapshot(reference);
+    }
+
+    private static CatalogSnapshot ResolveOptionalSnapshot(
         DataExtractionCatalogReference? reference,
         string catalogGroupSlug,
         string? rawValue,

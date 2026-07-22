@@ -107,6 +107,19 @@ public sealed class ExtractAndPersistFclPricingImportService(
             requestedBy
         );
 
+        if (mapped.Rates.Count == 0)
+        {
+            return new ExtractAndPersistFclPricingImportResult(
+                false,
+                extraction.ExtractionExecutionId,
+                0,
+                mapped.SkippedExtractionRowIds.Count,
+                extraction.Issues,
+                "Pricing.NoConfigMatchedRows",
+                "Ninguna fila pudo guardarse porque POL, POE, POD, naviera, contenedor o moneda no coincidieron con elementos activos de Config."
+            );
+        }
+
         var existingExtractionRecordIds = (
             await importFclRateRepository.GetByImportFclBatchIdAsync(
                 importBatchId,

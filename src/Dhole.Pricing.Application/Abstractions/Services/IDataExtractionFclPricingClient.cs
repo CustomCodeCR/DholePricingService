@@ -95,7 +95,6 @@ public sealed record DataExtractionFclPricingRow(
         && DestinationPortReference is not null
         && ContainerTypeReference is not null
         && CarrierReference is not null
-        && AgentReference is not null
         && CurrencyReference is not null;
 }
 
