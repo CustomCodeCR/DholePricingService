@@ -131,6 +131,11 @@ public static class PricingErrors
         "El estado de la tarifa FCL importada no es válido para esta operación."
     );
 
+    public static readonly Error ImportFclRateCatalogConcordanceRequired = new(
+        "Pricing.ImportFclRateCatalogConcordanceRequired",
+        "Debe corregir y validar perfil, POL, POE, POD, naviera, agente, contenedor y moneda contra Config antes de aprobar."
+    );
+
     public static readonly Error ImportFclRateRejectReasonIsRequired = new(
         "Pricing.ImportFclRateRejectReasonIsRequired",
         "Debe indicar el motivo de rechazo de la tarifa FCL importada."

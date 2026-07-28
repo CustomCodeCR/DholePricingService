@@ -1,6 +1,7 @@
 using CustomCodeFramework.Auth.DependencyInjection;
 using CustomCodeFramework.Mongo.DependencyInjection;
 using CustomCodeFramework.Redis.DependencyInjection;
+using Dhole.Config.Contracts.Grpc;
 using Dhole.DataExtraction.Contracts.Grpc;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Mongo;
@@ -40,8 +41,10 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddPricingCacheServices();
         services.AddPricingMongoSnapshotWriters();
         services.AddPricingDataExtractionGrpcClient(configuration);
+        services.AddPricingConfigGrpcClient(configuration);
 
         services.AddScoped<ExtractAndPersistFclPricingImportService>();
+        services.AddScoped<CorrectImportRateCatalogsService>();
 
         return services;
     }
@@ -119,6 +122,37 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddScoped<IDataExtractionFclPricingClient, DataExtractionFclPricingGrpcClient>();
 
+        return services;
+    }
+
+    public static IServiceCollection AddPricingConfigGrpcClient(
+        this IServiceCollection services,
+        IConfiguration configuration
+    )
+    {
+        var configuredAddress = configuration["Grpc:Clients:Config:Address"];
+        if (
+            string.IsNullOrWhiteSpace(configuredAddress)
+            || !Uri.TryCreate(configuredAddress, UriKind.Absolute, out var address)
+        )
+        {
+            throw new InvalidOperationException(
+                "Debe configurar Grpc:Clients:Config:Address con una URL válida."
+            );
+        }
+
+        AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
+        services
+            .AddGrpcClient<ConfigCatalogGrpc.ConfigCatalogGrpcClient>(options =>
+            {
+                options.Address = address;
+            })
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new SocketsHttpHandler { EnableMultipleHttp2Connections = true }
+            );
+
+        services.AddScoped<IPricingConfigCatalogClient, PricingConfigCatalogGrpcClient>();
         return services;
     }
 

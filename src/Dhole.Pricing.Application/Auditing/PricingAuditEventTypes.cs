@@ -9,6 +9,7 @@ public static class PricingAuditEventTypes
     public const string CostInactivated = "pricing.cost.inactivated";
 
     public const string ImportFclRateCreated = "pricing.import-fcl-rate.created";
+    public const string ImportFclRateUpdated = "pricing.import-fcl-rate.updated";
     public const string ImportFclRateApproved = "pricing.import-fcl-rate.approved";
     public const string ImportFclRateRejected = "pricing.import-fcl-rate.rejected";
     public const string ImportFclRateCreatedAsRate = "pricing.import-fcl-rate.created-as-rate";

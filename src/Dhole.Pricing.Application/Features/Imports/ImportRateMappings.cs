@@ -63,6 +63,8 @@ internal static class ImportRateMappings
             Status = importRate.Status.ToString(),
             UsedAsRateCount = importRate.UsedAsRateCount,
             CreatedAsRateHeaderId = importRate.CreatedAsRateHeaderId,
+            HasConfigConcordance = importRate.HasConfigConcordance,
+            UnresolvedCatalogs = GetUnresolvedCatalogs(importRate),
         };
     }
 
@@ -85,5 +87,21 @@ internal static class ImportRateMappings
             importRate.Status.ToString(),
             importRate.UsedAsRateCount
         );
+    }
+
+    private static IReadOnlyCollection<string> GetUnresolvedCatalogs(
+        ImportFclRates importRate
+    )
+    {
+        var unresolved = new List<string>();
+        if (importRate.ImportProfileId == Guid.Empty) unresolved.Add("pricing-imports-profiles");
+        if (importRate.PolId == Guid.Empty) unresolved.Add("pol");
+        if (importRate.PoeId == Guid.Empty) unresolved.Add("poe");
+        if (importRate.PodId == Guid.Empty) unresolved.Add("pod");
+        if (importRate.CarrierId == Guid.Empty) unresolved.Add("carriers");
+        if (importRate.AgentId == Guid.Empty) unresolved.Add("agents");
+        if (importRate.ContainerTypeId == Guid.Empty) unresolved.Add("container-types");
+        if (importRate.CurrencyId == Guid.Empty) unresolved.Add("currencies");
+        return unresolved;
     }
 }

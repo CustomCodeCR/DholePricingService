@@ -49,11 +49,23 @@ public static class PricingAuditSnapshots
 
             SourceType = importFclRate.SourceType.ToString(),
 
+            importFclRate.ImportProfileId,
+            importFclRate.ImportProfileName,
+            importFclRate.PolId,
             importFclRate.Pol,
+            importFclRate.PoeId,
+            importFclRate.Poe,
+            importFclRate.PodId,
             importFclRate.Pod,
+            importFclRate.CarrierId,
             importFclRate.Carrier,
+            importFclRate.AgentId,
+            importFclRate.Agent,
+            importFclRate.ContainerTypeId,
             importFclRate.ContainerType,
+            importFclRate.CurrencyId,
             importFclRate.Currency,
+            importFclRate.HasConfigConcordance,
 
             importFclRate.Freight,
             importFclRate.FreeDays,

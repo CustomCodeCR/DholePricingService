@@ -11,6 +11,7 @@ using Dhole.Pricing.Application.Features.Imports.GetImportRates;
 using Dhole.Pricing.Application.Features.Imports.GetImportRatesForSelect;
 using Dhole.Pricing.Application.Features.Imports.GetPricingDecisionDashboard;
 using Dhole.Pricing.Application.Features.Imports.RejectImportRate;
+using Dhole.Pricing.Application.Imports;
 using Dhole.Pricing.Contracts.Imports.Request;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
@@ -46,6 +47,10 @@ public static class ImportRateEndpoints
         group
             .MapPost("/", CreateImportRateAsync)
             .RequireScope(PricingConstants.Scopes.ImportFclRateCreate);
+
+        group
+            .MapPut("/{importRateId:guid}/catalogs", UpdateImportRateCatalogsAsync)
+            .RequireScope(PricingConstants.Scopes.ImportFclRateApprove);
 
         group
             .MapPost("/extract", ExtractImportRateFromFileAsync)
@@ -226,7 +231,7 @@ public static class ImportRateEndpoints
                     sourceType,
                     ToSnapshot(request.Profile),
                     ToSnapshot(request.Pol),
-                    ToPoeSnapshot(request.Poe, request.Pod),
+                    ToPoeSnapshot(request.Poe),
                     ToSnapshot(request.Pod),
                     ToSnapshot(request.Carrier),
                     ToSnapshot(request.Agent),
@@ -304,6 +309,33 @@ public static class ImportRateEndpoints
                 httpContext.User.Identity?.Name,
                 correlationId
             ),
+            cancellationToken
+        );
+
+        return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static async Task<IResult> UpdateImportRateCatalogsAsync(
+        Guid importRateId,
+        UpdateImportRateCatalogsRequest request,
+        CorrectImportRateCatalogsService correctionService,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await correctionService.CorrectAsync(
+            importRateId,
+            new ImportRateCatalogCorrection(
+                request.ImportProfileId,
+                request.PolId,
+                request.PoeId,
+                request.PodId,
+                request.CarrierId,
+                request.AgentId,
+                request.ContainerTypeId,
+                request.CurrencyId
+            ),
+            httpContext.GetCurrentUserId(),
             cancellationToken
         );
 
@@ -394,19 +426,16 @@ public static class ImportRateEndpoints
         return EndpointResults.FromResult(result, httpContext);
     }
 
-    private static CatalogSnapshot ToPoeSnapshot(
-        ImportCatalogSnapshotRequest? poe,
-        ImportCatalogSnapshotRequest pod
-    )
+    private static CatalogSnapshot ToPoeSnapshot(ImportCatalogSnapshotRequest? poe)
     {
-        return
-            poe is null
-            || poe.Id == Guid.Empty
-            || string.IsNullOrWhiteSpace(poe.Name)
-            || string.IsNullOrWhiteSpace(poe.Code)
-            || string.IsNullOrWhiteSpace(poe.Slug)
-            ? ToSnapshot(pod)
-            : ToSnapshot(poe);
+        if (poe is null)
+        {
+            throw new InvalidOperationException(
+                "El POE debe seleccionarse explícitamente; no se copia desde POD."
+            );
+        }
+
+        return ToSnapshot(poe);
     }
 
     private static CatalogSnapshot ToSnapshot(ImportCatalogSnapshotRequest request)

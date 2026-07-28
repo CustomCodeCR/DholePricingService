@@ -115,8 +115,8 @@ public sealed class ExtractAndPersistFclPricingImportService(
                 0,
                 mapped.SkippedExtractionRowIds.Count,
                 extraction.Issues,
-                "Pricing.NoConfigMatchedRows",
-                "Ninguna fila pudo guardarse porque POL, POE, POD, naviera, contenedor o moneda no coincidieron con elementos activos de Config."
+                "Pricing.NoUsableExtractionRows",
+                "Ninguna fila pudo guardarse porque faltan datos estructurales requeridos, fechas válidas o un monto de tarifa."
             );
         }
 

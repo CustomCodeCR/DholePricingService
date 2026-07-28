@@ -92,7 +92,6 @@ public sealed record DataExtractionFclPricingRow(
     public bool HasAllRequiredCatalogReferences =>
         OriginPortReference is not null
         && PortOfExitReference is not null
-        && DestinationPortReference is not null
         && ContainerTypeReference is not null
         && CarrierReference is not null
         && CurrencyReference is not null;

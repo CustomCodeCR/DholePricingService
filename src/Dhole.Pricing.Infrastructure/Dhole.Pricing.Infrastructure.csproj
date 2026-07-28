@@ -28,4 +28,8 @@
     <ProjectReference Include="..\Dhole.Pricing.Domain\Dhole.Pricing.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Protobuf Include="Protos\config_catalog.proto" GrpcServices="Client" />
+  </ItemGroup>
+
 </Project>

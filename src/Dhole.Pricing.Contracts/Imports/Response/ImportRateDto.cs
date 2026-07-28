@@ -56,4 +56,6 @@ public sealed record ImportRateDto
     public string Status { get; init; } = string.Empty;
     public int UsedAsRateCount { get; init; }
     public Guid? CreatedAsRateHeaderId { get; init; }
+    public bool HasConfigConcordance { get; init; }
+    public IReadOnlyCollection<string> UnresolvedCatalogs { get; init; } = [];
 }
