@@ -116,7 +116,7 @@ public sealed class ExtractAndPersistFclPricingImportService(
                 mapped.SkippedExtractionRowIds.Count,
                 extraction.Issues,
                 "Pricing.NoUsableExtractionRows",
-                "Ninguna fila pudo guardarse porque faltan datos estructurales requeridos, fechas válidas o un monto de tarifa."
+                "Ninguna fila pudo guardarse porque faltan datos estructurales requeridos, fechas válidas o un monto de tarifa. Los valores no encontrados en Config ya no bloquean la importación."
             );
         }
 

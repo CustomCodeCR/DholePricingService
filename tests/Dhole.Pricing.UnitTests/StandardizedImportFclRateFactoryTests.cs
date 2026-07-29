@@ -69,10 +69,9 @@ public sealed class StandardizedImportFclRateFactoryTests
 
         var rate = result.Rates.Single();
         Assert.AreEqual("CALDERA", rate.PoeName);
-        Assert.AreEqual(string.Empty, rate.PodName);
-        Assert.AreEqual(string.Empty, rate.PodCode);
-        Assert.AreEqual(Guid.Empty, rate.PodId);
-        Assert.IsFalse(rate.HasConfigConcordance);
+        Assert.AreEqual("Por asignar", rate.PodName);
+        Assert.AreEqual("PENDING", rate.PodCode);
+        Assert.AreNotEqual(rate.PodId, rate.PoeId);
     }
 
     [TestMethod]
@@ -158,47 +157,42 @@ public sealed class StandardizedImportFclRateFactoryTests
         Assert.AreEqual(polReference.Id, rate.PolId);
         Assert.AreEqual("Shanghai", rate.PolName);
         Assert.AreEqual("MOIN", rate.PoeName);
-        Assert.AreEqual(Guid.Empty, rate.PoeId);
         Assert.AreEqual(podReference.Id, rate.PodId);
         Assert.AreEqual("Puerto Caldera", rate.PodName);
         Assert.AreEqual(carrierReference.Id, rate.CarrierId);
         Assert.AreEqual(containerReference.Id, rate.ContainerTypeId);
         Assert.AreEqual(currencyReference.Id, rate.CurrencyId);
-        Assert.AreEqual(string.Empty, rate.AgentName);
-        Assert.AreEqual(Guid.Empty, rate.AgentId);
-        Assert.IsFalse(rate.HasConfigConcordance);
+        Assert.AreEqual("Por asignar", rate.AgentName);
     }
 
     [TestMethod]
-    public void CreateRates_DoesNotInventCatalogIdsForUnknownValues()
+    public void CreateRates_WhenCurrencyIsMissing_DefaultsToUsdAndDoesNotSkipRow()
     {
         var rowId = Guid.NewGuid();
         var extraction = new DataExtractionFclPricingResult(
             true,
             Guid.NewGuid(),
             Guid.NewGuid(),
-            "test-no-invented-ids",
-            new DataExtractionFclPricingSummary(1, 0, 1, 0, true),
+            "test-default-usd",
+            new DataExtractionFclPricingSummary(1, 0, 0, 1, true),
             [
                 new DataExtractionFclPricingRow(
                     rowId,
                     "Rates",
                     2,
-                    "Unknown POL",
-                    "Unknown POE",
+                    "Shanghai",
+                    "Moin",
                     null,
-                    "40SV",
-                    "Unknown Carrier",
-                    "Signature Company",
-                    null,
-                    "USD",
-                    10,
-                    null,
-                    DateTime.UtcNow.Date,
-                    DateTime.UtcNow.Date.AddDays(30),
-                    1500m,
+                    "40HC",
+                    "MSC",
+                    "RS",
                     null,
                     null,
+                    14,
+                    28,
+                    new DateTime(2026, 8, 1),
+                    new DateTime(2026, 8, 31),
+                    6210m,
                     null,
                     null,
                     null,
@@ -206,7 +200,9 @@ public sealed class StandardizedImportFclRateFactoryTests
                     null,
                     null,
                     null,
-                    "RequiresReview",
+                    null,
+                    null,
+                    "Invalid",
                     "{}",
                     null,
                     null,
@@ -217,28 +213,34 @@ public sealed class StandardizedImportFclRateFactoryTests
                     null
                 )
             ],
-            [],
+            [
+                new DataExtractionFclPricingIssue(
+                    Guid.NewGuid(),
+                    rowId,
+                    "missing_currency",
+                    "La fila no tiene moneda.",
+                    true,
+                    "Rates",
+                    2,
+                    "Currency",
+                    null
+                )
+            ],
             null,
             null
         );
 
-        var rate = StandardizedImportFclRateFactory.CreateRates(
+        var result = StandardizedImportFclRateFactory.CreateRates(
             Guid.NewGuid(),
             ImportSourceType.Email,
             extraction,
             null
-        ).Rates.Single();
+        );
 
-        Assert.AreEqual(Guid.Empty, rate.ImportProfileId);
-        Assert.AreEqual(Guid.Empty, rate.PolId);
-        Assert.AreEqual(Guid.Empty, rate.PoeId);
-        Assert.AreEqual(Guid.Empty, rate.PodId);
-        Assert.AreEqual(Guid.Empty, rate.CarrierId);
-        Assert.AreEqual(Guid.Empty, rate.AgentId);
-        Assert.AreEqual(Guid.Empty, rate.ContainerTypeId);
-        Assert.AreEqual(Guid.Empty, rate.CurrencyId);
-        Assert.AreEqual("Unknown POL", rate.PolName);
-        Assert.AreEqual("Signature Company", rate.AgentName);
+        var rate = result.Rates.Single();
+        Assert.AreEqual(0, result.SkippedExtractionRowIds.Count);
+        Assert.AreEqual("USD", rate.CurrencyCode);
+        Assert.AreEqual("USD", rate.CurrencyName);
     }
 
     private static DataExtractionCatalogReference Reference(

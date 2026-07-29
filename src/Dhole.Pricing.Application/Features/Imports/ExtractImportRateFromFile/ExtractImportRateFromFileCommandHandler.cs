@@ -158,10 +158,19 @@ public sealed class ExtractImportRateFromFileCommandHandler(
         }
 
         if (
-            extension is "eml" or "msg" or "html" or "htm" or "txt"
+            extension is "png" or "jpg" or "jpeg" or "gif" or "webp" or "bmp" or "tif" or "tiff"
+            || content.StartsWith("image/", StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            return ImportSourceType.Image;
+        }
+
+        if (
+            extension is "eml" or "msg" or "html" or "htm" or "mht" or "mhtml" or "txt"
             || content.Contains("message/rfc822")
             || content.Contains("text/html")
             || content.Contains("text/plain")
+            || content.Contains("multipart/related")
         )
         {
             return ImportSourceType.Email;

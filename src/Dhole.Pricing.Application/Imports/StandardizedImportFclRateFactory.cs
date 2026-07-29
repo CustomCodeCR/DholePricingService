@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
@@ -14,6 +17,9 @@ public static class StandardizedImportFclRateFactory
         "unknown_agent",
         "missing_destination_port",
         "same_poe_and_pod",
+        // Regla de negocio: cuando Data Extraction no pudo determinar la moneda,
+        // Pricing asume USD y permite importar la fila.
+        "missing_currency",
     };
 
     public static StandardizedImportFclRateMappingResult CreateRates(
@@ -45,7 +51,6 @@ public static class StandardizedImportFclRateFactory
 
         var rates = new List<ImportFclRates>();
         var skippedRows = new List<Guid>();
-        var rateKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var row in extraction.Rows)
         {
@@ -57,26 +62,46 @@ public static class StandardizedImportFclRateFactory
                 continue;
             }
 
-            var rateKey = BuildRateKey(row);
-            if (!rateKeys.Add(rateKey))
-            {
-                skippedRows.Add(row.Id);
-                continue;
-            }
-
             rates.Add(
                 ImportFclRates.Create(
                     importBatchId,
                     row.Id,
                     sourceType,
-                    ResolveSnapshot(profile, null),
-                    ResolveSnapshot(row.OriginPortReference, row.OriginPort),
-                    ResolveSnapshot(row.PortOfExitReference, row.PortOfExit),
-                    ResolveSnapshot(row.DestinationPortReference, row.DestinationPort),
-                    ResolveSnapshot(row.CarrierReference, row.Carrier),
-                    ResolveSnapshot(row.AgentReference, row.Agent),
-                    ResolveSnapshot(row.ContainerTypeReference, row.ContainerType),
-                    ResolveSnapshot(row.CurrencyReference, row.Currency),
+                    profile is not null
+                        ? ToSnapshot(profile)
+                        : CreateFallbackSnapshot(
+                            "pricing-imports-profiles",
+                            "Email",
+                            "EMAIL",
+                            "Importación desde correo"
+                        ),
+                    ResolveOptionalSnapshot(row.OriginPortReference, "pol", row.OriginPort),
+                    ResolveOptionalSnapshot(
+                        row.PortOfExitReference,
+                        "poe",
+                        row.PortOfExit
+                    ),
+                    ResolveOptionalSnapshot(
+                        row.DestinationPortReference,
+                        "pod",
+                        row.DestinationPort,
+                        "PENDING",
+                        "Por asignar"
+                    ),
+                    ResolveOptionalSnapshot(row.CarrierReference, "carriers", row.Carrier),
+                    ResolveOptionalSnapshot(
+                        row.AgentReference,
+                        "agents",
+                        row.Agent,
+                        "PENDING",
+                        "Por asignar"
+                    ),
+                    ResolveOptionalSnapshot(
+                        row.ContainerTypeReference,
+                        "container-types",
+                        row.ContainerType
+                    ),
+                    ResolveCurrencySnapshot(row.CurrencyReference, row.Currency),
                     row.Commodity,
                     row.OceanFreight,
                     row.OriginCharges,
@@ -113,7 +138,6 @@ public static class StandardizedImportFclRateFactory
             && HasText(row.PortOfExit)
             && HasText(row.ContainerType)
             && HasText(row.Carrier)
-            && HasText(row.Currency)
             && row.ValidFrom.HasValue
             && row.ValidTo.HasValue
             && row.ValidTo.Value >= row.ValidFrom.Value
@@ -130,46 +154,112 @@ public static class StandardizedImportFclRateFactory
             || code.StartsWith("unknown_", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static CatalogSnapshot ResolveSnapshot(
+    private static CatalogSnapshot ResolveOptionalSnapshot(
         DataExtractionCatalogReference? reference,
-        string? rawValue
+        string catalogGroupSlug,
+        string? rawValue,
+        string? fallbackCode = null,
+        string? fallbackName = null
     )
     {
         return reference is not null
             ? ToSnapshot(reference)
-            : CatalogSnapshot.Unresolved(rawValue);
+            : CreateFallbackSnapshot(catalogGroupSlug, rawValue, fallbackCode, fallbackName);
     }
 
-    private static string BuildRateKey(DataExtractionFclPricingRow row)
-    {
-        return string.Join(
-            "|",
-            CatalogIdentity(row.OriginPortReference, row.OriginPort),
-            CatalogIdentity(row.PortOfExitReference, row.PortOfExit),
-            CatalogIdentity(row.CarrierReference, row.Carrier),
-            CatalogIdentity(row.AgentReference, row.Agent),
-            CatalogIdentity(row.ContainerTypeReference, row.ContainerType),
-            CatalogIdentity(row.CurrencyReference, row.Currency),
-            row.ValidFrom?.Date.Ticks,
-            row.ValidTo?.Date.Ticks,
-            row.OceanFreight,
-            row.TotalSale
-        );
-    }
-
-    private static string CatalogIdentity(
+    private static CatalogSnapshot ResolveCurrencySnapshot(
         DataExtractionCatalogReference? reference,
         string? rawValue
     )
     {
-        return reference?.Id.ToString("N")
-            ?? rawValue?.Trim().ToUpperInvariant()
-            ?? string.Empty;
+        if (reference is not null)
+        {
+            return ToSnapshot(reference);
+        }
+
+        var currency = HasText(rawValue) ? rawValue!.Trim().ToUpperInvariant() : "USD";
+        return CreateFallbackSnapshot(
+            "currencies",
+            currency,
+            currency,
+            currency
+        );
+    }
+
+    private static CatalogSnapshot CreateFallbackSnapshot(
+        string catalogGroupSlug,
+        string? rawValue,
+        string? fallbackCode = null,
+        string? fallbackName = null
+    )
+    {
+        var hasRawValue = HasText(rawValue);
+        var name = hasRawValue ? rawValue!.Trim() : fallbackName ?? "Por asignar";
+        var normalized = NormalizeCatalogValue(name);
+        var code =
+            hasRawValue
+                ? normalized.Replace("-", string.Empty, StringComparison.Ordinal).ToUpperInvariant()
+            : HasText(fallbackCode) ? fallbackCode!.Trim().ToUpperInvariant()
+            : normalized.Replace("-", string.Empty, StringComparison.Ordinal).ToUpperInvariant();
+        var slug = string.IsNullOrWhiteSpace(normalized) ? "pending" : normalized;
+
+        code = Limit(
+            string.IsNullOrWhiteSpace(code) ? "PENDING" : code,
+            catalogGroupSlug switch
+            {
+                "currencies" => 20,
+                "container-types" => 50,
+                _ => 100,
+            }
+        );
+        name = Limit(name, catalogGroupSlug is "currencies" or "container-types" ? 150 : 250);
+        slug = Limit(slug, 200);
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes($"{catalogGroupSlug}:{slug}"));
+        var idBytes = hash.AsSpan(0, 16).ToArray();
+        var id = new Guid(idBytes);
+
+        return CatalogSnapshot.Create(id, name, code, slug);
+    }
+
+    private static string NormalizeCatalogValue(string value)
+    {
+        var decomposed = value.Trim().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposed.Length);
+        var appendSeparator = false;
+
+        foreach (var character in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            if (char.IsLetterOrDigit(character))
+            {
+                if (appendSeparator && builder.Length > 0)
+                {
+                    builder.Append('-');
+                }
+
+                builder.Append(char.ToLowerInvariant(character));
+                appendSeparator = false;
+            }
+            else
+            {
+                appendSeparator = true;
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static bool HasText(string? value) => !string.IsNullOrWhiteSpace(value);
 
     private static bool IsNonNegative(decimal? value) => !value.HasValue || value.Value >= 0m;
+
+    private static string Limit(string value, int maxLength) =>
+        value.Length <= maxLength ? value : value[..maxLength];
 
     private static CatalogSnapshot ToSnapshot(DataExtractionCatalogReference reference)
     {

@@ -158,15 +158,6 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
     public string? SourceUrl { get; private set; }
     public int UsedAsRateCount { get; private set; }
     public Guid? CreatedAsRateHeaderId { get; private set; }
-    public bool HasConfigConcordance =>
-        ImportProfileId != Guid.Empty
-        && PolId != Guid.Empty
-        && PoeId != Guid.Empty
-        && PodId != Guid.Empty
-        && CarrierId != Guid.Empty
-        && AgentId != Guid.Empty
-        && ContainerTypeId != Guid.Empty
-        && CurrencyId != Guid.Empty;
 
     public static ImportFclRates Create(
         Guid importBatchId,
@@ -232,13 +223,6 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
 
     public void Approve(Guid? updatedBy = null)
     {
-        if (!HasConfigConcordance)
-        {
-            throw new InvalidOperationException(
-                "Todos los catálogos deben estar validados contra Config antes de aprobar."
-            );
-        }
-
         Status = ImportStatus.Approved;
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
         AddDomainEvent(new ImportFclRateApprovedDomainEvent(Id, Status, updatedBy));
@@ -255,10 +239,6 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
     {
         if (rateHeaderId == Guid.Empty)
             throw new InvalidOperationException("La tarifa oficial creada es requerida.");
-        if (!HasConfigConcordance)
-            throw new InvalidOperationException(
-                "La tarifa importada tiene catálogos pendientes de validar."
-            );
 
         Status = ImportStatus.Approved;
         CreatedAsRateHeaderId = rateHeaderId;
@@ -283,36 +263,6 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
     {
         MarkAsDeleted(DateTime.UtcNow, deletedBy?.ToString());
         AddDomainEvent(new ImportFclRateDeletedDomainEvent(Id, deletedBy));
-    }
-
-    public void CorrectCatalogReferences(
-        CatalogSnapshot profile,
-        CatalogSnapshot pol,
-        CatalogSnapshot poe,
-        CatalogSnapshot pod,
-        CatalogSnapshot carrier,
-        CatalogSnapshot agent,
-        CatalogSnapshot containerType,
-        CatalogSnapshot currency,
-        Guid? updatedBy = null
-    )
-    {
-        if (Status != ImportStatus.Pending)
-        {
-            throw new InvalidOperationException(
-                "Solo se pueden corregir catálogos de importaciones pendientes."
-            );
-        }
-
-        ApplyProfile(profile);
-        ApplyPol(pol);
-        ApplyPoe(poe);
-        ApplyPod(pod);
-        ApplyCarrier(carrier);
-        ApplyAgent(agent);
-        ApplyContainerType(containerType);
-        ApplyCurrency(currency);
-        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
     }
 
     private void ApplyProfile(CatalogSnapshot value)
@@ -423,15 +373,5 @@ public sealed record CatalogSnapshot(Guid Id, string Name, string Code, string S
         }
 
         return new CatalogSnapshot(id, name.Trim(), code.Trim(), slug.Trim().ToLowerInvariant());
-    }
-
-    public static CatalogSnapshot Unresolved(string? rawValue = null)
-    {
-        return new CatalogSnapshot(
-            Guid.Empty,
-            string.IsNullOrWhiteSpace(rawValue) ? string.Empty : rawValue.Trim(),
-            string.Empty,
-            string.Empty
-        );
     }
 }

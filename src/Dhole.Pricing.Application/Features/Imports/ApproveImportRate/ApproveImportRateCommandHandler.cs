@@ -4,7 +4,6 @@ using CustomCodeFramework.Persistence.Abstractions;
 using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
-using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
@@ -14,7 +13,6 @@ namespace Dhole.Pricing.Application.Features.Imports.ApproveImportRate;
 
 public sealed class ApproveImportRateCommandHandler(
     IImportFclRateRepository importRates,
-    IPricingConfigCatalogClient configCatalog,
     IPricingAuditService audit,
     IImportRateCacheService cache,
     IUnitOfWork unitOfWork
@@ -53,27 +51,6 @@ public sealed class ApproveImportRateCommandHandler(
             if (importRate.Status is not (ImportStatus.Pending or ImportStatus.Approved))
             {
                 return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
-            }
-
-            if (!importRate.HasConfigConcordance)
-            {
-                return Result.Failure(
-                    PricingErrors.ImportFclRateCatalogConcordanceRequired
-                );
-            }
-
-            if (
-                importRate.Status == ImportStatus.Pending
-                && !await RefreshCatalogsFromConfigAsync(
-                    importRate,
-                    command.ApprovedBy,
-                    cancellationToken
-                )
-            )
-            {
-                return Result.Failure(
-                    PricingErrors.ImportFclRateCatalogConcordanceRequired
-                );
             }
 
             entities.Add(importRate);
@@ -126,79 +103,5 @@ public sealed class ApproveImportRateCommandHandler(
         }
 
         return Result.Success();
-    }
-
-    private async Task<bool> RefreshCatalogsFromConfigAsync(
-        ImportFclRates importRate,
-        Guid? updatedBy,
-        CancellationToken cancellationToken
-    )
-    {
-        var profile = ResolveAsync(
-            importRate.ImportProfileId,
-            "pricing-imports-profiles",
-            cancellationToken
-        );
-        var pol = ResolveAsync(importRate.PolId, "pol", cancellationToken);
-        var poe = ResolveAsync(importRate.PoeId, "poe", cancellationToken);
-        var pod = ResolveAsync(importRate.PodId, "pod", cancellationToken);
-        var carrier = ResolveAsync(importRate.CarrierId, "carriers", cancellationToken);
-        var agent = ResolveAsync(importRate.AgentId, "agents", cancellationToken);
-        var container = ResolveAsync(
-            importRate.ContainerTypeId,
-            "container-types",
-            cancellationToken
-        );
-        var currency = ResolveAsync(
-            importRate.CurrencyId,
-            "currencies",
-            cancellationToken
-        );
-
-        await Task.WhenAll(profile, pol, poe, pod, carrier, agent, container, currency);
-
-        if (
-            profile.Result is null
-            || pol.Result is null
-            || poe.Result is null
-            || pod.Result is null
-            || carrier.Result is null
-            || agent.Result is null
-            || container.Result is null
-            || currency.Result is null
-        )
-        {
-            return false;
-        }
-
-        importRate.CorrectCatalogReferences(
-            profile.Result,
-            pol.Result,
-            poe.Result,
-            pod.Result,
-            carrier.Result,
-            agent.Result,
-            container.Result,
-            currency.Result,
-            updatedBy
-        );
-        return true;
-    }
-
-    private async Task<CatalogSnapshot?> ResolveAsync(
-        Guid id,
-        string expectedGroup,
-        CancellationToken cancellationToken
-    )
-    {
-        var item = await configCatalog.GetActiveByIdAsync(id, cancellationToken);
-        return
-            item is not null
-            && item.CatalogGroupSlug.Equals(
-                expectedGroup,
-                StringComparison.OrdinalIgnoreCase
-            )
-            ? CatalogSnapshot.Create(item.Id, item.Name, item.Code, item.Slug)
-            : null;
     }
 }
