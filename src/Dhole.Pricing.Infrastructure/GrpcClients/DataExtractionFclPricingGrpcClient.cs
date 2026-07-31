@@ -3,11 +3,13 @@ using Dhole.DataExtraction.Contracts.Grpc;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Google.Protobuf;
 using Grpc.Core;
+using Microsoft.Extensions.Configuration;
 
 namespace Dhole.Pricing.Infrastructure.GrpcClients;
 
 public sealed class DataExtractionFclPricingGrpcClient(
-    DataExtractionGrpc.DataExtractionGrpcClient client
+    DataExtractionGrpc.DataExtractionGrpcClient client,
+    IConfiguration configuration
 ) : IDataExtractionFclPricingClient
 {
     public async Task<DataExtractionFclPricingResult> ExtractAsync(
@@ -31,9 +33,14 @@ public sealed class DataExtractionFclPricingGrpcClient(
                 RequestedByName = request.RequestedByName ?? string.Empty,
                 FileContent = ByteString.CopyFrom(request.FileContent),
             };
+            var timeoutSeconds = ReadPositiveInt(
+                configuration["Grpc:Clients:DataExtraction:TimeoutSeconds"],
+                1020
+            );
 
             var response = await client.ExtractFclPricingDataAsync(
                 grpcRequest,
+                deadline: DateTime.UtcNow.AddSeconds(timeoutSeconds),
                 cancellationToken: cancellationToken
             );
 
@@ -58,33 +65,58 @@ public sealed class DataExtractionFclPricingGrpcClient(
                 ToReference(response.ProfileReference)
             );
         }
-        catch (RpcException exception)
+        catch (RpcException exception) when (exception.StatusCode == StatusCode.DeadlineExceeded)
         {
-            return new DataExtractionFclPricingResult(
-                false,
-                null,
-                request.PricingImportId,
-                request.CorrelationId,
-                new DataExtractionFclPricingSummary(0, 0, 0, 0, true),
-                Array.Empty<DataExtractionFclPricingRow>(),
-                [
-                    new DataExtractionFclPricingIssue(
-                        Guid.NewGuid(),
-                        null,
-                        $"Grpc.{exception.StatusCode}",
-                        exception.Status.Detail,
-                        true,
-                        null,
-                        null,
-                        null,
-                        null
-                    ),
-                ],
-                $"Grpc.{exception.StatusCode}",
-                exception.Status.Detail,
-                null
+            var timeoutSeconds = ReadPositiveInt(
+                configuration["Grpc:Clients:DataExtraction:TimeoutSeconds"],
+                1020
+            );
+            return Failure(
+                request,
+                "Grpc.DeadlineExceeded",
+                $"DataExtraction no completó la extracción dentro de {timeoutSeconds} segundos."
             );
         }
+        catch (RpcException exception)
+        {
+            return Failure(
+                request,
+                $"Grpc.{exception.StatusCode}",
+                exception.Status.Detail
+            );
+        }
+    }
+
+    private static DataExtractionFclPricingResult Failure(
+        DataExtractionFclPricingRequest request,
+        string errorCode,
+        string errorMessage
+    )
+    {
+        return new DataExtractionFclPricingResult(
+            false,
+            null,
+            request.PricingImportId,
+            request.CorrelationId,
+            new DataExtractionFclPricingSummary(0, 0, 0, 0, true),
+            Array.Empty<DataExtractionFclPricingRow>(),
+            [
+                new DataExtractionFclPricingIssue(
+                    Guid.NewGuid(),
+                    null,
+                    errorCode,
+                    errorMessage,
+                    true,
+                    null,
+                    null,
+                    null,
+                    null
+                ),
+            ],
+            errorCode,
+            errorMessage,
+            null
+        );
     }
 
     private static DataExtractionFclPricingRow ToRow(PricingExtractionRecordGrpcModel row)
@@ -184,5 +216,10 @@ public sealed class DataExtractionFclPricingGrpcClient(
     private static string? EmptyToNull(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static int ReadPositiveInt(string? value, int fallback)
+    {
+        return int.TryParse(value, out var parsed) && parsed > 0 ? parsed : fallback;
     }
 }

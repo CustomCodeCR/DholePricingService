@@ -4,6 +4,7 @@ using CustomCodeFramework.Persistence.Abstractions;
 using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
+using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
@@ -13,6 +14,7 @@ namespace Dhole.Pricing.Application.Features.Imports.ApproveImportRate;
 
 public sealed class ApproveImportRateCommandHandler(
     IImportFclRateRepository importRates,
+    IPricingConfigCatalogClient configCatalog,
     IPricingAuditService audit,
     IImportRateCacheService cache,
     IUnitOfWork unitOfWork
@@ -51,6 +53,21 @@ public sealed class ApproveImportRateCommandHandler(
             if (importRate.Status is not (ImportStatus.Pending or ImportStatus.Approved))
             {
                 return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
+            }
+
+            var assignedPoe = await configCatalog.GetActiveByIdAsync(
+                importRate.PoeId,
+                cancellationToken
+            );
+            if (
+                assignedPoe is null
+                || !assignedPoe.CatalogGroupSlug.Equals(
+                    "poe",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                return Result.Failure(PricingErrors.ImportFclRatePoeAssignmentRequired);
             }
 
             entities.Add(importRate);

@@ -250,6 +250,122 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
     }
 
 
+    public void AssignPoe(CatalogSnapshot poe, Guid? updatedBy = null)
+    {
+        if (Status != ImportStatus.Pending)
+        {
+            throw new InvalidOperationException(
+                "Solo se puede asignar el POE de importaciones pendientes."
+            );
+        }
+
+        ApplyPoe(poe);
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
+    public void CorrectCatalogReferences(
+        CatalogSnapshot profile,
+        CatalogSnapshot pol,
+        CatalogSnapshot poe,
+        CatalogSnapshot pod,
+        CatalogSnapshot carrier,
+        CatalogSnapshot agent,
+        CatalogSnapshot containerType,
+        CatalogSnapshot currency,
+        Guid? updatedBy = null
+    )
+    {
+        if (Status != ImportStatus.Pending)
+        {
+            throw new InvalidOperationException(
+                "Solo se pueden corregir catálogos de importaciones pendientes."
+            );
+        }
+
+        ApplyProfile(profile);
+        ApplyPol(pol);
+        ApplyPoe(poe);
+        ApplyPod(pod);
+        ApplyCarrier(carrier);
+        ApplyAgent(agent);
+        ApplyContainerType(containerType);
+        ApplyCurrency(currency);
+
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
+    public void ApplyManualReview(
+        CatalogSnapshot profile,
+        CatalogSnapshot pol,
+        CatalogSnapshot poe,
+        CatalogSnapshot pod,
+        CatalogSnapshot carrier,
+        CatalogSnapshot agent,
+        CatalogSnapshot containerType,
+        CatalogSnapshot currency,
+        string? commodity,
+        decimal oceanFreight,
+        decimal originCharges,
+        decimal destinationCharges,
+        decimal surcharges,
+        decimal? totalSale,
+        int freeDays,
+        int? transitDays,
+        DateTime validFrom,
+        DateTime validTo,
+        Guid? updatedBy = null
+    )
+    {
+        if (Status != ImportStatus.Pending)
+        {
+            throw new InvalidOperationException(
+                "Solo se pueden revisar importaciones pendientes."
+            );
+        }
+
+        EnsureValidDates(validFrom, validTo);
+        EnsureNonNegative(oceanFreight, nameof(oceanFreight));
+        EnsureNonNegative(originCharges, nameof(originCharges));
+        EnsureNonNegative(destinationCharges, nameof(destinationCharges));
+        EnsureNonNegative(surcharges, nameof(surcharges));
+        EnsureNonNegative(totalSale, nameof(totalSale));
+
+        if (freeDays < 0 || transitDays < 0)
+        {
+            throw new InvalidOperationException(
+                "Los días libres y los días de tránsito no pueden ser negativos."
+            );
+        }
+
+        ApplyProfile(profile);
+        ApplyPol(pol);
+        ApplyPoe(poe);
+        ApplyPod(pod);
+        ApplyCarrier(carrier);
+        ApplyAgent(agent);
+        ApplyContainerType(containerType);
+        ApplyCurrency(currency);
+
+        Commodity = Normalize(commodity);
+        OceanFreight = oceanFreight;
+        Freight = oceanFreight;
+        OriginCharges = originCharges;
+        DestinationCharges = destinationCharges;
+        Surcharges = surcharges;
+        TotalCost = oceanFreight + originCharges + destinationCharges + surcharges;
+        TotalSale = totalSale;
+        Profit = totalSale.HasValue ? totalSale.Value - TotalCost.Value : null;
+        Margin = totalSale is > 0m && Profit.HasValue
+            ? decimal.Round((Profit.Value / totalSale.Value) * 100m, 4)
+            : null;
+        FreeDays = freeDays;
+        TransitDays = transitDays;
+        ValidFrom = validFrom;
+        ValidTo = validTo;
+
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
     public void ExpireIfNeeded(DateTime today, Guid? updatedBy = null)
     {
         if (Status == ImportStatus.Expired || ValidTo.Date >= today.Date)

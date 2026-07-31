@@ -3,6 +3,7 @@ using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
 using Dhole.Pricing.Application.Features.Imports.ApproveImportRate;
+using Dhole.Pricing.Application.Features.Imports.AssignImportRatePoe;
 using Dhole.Pricing.Application.Features.Imports.CreateImportRate;
 using Dhole.Pricing.Application.Features.Imports.DeleteImportRate;
 using Dhole.Pricing.Application.Features.Imports.ExtractImportRateFromFile;
@@ -11,6 +12,7 @@ using Dhole.Pricing.Application.Features.Imports.GetImportRates;
 using Dhole.Pricing.Application.Features.Imports.GetImportRatesForSelect;
 using Dhole.Pricing.Application.Features.Imports.GetPricingDecisionDashboard;
 using Dhole.Pricing.Application.Features.Imports.RejectImportRate;
+using Dhole.Pricing.Application.Features.Imports.ReviewImportRate;
 using Dhole.Pricing.Contracts.Imports.Request;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
@@ -58,6 +60,14 @@ public static class ImportRateEndpoints
 
         group
             .MapPost("/{importRateId:guid}/approve", ApproveImportRateAsync)
+            .RequireScope(PricingConstants.Scopes.ImportFclRateApprove);
+
+        group
+            .MapPut("/{importRateId:guid}/poe", AssignImportRatePoeAsync)
+            .RequireScope(PricingConstants.Scopes.ImportFclRateApprove);
+
+        group
+            .MapPut("/{importRateId:guid}/review", ReviewImportRateAsync)
             .RequireScope(PricingConstants.Scopes.ImportFclRateApprove);
 
         group
@@ -334,6 +344,64 @@ public static class ImportRateEndpoints
     {
         var result = await dispatcher.DispatchAsync(
             new ApproveImportRateCommand([importRateId], httpContext.GetCurrentUserId()),
+            cancellationToken
+        );
+
+        return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static async Task<IResult> AssignImportRatePoeAsync(
+        Guid importRateId,
+        [FromBody] AssignImportRatePoeRequest request,
+        ICommandDispatcher dispatcher,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await dispatcher.DispatchAsync(
+            new AssignImportRatePoeCommand(
+                importRateId,
+                request.PoeId,
+                httpContext.GetCurrentUserId()
+            ),
+            cancellationToken
+        );
+
+        return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static async Task<IResult> ReviewImportRateAsync(
+        Guid importRateId,
+        [FromBody] ReviewImportRateRequest request,
+        ICommandDispatcher dispatcher,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await dispatcher.DispatchAsync(
+            new ReviewImportRateCommand(
+                importRateId,
+                request.ImportProfileId,
+                request.PolId,
+                request.PoeId,
+                request.PodId,
+                request.CarrierId,
+                request.AgentId,
+                request.ContainerTypeId,
+                request.CurrencyId,
+                request.Commodity,
+                request.OceanFreight,
+                request.OriginCharges,
+                request.DestinationCharges,
+                request.Surcharges,
+                request.TotalSale,
+                request.FreeDays,
+                request.TransitDays,
+                request.ValidFrom,
+                request.ValidTo,
+                request.ReviewNotes,
+                httpContext.GetCurrentUserId()
+            ),
             cancellationToken
         );
 

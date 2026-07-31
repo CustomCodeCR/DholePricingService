@@ -7,7 +7,9 @@ using CustomCodeFramework.Workers.DependencyInjection;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Mongo;
 using Dhole.Pricing.Infrastructure.Cache;
+using Dhole.Pricing.Infrastructure.DependencyInjection;
 using Dhole.Pricing.Infrastructure.Mongo;
+using Dhole.Pricing.Worker.Health;
 using Dhole.Pricing.Worker.Outbox;
 using Dhole.Pricing.Worker.Streams;
 using Dhole.Pricing.Worker.Workers;
@@ -21,13 +23,16 @@ public static class WorkerServiceCollectionExtensions
         IConfiguration configuration
     )
     {
-        services.AddPricingRedis(configuration);
-        services.AddPricingMongo(configuration);
-        services.AddPricingCacheServices();
-        services.AddPricingMongoSnapshotWriters();
+        services.AddPricingWorkerInfrastructure(configuration);
+        services.AddCustomCodeRedisStreams(configuration);
 
         services.AddPricingMessaging(configuration);
         services.AddPricingStreamHandlers();
+        services
+            .AddHealthChecks()
+            .AddCheck<ExtractionImportJobsHealthCheck>(
+                "pricing-extraction-import-jobs"
+            );
         services.AddPricingPeriodicWorkers(configuration);
 
         return services;
@@ -103,6 +108,7 @@ public static class WorkerServiceCollectionExtensions
         services.AddCostCacheStreamHandlers();
         services.AddImportRateCacheStreamHandlers();
         services.AddRateHeaderCacheStreamHandlers();
+        services.AddCustomCodeRedisStreamHandler<PricingImportFromExtractionRequestedStreamHandler>();
 
         return services;
     }
@@ -172,6 +178,7 @@ public static class WorkerServiceCollectionExtensions
         services.AddCustomCodeWorkers(configuration);
 
         services.AddCustomCodePeriodicWorker<PricingCacheWarmupWorker>();
+        services.AddCustomCodePeriodicWorker<PricingImportFromExtractionWorker>();
 
         return services;
     }

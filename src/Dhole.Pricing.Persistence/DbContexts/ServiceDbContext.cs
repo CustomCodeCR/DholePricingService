@@ -22,6 +22,9 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
 
     public DbSet<ImportFclRates> ImportFclRates => Set<ImportFclRates>();
 
+    public DbSet<PricingImportFromExtractionJob> PricingImportFromExtractionJobs =>
+        Set<PricingImportFromExtractionJob>();
+
     public DbSet<RateHeader> RateHeaders => Set<RateHeader>();
 
     public DbSet<RateDetail> RateDetails => Set<RateDetail>();

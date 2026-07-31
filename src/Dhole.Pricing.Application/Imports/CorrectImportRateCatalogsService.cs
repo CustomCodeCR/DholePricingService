@@ -45,22 +45,14 @@ public sealed class CorrectImportRateCatalogsService(
         var pol = await ResolveAsync(correction.PolId, "pol", cancellationToken);
         var poe = await ResolveAsync(correction.PoeId, "poe", cancellationToken);
         var pod = await ResolveAsync(correction.PodId, "pod", cancellationToken);
-        var carrier = await ResolveAsync(
-            correction.CarrierId,
-            "carriers",
-            cancellationToken
-        );
+        var carrier = await ResolveAsync(correction.CarrierId, "carriers", cancellationToken);
         var agent = await ResolveAsync(correction.AgentId, "agents", cancellationToken);
         var containerType = await ResolveAsync(
             correction.ContainerTypeId,
             "container-types",
             cancellationToken
         );
-        var currency = await ResolveAsync(
-            correction.CurrencyId,
-            "currencies",
-            cancellationToken
-        );
+        var currency = await ResolveAsync(correction.CurrencyId, "currencies", cancellationToken);
 
         if (
             profile is null
@@ -73,9 +65,7 @@ public sealed class CorrectImportRateCatalogsService(
             || currency is null
         )
         {
-            return Result.Failure(
-                PricingErrors.ImportFclRateCatalogConcordanceRequired
-            );
+            return Result.Failure(PricingErrors.ImportFclRateCatalogConcordanceRequired);
         }
 
         var before = PricingAuditSnapshots.From(importRate);
@@ -129,10 +119,7 @@ public sealed class CorrectImportRateCatalogsService(
         var item = await configCatalog.GetActiveByIdAsync(id, cancellationToken);
         if (
             item is null
-            || !item.CatalogGroupSlug.Equals(
-                expectedGroupSlug,
-                StringComparison.OrdinalIgnoreCase
-            )
+            || !item.CatalogGroupSlug.Equals(expectedGroupSlug, StringComparison.OrdinalIgnoreCase)
         )
         {
             return null;

@@ -1,6 +1,7 @@
 using CustomCodeFramework.Auth.DependencyInjection;
 using CustomCodeFramework.Mongo.DependencyInjection;
 using CustomCodeFramework.Redis.DependencyInjection;
+using Dhole.Config.Contracts.Grpc;
 using Dhole.DataExtraction.Contracts.Grpc;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Mongo;
@@ -39,6 +40,7 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddPricingCacheServices();
         services.AddPricingMongoSnapshotWriters();
+        services.AddPricingConfigGrpcClient(configuration);
         services.AddPricingDataExtractionGrpcClient(configuration);
 
         services.AddScoped<ExtractAndPersistFclPricingImportService>();
@@ -56,6 +58,7 @@ public static class InfrastructureServiceCollectionExtensions
 
         services.AddPricingCacheServices();
         services.AddPricingMongoSnapshotWriters();
+        services.AddPricingConfigGrpcClient(configuration);
         services.AddPricingDataExtractionGrpcClient(configuration);
 
         services.AddScoped<ExtractAndPersistFclPricingImportService>();
@@ -85,6 +88,43 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddScoped<IRateDetailChangeSnapshotWriter, RateDetailChangeSnapshotWriter>();
 
         services.AddScoped<IRateHeaderChangeSnapshotWriter, RateHeaderChangeSnapshotWriter>();
+
+        return services;
+    }
+
+    public static IServiceCollection AddPricingConfigGrpcClient(
+        this IServiceCollection services,
+        IConfiguration configuration
+    )
+    {
+        var configuredAddress = configuration["Grpc:Clients:Config:Address"];
+
+        if (string.IsNullOrWhiteSpace(configuredAddress))
+        {
+            throw new InvalidOperationException(
+                "Debe configurar Grpc:Clients:Config:Address para validar los catálogos de Pricing."
+            );
+        }
+
+        if (!Uri.TryCreate(configuredAddress, UriKind.Absolute, out var address))
+        {
+            throw new InvalidOperationException(
+                $"Grpc:Clients:Config:Address no contiene una URL válida: '{configuredAddress}'."
+            );
+        }
+
+        AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
+        services
+            .AddGrpcClient<ConfigCatalogGrpc.ConfigCatalogGrpcClient>(options =>
+            {
+                options.Address = address;
+            })
+            .ConfigurePrimaryHttpMessageHandler(() =>
+                new SocketsHttpHandler { EnableMultipleHttp2Connections = true }
+            );
+
+        services.AddScoped<IPricingConfigCatalogClient, PricingConfigCatalogGrpcClient>();
 
         return services;
     }

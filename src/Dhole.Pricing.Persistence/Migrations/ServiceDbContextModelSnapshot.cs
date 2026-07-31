@@ -711,6 +711,144 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.ToTable("ImportFclRates", "pricing");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Domain.Imports.Entities.PricingImportFromExtractionJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AttemptCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("attempt_count");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<string>("CorrelationId")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("EmailExtractionJobId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("email_extraction_job_id");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("error_code");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("error_message");
+
+                    b.Property<Guid>("ExternalRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("external_request_id");
+
+                    b.Property<Guid>("ExtractionExecutionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("extraction_execution_id");
+
+                    b.Property<DateTime?>("LeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_expires_at_utc");
+
+                    b.Property<string>("LeaseOwner")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("lease_owner");
+
+                    b.Property<int>("MaxAttemptCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(3)
+                        .HasColumnName("max_attempt_count");
+
+                    b.Property<DateTime?>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at_utc");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload_json");
+
+                    b.Property<int>("PersistedRows")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("persisted_rows");
+
+                    b.Property<Guid>("PricingImportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pricing_import_id");
+
+                    b.Property<int>("SkippedRows")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("skipped_rows");
+
+                    b.Property<DateTime?>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at_utc");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_pricing_import_from_extraction_jobs");
+
+                    b.HasIndex("EmailExtractionJobId");
+
+                    b.HasIndex("ExternalRequestId")
+                        .IsUnique();
+
+                    b.HasIndex("ExtractionExecutionId");
+
+                    b.HasIndex("PricingImportId");
+
+                    b.HasIndex("Status", "LeaseExpiresAtUtc")
+                        .HasDatabaseName("ix_pricing_extraction_jobs_lease");
+
+                    b.HasIndex("Status", "NextAttemptAtUtc", "CreatedAtUtc")
+                        .HasDatabaseName("ix_pricing_extraction_jobs_queue");
+
+                    b.ToTable("PricingImportFromExtractionJobs", "pricing");
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateDetail", b =>
                 {
                     b.Property<Guid>("Id")
