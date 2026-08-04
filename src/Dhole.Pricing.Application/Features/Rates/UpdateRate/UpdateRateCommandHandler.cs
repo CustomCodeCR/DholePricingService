@@ -33,6 +33,11 @@ public sealed class UpdateRateCommandHandler(
             return Result.Failure(PricingErrors.RateHeaderNotFound);
         }
 
+        if (rate.Status == Dhole.Pricing.Domain.Rates.Enums.RateStatus.Closed)
+        {
+            return Result.Failure(PricingErrors.RateInvalidStatus);
+        }
+
         var existingDetails = rate.RateDetails.ToDictionary(x => x.Id);
 
         var extraDetails = command.ExtraDetails ?? Array.Empty<UpsertRateExtraDetailCommandItem>();
@@ -157,6 +162,8 @@ public sealed class UpdateRateCommandHandler(
 
         var addedDetails = new List<RateDetail>();
         var modifiedDetails = new List<RateDetail>();
+        var automaticallyApprovedLowMargin = false;
+        object? automaticApprovalBefore = null;
 
         try
         {
@@ -255,6 +262,17 @@ public sealed class UpdateRateCommandHandler(
             }
 
             rate.SetAmounts(command.UpdatedBy);
+
+            if (rate.RequiredApproval && command.CanApproveLowMargin)
+            {
+                automaticApprovalBefore = PricingAuditSnapshots.From(rate);
+                rate.SetApprovalMargin(
+                    command.UpdatedBy,
+                    isApproved: true,
+                    openAfterAutomaticApproval: true
+                );
+                automaticallyApprovedLowMargin = true;
+            }
         }
         catch (InvalidOperationException)
         {
@@ -282,10 +300,35 @@ public sealed class UpdateRateCommandHandler(
                     rate.MarginPercentage,
                     rate.RequiredApproval,
                     Status = rate.Status.ToString(),
+                    AutomaticallyApprovedLowMargin = automaticallyApprovedLowMargin,
                 }
             ),
             cancellationToken
         );
+
+        if (automaticallyApprovedLowMargin)
+        {
+            await audit.PublishAsync(
+                new PricingAuditEvent(
+                    EventType: PricingAuditEventTypes.RateHeaderApprovalChanged,
+                    Action: PricingAuditActions.Approved,
+                    EntityType: PricingAuditEntityTypes.RateHeader,
+                    EntityId: rate.Id,
+                    ActorUserId: command.UpdatedBy,
+                    Before: automaticApprovalBefore,
+                    After: PricingAuditSnapshots.From(rate),
+                    Payload: new
+                    {
+                        rate.Id,
+                        rate.MarginPercentage,
+                        rate.RequiredApproval,
+                        Status = rate.Status.ToString(),
+                        AutomaticallyApprovedByScope = true,
+                    }
+                ),
+                cancellationToken
+            );
+        }
 
         foreach (var detail in addedDetails)
         {

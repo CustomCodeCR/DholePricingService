@@ -14,7 +14,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
     private RateHeader(
         Guid id,
-        long rateConsecutive,
+        string rateCode,
         Guid? sourceImportFclRateId,
         Guid? agentId,
         string? agentName,
@@ -114,7 +114,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         SubjectTo = Normalize(subjectTo);
         Excludes = Normalize(excludes);
         TransitDays = transitDays;
-        RateCode = CreateRateCode(rateConsecutive);
+        RateCode = ValidateRateCode(rateCode);
         RateName = CreateRateName(
             RateCode,
             ContainerQuantity,
@@ -125,7 +125,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             ClientName
         );
 
-        Status = RateStatus.Draft;
+        Status = RateStatus.PendingApproval;
+        RequiredApproval = true;
         MarkAsCreated(DateTime.UtcNow, createdBy?.ToString());
     }
 
@@ -181,11 +182,14 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public decimal MarginPercentage { get; private set; }
     public bool RequiredApproval { get; private set; }
     public RateStatus Status { get; private set; }
+    public string? ClosedReason { get; private set; }
+    public DateTime? ClosedAtUtc { get; private set; }
+    public Guid? ClosedBy { get; private set; }
 
     public IReadOnlyCollection<RateDetail> RateDetails => _rateDetails.AsReadOnly();
 
     public static RateHeader Create(
-        long rateConsecutive,
+        string rateCode,
         Guid? sourceImportFclRateId,
         Guid? agentId,
         string? agentName,
@@ -224,7 +228,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     {
         var rate = new RateHeader(
             Guid.NewGuid(),
-            rateConsecutive,
+            rateCode,
             sourceImportFclRateId,
             agentId,
             agentName,
@@ -508,20 +512,15 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                     MidpointRounding.AwayFromZero
                 );
 
-        if (_rateDetails.Count == 0 || TotalSaleAmount <= 0m)
+        if (IdtraNumber is not null && QuoNumber is not null)
         {
             RequiredApproval = false;
-            Status = RateStatus.Draft;
+            Status = RateStatus.AcceptedByClient;
         }
         else if (MarginPercentage >= MinimumMarginPercentage)
         {
             RequiredApproval = false;
-            Status = RateStatus.Approved;
-        }
-        else if (IdtraNumber is not null || QuoNumber is not null)
-        {
-            RequiredApproval = false;
-            Status = RateStatus.AcceptedByClient;
+            Status = RateStatus.Open;
         }
         else
         {
@@ -542,37 +541,76 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         );
     }
 
-    public void SetApprovalMargin(Guid? updatedBy, bool isApproved)
+    public void SetApprovalMargin(
+        Guid? updatedBy,
+        bool isApproved,
+        bool openAfterAutomaticApproval = false
+    )
     {
         if (Status != RateStatus.PendingApproval)
         {
             throw new InvalidOperationException("La tarifa no está pendiente de aprobación.");
         }
 
-        Status = isApproved ? RateStatus.Approved : RateStatus.Rejected;
+        Status = isApproved
+            ? openAfterAutomaticApproval
+                ? RateStatus.Open
+                : RateStatus.ApprovedByManagement
+            : RateStatus.RejectedByManagement;
         RequiredApproval = false;
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
     }
 
-    public void SetCommercialStatus(RateStatus status, Guid? updatedBy)
+    public void SetCommercialStatus(RateStatus status, string? reason, Guid? updatedBy)
     {
-        if (
-            status
-            is not (RateStatus.Sent or RateStatus.AcceptedByClient or RateStatus.RejectedByClient)
-        )
+        var isClosing = status == RateStatus.Closed;
+        var isValidTransition = (Status, status) switch
         {
-            throw new InvalidOperationException("El estado comercial solicitado no es válido.");
-        }
+            (RateStatus.ApprovedByManagement, RateStatus.Open) => true,
+            (RateStatus.Open, RateStatus.Sent) => true,
+            (RateStatus.Sent, RateStatus.RequestedByClient) => true,
+            (RateStatus.Sent, RateStatus.AcceptedByClient) => true,
+            (RateStatus.Sent, RateStatus.RejectedByClient) => true,
+            (RateStatus.RequestedByClient, RateStatus.AcceptedByClient) => true,
+            (RateStatus.RequestedByClient, RateStatus.RejectedByClient) => true,
+            (RateStatus.PendingApproval, RateStatus.Closed) => true,
+            (RateStatus.ApprovedByManagement, RateStatus.Closed) => true,
+            (RateStatus.RejectedByManagement, RateStatus.Closed) => true,
+            (RateStatus.Open, RateStatus.Closed) => true,
+            (RateStatus.Sent, RateStatus.Closed) => true,
+            (RateStatus.RequestedByClient, RateStatus.Closed) => true,
+            _ => false,
+        };
 
-        if (Status is RateStatus.Draft or RateStatus.PendingApproval or RateStatus.Rejected)
+        if (!isValidTransition)
         {
             throw new InvalidOperationException(
-                "La tarifa debe estar aprobada antes de cambiar su estado comercial."
+                "La transición de estado comercial solicitada no es válida."
+            );
+        }
+
+        if (isClosing && string.IsNullOrWhiteSpace(reason))
+        {
+            throw new InvalidOperationException("El motivo de cierre es obligatorio.");
+        }
+
+        if (isClosing && reason!.Trim().Length > 1000)
+        {
+            throw new InvalidOperationException(
+                "El motivo de cierre no puede superar los 1000 caracteres."
             );
         }
 
         Status = status;
         RequiredApproval = false;
+
+        if (isClosing)
+        {
+            ClosedReason = reason!.Trim();
+            ClosedAtUtc = DateTime.UtcNow;
+            ClosedBy = updatedBy;
+        }
+
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
     }
@@ -583,28 +621,41 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         AddDomainEvent(new RateHeaderDeletedDomainEvent(Id, deletedBy));
     }
 
-    private static string CreateRateCode(long consecutive)
+    private static string ValidateRateCode(string rateCode)
     {
-        const string alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        const long maximumConsecutive = 2_176_782_335L;
+        var normalized = rateCode?.Trim().ToUpperInvariant();
 
-        if (consecutive is < 1 or > maximumConsecutive)
+        if (
+            normalized is null
+            || normalized.Length != 16
+            || !normalized.StartsWith("QUO-", StringComparison.Ordinal)
+            || normalized[9] != '-'
+            || !IsAsciiAlphanumeric(normalized.AsSpan(4, 5))
+            || !IsAsciiAlphanumeric(normalized.AsSpan(10, 6))
+        )
         {
             throw new InvalidOperationException(
-                "El consecutivo de la tarifa está fuera del rango permitido."
+                "El identificador QUO debe cumplir el formato alfanumérico QUO-XXXXX-XXXXXX."
             );
         }
 
-        Span<char> code = stackalloc char[6];
-        var value = consecutive;
+        return normalized;
+    }
 
-        for (var index = code.Length - 1; index >= 0; index--)
+    private static bool IsAsciiAlphanumeric(ReadOnlySpan<char> value)
+    {
+        foreach (var character in value)
         {
-            code[index] = alphabet[(int)(value % alphabet.Length)];
-            value /= alphabet.Length;
+            var isDigit = character is >= '0' and <= '9';
+            var isUppercaseLetter = character is >= 'A' and <= 'Z';
+
+            if (!isDigit && !isUppercaseLetter)
+            {
+                return false;
+            }
         }
 
-        return $"QUO-{new string(code)}";
+        return true;
     }
 
     private static string CreateRateName(

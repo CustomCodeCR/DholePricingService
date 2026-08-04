@@ -185,6 +185,10 @@ public static class RateEndpoints
             httpContext.User,
             PricingConstants.Scopes.ImportFclRateApprove
         );
+        var canApproveLowMargin = HasScope(
+            httpContext.User,
+            PricingConstants.Scopes.RateApproveLowMargin
+        );
 
         var result = await dispatcher.DispatchAsync(
             new CreateRateCommand(
@@ -223,6 +227,7 @@ public static class RateEndpoints
                 request.TransitDays,
                 details,
                 canApproveImportedRate,
+                canApproveLowMargin,
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken
@@ -278,6 +283,11 @@ public static class RateEndpoints
             );
         }
 
+        var canApproveLowMargin = HasScope(
+            httpContext.User,
+            PricingConstants.Scopes.RateApproveLowMargin
+        );
+
         var result = await dispatcher.DispatchAsync(
             new UpdateRateCommand(
                 rateId,
@@ -315,6 +325,7 @@ public static class RateEndpoints
                 request.TransitDays,
                 extraDetails,
                 request.RemovedExtraDetailIds,
+                canApproveLowMargin,
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken
@@ -384,7 +395,14 @@ public static class RateEndpoints
     )
     {
         if (!TryParseDefinedEnum(request.Status, out RateStatus status)
-            || status is not (RateStatus.Sent or RateStatus.AcceptedByClient or RateStatus.RejectedByClient))
+            || status is not (
+                RateStatus.Open
+                or RateStatus.Sent
+                or RateStatus.RequestedByClient
+                or RateStatus.AcceptedByClient
+                or RateStatus.RejectedByClient
+                or RateStatus.Closed
+            ))
         {
             return EndpointResults.BadRequest(
                 "Pricing.InvalidRateStatus",
@@ -394,7 +412,12 @@ public static class RateEndpoints
         }
 
         var result = await dispatcher.DispatchAsync(
-            new SetRateStatusCommand(rateId, status, httpContext.GetCurrentUserId()),
+            new SetRateStatusCommand(
+                rateId,
+                status,
+                request.Reason,
+                httpContext.GetCurrentUserId()
+            ),
             cancellationToken
         );
 

@@ -50,6 +50,9 @@ internal static class RateMappings
             rate.MarginPercentage,
             rate.RequiredApproval,
             rate.Status.ToString(),
+            rate.ClosedReason,
+            rate.ClosedAtUtc,
+            rate.ClosedBy,
             rate.RateDetails.OrderBy(x => x.CostDetailType)
                 .ThenBy(x => x.Name)
                 .Select(x => new RateDetailDto(

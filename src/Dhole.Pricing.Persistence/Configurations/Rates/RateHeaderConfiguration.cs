@@ -79,7 +79,7 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.ValidTo).IsRequired();
 
-        builder.Property(x => x.RateCode).HasMaxLength(10).IsRequired();
+        builder.Property(x => x.RateCode).HasMaxLength(16).IsRequired();
 
         builder.Property(x => x.RateName).HasMaxLength(500).IsRequired();
 
@@ -96,6 +96,12 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.RequiredApproval).IsRequired().HasDefaultValue(false);
 
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
+
+        builder.Property(x => x.ClosedReason).HasMaxLength(1000).IsRequired(false);
+
+        builder.Property(x => x.ClosedAtUtc).IsRequired(false);
+
+        builder.Property(x => x.ClosedBy).IsRequired(false);
 
         builder
             .HasMany(x => x.RateDetails)

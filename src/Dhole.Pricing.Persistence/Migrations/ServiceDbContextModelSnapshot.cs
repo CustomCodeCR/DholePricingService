@@ -1001,6 +1001,19 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("container_type_name");
 
+                    b.Property<DateTime?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at_utc");
+
+                    b.Property<Guid?>("ClosedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("closed_by");
+
+                    b.Property<string>("ClosedReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("closed_reason");
+
                     b.Property<int>("ContainerQuantity")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -1120,8 +1133,8 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.Property<string>("RateCode")
                         .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
                         .HasColumnName("rate_code");
 
                     b.Property<string>("RateName")

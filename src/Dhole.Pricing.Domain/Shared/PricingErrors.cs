@@ -181,6 +181,11 @@ public static class PricingErrors
         "El estado de la tarifa no es válido para esta operación."
     );
 
+    public static readonly Error RateClosureReasonIsRequired = new(
+        "Pricing.RateClosureReasonIsRequired",
+        "Debe indicar el motivo por el que se cerró la tarifa."
+    );
+
     public static readonly Error RateCannotBeActivatedWithoutFclDetails = new(
         "Pricing.RateCannotBeActivatedWithoutFclDetails",
         "No se puede activar la tarifa porque no tiene detalles FCL."

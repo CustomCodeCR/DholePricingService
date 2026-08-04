@@ -61,7 +61,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
 
         if (!status.HasValue)
         {
-            query = query.Where(x => x.Status == RateStatus.Approved);
+            query = query.Where(x => x.Status == RateStatus.Open);
         }
 
         return await query
@@ -214,6 +214,9 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.MarginPercentage,
                 x.RequiredApproval,
                 x.Status.ToString(),
+                x.ClosedReason,
+                x.ClosedAtUtc,
+                x.ClosedBy,
                 x.RateDetails.OrderBy(d => d.CostDetailType)
                     .ThenBy(d => d.Name)
                     .Select(d => new RateDetailDto(
@@ -334,6 +337,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 || (x.ClientName ?? string.Empty).ToLower().Contains(value)
                 || (x.IdtraNumber ?? string.Empty).ToLower().Contains(value)
                 || (x.QuoNumber ?? string.Empty).ToLower().Contains(value)
+                || (x.ClosedReason ?? string.Empty).ToLower().Contains(value)
                 || (x.AgentName ?? string.Empty).ToLower().Contains(value)
                 || (x.AgentCode ?? string.Empty).ToLower().Contains(value)
                 || (x.CarrierName ?? string.Empty).ToLower().Contains(value)

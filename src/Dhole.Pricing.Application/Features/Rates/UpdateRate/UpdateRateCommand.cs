@@ -54,5 +54,6 @@ public sealed record UpdateRateCommand(
     int? TransitDays,
     IReadOnlyCollection<UpsertRateExtraDetailCommandItem> ExtraDetails,
     IReadOnlyCollection<Guid> RemovedExtraDetailIds,
+    bool CanApproveLowMargin,
     Guid? UpdatedBy
 ) : ICommand<Result>;

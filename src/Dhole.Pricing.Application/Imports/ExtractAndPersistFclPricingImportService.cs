@@ -22,13 +22,6 @@ public sealed class ExtractAndPersistFclPricingImportService(
             throw new InvalidOperationException("El archivo de importación está vacío.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.ProfileSlug))
-        {
-            throw new InvalidOperationException(
-                "Debe seleccionar un perfil de pricing-imports-profiles."
-            );
-        }
-
         var correlationId = string.IsNullOrWhiteSpace(request.CorrelationId)
             ? Guid.NewGuid().ToString()
             : request.CorrelationId.Trim();
@@ -116,7 +109,7 @@ public sealed class ExtractAndPersistFclPricingImportService(
                 mapped.SkippedExtractionRowIds.Count,
                 extraction.Issues,
                 "Pricing.NoUsableExtractionRows",
-                "Ninguna fila pudo guardarse porque faltan datos estructurales requeridos, fechas válidas o un monto de tarifa. Los valores no encontrados en Config ya no bloquean la importación."
+                BuildNoUsableRowsMessage(extraction)
             );
         }
 
@@ -158,6 +151,57 @@ public sealed class ExtractAndPersistFclPricingImportService(
             null
         );
     }
+    private static string BuildNoUsableRowsMessage(
+        DataExtractionFclPricingResult extraction
+    )
+    {
+        const string baseMessage =
+            "Ninguna fila pudo guardarse porque faltan datos estructurales requeridos, fechas válidas o un monto de tarifa. Los valores no encontrados en Config ya no bloquean la importación.";
+
+        if (extraction.Rows.Count == 0)
+        {
+            return $"{baseMessage} DataExtraction no devolvió filas.";
+        }
+
+        var blockingCodes = extraction.Issues
+            .Where(issue => issue.IsBlocking)
+            .Select(issue => issue.Code)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(8)
+            .ToArray();
+        var missingPoe = extraction.Rows.Count(row =>
+            string.IsNullOrWhiteSpace(row.PortOfExit)
+            && string.IsNullOrWhiteSpace(row.DestinationPort)
+        );
+        var missingDates = extraction.Rows.Count(row =>
+            !row.ValidFrom.HasValue
+            || !row.ValidTo.HasValue
+            || row.ValidTo < row.ValidFrom
+        );
+        var missingAmount = extraction.Rows.Count(row =>
+            !row.OceanFreight.HasValue && !row.TotalSale.HasValue
+        );
+        var missingStructure = extraction.Rows.Count(row =>
+            string.IsNullOrWhiteSpace(row.OriginPort)
+            || string.IsNullOrWhiteSpace(row.ContainerType)
+            || string.IsNullOrWhiteSpace(row.Carrier)
+        );
+
+        var details = new List<string>
+        {
+            $"filas recibidas: {extraction.Rows.Count}",
+            $"sin estructura: {missingStructure}",
+            $"sin POE recuperable: {missingPoe}",
+            $"sin vigencia válida: {missingDates}",
+            $"sin monto: {missingAmount}",
+        };
+        if (blockingCodes.Length > 0)
+        {
+            details.Add($"bloqueos: {string.Join(", ", blockingCodes)}");
+        }
+
+        return $"{baseMessage} Detalle: {string.Join("; ", details)}.";
+    }
 }
 
 public sealed record ExtractAndPersistFclPricingImportRequest(
@@ -165,7 +209,7 @@ public sealed record ExtractAndPersistFclPricingImportRequest(
     ImportSourceType SourceType,
     string OriginalFileName,
     string? ContentType,
-    string ProfileSlug,
+    string? ProfileSlug,
     byte[] FileContent,
     Guid? RequestedBy,
     string? RequestedByName,

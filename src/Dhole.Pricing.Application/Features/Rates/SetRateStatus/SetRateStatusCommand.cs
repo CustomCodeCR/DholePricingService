@@ -4,5 +4,9 @@ using Dhole.Pricing.Domain.Rates.Enums;
 
 namespace Dhole.Pricing.Application.Features.Rates.SetRateStatus;
 
-public sealed record SetRateStatusCommand(Guid Id, RateStatus Status, Guid? UpdatedBy)
-    : ICommand<Result>;
+public sealed record SetRateStatusCommand(
+    Guid Id,
+    RateStatus Status,
+    string? Reason,
+    Guid? UpdatedBy
+) : ICommand<Result>;

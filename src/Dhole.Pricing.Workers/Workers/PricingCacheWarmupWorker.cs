@@ -306,7 +306,9 @@ internal sealed class PricingCacheWarmupWorker(
 
         var validRates = rateHeaders
             .Where(x =>
-                x.Status == RateStatus.Approved && x.ValidFrom < nextDate && x.ValidTo >= quoteDate
+                x.Status == RateStatus.Open
+                && x.ValidFrom < nextDate
+                && x.ValidTo >= quoteDate
             )
             .Select(ToRateDto)
             .ToList();
@@ -572,6 +574,9 @@ internal sealed class PricingCacheWarmupWorker(
             rate.MarginPercentage,
             rate.RequiredApproval,
             rate.Status.ToString(),
+            rate.ClosedReason,
+            rate.ClosedAtUtc,
+            rate.ClosedBy,
             rate.RateDetails.OrderBy(x => x.CostType)
                 .ThenBy(x => x.CostDetailType)
                 .ThenBy(x => x.Name)

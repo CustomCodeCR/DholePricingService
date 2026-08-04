@@ -43,5 +43,8 @@ public sealed record RateDto(
     decimal MarginPercentage,
     bool RequiredApproval,
     string Status,
+    string? ClosedReason,
+    DateTime? ClosedAtUtc,
+    Guid? ClosedBy,
     IReadOnlyCollection<RateDetailDto> RateDetails
 );

@@ -7,7 +7,7 @@ namespace Dhole.Pricing.UnitTests;
 [TestClass]
 public sealed class RateFreightQuantityTests
 {
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(CostDetailType.Freight)]
     [DataRow(CostDetailType.InlandTransport)]
     public void AddRateDetail_FreightTypes_AlwaysUseContainerQuantity(CostDetailType detailType)
@@ -71,7 +71,7 @@ public sealed class RateFreightQuantityTests
         Assert.AreEqual(740m, rate.TotalSaleAmount);
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(CostDetailType.Freight)]
     [DataRow(CostDetailType.InlandTransport)]
     public void CreateCost_FreightTypes_AreAlwaysMarkedPerContainer(CostDetailType detailType)
@@ -93,7 +93,7 @@ public sealed class RateFreightQuantityTests
     {
         var today = DateTime.UtcNow.Date;
         return RateHeader.Create(
-            rateConsecutive: 1,
+            rateCode: "QUO-A7K2P-9X4M8Q",
             sourceImportFclRateId: null,
             agentId: Guid.NewGuid(), agentName: "Agente", agentCode: "AGT",
             carrierId: Guid.NewGuid(), carrierName: "Naviera", carrierCode: "CAR",

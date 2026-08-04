@@ -243,6 +243,86 @@ public sealed class StandardizedImportFclRateFactoryTests
         Assert.AreEqual("USD", rate.CurrencyName);
     }
 
+    [TestMethod]
+    public void CreateRates_WhenEmailAiPlacedDischargePortInPod_RecoversItAsPoe()
+    {
+        var rowId = Guid.NewGuid();
+        var extraction = new DataExtractionFclPricingResult(
+            true,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "test-email-pod-as-poe",
+            new DataExtractionFclPricingSummary(1, 0, 0, 1, true),
+            [
+                new DataExtractionFclPricingRow(
+                    rowId,
+                    "AI Email",
+                    1,
+                    "SHANGHAI",
+                    null,
+                    "CALDERA",
+                    "40HC",
+                    "ONE",
+                    "WWL",
+                    "Auto Spare Parts",
+                    "USD",
+                    21,
+                    null,
+                    new DateTime(2026, 8, 8),
+                    new DateTime(2026, 8, 14),
+                    6400m,
+                    null,
+                    null,
+                    65m,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "POD marítimo informado por el correo.",
+                    "Invalid",
+                    "{}",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
+            ],
+            [
+                new DataExtractionFclPricingIssue(
+                    Guid.NewGuid(),
+                    rowId,
+                    "missing_port_of_exit",
+                    "La fila no tiene POE.",
+                    true,
+                    "AI Email",
+                    1,
+                    "PortOfExit",
+                    null
+                )
+            ],
+            null,
+            null
+        );
+
+        var result = StandardizedImportFclRateFactory.CreateRates(
+            Guid.NewGuid(),
+            ImportSourceType.Email,
+            extraction,
+            null
+        );
+
+        var rate = result.Rates.Single();
+        Assert.AreEqual("CALDERA", rate.PoeName);
+        Assert.AreEqual("Por asignar", rate.PodName);
+        Assert.AreEqual("PENDING", rate.PodCode);
+        Assert.AreEqual(6400m, rate.OceanFreight);
+        Assert.AreEqual(0, result.SkippedExtractionRowIds.Count);
+    }
+
     private static DataExtractionCatalogReference Reference(
         string group,
         string code,

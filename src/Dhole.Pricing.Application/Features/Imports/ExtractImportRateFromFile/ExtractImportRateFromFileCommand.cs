@@ -7,7 +7,7 @@ namespace Dhole.Pricing.Application.Features.Imports.ExtractImportRateFromFile;
 public sealed record ExtractImportRateFromFileCommand(
     string OriginalFileName,
     string? ContentType,
-    string ProfileSlug,
+    string? ProfileSlug,
     byte[] FileContent,
     Guid? RequestedBy,
     string? RequestedByName,

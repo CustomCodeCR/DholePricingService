@@ -53,5 +53,6 @@ public sealed record CreateRateCommand(
     int? TransitDays,
     IReadOnlyCollection<CreateRateDetailCommandItem> Details,
     bool CanApproveImportedRate,
+    bool CanApproveLowMargin,
     Guid? CreatedBy
 ) : ICommand<Result<Guid>>;

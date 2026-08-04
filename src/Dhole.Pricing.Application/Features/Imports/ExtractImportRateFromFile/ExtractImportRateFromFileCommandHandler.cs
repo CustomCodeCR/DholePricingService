@@ -35,13 +35,6 @@ public sealed class ExtractImportRateFromFileCommandHandler(
             );
         }
 
-        if (string.IsNullOrWhiteSpace(command.ProfileSlug))
-        {
-            return Result.Failure<ExtractAndPersistFclPricingImportResult>(
-                PricingErrors.ImportProfileRequired
-            );
-        }
-
         var importBatchId = Guid.NewGuid();
 
         ExtractAndPersistFclPricingImportResult extraction;
@@ -54,7 +47,9 @@ public sealed class ExtractImportRateFromFileCommandHandler(
                     ResolveSourceType(command.OriginalFileName, command.ContentType),
                     command.OriginalFileName,
                     command.ContentType,
-                    command.ProfileSlug.Trim(),
+                    string.IsNullOrWhiteSpace(command.ProfileSlug)
+                        ? null
+                        : command.ProfileSlug.Trim(),
                     command.FileContent,
                     command.RequestedBy,
                     command.RequestedByName,

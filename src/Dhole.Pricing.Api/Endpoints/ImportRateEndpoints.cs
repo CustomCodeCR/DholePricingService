@@ -275,7 +275,7 @@ public static class ImportRateEndpoints
 
     private static async Task<IResult> ExtractImportRateFromFileAsync(
         [FromForm] IFormFile file,
-        [FromForm] string profileSlug,
+        [FromForm] string? profileSlug,
         [FromForm] string? correlationId,
         ICommandDispatcher dispatcher,
         HttpContext httpContext,
@@ -291,15 +291,6 @@ public static class ImportRateEndpoints
             );
         }
 
-        if (string.IsNullOrWhiteSpace(profileSlug))
-        {
-            return EndpointResults.BadRequest(
-                "Pricing.ImportProfileRequired",
-                "Debe seleccionar un perfil de importación.",
-                httpContext
-            );
-        }
-
         await using var stream = new MemoryStream();
 
         await file.CopyToAsync(stream, cancellationToken);
@@ -308,7 +299,7 @@ public static class ImportRateEndpoints
             new ExtractImportRateFromFileCommand(
                 file.FileName,
                 file.ContentType,
-                profileSlug.Trim(),
+                string.IsNullOrWhiteSpace(profileSlug) ? null : profileSlug.Trim(),
                 stream.ToArray(),
                 httpContext.GetCurrentUserId(),
                 httpContext.User.Identity?.Name,

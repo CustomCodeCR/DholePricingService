@@ -28,11 +28,17 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateHeaderNotFound);
         }
 
+        if (command.Status == Dhole.Pricing.Domain.Rates.Enums.RateStatus.Closed
+            && string.IsNullOrWhiteSpace(command.Reason))
+        {
+            return Result.Failure(PricingErrors.RateClosureReasonIsRequired);
+        }
+
         var before = PricingAuditSnapshots.From(rate);
 
         try
         {
-            rate.SetCommercialStatus(command.Status, command.UpdatedBy);
+            rate.SetCommercialStatus(command.Status, command.Reason, command.UpdatedBy);
         }
         catch (InvalidOperationException)
         {
@@ -48,7 +54,14 @@ public sealed class SetRateStatusCommandHandler(
                 ActorUserId: command.UpdatedBy,
                 Before: before,
                 After: PricingAuditSnapshots.From(rate),
-                Payload: new { rate.Id, Status = rate.Status.ToString() }
+                Payload: new
+                {
+                    rate.Id,
+                    Status = rate.Status.ToString(),
+                    rate.ClosedReason,
+                    rate.ClosedAtUtc,
+                    rate.ClosedBy,
+                }
             ),
             cancellationToken
         );

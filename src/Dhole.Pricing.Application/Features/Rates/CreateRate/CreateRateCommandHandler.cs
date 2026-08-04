@@ -67,6 +67,7 @@ public sealed class CreateRateCommandHandler(
 
         ImportFclRates? importedRate = null;
         var automaticallyApprovedImport = false;
+        var automaticallyApprovedLowMargin = false;
 
         if (command.SourceImportFclRateId.HasValue)
         {
@@ -108,15 +109,15 @@ public sealed class CreateRateCommandHandler(
             }
         }
 
-        var rateConsecutive = await rateCodeGenerator.GetNextAsync(cancellationToken);
+        var rateCode = await rateCodeGenerator.GenerateAsync(cancellationToken);
 
         RateHeader rate;
 
         try
         {
             rate = importedRate is null
-                ? CreateManualRate(command, rateConsecutive)
-                : CreateFromImportedRate(command, importedRate, rateConsecutive);
+                ? CreateManualRate(command, rateCode)
+                : CreateFromImportedRate(command, importedRate, rateCode);
 
             if (importedRate is not null)
             {
@@ -149,6 +150,16 @@ public sealed class CreateRateCommandHandler(
             );
 
             rate.SetAmounts(command.CreatedBy);
+
+            if (rate.RequiredApproval && command.CanApproveLowMargin)
+            {
+                rate.SetApprovalMargin(
+                    command.CreatedBy,
+                    isApproved: true,
+                    openAfterAutomaticApproval: true
+                );
+                automaticallyApprovedLowMargin = true;
+            }
         }
         catch (InvalidOperationException)
         {
@@ -178,6 +189,29 @@ public sealed class CreateRateCommandHandler(
             );
         }
 
+        if (automaticallyApprovedLowMargin)
+        {
+            await audit.PublishAsync(
+                new PricingAuditEvent(
+                    EventType: PricingAuditEventTypes.RateHeaderApprovalChanged,
+                    Action: PricingAuditActions.Approved,
+                    EntityType: PricingAuditEntityTypes.RateHeader,
+                    EntityId: rate.Id,
+                    ActorUserId: command.CreatedBy,
+                    After: PricingAuditSnapshots.From(rate),
+                    Payload: new
+                    {
+                        rate.Id,
+                        rate.MarginPercentage,
+                        rate.RequiredApproval,
+                        Status = rate.Status.ToString(),
+                        AutomaticallyApprovedByScope = true,
+                    }
+                ),
+                cancellationToken
+            );
+        }
+
         await audit.PublishAsync(
             new PricingAuditEvent(
                 EventType: PricingAuditEventTypes.RateHeaderCreated,
@@ -196,6 +230,7 @@ public sealed class CreateRateCommandHandler(
                     rate.MarginPercentage,
                     rate.RequiredApproval,
                     Status = rate.Status.ToString(),
+                    AutomaticallyApprovedLowMargin = automaticallyApprovedLowMargin,
                 }
             ),
             cancellationToken
@@ -256,10 +291,10 @@ public sealed class CreateRateCommandHandler(
         return Result.Success(rate.Id);
     }
 
-    private static RateHeader CreateManualRate(CreateRateCommand command, long rateConsecutive)
+    private static RateHeader CreateManualRate(CreateRateCommand command, string rateCode)
     {
         return RateHeader.Create(
-            rateConsecutive,
+            rateCode,
             sourceImportFclRateId: null,
             command.AgentId,
             command.AgentName,
@@ -300,11 +335,11 @@ public sealed class CreateRateCommandHandler(
     private static RateHeader CreateFromImportedRate(
         CreateRateCommand command,
         ImportFclRates importedRate,
-        long rateConsecutive
+        string rateCode
     )
     {
         return RateHeader.Create(
-            rateConsecutive,
+            rateCode,
             importedRate.Id,
             command.AgentId,
             command.AgentName,

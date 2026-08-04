@@ -54,7 +54,22 @@ public static class StandardizedImportFclRateFactory
 
         foreach (var row in extraction.Rows)
         {
-            var canPersist = CanPersistReviewableRow(row, blockingIssuesByRecordId);
+            var promoteDestinationToPoe = ShouldPromoteEmailDestinationToPoe(
+                row,
+                sourceType
+            );
+            var resolvedPortOfExit = promoteDestinationToPoe
+                ? row.DestinationPort
+                : row.PortOfExit;
+            var resolvedDestinationPort = promoteDestinationToPoe
+                ? null
+                : row.DestinationPort;
+            var canPersist = CanPersistReviewableRow(
+                row,
+                blockingIssuesByRecordId,
+                sourceType,
+                resolvedPortOfExit
+            );
 
             if (!canPersist)
             {
@@ -79,12 +94,12 @@ public static class StandardizedImportFclRateFactory
                     ResolveOptionalSnapshot(
                         row.PortOfExitReference,
                         "poe",
-                        row.PortOfExit
+                        resolvedPortOfExit
                     ),
                     ResolveOptionalSnapshot(
-                        row.DestinationPortReference,
+                        promoteDestinationToPoe ? null : row.DestinationPortReference,
                         "pod",
-                        row.DestinationPort,
+                        resolvedDestinationPort,
                         "PENDING",
                         "Por asignar"
                     ),
@@ -126,16 +141,21 @@ public static class StandardizedImportFclRateFactory
 
     private static bool CanPersistReviewableRow(
         DataExtractionFclPricingRow row,
-        IReadOnlyDictionary<Guid, DataExtractionFclPricingIssue[]> blockingIssuesByRecordId
+        IReadOnlyDictionary<Guid, DataExtractionFclPricingIssue[]> blockingIssuesByRecordId,
+        ImportSourceType sourceType,
+        string? resolvedPortOfExit
     )
     {
         var hasNonReviewableBlockingIssue =
             blockingIssuesByRecordId.TryGetValue(row.Id, out var rowIssues)
-            && rowIssues.Any(x => !IsReviewableImportIssue(x.Code));
+            && rowIssues.Any(issue =>
+                !IsReviewableImportIssue(issue.Code)
+                && !IsRecoverableEmailIssue(issue.Code, row, sourceType)
+            );
 
         return !hasNonReviewableBlockingIssue
             && HasText(row.OriginPort)
-            && HasText(row.PortOfExit)
+            && HasText(resolvedPortOfExit)
             && HasText(row.ContainerType)
             && HasText(row.Carrier)
             && row.ValidFrom.HasValue
@@ -146,6 +166,36 @@ public static class StandardizedImportFclRateFactory
             && IsNonNegative(row.OriginCharges)
             && IsNonNegative(row.DestinationCharges)
             && IsNonNegative(row.Surcharges);
+    }
+
+    private static bool ShouldPromoteEmailDestinationToPoe(
+        DataExtractionFclPricingRow row,
+        ImportSourceType sourceType
+    )
+    {
+        return sourceType == ImportSourceType.Email
+            && HasText(row.DestinationPort);
+    }
+
+    private static bool IsRecoverableEmailIssue(
+        string code,
+        DataExtractionFclPricingRow row,
+        ImportSourceType sourceType
+    )
+    {
+        if (sourceType != ImportSourceType.Email)
+        {
+            return false;
+        }
+
+        return (
+                code.Equals("missing_port_of_exit", StringComparison.OrdinalIgnoreCase)
+                && (HasText(row.PortOfExit) || ShouldPromoteEmailDestinationToPoe(row, sourceType))
+            )
+            || (
+                code.Equals("missing_container_type", StringComparison.OrdinalIgnoreCase)
+                && HasText(row.ContainerType)
+            );
     }
 
     private static bool IsReviewableImportIssue(string code)

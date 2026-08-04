@@ -139,12 +139,16 @@ internal sealed class PricingImportFromExtractionWorker(
                 );
             }
 
-            var extraction =
+            var extraction = PricingEmailExtractionRecovery.Recover(
                 DataExtractionPricingImportMapper.ToApplicationResult(
                     integrationEvent.Response,
                     integrationEvent.ExtractionExecutionId,
                     integrationEvent.PricingImportId
-                );
+                ),
+                sourceType,
+                integrationEvent.Subject,
+                integrationEvent.OriginalFileName
+            );
 
             await dbContext.ExecuteInRetryableTransactionAsync(
                 async () =>

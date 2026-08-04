@@ -33,14 +33,14 @@ public sealed class DuplicateRateCommandHandler(
             return Result.Failure<Guid>(PricingErrors.RateHeaderNotFound);
         }
 
-        var rateConsecutive = await rateCodeGenerator.GetNextAsync(cancellationToken);
+        var rateCode = await rateCodeGenerator.GenerateAsync(cancellationToken);
 
         RateHeader duplicate;
 
         try
         {
             duplicate = RateHeader.Create(
-                rateConsecutive,
+                rateCode,
                 sourceImportFclRateId: null,
                 source.AgentId,
                 source.AgentName,

@@ -1,6 +1,6 @@
-using System.Data;
-using System.Globalization;
+using System.Security.Cryptography;
 using Dhole.Pricing.Application.Abstractions.Services;
+using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,38 +8,42 @@ namespace Dhole.Pricing.Persistence.Services;
 
 public sealed class RateCodeGenerator(ServiceDbContext dbContext) : IRateCodeGenerator
 {
-    public async Task<long> GetNextAsync(CancellationToken cancellationToken = default)
+    private const string Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private const int FirstBlockLength = 5;
+    private const int SecondBlockLength = 6;
+    private const int MaximumGenerationAttempts = 32;
+
+    public async Task<string> GenerateAsync(CancellationToken cancellationToken = default)
     {
-        var connection = dbContext.Database.GetDbConnection();
-        var shouldCloseConnection = connection.State != ConnectionState.Open;
-
-        if (shouldCloseConnection)
+        for (var attempt = 0; attempt < MaximumGenerationAttempts; attempt++)
         {
-            await connection.OpenAsync(cancellationToken);
-        }
+            var candidate = $"QUO-{GenerateBlock(FirstBlockLength)}-{GenerateBlock(SecondBlockLength)}";
 
-        try
-        {
-            await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT nextval('pricing.rate_code_sequence');";
+            var alreadyExists = await dbContext
+                .Set<RateHeader>()
+                .AsNoTracking()
+                .AnyAsync(rate => rate.RateCode == candidate, cancellationToken);
 
-            var value = await command.ExecuteScalarAsync(cancellationToken);
-
-            if (value is null || value is DBNull)
+            if (!alreadyExists)
             {
-                throw new InvalidOperationException(
-                    "No se pudo obtener el consecutivo de la tarifa."
-                );
-            }
-
-            return Convert.ToInt64(value, CultureInfo.InvariantCulture);
-        }
-        finally
-        {
-            if (shouldCloseConnection)
-            {
-                await connection.CloseAsync();
+                return candidate;
             }
         }
+
+        throw new InvalidOperationException(
+            "No se pudo generar un identificador QUO único después de varios intentos."
+        );
+    }
+
+    private static string GenerateBlock(int length)
+    {
+        Span<char> block = stackalloc char[length];
+
+        for (var index = 0; index < block.Length; index++)
+        {
+            block[index] = Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)];
+        }
+
+        return new string(block);
     }
 }
