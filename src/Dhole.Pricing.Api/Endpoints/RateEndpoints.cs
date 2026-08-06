@@ -10,6 +10,7 @@ using Dhole.Pricing.Application.Features.Rates.DuplicateRate;
 using Dhole.Pricing.Application.Features.Rates.GetRateById;
 using Dhole.Pricing.Application.Features.Rates.GetRateDashboard;
 using Dhole.Pricing.Application.Features.Rates.GetRates;
+using Dhole.Pricing.Application.Features.Rates.GenerateRateDocument;
 using Dhole.Pricing.Application.Features.Rates.RejectRateMargin;
 using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
 using Dhole.Pricing.Application.Features.Rates.UpdateRate;
@@ -37,6 +38,15 @@ public static class RateEndpoints
             .MapGet("/{rateId:guid}", GetRateByIdAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
 
+
+        group
+            .MapGet("/report-template-definition", GetRateReportTemplateDefinition)
+            .RequireScope(PricingConstants.Scopes.RateView);
+
+        group
+            .MapPost("/{rateId:guid}/documents", GenerateRateDocumentAsync)
+            .RequireScope(PricingConstants.Scopes.RateReportGenerate);
+
         group.MapPost("/", CreateRateAsync).RequireScope(PricingConstants.Scopes.RateCreate);
 
         group
@@ -62,6 +72,98 @@ public static class RateEndpoints
         group.MapDelete("/", DeleteRatesAsync).RequireScope(PricingConstants.Scopes.RateDelete);
 
         return app;
+    }
+
+
+    private static IResult GetRateReportTemplateDefinition()
+    {
+        var sampleData = new
+        {
+            company = new
+            {
+                name = "Grupo Castro Fallas",
+                legalName = "Grupo Castro Fallas",
+                phone = "+506 0000-0000",
+                email = "pricing@empresa.com",
+                website = "https://logisticacastrofallas.com",
+                logoDataUri = ""
+            },
+            generated = new { date = "06/08/2026", time = "11:00" },
+            rate = new
+            {
+                rateCode = "RATE-ABCDE-123456",
+                quoteNumber = "QUO-ABCDE-123456",
+                idtraNumber = "IDTRA-2026-00125",
+                clientName = "Cliente de ejemplo",
+                agent = "Agente de ejemplo",
+                carrier = "MSC",
+                pol = "Shanghai",
+                poe = "Moín",
+                pod = "Puerto Caldera",
+                route = "Shanghai → Puerto Caldera vía Moín",
+                containerType = "40 HC",
+                containerQuantity = 2,
+                currency = "USD",
+                freeDays = 21,
+                transitTime = "28 días",
+                transitDays = 28,
+                validFrom = "08/08/2026",
+                validTo = "14/08/2026",
+                total = "USD 12,730.00",
+                totalAmount = 12730.00m,
+                includes = "Flete marítimo y días libres indicados.",
+                subjectTo = "Espacio y equipo disponibles.",
+                excludes = "Impuestos y gastos no indicados.",
+                status = "Open"
+            },
+            items = new[]
+            {
+                new { description = "Flete marítimo", quantity = 2, unitSale = "USD 6,300.00", unitSaleAmount = 6300m, lineTotal = "USD 12,600.00", lineTotalAmount = 12600m, notes = "" },
+                new { description = "ISPS", quantity = 2, unitSale = "USD 15.00", unitSaleAmount = 15m, lineTotal = "USD 30.00", lineTotalAmount = 30m, notes = "Por contenedor" },
+                new { description = "P/S", quantity = 2, unitSale = "USD 50.00", unitSaleAmount = 50m, lineTotal = "USD 100.00", lineTotalAmount = 100m, notes = "Por contenedor" }
+            },
+            rows = new[]
+            {
+                new Dictionary<string, object?> { ["Concepto"] = "Flete marítimo", ["Cantidad"] = 2, ["Moneda"] = "USD", ["Precio unitario"] = 6300m, ["Total"] = 12600m, ["Notas"] = "" }
+            }
+        };
+
+        var variables = new[]
+        {
+            "company.name", "company.legalName", "company.phone", "company.email", "company.website", "company.logoDataUri",
+            "generated.date", "generated.time",
+            "rate.rateCode", "rate.quoteNumber", "rate.idtraNumber", "rate.clientName", "rate.agent", "rate.carrier",
+            "rate.pol", "rate.poe", "rate.pod", "rate.route", "rate.containerType", "rate.containerQuantity", "rate.currency",
+            "rate.freeDays", "rate.transitTime", "rate.transitDays", "rate.validFrom", "rate.validTo", "rate.total", "rate.totalAmount",
+            "rate.includes", "rate.subjectTo", "rate.excludes", "rate.status",
+            "items[].description", "items[].quantity", "items[].unitSale", "items[].unitSaleAmount", "items[].lineTotal", "items[].lineTotalAmount", "items[].notes"
+        };
+
+        return EndpointResults.Ok(new
+        {
+            templateCode = "pricing-fcl-client-quote",
+            name = "Cotización FCL para cliente",
+            pageSize = "A4",
+            orientation = "Portrait",
+            variables,
+            sampleData
+        });
+    }
+
+    private static async Task<IResult> GenerateRateDocumentAsync(
+        Guid rateId,
+        GenerateRateDocumentRequest request,
+        ICommandDispatcher dispatcher,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var result = await dispatcher.DispatchAsync(
+            new GenerateRateDocumentCommand(rateId, request.TemplateCode, request.Format),
+            cancellationToken);
+
+        return result.IsSuccess
+            ? Results.File(result.Value.Content, result.Value.ContentType, result.Value.FileName)
+            : EndpointResults.FromResult(result, httpContext);
     }
 
     private static async Task<IResult> GetRateDashboardAsync(

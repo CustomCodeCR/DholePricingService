@@ -365,4 +365,19 @@ public static class PricingErrors
         "Pricing.ImportProfileRequired",
         "Debe seleccionar un perfil de importación de tarifas."
     );
+
+    public static readonly Error UnsupportedReportFormat = new(
+        "Pricing.Reports.UnsupportedFormat",
+        "El formato solicitado no es soportado. Use pdf, xlsx o csv."
+    );
+
+    public static readonly Error ReportGenerationFailed = new(
+        "Pricing.Reports.GenerationFailed",
+        "Reports Service no pudo generar el documento de la tarifa."
+    );
+
+    public static readonly Error ReportGenerationTimedOut = new(
+        "Pricing.Reports.GenerationTimedOut",
+        "Reports Service superó el tiempo máximo para generar el documento."
+    );
 }

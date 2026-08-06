@@ -1,3 +1,4 @@
+using Dhole.Pricing.Application.Abstractions.Reports;
 using CustomCodeFramework.Auth.DependencyInjection;
 using CustomCodeFramework.Mongo.DependencyInjection;
 using CustomCodeFramework.Redis.DependencyInjection;
@@ -14,6 +15,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+
+using Dhole.Pricing.Infrastructure.Reports;
 
 namespace Dhole.Pricing.Infrastructure.DependencyInjection;
 
@@ -42,6 +45,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddPricingMongoSnapshotWriters();
         services.AddPricingConfigGrpcClient(configuration);
         services.AddPricingDataExtractionGrpcClient(configuration);
+        services.AddPricingReportsClient(configuration);
 
         services.AddScoped<ExtractAndPersistFclPricingImportService>();
 
@@ -158,6 +162,43 @@ public static class InfrastructureServiceCollectionExtensions
             );
 
         services.AddScoped<IDataExtractionFclPricingClient, DataExtractionFclPricingGrpcClient>();
+
+        return services;
+    }
+
+
+    private static IServiceCollection AddPricingReportsClient(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var options = new PricingReportsOptions
+        {
+            BaseAddress = configuration["Reports:Client:BaseAddress"] ?? "http://localhost:5208",
+            InternalServiceKeyHeader = configuration["Reports:Client:InternalServiceKeyHeader"] ?? "X-Dhole-Service-Key",
+            InternalServiceKey = configuration["Reports:Client:InternalServiceKey"] ?? string.Empty,
+            TimeoutSeconds = int.TryParse(configuration["Reports:Client:TimeoutSeconds"], out var timeout)
+                ? timeout
+                : 120
+        };
+
+        if (!Uri.TryCreate(options.BaseAddress, UriKind.Absolute, out var baseAddress))
+            throw new InvalidOperationException("Reports:Client:BaseAddress debe ser una URL absoluta válida.");
+
+        services.AddScoped<IRateReportDataFactory, RateReportDataFactory>();
+        services.AddHttpClient<IPricingReportsClient, PricingReportsHttpClient>(client =>
+        {
+            client.BaseAddress = baseAddress;
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(15, options.TimeoutSeconds));
+
+            if (!string.IsNullOrWhiteSpace(options.InternalServiceKey))
+            {
+                client.DefaultRequestHeaders.Add(
+                    string.IsNullOrWhiteSpace(options.InternalServiceKeyHeader)
+                        ? "X-Dhole-Service-Key"
+                        : options.InternalServiceKeyHeader,
+                    options.InternalServiceKey);
+            }
+        });
 
         return services;
     }
