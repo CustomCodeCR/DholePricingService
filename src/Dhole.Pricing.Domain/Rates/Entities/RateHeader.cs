@@ -615,6 +615,35 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
     }
 
+    public bool MarkExpired(DateTime evaluatedAtUtc, Guid? updatedBy = null)
+    {
+        var effectiveDate = evaluatedAtUtc.Kind == DateTimeKind.Utc
+            ? evaluatedAtUtc.Date
+            : evaluatedAtUtc.ToUniversalTime().Date;
+
+        if (ValidTo.Date >= effectiveDate || Status == RateStatus.Expired)
+        {
+            return false;
+        }
+
+        if (
+            Status
+            is RateStatus.Closed
+                or RateStatus.RejectedByManagement
+                or RateStatus.RejectedByClient
+        )
+        {
+            return false;
+        }
+
+        Status = RateStatus.Expired;
+        RequiredApproval = false;
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
+
+        return true;
+    }
+
     public void Delete(Guid? deletedBy)
     {
         MarkAsDeleted(DateTime.UtcNow, deletedBy?.ToString());

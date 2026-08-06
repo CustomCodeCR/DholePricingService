@@ -323,6 +323,194 @@ public sealed class StandardizedImportFclRateFactoryTests
         Assert.AreEqual(0, result.SkippedExtractionRowIds.Count);
     }
 
+    [TestMethod]
+    public void CreateRates_WhenStructuralFieldsExistOnlyInRawJson_RecoversEmailRow()
+    {
+        var rowId = Guid.NewGuid();
+        var extraction = new DataExtractionFclPricingResult(
+            true,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "test-raw-json-recovery",
+            new DataExtractionFclPricingSummary(1, 0, 0, 1, true),
+            [
+                new DataExtractionFclPricingRow(
+                    rowId,
+                    "AI Email",
+                    1,
+                    null,
+                    null,
+                    null,
+                    "40HC",
+                    "MSC",
+                    "RS Logistics",
+                    "General Cargo",
+                    "USD",
+                    14,
+                    null,
+                    new DateTime(2026, 8, 8),
+                    new DateTime(2026, 8, 14),
+                    7515m,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "Invalid",
+                    "{\"POL\":\"Shanghai\",\"POD\":\"Caldera\",\"CARRIER\":\"MSC\"}",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
+            ],
+            [
+                new DataExtractionFclPricingIssue(
+                    Guid.NewGuid(),
+                    rowId,
+                    "missing_origin_port",
+                    "La fila no tiene POL.",
+                    true,
+                    "AI Email",
+                    1,
+                    "OriginPort",
+                    null
+                ),
+                new DataExtractionFclPricingIssue(
+                    Guid.NewGuid(),
+                    rowId,
+                    "missing_port_of_exit",
+                    "La fila no tiene POE.",
+                    true,
+                    "AI Email",
+                    1,
+                    "PortOfExit",
+                    null
+                )
+            ],
+            null,
+            null
+        );
+
+        var result = StandardizedImportFclRateFactory.CreateRates(
+            Guid.NewGuid(),
+            ImportSourceType.Email,
+            extraction,
+            null
+        );
+
+        var rate = result.Rates.Single();
+        Assert.AreEqual("Shanghai", rate.PolName);
+        Assert.AreEqual("Caldera", rate.PoeName);
+        Assert.AreEqual(0, result.SkippedExtractionRowIds.Count);
+    }
+
+    [TestMethod]
+    public void CreateRates_WhenAnyAmountExceedsNumeric18Scale4_SkipsTheRow()
+    {
+        var rowId = Guid.NewGuid();
+        var extraction = CreateSingleRowExtraction(
+            rowId,
+            oceanFreight: 8108m,
+            totalSale: 999_999_999_999_999m
+        );
+
+        var result = StandardizedImportFclRateFactory.CreateRates(
+            Guid.NewGuid(),
+            ImportSourceType.Email,
+            extraction,
+            null
+        );
+
+        Assert.AreEqual(0, result.Rates.Count);
+        Assert.IsTrue(result.SkippedExtractionRowIds.Contains(rowId));
+    }
+
+    [TestMethod]
+    public void CreateRates_RoundsPersistedAmountsToFourDecimals()
+    {
+        var rowId = Guid.NewGuid();
+        var extraction = CreateSingleRowExtraction(
+            rowId,
+            oceanFreight: 8108.12345m,
+            totalSale: 8316.98765m
+        );
+
+        var result = StandardizedImportFclRateFactory.CreateRates(
+            Guid.NewGuid(),
+            ImportSourceType.Email,
+            extraction,
+            null
+        );
+
+        var rate = result.Rates.Single();
+        Assert.AreEqual(8108.1235m, rate.OceanFreight);
+        Assert.AreEqual(8316.9877m, rate.TotalSale);
+    }
+
+    private static DataExtractionFclPricingResult CreateSingleRowExtraction(
+        Guid rowId,
+        decimal? oceanFreight,
+        decimal? totalSale
+    )
+    {
+        return new DataExtractionFclPricingResult(
+            true,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "test-numeric-boundary",
+            new DataExtractionFclPricingSummary(1, 1, 0, 0, true),
+            [
+                new DataExtractionFclPricingRow(
+                    rowId,
+                    "Rates",
+                    2,
+                    "Qingdao",
+                    "Caldera",
+                    null,
+                    "20DV",
+                    "PIL",
+                    "AGUNSA",
+                    "General Cargo",
+                    "USD",
+                    7,
+                    null,
+                    new DateTime(2026, 8, 15),
+                    new DateTime(2026, 8, 21),
+                    oceanFreight,
+                    null,
+                    null,
+                    null,
+                    null,
+                    totalSale,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "Valid",
+                    "{}",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
+            ],
+            [],
+            null,
+            null
+        );
+    }
+
     private static DataExtractionCatalogReference Reference(
         string group,
         string code,

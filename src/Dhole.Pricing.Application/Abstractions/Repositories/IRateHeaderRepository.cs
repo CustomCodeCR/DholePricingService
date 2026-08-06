@@ -58,6 +58,16 @@ public interface IRateHeaderRepository : IRepository<RateHeader, Guid>
         CancellationToken cancellationToken = default
     );
 
+    Task<PricingRateDashboardDto> GetDashboardAsync(
+        DateTime? createdFrom = null,
+        DateTime? createdTo = null,
+        DateTime? modifiedFrom = null,
+        DateTime? modifiedTo = null,
+        DateTime? validityFrom = null,
+        DateTime? validityTo = null,
+        CancellationToken cancellationToken = default
+    );
+
     Task<IReadOnlyCollection<RateSelectDto>> GetForSelectAsync(
         string? search = null,
         Guid? agentId = null,

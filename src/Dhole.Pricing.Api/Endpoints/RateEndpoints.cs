@@ -8,6 +8,7 @@ using Dhole.Pricing.Application.Features.Rates.CreateRate;
 using Dhole.Pricing.Application.Features.Rates.DeleteRate;
 using Dhole.Pricing.Application.Features.Rates.DuplicateRate;
 using Dhole.Pricing.Application.Features.Rates.GetRateById;
+using Dhole.Pricing.Application.Features.Rates.GetRateDashboard;
 using Dhole.Pricing.Application.Features.Rates.GetRates;
 using Dhole.Pricing.Application.Features.Rates.RejectRateMargin;
 using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
@@ -27,6 +28,10 @@ public static class RateEndpoints
         var group = app.MapGroup("/api/pricing/rates").WithTags("Rates").RequireAuthorization();
 
         group.MapGet("/", GetRatesAsync).RequireScope(PricingConstants.Scopes.RateView);
+
+        group
+            .MapGet("/dashboard", GetRateDashboardAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
 
         group
             .MapGet("/{rateId:guid}", GetRateByIdAsync)
@@ -57,6 +62,60 @@ public static class RateEndpoints
         group.MapDelete("/", DeleteRatesAsync).RequireScope(PricingConstants.Scopes.RateDelete);
 
         return app;
+    }
+
+    private static async Task<IResult> GetRateDashboardAsync(
+        DateTime? createdFrom,
+        DateTime? createdTo,
+        DateTime? modifiedFrom,
+        DateTime? modifiedTo,
+        DateTime? validityFrom,
+        DateTime? validityTo,
+        IQueryDispatcher dispatcher,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        if (createdFrom.HasValue && createdTo.HasValue && createdFrom > createdTo)
+        {
+            return EndpointResults.BadRequest(
+                "Pricing.InvalidCreatedDateRange",
+                "La fecha inicial de creación no puede ser posterior a la fecha final.",
+                httpContext
+            );
+        }
+
+        if (modifiedFrom.HasValue && modifiedTo.HasValue && modifiedFrom > modifiedTo)
+        {
+            return EndpointResults.BadRequest(
+                "Pricing.InvalidModifiedDateRange",
+                "La fecha inicial de modificación no puede ser posterior a la fecha final.",
+                httpContext
+            );
+        }
+
+        if (validityFrom.HasValue && validityTo.HasValue && validityFrom > validityTo)
+        {
+            return EndpointResults.BadRequest(
+                "Pricing.InvalidValidityDateRange",
+                "La fecha inicial de vigencia no puede ser posterior a la fecha final.",
+                httpContext
+            );
+        }
+
+        var result = await dispatcher.DispatchAsync(
+            new GetRateDashboardQuery(
+                createdFrom,
+                createdTo,
+                modifiedFrom,
+                modifiedTo,
+                validityFrom,
+                validityTo
+            ),
+            cancellationToken
+        );
+
+        return EndpointResults.FromResult(result, httpContext);
     }
 
     private static async Task<IResult> GetRatesAsync(

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
@@ -52,8 +53,9 @@ public static class StandardizedImportFclRateFactory
         var rates = new List<ImportFclRates>();
         var skippedRows = new List<Guid>();
 
-        foreach (var row in extraction.Rows)
+        foreach (var sourceRow in extraction.Rows)
         {
+            var row = RecoverStructuralFields(sourceRow, sourceType);
             var promoteDestinationToPoe = ShouldPromoteEmailDestinationToPoe(
                 row,
                 sourceType
@@ -118,14 +120,14 @@ public static class StandardizedImportFclRateFactory
                     ),
                     ResolveCurrencySnapshot(row.CurrencyReference, row.Currency),
                     row.Commodity,
-                    row.OceanFreight,
-                    row.OriginCharges,
-                    row.DestinationCharges,
-                    row.Surcharges,
-                    row.TotalCost,
-                    row.TotalSale,
-                    row.Profit,
-                    row.Margin,
+                    RoundNumeric18Scale4(row.OceanFreight),
+                    RoundNumeric18Scale4(row.OriginCharges),
+                    RoundNumeric18Scale4(row.DestinationCharges),
+                    RoundNumeric18Scale4(row.Surcharges),
+                    RoundNumeric18Scale4(row.TotalCost),
+                    RoundNumeric18Scale4(row.TotalSale),
+                    RoundNumeric18Scale4(row.Profit),
+                    RoundNumeric18Scale4(row.Margin),
                     row.FreeDays ?? 0,
                     row.TransitDays ?? 0,
                     row.ValidFrom!.Value,
@@ -165,7 +167,15 @@ public static class StandardizedImportFclRateFactory
             && IsNonNegative(row.OceanFreight)
             && IsNonNegative(row.OriginCharges)
             && IsNonNegative(row.DestinationCharges)
-            && IsNonNegative(row.Surcharges);
+            && IsNonNegative(row.Surcharges)
+            && FitsNumeric18Scale4(row.OceanFreight)
+            && FitsNumeric18Scale4(row.OriginCharges)
+            && FitsNumeric18Scale4(row.DestinationCharges)
+            && FitsNumeric18Scale4(row.Surcharges)
+            && FitsNumeric18Scale4(row.TotalCost)
+            && FitsNumeric18Scale4(row.TotalSale)
+            && FitsNumeric18Scale4(row.Profit)
+            && FitsNumeric18Scale4(row.Margin);
     }
 
     private static bool ShouldPromoteEmailDestinationToPoe(
@@ -174,6 +184,7 @@ public static class StandardizedImportFclRateFactory
     )
     {
         return sourceType == ImportSourceType.Email
+            && !HasText(row.PortOfExit)
             && HasText(row.DestinationPort);
     }
 
@@ -189,12 +200,20 @@ public static class StandardizedImportFclRateFactory
         }
 
         return (
+                code.Equals("missing_origin_port", StringComparison.OrdinalIgnoreCase)
+                && HasText(row.OriginPort)
+            )
+            || (
                 code.Equals("missing_port_of_exit", StringComparison.OrdinalIgnoreCase)
                 && (HasText(row.PortOfExit) || ShouldPromoteEmailDestinationToPoe(row, sourceType))
             )
             || (
                 code.Equals("missing_container_type", StringComparison.OrdinalIgnoreCase)
                 && HasText(row.ContainerType)
+            )
+            || (
+                code.Equals("missing_carrier", StringComparison.OrdinalIgnoreCase)
+                && HasText(row.Carrier)
             );
     }
 
@@ -202,6 +221,107 @@ public static class StandardizedImportFclRateFactory
     {
         return ReviewableImportIssueCodes.Contains(code)
             || code.StartsWith("unknown_", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static DataExtractionFclPricingRow RecoverStructuralFields(
+        DataExtractionFclPricingRow row,
+        ImportSourceType sourceType
+    )
+    {
+        if (string.IsNullOrWhiteSpace(row.RawJson))
+        {
+            return row;
+        }
+
+        var originPort = FirstText(
+            row.OriginPort,
+            ReadRawJsonValue(row.RawJson, "OriginPort", "POL", "pol", "PortOfLoading")
+        );
+        var portOfExit = FirstText(
+            row.PortOfExit,
+            ReadRawJsonValue(row.RawJson, "PortOfExit", "POE", "poe", "PortOfDischarge"),
+            sourceType == ImportSourceType.Email
+                ? ReadRawJsonValue(row.RawJson, "POD", "pod", "DestinationPort")
+                : null
+        );
+        var destinationPort = FirstText(
+            row.DestinationPort,
+            sourceType == ImportSourceType.Email
+                ? ReadRawJsonValue(row.RawJson, "FinalDestination", "PlaceOfDelivery")
+                : ReadRawJsonValue(
+                    row.RawJson,
+                    "DestinationPort",
+                    "FinalDestination",
+                    "PlaceOfDelivery"
+                )
+        );
+        var containerType = FirstText(
+            row.ContainerType,
+            ReadRawJsonValue(
+                row.RawJson,
+                "ContainerType",
+                "ContainerSize",
+                "EquipmentType",
+                "Equipment"
+            )
+        );
+        var carrier = FirstText(
+            row.Carrier,
+            ReadRawJsonValue(row.RawJson, "Carrier", "ShippingLine", "Naviera")
+        );
+
+        return row with
+        {
+            OriginPort = originPort,
+            PortOfExit = portOfExit,
+            DestinationPort = destinationPort,
+            ContainerType = containerType,
+            Carrier = carrier,
+        };
+    }
+
+    private static string? ReadRawJsonValue(string rawJson, params string[] aliases)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(rawJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            foreach (var alias in aliases)
+            {
+                foreach (var property in document.RootElement.EnumerateObject())
+                {
+                    if (!property.Name.Equals(alias, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var value = property.Value.ValueKind == JsonValueKind.String
+                        ? property.Value.GetString()
+                        : property.Value.ValueKind is JsonValueKind.Number
+                            ? property.Value.GetRawText()
+                            : null;
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        return value.Trim();
+                    }
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // RawJson is diagnostic data. A malformed payload must not abort the import.
+        }
+
+        return null;
+    }
+
+    private static string? FirstText(params string?[] values)
+    {
+        return values.FirstOrDefault(HasText)?.Trim();
     }
 
     private static CatalogSnapshot ResolveOptionalSnapshot(
@@ -306,7 +426,17 @@ public static class StandardizedImportFclRateFactory
 
     private static bool HasText(string? value) => !string.IsNullOrWhiteSpace(value);
 
+    private const decimal MaximumNumeric18Scale4 = 99_999_999_999_999.9999m;
+
     private static bool IsNonNegative(decimal? value) => !value.HasValue || value.Value >= 0m;
+
+    private static bool FitsNumeric18Scale4(decimal? value) =>
+        !value.HasValue || Math.Abs(value.Value) <= MaximumNumeric18Scale4;
+
+    private static decimal? RoundNumeric18Scale4(decimal? value) =>
+        value.HasValue
+            ? decimal.Round(value.Value, 4, MidpointRounding.AwayFromZero)
+            : null;
 
     private static string Limit(string value, int maxLength) =>
         value.Length <= maxLength ? value : value[..maxLength];

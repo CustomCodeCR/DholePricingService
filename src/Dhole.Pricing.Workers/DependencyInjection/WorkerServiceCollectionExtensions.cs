@@ -179,6 +179,7 @@ public static class WorkerServiceCollectionExtensions
 
         services.AddCustomCodePeriodicWorker<PricingCacheWarmupWorker>();
         services.AddCustomCodePeriodicWorker<PricingImportFromExtractionWorker>();
+        services.AddCustomCodePeriodicWorker<PricingRateExpirationWorker>();
 
         return services;
     }

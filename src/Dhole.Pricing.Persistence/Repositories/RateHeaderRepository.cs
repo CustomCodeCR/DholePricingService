@@ -307,6 +307,187 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<PricingRateDashboardDto> GetDashboardAsync(
+        DateTime? createdFrom = null,
+        DateTime? createdTo = null,
+        DateTime? modifiedFrom = null,
+        DateTime? modifiedTo = null,
+        DateTime? validityFrom = null,
+        DateTime? validityTo = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var query = dbContext.RateHeaders.AsNoTracking().Where(x => !x.IsDeleted);
+
+        if (createdFrom.HasValue)
+        {
+            var value = AsUtcDate(createdFrom.Value);
+            query = query.Where(x => x.CreatedAtUtc >= value);
+        }
+
+        if (createdTo.HasValue)
+        {
+            var value = AsUtcDate(createdTo.Value).AddDays(1);
+            query = query.Where(x => x.CreatedAtUtc < value);
+        }
+
+        if (modifiedFrom.HasValue)
+        {
+            var value = AsUtcDate(modifiedFrom.Value);
+            query = query.Where(x => x.UpdatedAtUtc.HasValue && x.UpdatedAtUtc.Value >= value);
+        }
+
+        if (modifiedTo.HasValue)
+        {
+            var value = AsUtcDate(modifiedTo.Value).AddDays(1);
+            query = query.Where(x => x.UpdatedAtUtc.HasValue && x.UpdatedAtUtc.Value < value);
+        }
+
+        // La vigencia se filtra por intersección: la tarifa debe estar vigente
+        // al menos un día dentro del rango solicitado.
+        if (validityFrom.HasValue)
+        {
+            var value = AsUtcDate(validityFrom.Value);
+            query = query.Where(x => x.ValidTo >= value);
+        }
+
+        if (validityTo.HasValue)
+        {
+            var value = AsUtcDate(validityTo.Value).AddDays(1);
+            query = query.Where(x => x.ValidFrom < value);
+        }
+
+        var totalRates = await query.CountAsync(cancellationToken);
+
+        var statusCounts = await query
+            .GroupBy(x => x.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(x => x.Status, x => x.Count, cancellationToken);
+
+        var statuses = Enum.GetValues<RateStatus>()
+            .Select(status =>
+            {
+                var count = statusCounts.GetValueOrDefault(status);
+                var percentage = totalRates == 0
+                    ? 0m
+                    : Math.Round(count * 100m / totalRates, 2, MidpointRounding.AwayFromZero);
+
+                return new PricingRateStatusSummaryDto(status.ToString(), count, percentage);
+            })
+            .ToList();
+
+        var financialQuery = query.Where(x =>
+            x.Status == RateStatus.ApprovedByManagement
+            || x.Status == RateStatus.Open
+            || x.Status == RateStatus.Sent
+            || x.Status == RateStatus.RequestedByClient
+            || x.Status == RateStatus.AcceptedByClient
+        );
+
+        var financials = await financialQuery
+            .GroupBy(x => new
+            {
+                x.CurrencyId,
+                x.CurrencyName,
+                x.CurrencyCode,
+            })
+            .OrderBy(group => group.Key.CurrencyCode)
+            .Select(group => new PricingRateCurrencySummaryDto(
+                group.Key.CurrencyId,
+                group.Key.CurrencyName,
+                group.Key.CurrencyCode,
+                group.Count(),
+                group.Sum(x => x.TotalCostAmount),
+                group.Sum(x => x.TotalSaleAmount),
+                group.Sum(x => x.TotalUtilityAmount),
+                group.Average(x => x.MarginPercentage)
+            ))
+            .ToListAsync(cancellationToken);
+
+        var recentRateRows = await query
+            .OrderByDescending(x => x.UpdatedAtUtc ?? x.CreatedAtUtc)
+            .ThenByDescending(x => x.CreatedAtUtc)
+            .Take(10)
+            .Select(x => new
+            {
+                x.Id,
+                x.RateCode,
+                x.RateName,
+                x.Status,
+                x.ClientName,
+                x.CarrierName,
+                x.PolName,
+                x.PoeName,
+                x.PodName,
+                x.ContainerTypeName,
+                x.CurrencyCode,
+                x.TotalUtilityAmount,
+                x.MarginPercentage,
+                x.CreatedAtUtc,
+                x.UpdatedAtUtc,
+                x.ValidFrom,
+                x.ValidTo,
+            })
+            .ToListAsync(cancellationToken);
+
+        var recentRates = recentRateRows
+            .Select(x => new PricingRateDashboardItemDto(
+                x.Id,
+                x.RateCode,
+                x.RateName,
+                x.Status.ToString(),
+                x.ClientName,
+                x.CarrierName,
+                x.PolName,
+                x.PoeName,
+                x.PodName,
+                x.ContainerTypeName,
+                x.CurrencyCode,
+                x.TotalUtilityAmount,
+                x.MarginPercentage,
+                x.CreatedAtUtc,
+                x.UpdatedAtUtc,
+                x.ValidFrom,
+                x.ValidTo
+            ))
+            .ToList();
+
+        var lastCreatedAtUtc = await query
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Select(x => (DateTime?)x.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var lastModifiedAtUtc = await query
+            .Where(x => x.UpdatedAtUtc.HasValue)
+            .OrderByDescending(x => x.UpdatedAtUtc)
+            .Select(x => x.UpdatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return new PricingRateDashboardDto(
+            totalRates,
+            statusCounts.GetValueOrDefault(RateStatus.PendingApproval),
+            statusCounts.GetValueOrDefault(RateStatus.ApprovedByManagement),
+            statusCounts.GetValueOrDefault(RateStatus.RejectedByManagement)
+                + statusCounts.GetValueOrDefault(RateStatus.RejectedByClient),
+            statusCounts.GetValueOrDefault(RateStatus.Open),
+            statusCounts.GetValueOrDefault(RateStatus.Sent),
+            statusCounts.GetValueOrDefault(RateStatus.RequestedByClient),
+            statusCounts.GetValueOrDefault(RateStatus.AcceptedByClient),
+            statusCounts.GetValueOrDefault(RateStatus.Closed),
+            statusCounts.GetValueOrDefault(RateStatus.Expired),
+            lastCreatedAtUtc,
+            lastModifiedAtUtc,
+            statuses,
+            financials,
+            recentRates
+        );
+    }
+
+    private static DateTime AsUtcDate(DateTime value)
+    {
+        return DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
+    }
+
     private static IQueryable<RateHeader> ApplyFilters(
         IQueryable<RateHeader> query,
         string? search,

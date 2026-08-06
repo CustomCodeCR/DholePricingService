@@ -33,7 +33,11 @@ public sealed class UpdateRateCommandHandler(
             return Result.Failure(PricingErrors.RateHeaderNotFound);
         }
 
-        if (rate.Status == Dhole.Pricing.Domain.Rates.Enums.RateStatus.Closed)
+        if (
+            rate.Status
+            is Dhole.Pricing.Domain.Rates.Enums.RateStatus.Closed
+                or Dhole.Pricing.Domain.Rates.Enums.RateStatus.Expired
+        )
         {
             return Result.Failure(PricingErrors.RateInvalidStatus);
         }

@@ -207,6 +207,40 @@ public sealed class RateStatusWorkflowTests
     }
 
     [TestMethod]
+    public void MarkExpired_WhenValidityEnded_ChangesActiveRateToExpired()
+    {
+        var today = DateTime.UtcNow.Date;
+        var rate = CreateRate(validTo: today.AddDays(-1));
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+
+        var changed = rate.MarkExpired(today);
+
+        Assert.IsTrue(changed);
+        Assert.AreEqual(RateStatus.Expired, rate.Status);
+        Assert.IsFalse(rate.RequiredApproval);
+    }
+
+    [TestMethod]
+    public void MarkExpired_DoesNotReplaceClosedDecision()
+    {
+        var today = DateTime.UtcNow.Date;
+        var rate = CreateRate(validTo: today.AddDays(-1));
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(
+            RateStatus.Closed,
+            reason: "La operación fue cerrada antes de vencer.",
+            updatedBy: null
+        );
+
+        var changed = rate.MarkExpired(today);
+
+        Assert.IsFalse(changed);
+        Assert.AreEqual(RateStatus.Closed, rate.Status);
+    }
+
+    [TestMethod]
     public void Create_WithRandomQuoFormat_PreservesGeneratedCode()
     {
         var rate = CreateRate();
@@ -228,7 +262,12 @@ public sealed class RateStatusWorkflowTests
         Assert.AreEqual("QUO-A7K2P-9X4M8Q", rate.RateCode);
     }
 
-    private static RateHeader CreateRate(string rateCode = "QUO-A7K2P-9X4M8Q", string? idtraNumber = null, string? quoNumber = null)
+    private static RateHeader CreateRate(
+        string rateCode = "QUO-A7K2P-9X4M8Q",
+        string? idtraNumber = null,
+        string? quoNumber = null,
+        DateTime? validTo = null
+    )
     {
         var today = DateTime.UtcNow.Date;
         return RateHeader.Create(
@@ -257,7 +296,7 @@ public sealed class RateStatusWorkflowTests
             currencyCode: "USD",
             freeDays: 7,
             validFrom: today,
-            validTo: today.AddDays(30),
+            validTo: validTo ?? today.AddDays(30),
             containerQuantity: 1,
             clientName: "Cliente",
             idtraNumber,
