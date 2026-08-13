@@ -8,6 +8,11 @@ namespace Dhole.Pricing.Application.Abstractions.Repositories;
 
 public interface ICostRepository : IRepository<Cost, Guid>
 {
+    Task<Cost?> GetByIdWithIncotermsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default
+    );
+
     Task<bool> ExistsByNameAsync(
         string name,
         CostType costType,

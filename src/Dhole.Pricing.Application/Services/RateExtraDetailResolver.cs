@@ -2,6 +2,8 @@ using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Shared;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace Dhole.Pricing.Application.Services;
 
@@ -53,6 +55,8 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
                 return RateExtraDetailResolution.Failure(PricingErrors.RateCostDetailFixedLocked);
             }
 
+            var (costAmount, saleAmount) = ResolveGeneratedInsuranceAmounts(input);
+
             return RateExtraDetailResolution.Success(
                 new ResolvedRateExtraDetail(
                     input.Id,
@@ -63,8 +67,8 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
                     input.CurrencyId,
                     input.CurrencyName.Trim(),
                     input.CurrencyCode.Trim(),
-                    input.CostAmount,
-                    input.SaleAmount,
+                    costAmount,
+                    saleAmount,
                     Normalize(input.Notes),
                     IsAccountant: false
                 )
@@ -80,11 +84,16 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
 
         if (cost.CostType == CostType.Fixed)
         {
-            if (!input.Id.HasValue)
+            // En creación se permite enviar el costo fijo para personalizar únicamente su venta.
+            // El costo contable siempre se toma del maestro; así el cliente no puede alterarlo.
+            if (!input.Id.HasValue && (cost.IsDeleted || !cost.IsActive))
             {
-                return RateExtraDetailResolution.Failure(PricingErrors.RateCostDetailFixedLocked);
+                return RateExtraDetailResolution.Failure(
+                    cost.IsDeleted ? PricingErrors.CostNotFound : PricingErrors.CostIsInactive
+                );
             }
 
+            var costAmount = input.Id.HasValue ? input.CostAmount : cost.CostAmount;
             var saleAmount = cost.AgentId.HasValue ? 0m : input.SaleAmount;
 
             return RateExtraDetailResolution.Success(
@@ -97,7 +106,7 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
                     cost.CurrencyId,
                     cost.CurrencyName,
                     cost.CurrencyCode,
-                    input.CostAmount,
+                    costAmount,
                     saleAmount,
                     Normalize(input.Notes) ?? cost.Notes,
                     cost.IsAccountant
@@ -131,6 +140,71 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
                 cost.IsAccountant
             )
         );
+    }
+
+    private static (decimal CostAmount, decimal SaleAmount) ResolveGeneratedInsuranceAmounts(
+        RateExtraDetailInput input
+    )
+    {
+        if (
+            input.CostDetailType != CostDetailType.Insurance
+            || string.IsNullOrWhiteSpace(input.Notes)
+            || !input.Notes.StartsWith(
+                "Seguro de carga · valor carga USD",
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+        {
+            return (input.CostAmount, input.SaleAmount);
+        }
+
+        var cargoValue = ReadDecimal(input.Notes, @"valor carga USD\s+([0-9]+(?:[.,][0-9]+)?)");
+        if (!cargoValue.HasValue || cargoValue.Value <= 0m)
+        {
+            return (input.CostAmount, input.SaleAmount);
+        }
+
+        var salePercentage =
+            ReadDecimal(input.Notes, @"·\s*([0-9]+(?:[.,][0-9]+)?)%")
+            ?? CargoInsurancePricingRules.DefaultSalePercentage;
+        var saleMinimum =
+            ReadDecimal(input.Notes, @"mínimo USD\s+([0-9]+(?:[.,][0-9]+)?)")
+            ?? CargoInsurancePricingRules.DefaultSaleMinimumAmount;
+        decimal? manualSaleAmount = input.Notes.Contains(
+            "tarifa manual",
+            StringComparison.OrdinalIgnoreCase
+        )
+            ? input.SaleAmount
+            : null;
+
+        var calculated = CargoInsurancePricingRules.Calculate(
+            cargoValue.Value,
+            salePercentage,
+            saleMinimum,
+            manualSaleAmount
+        );
+
+        return (calculated.CostAmount, calculated.SaleAmount);
+    }
+
+    private static decimal? ReadDecimal(string source, string pattern)
+    {
+        var match = Regex.Match(
+            source,
+            pattern,
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+        );
+        if (!match.Success || match.Groups.Count < 2) return null;
+
+        var raw = match.Groups[1].Value.Replace(',', '.');
+        return decimal.TryParse(
+            raw,
+            NumberStyles.Number,
+            CultureInfo.InvariantCulture,
+            out var value
+        )
+            ? value
+            : null;
     }
 
     private static string? Normalize(string? value)

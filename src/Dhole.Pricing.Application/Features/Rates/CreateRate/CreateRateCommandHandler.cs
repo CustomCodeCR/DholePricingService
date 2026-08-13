@@ -32,6 +32,9 @@ public sealed class CreateRateCommandHandler(
     )
     {
         var resolvedDetails = new List<ResolvedRateExtraDetail>();
+        var importedFreightOverride = command.SourceImportFclRateId.HasValue
+            ? command.Details.FirstOrDefault(x => x.CostDetailType == CostDetailType.Freight)
+            : null;
 
         foreach (
             var detail in command.Details.Where(detail =>
@@ -83,13 +86,9 @@ public sealed class CreateRateCommandHandler(
             var today = DateTime.UtcNow.Date;
             importedRate.ExpireIfNeeded(today, command.CreatedBy);
 
-            if (
-                importedRate.Status == ImportStatus.Expired
-                || importedRate.ValidFrom.Date < today
-                || importedRate.ValidTo.Date < today
-            )
+            if (!importedRate.IsEffectiveOn(today))
             {
-                return Result.Failure<Guid>(PricingErrors.ImportFclRateInvalidStatus);
+                return Result.Failure<Guid>(PricingErrors.ImportFclRateOutsideValidity);
             }
 
             if (importedRate.Status == ImportStatus.Pending)
@@ -121,7 +120,7 @@ public sealed class CreateRateCommandHandler(
 
             if (importedRate is not null)
             {
-                AddImportedFreight(rate, importedRate, command.CreatedBy);
+                AddImportedFreight(rate, importedRate, importedFreightOverride, command.CreatedBy);
             }
 
             foreach (var detail in resolvedDetails)
@@ -314,6 +313,9 @@ public sealed class CreateRateCommandHandler(
             command.ContainerTypeId,
             command.ContainerTypeName,
             command.ContainerTypeCode,
+            command.IncotermId,
+            command.IncotermName,
+            command.IncotermCode,
             command.CurrencyId,
             command.CurrencyName,
             command.CurrencyCode,
@@ -359,6 +361,9 @@ public sealed class CreateRateCommandHandler(
             command.ContainerTypeId,
             command.ContainerTypeName,
             command.ContainerTypeCode,
+            command.IncotermId,
+            command.IncotermName,
+            command.IncotermCode,
             command.CurrencyId,
             command.CurrencyName,
             command.CurrencyCode,
@@ -380,12 +385,15 @@ public sealed class CreateRateCommandHandler(
     private static void AddImportedFreight(
         RateHeader rate,
         ImportFclRates importedRate,
+        CreateRateDetailCommandItem? saleOverride,
         Guid? createdBy
     )
     {
         var costAmount = importedRate.OceanFreight ?? importedRate.Freight;
-        var saleAmount =
-            importedRate.TotalSale ?? importedRate.OceanFreight ?? importedRate.Freight;
+        var saleAmount = saleOverride?.SaleAmount
+            ?? importedRate.TotalSale
+            ?? importedRate.OceanFreight
+            ?? importedRate.Freight;
 
         rate.AddRateDetail(
             rate.Id,
@@ -398,7 +406,7 @@ public sealed class CreateRateCommandHandler(
             importedRate.CurrencyCode,
             costAmount,
             saleAmount,
-            notes: null,
+            notes: saleOverride?.Notes,
             quantity: rate.ContainerQuantity,
             updatedBy: createdBy
         );

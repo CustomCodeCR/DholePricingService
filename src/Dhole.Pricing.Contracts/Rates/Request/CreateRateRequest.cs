@@ -34,5 +34,8 @@ public sealed record CreateRateRequest(
     string? Includes = null,
     string? SubjectTo = null,
     string? Excludes = null,
-    int? TransitDays = null
+    int? TransitDays = null,
+    Guid? IncotermId = null,
+    string? IncotermName = null,
+    string? IncotermCode = null
 );

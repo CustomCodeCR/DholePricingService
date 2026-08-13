@@ -46,6 +46,7 @@ internal static class ImportRateMappings
             CurrencyCode = importRate.CurrencyCode,
             CurrencySlug = importRate.CurrencySlug,
             Commodity = importRate.Commodity,
+            SpaceComment = importRate.SpaceComment,
             Freight = importRate.OceanFreight ?? importRate.Freight,
             OceanFreight = importRate.OceanFreight,
             OriginCharges = importRate.OriginCharges,

@@ -18,6 +18,7 @@ public sealed record CreateImportRateCommand(
     CatalogSnapshot ContainerType,
     CatalogSnapshot Currency,
     string? Commodity,
+    string? SpaceComment,
     decimal? OceanFreight,
     decimal? OriginCharges,
     decimal? DestinationCharges,

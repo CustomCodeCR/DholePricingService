@@ -57,6 +57,7 @@ public sealed class CreateCostCommandHandler(
                 command.PortName,
                 command.PortCode,
                 command.PortRole,
+                command.Incoterms,
                 command.CurrencyId,
                 command.CurrencyName,
                 command.CurrencyCode,

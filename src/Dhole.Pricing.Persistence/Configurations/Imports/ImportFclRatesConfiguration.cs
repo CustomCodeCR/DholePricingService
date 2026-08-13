@@ -36,6 +36,7 @@ internal sealed class ImportFclRatesConfiguration
         builder.Property(x => x.ContainerType).HasMaxLength(50).IsRequired();
         builder.Property(x => x.Currency).HasMaxLength(20).IsRequired();
         builder.Property(x => x.Commodity).HasMaxLength(250);
+        builder.Property(x => x.SpaceComment).HasMaxLength(2000);
 
         builder.Property(x => x.Freight).HasPrecision(18, 4).IsRequired();
         builder.Property(x => x.OceanFreight).HasPrecision(18, 4);

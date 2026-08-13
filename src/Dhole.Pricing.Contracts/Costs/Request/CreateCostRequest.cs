@@ -20,5 +20,6 @@ public sealed record CreateCostRequest(
     decimal CostAmount,
     decimal SaleAmount,
     string? Notes,
-    bool IsAccountant = false
+    bool IsAccountant = false,
+    IReadOnlyCollection<CostIncotermRequest>? Incoterms = null
 );

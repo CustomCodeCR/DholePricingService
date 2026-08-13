@@ -6,10 +6,11 @@ using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace Dhole.Pricing.Persistence.Repositories;
 
-public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
+public sealed class ImportFclRateRepository(ServiceDbContext dbContext, IConfiguration configuration)
     : EfRepository<ImportFclRates, Guid>(dbContext),
         IImportFclRateRepository
 {
@@ -136,7 +137,7 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
                 .Where(x =>
                     !x.IsDeleted
                     && x.Status != ImportStatus.Expired
-                    && x.ValidFrom.Date >= today
+                    && x.ValidFrom.Date <= today
                     && x.ValidTo.Date >= today
                 ),
             search,
@@ -204,6 +205,7 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
                 CurrencyCode = x.CurrencyCode,
                 CurrencySlug = x.CurrencySlug,
                 Commodity = x.Commodity,
+                SpaceComment = x.SpaceComment,
                 Freight = x.OceanFreight ?? x.Freight,
                 OceanFreight = x.OceanFreight,
                 OriginCharges = x.OriginCharges,
@@ -235,6 +237,7 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
     )
     {
         const decimal multimodalLandFreight = 2140m;
+        var prioritySettings = ReadPrioritySettings();
 
         var today = DateTime.UtcNow.Date;
         await ExpireOutdatedAsync(today, cancellationToken);
@@ -248,7 +251,7 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
                 !x.IsDeleted
                 && x.Status != ImportStatus.Rejected
                 && x.Status != ImportStatus.Expired
-                && x.ValidFrom.Date >= today
+                && x.ValidFrom.Date <= today
                 && x.ValidTo.Date >= today
             );
 
@@ -258,54 +261,27 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
         if (endDateExclusive.HasValue)
             query = query.Where(x => x.ValidTo < endDateExclusive.Value);
 
-        if (containerType is not null)
+        if (!string.IsNullOrWhiteSpace(containerType))
             query = query.Where(x => x.ContainerTypeName.Contains(containerType));
 
         query = query.Where(x =>
-            (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("limon")
-            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("limón")
-            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("moin")
-            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("moín")
-            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("caldera")
-            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("manzanillo")
-            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("colon")
-            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("colón")
-            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("rodman")
-            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("cristobal")
-            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("cristóbal")
-            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("panama")
-            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe)
-                .ToLower()
-                .Contains("panamá")
+            (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("limon")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("limón")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("moin")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("moín")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("caldera")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("manzanillo")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("colon")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("colón")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("rodman")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("cristobal")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("cristóbal")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("panama")
+            || (x.PoeName + " " + x.PoeCode + " " + x.PoeSlug + " " + x.Poe).ToLower().Contains("panamá")
         );
 
         var importedRates = await query
-            .OrderByDescending(x => x.OceanFreight ?? x.Freight)
-            .ThenBy(x => x.CarrierName)
+            .OrderBy(x => x.CarrierName)
             .ThenBy(x => x.ContainerTypeName)
             .ThenBy(x => x.PolName)
             .Select(x => new
@@ -314,68 +290,244 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext)
                 x.ImportBatchId,
                 x.CarrierName,
                 OceanFreight = x.OceanFreight ?? x.Freight,
+                x.TotalSale,
+                x.Margin,
                 Currency = x.CurrencyName,
                 x.ContainerTypeName,
                 x.PolName,
                 x.PoeName,
                 x.ValidFrom,
                 x.ValidTo,
+                x.Status,
+                x.SpaceComment,
+                x.RawDataJson,
             })
             .ToListAsync(cancellationToken);
 
-        var limonMoinRates = new List<PricingDecisionRateDto>();
-        var calderaRates = new List<PricingDecisionRateDto>();
-        var multimodalRates = new List<PricingDecisionRateDto>();
+        var candidates = importedRates
+            .Select(rate =>
+            {
+                var lane = ResolveDecisionLane(rate.PoeName);
+                var comment = string.IsNullOrWhiteSpace(rate.SpaceComment)
+                    ? ExtractSpaceComment(rate.RawDataJson)
+                    : rate.SpaceComment.Trim();
+                var space = EvaluateSpaceComment(comment, prioritySettings);
+                return new DecisionCandidate(
+                    rate.Id, rate.ImportBatchId, rate.CarrierName, rate.OceanFreight,
+                    lane == DecisionLane.Multimodal ? multimodalLandFreight : null,
+                    rate.TotalSale, rate.Margin, rate.Currency, rate.ContainerTypeName,
+                    rate.PolName, rate.PoeName, rate.ValidFrom, rate.ValidTo, rate.Status.ToString(), lane,
+                    comment, space.Score, space.Risk, space.Reason
+                );
+            })
+            .Where(x => x.Lane.HasValue)
+            .ToArray();
 
-        foreach (var rate in importedRates)
+        var scored = new List<(DecisionLane Lane, PricingDecisionRateDto Rate)>();
+
+        // El HTML de decisión FCL calcula precio y margen contra el universo comparable
+        // actualmente filtrado. Aquí hacemos lo mismo por moneda para no mezclar importes
+        // que no son directamente comparables, pero NO reiniciamos el score por POE/vía.
+        foreach (var currencyGroup in candidates.GroupBy(x => x.Currency, StringComparer.OrdinalIgnoreCase))
         {
-            var lane = ResolveDecisionLane(rate.PoeName);
-            if (lane is null)
-            {
-                continue;
-            }
+            var comparable = currencyGroup
+                .Select(x => (x.TotalSale ?? x.OceanFreight) + (x.LandFreight ?? 0m))
+                .Where(x => x > 0m)
+                .ToArray();
+            var minimumPrice = comparable.Length == 0 ? 0m : comparable.Min();
+            var maxMargin = currencyGroup
+                .Select(x => Math.Max(0m, x.Margin ?? 0m))
+                .DefaultIfEmpty(0m)
+                .Max();
 
-            var item = new PricingDecisionRateDto(
-                rate.Id,
-                rate.CarrierName,
-                rate.OceanFreight,
-                lane == DecisionLane.Multimodal ? multimodalLandFreight : null,
-                rate.Currency,
-                rate.ContainerTypeName,
-                rate.PolName,
-                rate.PoeName,
-                rate.ValidFrom,
-                rate.ValidTo
-            );
-
-            switch (lane)
+            foreach (var candidate in currencyGroup)
             {
-                case DecisionLane.LimonMoin:
-                    limonMoinRates.Add(item);
-                    break;
-                case DecisionLane.Caldera:
-                    calderaRates.Add(item);
-                    break;
-                case DecisionLane.Multimodal:
-                    multimodalRates.Add(item);
-                    break;
+                var amount = (candidate.TotalSale ?? candidate.OceanFreight)
+                    + (candidate.LandFreight ?? 0m);
+
+                // Misma fórmula del HTML:
+                // 100 - ((venta - venta mínima) / max(venta mínima, 1)) * 100.
+                var priceScore = amount > 0m && minimumPrice > 0m
+                    ? Math.Max(
+                        0m,
+                        100m - ((amount - minimumPrice) / Math.Max(minimumPrice, 1m)) * 100m
+                    )
+                    : 0m;
+                var marginScore = maxMargin > 0m
+                    ? Math.Clamp(
+                        (Math.Max(0m, candidate.Margin ?? 0m) / maxMargin) * 100m,
+                        0m,
+                        100m
+                    )
+                    : 0m;
+                var totalWeight = prioritySettings.SpaceWeight
+                    + prioritySettings.PriceWeight
+                    + prioritySettings.MarginWeight;
+                var priority = totalWeight > 0m
+                    ? decimal.Round(
+                        (candidate.SpaceScore * prioritySettings.SpaceWeight
+                            + priceScore * prioritySettings.PriceWeight
+                            + marginScore * prioritySettings.MarginWeight) / totalWeight,
+                        2
+                    )
+                    : 0m;
+                var reason = $"Espacios {candidate.SpaceScore:0}/100 ({AsPercent(prioritySettings.SpaceWeight, totalWeight):0.#}%) · "
+                    + $"precio {priceScore:0}/100 ({AsPercent(prioritySettings.PriceWeight, totalWeight):0.#}%) · "
+                    + $"margen {marginScore:0}/100 ({AsPercent(prioritySettings.MarginWeight, totalWeight):0.#}%). "
+                    + candidate.SpaceReason;
+
+                scored.Add((
+                    candidate.Lane!.Value,
+                    new PricingDecisionRateDto(
+                        candidate.Id, candidate.ImportBatchId, candidate.Carrier,
+                        candidate.OceanFreight, candidate.LandFreight, candidate.Currency,
+                        candidate.ContainerType, candidate.Pol, candidate.Poe, candidate.ValidFrom,
+                        candidate.ValidTo, candidate.Status, candidate.TotalSale, candidate.Margin, candidate.SpaceComment,
+                        candidate.SpaceScore, candidate.SpaceRisk, priority, reason
+                    )
+                ));
             }
         }
 
+        IReadOnlyCollection<PricingDecisionRateDto> RatesFor(DecisionLane lane) => scored
+            .Where(x => x.Lane == lane)
+            .Select(x => x.Rate)
+            .OrderByDescending(x => x.PriorityScore)
+            .ThenBy(x => (x.TotalSale ?? x.InternationalOceanFreight) + (x.InternationalLandFreight ?? 0m))
+            .ThenBy(x => x.Carrier)
+            .ToArray();
+
+        var limonMoinRates = RatesFor(DecisionLane.LimonMoin);
+        var calderaRates = RatesFor(DecisionLane.Caldera);
+        var multimodalRates = RatesFor(DecisionLane.Multimodal);
+
         var lanes = new PricingDecisionLaneDto[]
         {
-            new("limon-moin", "Limón / Moín", limonMoinRates.Count, limonMoinRates),
-            new("puerto-caldera", "Puerto Caldera", calderaRates.Count, calderaRates),
-            new("multimodal", "Multimodal", multimodalRates.Count, multimodalRates),
+            new("limon-moin", "Limón / Moín", "Entrada directa por Limón o Moín.", limonMoinRates.Count, limonMoinRates),
+            new("puerto-caldera", "Puerto Caldera", "Entrada directa por Puerto Caldera.", calderaRates.Count, calderaRates),
+            new("multimodal", "Multimodal", $"Entrada por Panamá + terrestre internacional de USD {multimodalLandFreight:0}.", multimodalRates.Count, multimodalRates),
         };
 
         return new PricingDecisionDashboardDto(
             startDate,
             dateTo?.Date,
+            multimodalLandFreight,
             lanes.Sum(x => x.TotalOptions),
             lanes
         );
     }
+
+    private static string ExtractSpaceComment(string? rawDataJson)
+    {
+        if (string.IsNullOrWhiteSpace(rawDataJson)) return string.Empty;
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(rawDataJson);
+            var aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "COMENTARIOS DE ESPACIOS", "comentariosDeEspacios", "spaceComments",
+                "spaceComment", "comentarioEspacios", "comentarioDeEspacios",
+                "remarks", "observaciones", "comentarios"
+            };
+            string? Visit(System.Text.Json.JsonElement element)
+            {
+                if (element.ValueKind == System.Text.Json.JsonValueKind.Object)
+                {
+                    foreach (var property in element.EnumerateObject())
+                    {
+                        if (aliases.Contains(property.Name) && property.Value.ValueKind == System.Text.Json.JsonValueKind.String)
+                        {
+                            var text = property.Value.GetString();
+                            if (!string.IsNullOrWhiteSpace(text)) return text.Trim();
+                        }
+                        var nested = Visit(property.Value);
+                        if (!string.IsNullOrWhiteSpace(nested)) return nested;
+                    }
+                }
+                else if (element.ValueKind == System.Text.Json.JsonValueKind.Array)
+                {
+                    foreach (var child in element.EnumerateArray())
+                    {
+                        var nested = Visit(child);
+                        if (!string.IsNullOrWhiteSpace(nested)) return nested;
+                    }
+                }
+                return null;
+            }
+            return Visit(document.RootElement) ?? string.Empty;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static SpaceEvaluation EvaluateSpaceComment(string comment, DecisionPrioritySettings settings)
+    {
+        var normalized = RemoveDiacritics(comment).ToLowerInvariant();
+        var score = settings.SpaceBaseScore;
+        var hits = new List<string>();
+
+        var positive = new[] { "libero espacio", "se libero espacio", "espacio liberado", "booking confirmado", "cupo confirmado", "hay espacio", "space available", "espacio confirmado" };
+        var alerts = new[] { "sujeto", "revisar", "validar", "pendiente", "limitado", "poco espacio", "consultar" };
+        var risks = new[] { "sin espacio", "no hay espacio", "roll", "rolleo", "congestion", "lleno", "full", "dificil", "no libero" };
+
+        var riskMatches = risks.Where(normalized.Contains).Distinct(StringComparer.Ordinal).ToArray();
+        var alertMatches = alerts.Where(normalized.Contains).Distinct(StringComparer.Ordinal).ToArray();
+        var positiveMatches = positive
+            .Where(normalized.Contains)
+            .Where(word => !(word == "hay espacio" && normalized.Contains("no hay espacio")))
+            .Where(word => !(word == "libero espacio" && normalized.Contains("no libero")))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var word in positiveMatches) { score += settings.SpacePositiveAdjustment; hits.Add($"positivo: {word}"); }
+        foreach (var word in alertMatches) { score += settings.SpaceAlertAdjustment; hits.Add($"alerta: {word}"); }
+        foreach (var word in riskMatches) { score += settings.SpaceRiskAdjustment; hits.Add($"riesgo: {word}"); }
+
+        score = Math.Clamp(score, 0m, 100m);
+        var risk = score >= 75m ? "Bajo" : score >= 45m ? "Medio" : "Alto";
+        if (hits.Count == 0) hits.Add(string.IsNullOrWhiteSpace(comment) ? "sin comentario operativo" : "sin señales específicas detectadas");
+        return new SpaceEvaluation(score, risk, string.Join(" · ", hits.Take(3)));
+    }
+
+    private DecisionPrioritySettings ReadPrioritySettings()
+    {
+        decimal Read(string key, decimal fallback) =>
+            configuration.GetValue<decimal?>($"Pricing:DecisionPriority:{key}") ?? fallback;
+
+        return new DecisionPrioritySettings(
+            Math.Max(0m, Read("SpaceWeight", 0.50m)),
+            Math.Max(0m, Read("PriceWeight", 0.30m)),
+            Math.Max(0m, Read("MarginWeight", 0.20m)),
+            Math.Clamp(Read("SpaceBaseScore", 50m), 0m, 100m),
+            Read("SpacePositiveAdjustment", 28m),
+            Read("SpaceAlertAdjustment", -8m),
+            Read("SpaceRiskAdjustment", -30m)
+        );
+    }
+
+    private static decimal AsPercent(decimal weight, decimal totalWeight) =>
+        totalWeight > 0m ? weight / totalWeight * 100m : 0m;
+
+    private sealed record DecisionPrioritySettings(
+        decimal SpaceWeight,
+        decimal PriceWeight,
+        decimal MarginWeight,
+        decimal SpaceBaseScore,
+        decimal SpacePositiveAdjustment,
+        decimal SpaceAlertAdjustment,
+        decimal SpaceRiskAdjustment
+    );
+
+    private sealed record SpaceEvaluation(decimal Score, string Risk, string Reason);
+    private sealed record DecisionCandidate(
+        Guid Id, Guid ImportBatchId, string Carrier, decimal OceanFreight, decimal? LandFreight,
+        decimal? TotalSale, decimal? Margin, string Currency, string ContainerType, string Pol, string Poe,
+        DateTime ValidFrom, DateTime ValidTo, string Status, DecisionLane? Lane, string SpaceComment, decimal SpaceScore,
+        string SpaceRisk, string SpaceReason
+    );
 
     private static DecisionLane? ResolveDecisionLane(string poe)
     {

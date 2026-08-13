@@ -19,6 +19,7 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
     private const string SourceService = "DholePricingService";
 
     public DbSet<Cost> Costs => Set<Cost>();
+    public DbSet<CostIncoterm> CostIncoterms => Set<CostIncoterm>();
 
     public DbSet<ImportFclRates> ImportFclRates => Set<ImportFclRates>();
 
@@ -28,6 +29,8 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
     public DbSet<RateHeader> RateHeaders => Set<RateHeader>();
 
     public DbSet<RateDetail> RateDetails => Set<RateDetail>();
+
+    public DbSet<RateTermItem> RateTermItems => Set<RateTermItem>();
 
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 

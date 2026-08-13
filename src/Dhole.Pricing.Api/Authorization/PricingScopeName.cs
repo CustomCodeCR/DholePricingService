@@ -10,6 +10,14 @@ internal static class PricingScopeNames
     public const string CostSetActive = "pricing.cost.set-active";
     public const string CostSelect = "pricing.cost.select";
 
+    // Rate term catalog
+    public const string RateTermCreate = "pricing.rate-term.create";
+    public const string RateTermView = "pricing.rate-term.view";
+    public const string RateTermUpdate = "pricing.rate-term.update";
+    public const string RateTermDelete = "pricing.rate-term.delete";
+    public const string RateTermSetActive = "pricing.rate-term.set-active";
+    public const string RateTermSelect = "pricing.rate-term.select";
+
     // Imported FCL rates
     public const string ImportFclRateCreate = "pricing.import-fcl-rate.create";
     public const string ImportFclRateView = "pricing.import-fcl-rate.view";

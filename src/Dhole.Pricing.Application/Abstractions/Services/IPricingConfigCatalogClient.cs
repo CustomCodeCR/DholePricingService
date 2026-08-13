@@ -6,6 +6,12 @@ public interface IPricingConfigCatalogClient
         Guid catalogItemId,
         CancellationToken cancellationToken = default
     );
+
+    Task<PricingConfigCatalogItem?> GetActiveByCodeAsync(
+        string catalogGroupSlug,
+        string catalogItemCode,
+        CancellationToken cancellationToken = default
+    );
 }
 
 public sealed record PricingConfigCatalogItem(

@@ -9,6 +9,7 @@ namespace Dhole.Pricing.Application.Imports;
 public sealed class ExtractAndPersistFclPricingImportService(
     IDataExtractionFclPricingClient dataExtractionClient,
     IImportFclRateRepository importFclRateRepository,
+    IImportedRateChangeNotificationService rateChangeNotifications,
     IUnitOfWork unitOfWork
 )
 {
@@ -134,6 +135,7 @@ public sealed class ExtractAndPersistFclPricingImportService(
         foreach (var rate in newRates)
         {
             await importFclRateRepository.AddAsync(rate, cancellationToken);
+            await rateChangeNotifications.QueueVariationNotificationsAsync(rate, cancellationToken);
         }
 
         if (newRates.Length > 0)

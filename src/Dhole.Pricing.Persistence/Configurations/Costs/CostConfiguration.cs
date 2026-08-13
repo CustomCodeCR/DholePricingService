@@ -67,6 +67,14 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
 
         builder.Property(x => x.IsActive).IsRequired().HasDefaultValue(true);
 
+        builder
+            .HasMany(x => x.Incoterms)
+            .WithOne()
+            .HasForeignKey(x => x.CostId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Navigation(x => x.Incoterms).UsePropertyAccessMode(PropertyAccessMode.Field);
+
         builder.HasIndex(x => x.Name);
         builder.HasIndex(x => x.CostType);
         builder.HasIndex(x => x.CostDetailType);

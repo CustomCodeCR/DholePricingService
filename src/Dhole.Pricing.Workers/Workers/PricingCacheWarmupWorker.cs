@@ -38,6 +38,7 @@ internal sealed class PricingCacheWarmupWorker(
     {
         var entities = await dbContext
             .Costs.AsNoTracking()
+            .Include(x => x.Incoterms)
             .Where(x => !x.IsDeleted)
             .OrderBy(x => x.CostType)
             .ThenBy(x => x.CarrierName)
@@ -434,7 +435,11 @@ internal sealed class PricingCacheWarmupWorker(
             cost.UtilityAmount,
             cost.Notes!,
             cost.IsAccountant,
-            cost.IsActive
+            cost.IsActive,
+            cost.Incoterms
+                .OrderBy(x => x.IncotermName)
+                .Select(x => new CostIncotermDto(x.IncotermId, x.IncotermName, x.IncotermCode))
+                .ToArray()
         );
     }
 
@@ -462,7 +467,11 @@ internal sealed class PricingCacheWarmupWorker(
             cost.SaleAmount,
             cost.UtilityAmount,
             cost.Notes!,
-            cost.IsAccountant
+            cost.IsAccountant,
+            cost.Incoterms
+                .OrderBy(x => x.IncotermName)
+                .Select(x => new CostIncotermDto(x.IncotermId, x.IncotermName, x.IncotermCode))
+                .ToArray()
         );
     }
 
@@ -554,6 +563,9 @@ internal sealed class PricingCacheWarmupWorker(
             rate.ContainerTypeId,
             rate.ContainerTypeName,
             rate.ContainerTypeCode,
+            rate.IncotermId,
+            rate.IncotermName,
+            rate.IncotermCode,
             rate.ContainerQuantity,
             rate.CurrencyId,
             rate.CurrencyName,

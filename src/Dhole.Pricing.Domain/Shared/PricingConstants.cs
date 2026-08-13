@@ -4,6 +4,19 @@ public static class PricingConstants
 {
     public const string ServiceName = "Pricing";
 
+    public static class CatalogSlugs
+    {
+        public const string Carriers = "carriers";
+        public const string Pol = "pol";
+        public const string Pod = "pod";
+        public const string Poe = "poe";
+        public const string Currencies = "currencies";
+        public const string Agents = "agents";
+        public const string ContainerTypes = "container-types";
+        public const string PricingImportsProfiles = "pricing-imports-profiles";
+        public const string Incoterms = "incoterms";
+    }
+
     public static class Scopes
     {
         // Costs
@@ -13,6 +26,14 @@ public static class PricingConstants
         public const string CostDelete = "pricing.cost.delete";
         public const string CostSetActive = "pricing.cost.set-active";
         public const string CostSelect = "pricing.cost.select";
+
+        // Rate term catalog
+        public const string RateTermCreate = "pricing.rate-term.create";
+        public const string RateTermView = "pricing.rate-term.view";
+        public const string RateTermUpdate = "pricing.rate-term.update";
+        public const string RateTermDelete = "pricing.rate-term.delete";
+        public const string RateTermSetActive = "pricing.rate-term.set-active";
+        public const string RateTermSelect = "pricing.rate-term.select";
 
         // Imported FCL rates
         public const string ImportFclRateCreate = "pricing.import-fcl-rate.create";

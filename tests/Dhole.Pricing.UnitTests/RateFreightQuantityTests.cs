@@ -57,6 +57,7 @@ public sealed class RateFreightQuantityTests
             rate.PoeId, rate.PoeName, rate.PoeCode,
             rate.PodId, rate.PodName, rate.PodCode,
             rate.ContainerTypeId, rate.ContainerTypeName, rate.ContainerTypeCode,
+            rate.IncotermId, rate.IncotermName, rate.IncotermCode,
             rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
             rate.FreeDays, rate.ValidFrom, rate.ValidTo,
             4,
@@ -81,6 +82,7 @@ public sealed class RateFreightQuantityTests
             carrierId: null, carrierName: null, carrierCode: null,
             agentId: null, agentName: null, agentCode: null,
             portId: null, portName: null, portCode: null, portRole: null,
+            incoterms: null,
             currencyId: Guid.NewGuid(), currencyName: "Dólar", currencyCode: "USD",
             costAmount: 100m, saleAmount: 120m, notes: null,
             isAccountant: false, createdBy: null
@@ -101,6 +103,7 @@ public sealed class RateFreightQuantityTests
             poeId: Guid.NewGuid(), poeName: "Caldera", poeCode: "CRCAL",
             podId: Guid.NewGuid(), podName: "San José", podCode: "CRSJO",
             containerTypeId: Guid.NewGuid(), containerTypeName: "40HC", containerTypeCode: "40HC",
+            incotermId: null, incotermName: null, incotermCode: null,
             currencyId: Guid.NewGuid(), currencyName: "Dólar", currencyCode: "USD",
             freeDays: 7, validFrom: today, validTo: today.AddDays(30),
             containerQuantity: containerQuantity, clientName: null, idtraNumber: null, quoNumber: null,

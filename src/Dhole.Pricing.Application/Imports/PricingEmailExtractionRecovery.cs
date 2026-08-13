@@ -58,6 +58,13 @@ public static class PricingEmailExtractionRecovery
                     : row.PortOfExitReference;
                 var containerType = row.ContainerType;
                 var remarks = row.Remarks;
+                var validFrom = row.ValidFrom;
+                var validTo = row.ValidTo;
+                var rowSemanticSource = string.Join(
+                    "\n",
+                    new[] { row.Remarks, row.RawJson }
+                        .Where(value => !string.IsNullOrWhiteSpace(value))
+                );
 
                 if (!string.IsNullOrWhiteSpace(row.DestinationPort))
                 {
@@ -76,6 +83,26 @@ public static class PricingEmailExtractionRecovery
                     );
                 }
 
+                if (ContainsEffectiveEtd(rowSemanticSource))
+                {
+                    if (validFrom.HasValue && !validTo.HasValue)
+                    {
+                        validTo = validFrom;
+                        remarks = JoinRemarks(
+                            remarks,
+                            "Vigencia de un día recuperada desde Effective ETD."
+                        );
+                    }
+                    else if (!validFrom.HasValue && validTo.HasValue)
+                    {
+                        validFrom = validTo;
+                        remarks = JoinRemarks(
+                            remarks,
+                            "Vigencia de un día recuperada desde Effective ETD."
+                        );
+                    }
+                }
+
                 return row with
                 {
                     PortOfExit = portOfExit,
@@ -83,12 +110,24 @@ public static class PricingEmailExtractionRecovery
                     ContainerType = containerType,
                     PortOfExitReference = portOfExitReference,
                     DestinationPortReference = null,
+                    ValidFrom = validFrom,
+                    ValidTo = validTo,
                     Remarks = remarks,
                 };
             })
             .ToArray();
 
         return extraction with { Rows = rows };
+    }
+
+    private static bool ContainsEffectiveEtd(string? value)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+            && Regex.IsMatch(
+                value,
+                @"\beffective\s*etd\b",
+                RegexOptions.IgnoreCase
+            );
     }
 
     private static string JoinRemarks(string? current, string addition)

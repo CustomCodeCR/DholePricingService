@@ -27,6 +27,10 @@ public static class PricingAuditSnapshots
             cost.PortName,
             cost.PortCode,
             PortRole = cost.PortRole.ToString(),
+            Incoterms = cost.Incoterms
+                .OrderBy(x => x.IncotermName)
+                .Select(x => new { x.IncotermId, x.IncotermName, x.IncotermCode })
+                .ToArray(),
 
             cost.CurrencyId,
             cost.CurrencyName,
@@ -81,6 +85,7 @@ public static class PricingAuditSnapshots
             importFclRate.CurrencyName,
 
             importFclRate.Commodity,
+            importFclRate.SpaceComment,
             importFclRate.Freight,
             importFclRate.OceanFreight,
             importFclRate.OriginCharges,
@@ -136,6 +141,10 @@ public static class PricingAuditSnapshots
             rateHeader.ContainerTypeName,
             rateHeader.ContainerTypeCode,
             rateHeader.ContainerQuantity,
+
+            rateHeader.IncotermId,
+            rateHeader.IncotermName,
+            rateHeader.IncotermCode,
 
             rateHeader.CurrencyId,
             rateHeader.CurrencyName,

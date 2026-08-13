@@ -22,6 +22,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         CatalogSnapshot containerType,
         CatalogSnapshot currency,
         string? commodity,
+        string? spaceComment,
         decimal? oceanFreight,
         decimal? originCharges,
         decimal? destinationCharges,
@@ -66,6 +67,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         ApplyCurrency(currency);
 
         Commodity = Normalize(commodity);
+        SpaceComment = Normalize(spaceComment);
         OceanFreight = oceanFreight;
         OriginCharges = originCharges;
         DestinationCharges = destinationCharges;
@@ -139,6 +141,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
     public string CurrencySlug { get; private set; } = string.Empty;
 
     public string? Commodity { get; private set; }
+    public string? SpaceComment { get; private set; }
     public decimal Freight { get; private set; }
     public decimal? OceanFreight { get; private set; }
     public decimal? OriginCharges { get; private set; }
@@ -172,6 +175,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         CatalogSnapshot containerType,
         CatalogSnapshot currency,
         string? commodity,
+        string? spaceComment,
         decimal? oceanFreight,
         decimal? originCharges,
         decimal? destinationCharges,
@@ -202,6 +206,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
             containerType,
             currency,
             commodity,
+            spaceComment,
             oceanFreight,
             originCharges,
             destinationCharges,
@@ -219,6 +224,15 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         );
 
         return rate;
+    }
+
+    public bool IsEffectiveOn(DateTime date)
+    {
+        var effectiveDate = date.Date;
+
+        return Status != ImportStatus.Expired
+            && ValidFrom.Date <= effectiveDate
+            && ValidTo.Date >= effectiveDate;
     }
 
     public void Approve(Guid? updatedBy = null)
@@ -304,6 +318,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         CatalogSnapshot containerType,
         CatalogSnapshot currency,
         string? commodity,
+        string? spaceComment,
         decimal oceanFreight,
         decimal originCharges,
         decimal destinationCharges,
@@ -347,6 +362,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         ApplyCurrency(currency);
 
         Commodity = Normalize(commodity);
+        SpaceComment = Normalize(spaceComment);
         OceanFreight = oceanFreight;
         Freight = oceanFreight;
         OriginCharges = originCharges;

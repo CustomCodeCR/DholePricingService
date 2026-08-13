@@ -87,6 +87,7 @@ public sealed class ReviewImportRateCommandHandler(
                 Snapshot(containerType),
                 Snapshot(currency),
                 command.Commodity,
+                command.SpaceComment,
                 command.OceanFreight,
                 command.OriginCharges,
                 command.DestinationCharges,

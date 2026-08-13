@@ -23,5 +23,6 @@ public sealed record CostDto(
     decimal UtilityAmount,
     string? Notes,
     bool IsAccountant,
-    bool IsActive
+    bool IsActive,
+    IReadOnlyCollection<CostIncotermDto> Incoterms
 );

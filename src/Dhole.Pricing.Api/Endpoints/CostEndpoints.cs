@@ -10,6 +10,7 @@ using Dhole.Pricing.Application.Features.Costs.GetCostsForSelect;
 using Dhole.Pricing.Application.Features.Costs.SetActive;
 using Dhole.Pricing.Application.Features.Costs.Update;
 using Dhole.Pricing.Contracts.Costs.Request;
+using Dhole.Pricing.Domain.Costs.Entities;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Shared;
 
@@ -195,6 +196,9 @@ public static class CostEndpoints
                 request.SaleAmount,
                 request.Notes,
                 request.IsAccountant,
+                (request.Incoterms ?? [])
+                    .Select(x => new CostIncotermSelection(x.Id, x.Name, x.Code))
+                    .ToArray(),
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken
@@ -268,6 +272,9 @@ public static class CostEndpoints
                 request.SaleAmount,
                 request.Notes,
                 request.IsAccountant,
+                (request.Incoterms ?? [])
+                    .Select(x => new CostIncotermSelection(x.Id, x.Name, x.Code))
+                    .ToArray(),
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken

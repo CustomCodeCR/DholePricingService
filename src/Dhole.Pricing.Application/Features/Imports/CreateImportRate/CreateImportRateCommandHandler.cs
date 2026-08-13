@@ -4,6 +4,7 @@ using CustomCodeFramework.Persistence.Abstractions;
 using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
+using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Shared;
@@ -14,6 +15,7 @@ public sealed class CreateImportRateCommandHandler(
     IImportFclRateRepository importRates,
     IPricingAuditService audit,
     IImportRateCacheService cache,
+    IImportedRateChangeNotificationService rateChangeNotifications,
     IUnitOfWork unitOfWork
 ) : ICommandHandler<CreateImportRateCommand, Result<Guid>>
 {
@@ -39,6 +41,7 @@ public sealed class CreateImportRateCommandHandler(
                 command.ContainerType,
                 command.Currency,
                 command.Commodity,
+                command.SpaceComment,
                 command.OceanFreight,
                 command.OriginCharges,
                 command.DestinationCharges,
@@ -61,6 +64,8 @@ public sealed class CreateImportRateCommandHandler(
         }
 
         await importRates.AddAsync(importRate, cancellationToken);
+
+        await rateChangeNotifications.QueueVariationNotificationsAsync(importRate, cancellationToken);
 
         await audit.PublishAsync(
             new PricingAuditEvent(

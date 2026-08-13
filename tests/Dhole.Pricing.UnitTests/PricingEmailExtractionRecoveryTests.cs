@@ -93,4 +93,72 @@ public sealed class PricingEmailExtractionRecoveryTests
         );
         Assert.HasCount(1, mapped.Rates);
     }
+
+    [TestMethod]
+    public void Recover_EffectiveEtdSingleDate_CompletesValidityRange()
+    {
+        var rowId = Guid.NewGuid();
+        var effectiveDate = new DateTime(2026, 8, 24);
+        var extraction = new DataExtractionFclPricingResult(
+            true,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "correlation-id",
+            new DataExtractionFclPricingSummary(1, 1, 0, 0, false),
+            [
+                new DataExtractionFclPricingRow(
+                    rowId,
+                    "AI Email",
+                    1,
+                    "Shanghai",
+                    "Caldera",
+                    null,
+                    "40HC",
+                    "PIL",
+                    null,
+                    "General Cargo",
+                    "USD",
+                    18,
+                    null,
+                    effectiveDate,
+                    null,
+                    7800m,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "Effective ETD: 24-Aug",
+                    "Valid",
+                    "{\"Effective ETD\":\"24-Aug\"}",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                ),
+            ],
+            [],
+            null,
+            null
+        );
+
+        var recovered = PricingEmailExtractionRecovery.Recover(
+            extraction,
+            ImportSourceType.Email,
+            "RS rates update",
+            "email-body.txt"
+        );
+        var row = recovered.Rows.Single();
+
+        Assert.AreEqual(effectiveDate, row.ValidFrom);
+        Assert.AreEqual(effectiveDate, row.ValidTo);
+        StringAssert.Contains(row.Remarks, "Effective ETD");
+    }
+
 }

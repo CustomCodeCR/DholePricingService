@@ -14,6 +14,7 @@ public sealed record ReviewImportRateCommand(
     Guid ContainerTypeId,
     Guid CurrencyId,
     string? Commodity,
+    string? SpaceComment,
     decimal OceanFreight,
     decimal OriginCharges,
     decimal DestinationCharges,

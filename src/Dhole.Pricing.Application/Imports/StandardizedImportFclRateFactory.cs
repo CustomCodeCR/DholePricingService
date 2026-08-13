@@ -120,6 +120,7 @@ public static class StandardizedImportFclRateFactory
                     ),
                     ResolveCurrencySnapshot(row.CurrencyReference, row.Currency),
                     row.Commodity,
+                    row.SpaceComment,
                     RoundNumeric18Scale4(row.OceanFreight),
                     RoundNumeric18Scale4(row.OriginCharges),
                     RoundNumeric18Scale4(row.DestinationCharges),
@@ -132,7 +133,7 @@ public static class StandardizedImportFclRateFactory
                     row.TransitDays ?? 0,
                     row.ValidFrom!.Value,
                     row.ValidTo!.Value,
-                    row.RawJson,
+                    BuildPersistedRawJson(row),
                     createdBy
                 )
             );
@@ -278,6 +279,37 @@ public static class StandardizedImportFclRateFactory
             ContainerType = containerType,
             Carrier = carrier,
         };
+    }
+
+    private static string? BuildPersistedRawJson(DataExtractionFclPricingRow row)
+    {
+        if (!HasText(row.SpaceComment) && !HasText(row.Remarks))
+        {
+            return row.RawJson;
+        }
+
+        object? rawPayload = null;
+        string? rawText = null;
+        if (HasText(row.RawJson))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(row.RawJson!);
+                rawPayload = document.RootElement.Clone();
+            }
+            catch (JsonException)
+            {
+                rawText = row.RawJson;
+            }
+        }
+
+        return JsonSerializer.Serialize(new
+        {
+            SpaceComment = FirstText(row.SpaceComment, row.Remarks),
+            Remarks = row.Remarks,
+            Raw = rawPayload,
+            RawText = rawText,
+        });
     }
 
     private static string? ReadRawJsonValue(string rawJson, params string[] aliases)

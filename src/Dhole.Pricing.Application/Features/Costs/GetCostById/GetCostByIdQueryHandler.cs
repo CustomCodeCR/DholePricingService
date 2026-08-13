@@ -22,7 +22,7 @@ public sealed class GetCostByIdQueryHandler(ICostRepository costs, ICostCacheSer
             return Result.Success(cached);
         }
 
-        var cost = await costs.GetByIdAsync(query.Id, cancellationToken);
+        var cost = await costs.GetByIdWithIncotermsAsync(query.Id, cancellationToken);
 
         if (cost is null || cost.IsDeleted)
         {
@@ -52,7 +52,11 @@ public sealed class GetCostByIdQueryHandler(ICostRepository costs, ICostCacheSer
             cost.UtilityAmount,
             cost.Notes!,
             cost.IsAccountant,
-            cost.IsActive
+            cost.IsActive,
+            cost.Incoterms
+                .OrderBy(x => x.IncotermName)
+                .Select(x => new CostIncotermDto(x.IncotermId, x.IncotermName, x.IncotermCode))
+                .ToArray()
         );
 
         await cache.SetCostByIdAsync(cost.Id, dto, cancellationToken: cancellationToken);

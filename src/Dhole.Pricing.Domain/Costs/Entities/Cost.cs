@@ -6,6 +6,8 @@ namespace Dhole.Pricing.Domain.Costs.Entities;
 
 public sealed class Cost : SoftDeletableAggregateRoot<Guid>
 {
+    private readonly List<CostIncoterm> _incoterms = [];
+
     private Cost() { }
 
     private Cost(
@@ -23,6 +25,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         string? portName,
         string? portCode,
         CostPortRole? portRole,
+        IReadOnlyCollection<CostIncotermSelection>? incoterms,
         Guid currencyId,
         string currencyName,
         string currencyCode,
@@ -47,6 +50,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
             portName,
             portCode,
             portRole,
+            incoterms,
             currencyId,
             currencyName,
             currencyCode,
@@ -73,6 +77,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
     public string? PortName { get; private set; }
     public string? PortCode { get; private set; }
     public CostPortRole? PortRole { get; private set; }
+    public IReadOnlyCollection<CostIncoterm> Incoterms => _incoterms.AsReadOnly();
     public Guid CurrencyId { get; private set; }
     public string CurrencyName { get; private set; } = string.Empty;
     public string CurrencyCode { get; private set; } = string.Empty;
@@ -102,6 +107,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         string? portName,
         string? portCode,
         CostPortRole? portRole,
+        IReadOnlyCollection<CostIncotermSelection>? incoterms,
         Guid currencyId,
         string currencyName,
         string currencyCode,
@@ -116,7 +122,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
             Guid.NewGuid(), name, costType, costDetailType,
             carrierId, carrierName, carrierCode,
             agentId, agentName, agentCode,
-            portId, portName, portCode, portRole,
+            portId, portName, portCode, portRole, incoterms,
             currencyId, currencyName, currencyCode,
             costAmount, saleAmount, notes, isAccountant, createdBy
         );
@@ -139,6 +145,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         string? portName,
         string? portCode,
         CostPortRole? portRole,
+        IReadOnlyCollection<CostIncotermSelection>? incoterms,
         Guid currencyId,
         string currencyName,
         string currencyCode,
@@ -153,7 +160,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
             name, costType, costDetailType,
             carrierId, carrierName, carrierCode,
             agentId, agentName, agentCode,
-            portId, portName, portCode, portRole,
+            portId, portName, portCode, portRole, incoterms,
             currencyId, currencyName, currencyCode,
             costAmount, saleAmount, notes, isAccountant
         );
@@ -176,6 +183,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         string? portName,
         string? portCode,
         CostPortRole? portRole,
+        IReadOnlyCollection<CostIncotermSelection>? incoterms,
         Guid currencyId,
         string currencyName,
         string currencyCode,
@@ -209,6 +217,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         PortName = normalizedPortId.HasValue ? Normalize(portName) : null;
         PortCode = normalizedPortId.HasValue ? Normalize(portCode) : null;
         PortRole = normalizedPortId.HasValue ? portRole : null;
+        ReplaceIncoterms(incoterms);
         CurrencyId = currencyId;
         CurrencyName = currencyName.Trim();
         CurrencyCode = currencyCode.Trim();
@@ -219,6 +228,34 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         // El flete marítimo y el transporte terrestre siempre se aplican por contenedor.
         // La bandera continúa siendo configurable para los demás rubros.
         IsAccountant = isAccountant || IsFreightPerContainer(costDetailType);
+    }
+
+    private void ReplaceIncoterms(IReadOnlyCollection<CostIncotermSelection>? incoterms)
+    {
+        var selections = incoterms ?? [];
+        var normalized = selections
+            .Where(x => x.Id != Guid.Empty)
+            .GroupBy(x => x.Id)
+            .Select(group => group.First())
+            .ToArray();
+
+        if (normalized.Length != selections.Count)
+            throw new InvalidOperationException("Los Incoterms del costo no pueden estar vacíos ni repetidos.");
+
+        var selectedIds = normalized.Select(x => x.Id).ToHashSet();
+        _incoterms.RemoveAll(x => !selectedIds.Contains(x.IncotermId));
+
+        foreach (var incoterm in normalized)
+        {
+            var existing = _incoterms.FirstOrDefault(x => x.IncotermId == incoterm.Id);
+            if (existing is null)
+            {
+                _incoterms.Add(new CostIncoterm(Id, incoterm.Id, incoterm.Name, incoterm.Code));
+                continue;
+            }
+
+            existing.UpdateSnapshot(incoterm.Name, incoterm.Code);
+        }
     }
 
     public void Delete(Guid? deletedBy)

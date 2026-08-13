@@ -1,5 +1,6 @@
 using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Commands;
+using Dhole.Pricing.Domain.Costs.Entities;
 using Dhole.Pricing.Domain.Costs.Enums;
 
 namespace Dhole.Pricing.Application.Features.Costs.Update;
@@ -26,5 +27,6 @@ public sealed record UpdateCostCommand(
     decimal SaleAmount,
     string? Notes,
     bool IsAccountant,
+    IReadOnlyCollection<CostIncotermSelection> Incoterms,
     Guid? UpdatedBy
 ) : ICommand<Result>;

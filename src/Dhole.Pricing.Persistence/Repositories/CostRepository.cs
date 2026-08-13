@@ -13,6 +13,13 @@ public sealed class CostRepository(ServiceDbContext dbContext)
     : EfRepository<Cost, Guid>(dbContext),
         ICostRepository
 {
+    public Task<Cost?> GetByIdWithIncotermsAsync(
+        Guid id,
+        CancellationToken cancellationToken = default
+    ) => dbContext.Costs
+        .Include(x => x.Incoterms)
+        .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
     public Task<bool> ExistsByNameAsync(
         string name,
         CostType costType,
@@ -54,7 +61,7 @@ public sealed class CostRepository(ServiceDbContext dbContext)
     )
     {
         var query = ApplyFilters(
-            dbContext.Costs.AsNoTracking().Where(x => !x.IsDeleted && x.IsActive),
+            dbContext.Costs.AsNoTracking().Include(x => x.Incoterms).Where(x => !x.IsDeleted && x.IsActive),
             search: null,
             costType,
             costDetailType,
@@ -141,7 +148,11 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.IsAccountant
                     || x.CostDetailType == CostDetailType.Freight
                     || x.CostDetailType == CostDetailType.InlandTransport,
-                x.IsActive
+                x.IsActive,
+                x.Incoterms
+                    .OrderBy(i => i.IncotermName)
+                    .Select(i => new CostIncotermDto(i.IncotermId, i.IncotermName, i.IncotermCode))
+                    .ToList()
             ))
             .ToListAsync(cancellationToken);
 
@@ -206,7 +217,11 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.Notes,
                 x.IsAccountant
                     || x.CostDetailType == CostDetailType.Freight
-                    || x.CostDetailType == CostDetailType.InlandTransport
+                    || x.CostDetailType == CostDetailType.InlandTransport,
+                x.Incoterms
+                    .OrderBy(i => i.IncotermName)
+                    .Select(i => new CostIncotermDto(i.IncotermId, i.IncotermName, i.IncotermCode))
+                    .ToList()
             ))
             .ToListAsync(cancellationToken);
     }
@@ -240,6 +255,7 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 || (x.PortCode ?? string.Empty).ToLower().Contains(value)
                 || (x.PortRole.HasValue
                     && x.PortRole.Value.ToString().ToLower().Contains(value))
+                || x.Incoterms.Any(i => i.IncotermName.ToLower().Contains(value) || i.IncotermCode.ToLower().Contains(value))
                 || x.CurrencyName.ToLower().Contains(value)
                 || x.CurrencyCode.ToLower().Contains(value)
                 || (x.Notes ?? string.Empty).ToLower().Contains(value)

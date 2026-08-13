@@ -1,5 +1,6 @@
 using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Commands;
+using Dhole.Pricing.Domain.Costs.Entities;
 using Dhole.Pricing.Domain.Costs.Enums;
 
 namespace Dhole.Pricing.Application.Features.Costs.Create;
@@ -25,5 +26,6 @@ public sealed record CreateCostCommand(
     decimal SaleAmount,
     string? Notes,
     bool IsAccountant,
+    IReadOnlyCollection<CostIncotermSelection> Incoterms,
     Guid? CreatedBy
 ) : ICommand<Result<Guid>>;

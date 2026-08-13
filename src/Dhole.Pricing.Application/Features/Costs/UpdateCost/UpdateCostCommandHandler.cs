@@ -21,7 +21,7 @@ public sealed class UpdateCostCommandHandler(
         CancellationToken cancellationToken = default
     )
     {
-        var cost = await costs.GetByIdAsync(command.Id, cancellationToken);
+        var cost = await costs.GetByIdWithIncotermsAsync(command.Id, cancellationToken);
 
         if (cost is null || cost.IsDeleted)
         {
@@ -63,6 +63,7 @@ public sealed class UpdateCostCommandHandler(
                 command.PortName,
                 command.PortCode,
                 command.PortRole,
+                command.Incoterms,
                 command.CurrencyId,
                 command.CurrencyName,
                 command.CurrencyCode,

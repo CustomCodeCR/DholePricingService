@@ -13,6 +13,7 @@ public sealed record CreateImportRateRequest(
     ImportCatalogSnapshotRequest ContainerType,
     ImportCatalogSnapshotRequest Currency,
     string? Commodity,
+    string? SpaceComment,
     decimal OceanFreight,
     decimal OriginCharges,
     decimal DestinationCharges,

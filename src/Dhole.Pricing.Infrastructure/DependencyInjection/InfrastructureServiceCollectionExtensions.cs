@@ -9,6 +9,7 @@ using Dhole.Pricing.Application.Abstractions.Mongo;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Imports;
 using Dhole.Pricing.Infrastructure.Cache;
+using Dhole.Pricing.Infrastructure.Auth;
 using Dhole.Pricing.Infrastructure.GrpcClients;
 using Dhole.Pricing.Infrastructure.Mongo;
 using Microsoft.AspNetCore.Authentication;
@@ -46,6 +47,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddPricingConfigGrpcClient(configuration);
         services.AddPricingDataExtractionGrpcClient(configuration);
         services.AddPricingReportsClient(configuration);
+        services.AddPricingAuthRecipientClient(configuration);
 
         services.AddScoped<ExtractAndPersistFclPricingImportService>();
 
@@ -64,6 +66,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddPricingMongoSnapshotWriters();
         services.AddPricingConfigGrpcClient(configuration);
         services.AddPricingDataExtractionGrpcClient(configuration);
+        services.AddPricingAuthRecipientClient(configuration);
 
         services.AddScoped<ExtractAndPersistFclPricingImportService>();
 
@@ -166,6 +169,27 @@ public static class InfrastructureServiceCollectionExtensions
         return services;
     }
 
+
+    private static IServiceCollection AddPricingAuthRecipientClient(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var baseAddressText = configuration["Auth:Client:BaseAddress"] ?? "http://localhost:5201";
+        if (!Uri.TryCreate(baseAddressText, UriKind.Absolute, out var baseAddress))
+            throw new InvalidOperationException("Auth:Client:BaseAddress debe ser una URL absoluta válida.");
+
+        var header = configuration["Auth:Client:InternalServiceKeyHeader"] ?? "X-Dhole-Service-Key";
+        var serviceKey = configuration["Auth:Client:InternalServiceKey"] ?? string.Empty;
+
+        services.AddHttpClient<IPricingNotificationRecipientProvider, AuthPricingNotificationRecipientProvider>(client =>
+        {
+            client.BaseAddress = baseAddress;
+            client.Timeout = TimeSpan.FromSeconds(15);
+            if (!string.IsNullOrWhiteSpace(serviceKey)) client.DefaultRequestHeaders.Add(header, serviceKey);
+        });
+
+        return services;
+    }
 
     private static IServiceCollection AddPricingReportsClient(
         this IServiceCollection services,

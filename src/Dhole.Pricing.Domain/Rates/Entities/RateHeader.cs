@@ -34,6 +34,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         Guid containerTypeId,
         string containerTypeName,
         string containerTypeCode,
+        Guid? incotermId,
+        string? incotermName,
+        string? incotermCode,
         Guid currencyId,
         string currencyName,
         string currencyCode,
@@ -71,6 +74,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             containerTypeId,
             containerTypeName,
             containerTypeCode,
+            incotermId,
+            incotermName,
+            incotermCode,
             currencyId,
             currencyName,
             currencyCode,
@@ -80,6 +86,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             containerQuantity,
             transitDays
         );
+
+        ValidateRateTerms(includes, subjectTo, excludes);
 
         SourceImportFclRateId = sourceImportFclRateId;
         AgentId = agentId;
@@ -100,6 +108,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         ContainerTypeId = containerTypeId;
         ContainerTypeName = containerTypeName.Trim();
         ContainerTypeCode = containerTypeCode.Trim();
+        IncotermId = NormalizeId(incotermId);
+        IncotermName = IncotermId.HasValue ? Normalize(incotermName) : null;
+        IncotermCode = IncotermId.HasValue ? Normalize(incotermCode) : null;
         CurrencyId = currencyId;
         CurrencyName = currencyName.Trim();
         CurrencyCode = currencyCode.Trim();
@@ -122,6 +133,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             PolName,
             PoeName,
             PodName,
+            IncotermCode ?? IncotermName,
             ClientName
         );
 
@@ -155,6 +167,10 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public Guid ContainerTypeId { get; private set; }
     public string ContainerTypeName { get; private set; } = string.Empty;
     public string ContainerTypeCode { get; private set; } = string.Empty;
+
+    public Guid? IncotermId { get; private set; }
+    public string? IncotermName { get; private set; }
+    public string? IncotermCode { get; private set; }
 
     public Guid CurrencyId { get; private set; }
     public string CurrencyName { get; private set; } = string.Empty;
@@ -209,6 +225,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         Guid containerTypeId,
         string containerTypeName,
         string containerTypeCode,
+        Guid? incotermId,
+        string? incotermName,
+        string? incotermCode,
         Guid currencyId,
         string currencyName,
         string currencyCode,
@@ -248,6 +267,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             containerTypeId,
             containerTypeName,
             containerTypeCode,
+            incotermId,
+            incotermName,
+            incotermCode,
             currencyId,
             currencyName,
             currencyCode,
@@ -288,6 +310,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         Guid containerTypeId,
         string containerTypeName,
         string containerTypeCode,
+        Guid? incotermId,
+        string? incotermName,
+        string? incotermCode,
         Guid currencyId,
         string currencyName,
         string currencyCode,
@@ -324,6 +349,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             containerTypeId,
             containerTypeName,
             containerTypeCode,
+            incotermId,
+            incotermName,
+            incotermCode,
             currencyId,
             currencyName,
             currencyCode,
@@ -333,6 +361,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             containerQuantity,
             transitDays
         );
+
+        ValidateRateTerms(includes, subjectTo, excludes);
 
         AgentId = agentId;
         AgentName = agentName.Trim();
@@ -352,6 +382,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         ContainerTypeId = containerTypeId;
         ContainerTypeName = containerTypeName.Trim();
         ContainerTypeCode = containerTypeCode.Trim();
+        IncotermId = NormalizeId(incotermId);
+        IncotermName = IncotermId.HasValue ? Normalize(incotermName) : null;
+        IncotermCode = IncotermId.HasValue ? Normalize(incotermCode) : null;
         CurrencyId = currencyId;
         CurrencyName = currencyName.Trim();
         CurrencyCode = currencyCode.Trim();
@@ -375,6 +408,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             PolName,
             PoeName,
             PodName,
+            IncotermCode ?? IncotermName,
             ClientName
         );
 
@@ -694,6 +728,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         string polName,
         string poeName,
         string podName,
+        string? incoterm,
         string? clientName
     )
     {
@@ -717,8 +752,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             _ => poeName,
         };
 
+        var incotermLabel = string.IsNullOrWhiteSpace(incoterm) ? "FOB" : incoterm.Trim();
         var baseName =
-            $"{rateCode} - Tarifa {containerQuantity} x {containerTypeName} - FOB - {polName} To {podName} Via {via}";
+            $"{rateCode} - Tarifa {containerQuantity} x {containerTypeName} - {incotermLabel} - {polName} To {podName} Via {via}";
         return string.IsNullOrWhiteSpace(clientName) ? baseName : $"{baseName} - {clientName}";
     }
 
@@ -741,6 +777,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         Guid containerTypeId,
         string containerTypeName,
         string containerTypeCode,
+        Guid? incotermId,
+        string? incotermName,
+        string? incotermCode,
         Guid currencyId,
         string currencyName,
         string currencyCode,
@@ -769,6 +808,23 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         )
         {
             throw new InvalidOperationException("La naviera es obligatoria.");
+        }
+
+        var normalizedIncotermId = NormalizeId(incotermId);
+        if (
+            normalizedIncotermId.HasValue
+            && (string.IsNullOrWhiteSpace(incotermName) || string.IsNullOrWhiteSpace(incotermCode))
+        )
+        {
+            throw new InvalidOperationException("El Incoterm seleccionado debe incluir nombre y código.");
+        }
+
+        if (
+            !normalizedIncotermId.HasValue
+            && (!string.IsNullOrWhiteSpace(incotermName) || !string.IsNullOrWhiteSpace(incotermCode))
+        )
+        {
+            throw new InvalidOperationException("El identificador del Incoterm es obligatorio cuando se envía su información.");
         }
 
         if (
@@ -887,6 +943,36 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             throw new InvalidOperationException("Los montos del detalle no pueden ser negativos.");
         }
     }
+
+
+    private static void ValidateRateTerms(string? includes, string? subjectTo, string? excludes)
+    {
+        static HashSet<string> Parse(string? value) => string.IsNullOrWhiteSpace(value)
+            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            : value
+                .Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+                .Where(x => x.Length > 0)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var included = Parse(includes);
+        var subject = Parse(subjectTo);
+        var excluded = Parse(excludes);
+
+        var duplicate = included.FirstOrDefault(subject.Contains)
+            ?? included.FirstOrDefault(excluded.Contains)
+            ?? subject.FirstOrDefault(excluded.Contains);
+
+        if (duplicate is not null)
+        {
+            throw new InvalidOperationException(
+                $"El ítem '{duplicate}' solo puede pertenecer a una categoría: Incluye, Sujeto a o No incluye."
+            );
+        }
+    }
+
+    private static Guid? NormalizeId(Guid? value) =>
+        value.HasValue && value.Value != Guid.Empty ? value : null;
 
     private static string? Normalize(string? value)
     {

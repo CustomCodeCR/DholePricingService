@@ -22,5 +22,6 @@ public sealed record CostSelectDto(
     decimal SaleAmount,
     decimal UtilityAmount,
     string? Notes,
-    bool IsAccountant
+    bool IsAccountant,
+    IReadOnlyCollection<CostIncotermDto> Incoterms
 );

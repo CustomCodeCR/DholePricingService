@@ -39,6 +39,7 @@ public sealed record ImportRateDto
     public string CurrencyCode { get; init; } = string.Empty;
     public string CurrencySlug { get; init; } = string.Empty;
     public string? Commodity { get; init; }
+    public string? SpaceComment { get; init; }
     public decimal Freight { get; init; }
     public decimal? OceanFreight { get; init; }
     public decimal? OriginCharges { get; init; }

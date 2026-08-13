@@ -138,6 +138,9 @@ public sealed class UpdateRateCommandHandler(
         var containerTypeId = command.ContainerTypeId;
         var containerTypeName = command.ContainerTypeName;
         var containerTypeCode = command.ContainerTypeCode;
+        var incotermId = command.IncotermId;
+        var incotermName = command.IncotermName;
+        var incotermCode = command.IncotermCode;
         var currencyId = command.CurrencyId;
         var currencyName = command.CurrencyName;
         var currencyCode = command.CurrencyCode;
@@ -154,6 +157,7 @@ public sealed class UpdateRateCommandHandler(
             || rate.PoeId != poeId
             || rate.PodId != podId
             || rate.ContainerTypeId != containerTypeId
+            || rate.IncotermId != incotermId
             || rate.CurrencyId != currencyId
             || rate.ContainerQuantity != containerQuantity;
 
@@ -190,6 +194,9 @@ public sealed class UpdateRateCommandHandler(
                 containerTypeId,
                 containerTypeName,
                 containerTypeCode,
+                incotermId,
+                incotermName,
+                incotermCode,
                 currencyId,
                 currencyName,
                 currencyCode,
