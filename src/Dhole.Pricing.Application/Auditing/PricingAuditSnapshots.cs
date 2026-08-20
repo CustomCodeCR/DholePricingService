@@ -27,6 +27,17 @@ public static class PricingAuditSnapshots
             cost.PortName,
             cost.PortCode,
             PortRole = cost.PortRole.ToString(),
+
+            cost.PolId,
+            cost.PolName,
+            cost.PolCode,
+            cost.PoeId,
+            cost.PoeName,
+            cost.PoeCode,
+            cost.PodId,
+            cost.PodName,
+            cost.PodCode,
+
             Incoterms = cost.Incoterms
                 .OrderBy(x => x.IncotermName)
                 .Select(x => new { x.IncotermId, x.IncotermName, x.IncotermCode })
@@ -39,6 +50,11 @@ public static class PricingAuditSnapshots
             cost.CostAmount,
             cost.SaleAmount,
             cost.UtilityAmount,
+            ShipmentMode = cost.ShipmentMode?.ToString(),
+            ChargeBasis = cost.ChargeBasis.ToString(),
+            cost.MinimumCostAmount,
+            cost.MinimumSaleAmount,
+            cost.KgPerCbm,
 
             cost.Notes,
             cost.IsAccountant,
@@ -141,6 +157,14 @@ public static class PricingAuditSnapshots
             rateHeader.ContainerTypeName,
             rateHeader.ContainerTypeCode,
             rateHeader.ContainerQuantity,
+            ShipmentMode = rateHeader.ShipmentMode.ToString(),
+            rateHeader.TotalPackages,
+            rateHeader.TotalPallets,
+            rateHeader.TotalWeightKg,
+            rateHeader.TotalVolumeCbm,
+            rateHeader.KgPerCbm,
+            rateHeader.ChargeableQuantity,
+            rateHeader.CargoLinesJson,
 
             rateHeader.IncotermId,
             rateHeader.IncotermName,
@@ -159,7 +183,8 @@ public static class PricingAuditSnapshots
             rateHeader.Includes,
             rateHeader.SubjectTo,
             rateHeader.Excludes,
-            rateHeader.TransitDays,
+            rateHeader.TransitTime,
+            RateType = rateHeader.RateType.ToString(),
 
             rateHeader.TotalCostAmount,
             rateHeader.TotalSaleAmount,
@@ -169,6 +194,14 @@ public static class PricingAuditSnapshots
 
             Status = rateHeader.Status.ToString(),
 
+            Containers = rateHeader.RateContainers.Select(x => new
+            {
+                x.Id,
+                x.ContainerTypeId,
+                x.ContainerTypeName,
+                x.ContainerTypeCode,
+                x.Quantity,
+            }).ToList(),
             RateDetails = rateHeader.RateDetails.Select(From).ToList(),
         };
 
@@ -183,6 +216,7 @@ public static class PricingAuditSnapshots
 
             CostDetailType = detail.CostDetailType.ToString(),
             CostType = detail.CostType.ToString(),
+            ChargeBasis = detail.ChargeBasis.ToString(),
 
             detail.CurrencyId,
             detail.CurrencyName,

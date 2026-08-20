@@ -307,7 +307,8 @@ public sealed class RateStatusWorkflowTests
             includes: null,
             subjectTo: null,
             excludes: null,
-            transitDays: 20,
+            transitTime: "20 días",
+            rateType: RateType.Tariff,
             createdBy: null
         );
     }

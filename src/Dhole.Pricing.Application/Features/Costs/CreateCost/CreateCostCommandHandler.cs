@@ -29,8 +29,13 @@ public sealed class CreateCostCommandHandler(
                 command.CostDetailType,
                 command.PortId,
                 command.PortRole,
+                command.PolId,
+                command.PoeId,
+                command.PodId,
                 command.CarrierId,
                 command.AgentId,
+                command.ShipmentMode,
+                command.ChargeBasis,
                 null,
                 cancellationToken
             )
@@ -57,6 +62,15 @@ public sealed class CreateCostCommandHandler(
                 command.PortName,
                 command.PortCode,
                 command.PortRole,
+                command.PolId,
+                command.PolName,
+                command.PolCode,
+                command.PoeId,
+                command.PoeName,
+                command.PoeCode,
+                command.PodId,
+                command.PodName,
+                command.PodCode,
                 command.Incoterms,
                 command.CurrencyId,
                 command.CurrencyName,
@@ -65,6 +79,11 @@ public sealed class CreateCostCommandHandler(
                 command.SaleAmount,
                 command.Notes,
                 command.IsAccountant,
+                command.ShipmentMode,
+                command.ChargeBasis,
+                command.MinimumCostAmount,
+                command.MinimumSaleAmount,
+                command.KgPerCbm,
                 command.CreatedBy
             );
         }

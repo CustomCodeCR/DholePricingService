@@ -29,6 +29,8 @@ internal sealed class RateDetailConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.CostType).HasConversion<string>().HasMaxLength(50).IsRequired();
 
+        builder.Property(x => x.ChargeBasis).HasConversion<string>().HasMaxLength(40).IsRequired().HasDefaultValue(Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerShipment);
+
         builder.Property(x => x.CurrencyId).IsRequired();
 
         builder.Property(x => x.CurrencyName).HasMaxLength(120).IsRequired();
@@ -43,12 +45,13 @@ internal sealed class RateDetailConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.Notes).HasColumnType("text").IsRequired(false);
 
-        builder.Property(x => x.Quantity).IsRequired().HasDefaultValue(1);
+        builder.Property(x => x.Quantity).HasPrecision(18, 6).IsRequired().HasDefaultValue(1m);
 
         builder.HasIndex(x => x.RateHeaderId);
         builder.HasIndex(x => x.CostId);
         builder.HasIndex(x => x.CostDetailType);
         builder.HasIndex(x => x.CostType);
+        builder.HasIndex(x => x.ChargeBasis);
         builder.HasIndex(x => x.CurrencyId);
 
         builder

@@ -11,5 +11,7 @@ public sealed record UpsertRateExtraDetailRequest(
     string CurrencyCode,
     decimal CostAmount,
     decimal SaleAmount,
-    string? Notes
+    string? Notes,
+    decimal? Quantity = null,
+    string? ChargeBasis = null
 );

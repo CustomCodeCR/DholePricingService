@@ -12,6 +12,7 @@ using Dhole.Pricing.Application.Features.Costs.Update;
 using Dhole.Pricing.Contracts.Costs.Request;
 using Dhole.Pricing.Domain.Costs.Entities;
 using Dhole.Pricing.Domain.Costs.Enums;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
 
 namespace Dhole.Pricing.Api.Endpoints;
@@ -174,6 +175,17 @@ public static class CostEndpoints
             portRole = parsedPortRole;
         }
 
+        ShipmentMode? shipmentMode = null;
+        if (!string.IsNullOrWhiteSpace(request.ShipmentMode))
+        {
+            if (!TryParseDefinedEnum(request.ShipmentMode, out ShipmentMode parsedShipmentMode))
+                return EndpointResults.BadRequest("Pricing.InvalidShipmentMode", "La modalidad no es válida.", httpContext);
+            shipmentMode = parsedShipmentMode;
+        }
+
+        if (!TryParseDefinedEnum(request.ChargeBasis, out ChargeBasis chargeBasis))
+            return EndpointResults.BadRequest("Pricing.InvalidChargeBasis", "La base de cobro no es válida.", httpContext);
+
         var result = await dispatcher.DispatchAsync(
             new CreateCostCommand(
                 request.Name,
@@ -189,6 +201,15 @@ public static class CostEndpoints
                 request.PortName,
                 request.PortCode,
                 portRole,
+                request.PolId,
+                request.PolName,
+                request.PolCode,
+                request.PoeId,
+                request.PoeName,
+                request.PoeCode,
+                request.PodId,
+                request.PodName,
+                request.PodCode,
                 request.CurrencyId,
                 request.CurrencyName,
                 request.CurrencyCode,
@@ -199,6 +220,11 @@ public static class CostEndpoints
                 (request.Incoterms ?? [])
                     .Select(x => new CostIncotermSelection(x.Id, x.Name, x.Code))
                     .ToArray(),
+                shipmentMode,
+                chargeBasis,
+                request.MinimumCostAmount,
+                request.MinimumSaleAmount,
+                request.KgPerCbm,
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken
@@ -249,6 +275,17 @@ public static class CostEndpoints
             portRole = parsedPortRole;
         }
 
+        ShipmentMode? shipmentMode = null;
+        if (!string.IsNullOrWhiteSpace(request.ShipmentMode))
+        {
+            if (!TryParseDefinedEnum(request.ShipmentMode, out ShipmentMode parsedShipmentMode))
+                return EndpointResults.BadRequest("Pricing.InvalidShipmentMode", "La modalidad no es válida.", httpContext);
+            shipmentMode = parsedShipmentMode;
+        }
+
+        if (!TryParseDefinedEnum(request.ChargeBasis, out ChargeBasis chargeBasis))
+            return EndpointResults.BadRequest("Pricing.InvalidChargeBasis", "La base de cobro no es válida.", httpContext);
+
         var result = await dispatcher.DispatchAsync(
             new UpdateCostCommand(
                 costId,
@@ -265,6 +302,15 @@ public static class CostEndpoints
                 request.PortName,
                 request.PortCode,
                 portRole,
+                request.PolId,
+                request.PolName,
+                request.PolCode,
+                request.PoeId,
+                request.PoeName,
+                request.PoeCode,
+                request.PodId,
+                request.PodName,
+                request.PodCode,
                 request.CurrencyId,
                 request.CurrencyName,
                 request.CurrencyCode,
@@ -275,6 +321,11 @@ public static class CostEndpoints
                 (request.Incoterms ?? [])
                     .Select(x => new CostIncotermSelection(x.Id, x.Name, x.Code))
                     .ToArray(),
+                shipmentMode,
+                chargeBasis,
+                request.MinimumCostAmount,
+                request.MinimumSaleAmount,
+                request.KgPerCbm,
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken

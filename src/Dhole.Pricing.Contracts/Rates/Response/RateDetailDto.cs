@@ -7,12 +7,13 @@ public sealed record RateDetailDto(
     string Name,
     string CostDetailType,
     string CostType,
+    string ChargeBasis,
     Guid CurrencyId,
     string CurrencyName,
     string CurrencyCode,
     decimal CostAmount,
     decimal SaleAmount,
     decimal UtilityAmount,
-    int Quantity,
+    decimal Quantity,
     string? Notes
 );

@@ -1,6 +1,7 @@
 using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Commands;
 using Dhole.Pricing.Domain.Costs.Enums;
+using Dhole.Pricing.Domain.Rates.Enums;
 
 namespace Dhole.Pricing.Application.Features.Rates.UpdateRate;
 
@@ -15,7 +16,16 @@ public sealed record UpsertRateExtraDetailCommandItem(
     string CurrencyCode,
     decimal CostAmount,
     decimal SaleAmount,
-    string? Notes
+    string? Notes,
+    decimal? Quantity,
+    ChargeBasis? ChargeBasis
+);
+
+public sealed record UpdateRateContainerCommandItem(
+    Guid ContainerTypeId,
+    string ContainerTypeName,
+    string ContainerTypeCode,
+    int Quantity
 );
 
 public sealed record UpdateRateCommand(
@@ -54,9 +64,18 @@ public sealed record UpdateRateCommand(
     string? Includes,
     string? SubjectTo,
     string? Excludes,
-    int? TransitDays,
+    string? TransitTime,
     IReadOnlyCollection<UpsertRateExtraDetailCommandItem> ExtraDetails,
     IReadOnlyCollection<Guid> RemovedExtraDetailIds,
+    IReadOnlyCollection<UpdateRateContainerCommandItem> Containers,
+    RateType RateType,
+    ShipmentMode ShipmentMode,
+    decimal KgPerCbm,
+    int TotalPackages,
+    int TotalPallets,
+    decimal TotalWeightKg,
+    decimal TotalVolumeCbm,
+    IReadOnlyCollection<RateCargoLineCommandItem> CargoLines,
     bool CanApproveLowMargin,
     Guid? UpdatedBy
 ) : ICommand<Result>;

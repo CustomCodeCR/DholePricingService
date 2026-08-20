@@ -19,5 +19,6 @@ public sealed record PricingConfigCatalogItem(
     string CatalogGroupSlug,
     string Code,
     string Slug,
-    string Name
+    string Name,
+    string? Value
 );

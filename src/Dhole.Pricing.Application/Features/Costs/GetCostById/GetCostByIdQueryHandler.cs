@@ -56,7 +56,21 @@ public sealed class GetCostByIdQueryHandler(ICostRepository costs, ICostCacheSer
             cost.Incoterms
                 .OrderBy(x => x.IncotermName)
                 .Select(x => new CostIncotermDto(x.IncotermId, x.IncotermName, x.IncotermCode))
-                .ToArray()
+                .ToArray(),
+            cost.PolId,
+            cost.PolName,
+            cost.PolCode,
+            cost.PoeId,
+            cost.PoeName,
+            cost.PoeCode,
+            cost.PodId,
+            cost.PodName,
+            cost.PodCode,
+            cost.ShipmentMode.HasValue ? cost.ShipmentMode.Value.ToString() : null,
+            cost.ChargeBasis.ToString(),
+            cost.MinimumCostAmount,
+            cost.MinimumSaleAmount,
+            cost.KgPerCbm
         );
 
         await cache.SetCostByIdAsync(cost.Id, dto, cancellationToken: cancellationToken);

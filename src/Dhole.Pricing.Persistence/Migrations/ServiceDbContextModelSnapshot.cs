@@ -215,6 +215,34 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("cost_type");
 
+                    b.Property<string>("ChargeBasis")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("PerShipment")
+                        .HasColumnName("charge_basis");
+
+                    b.Property<decimal?>("KgPerCbm")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasColumnName("kg_per_cbm");
+
+                    b.Property<decimal?>("MinimumCostAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("minimum_cost_amount");
+
+                    b.Property<decimal?>("MinimumSaleAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("minimum_sale_amount");
+
+                    b.Property<string>("ShipmentMode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("shipment_mode");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at_utc");
@@ -292,6 +320,48 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("port_role");
 
+                    b.Property<string>("PodCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("pod_code");
+
+                    b.Property<Guid?>("PodId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pod_id");
+
+                    b.Property<string>("PodName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("pod_name");
+
+                    b.Property<string>("PoeCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("poe_code");
+
+                    b.Property<Guid?>("PoeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("poe_id");
+
+                    b.Property<string>("PoeName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("poe_name");
+
+                    b.Property<string>("PolCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("pol_code");
+
+                    b.Property<Guid?>("PolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pol_id");
+
+                    b.Property<string>("PolName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("pol_name");
+
                     b.Property<decimal>("SaleAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
@@ -321,7 +391,11 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasIndex("CostType");
 
+                    b.HasIndex("ChargeBasis");
+
                     b.HasIndex("CurrencyId");
+
+                    b.HasIndex("ShipmentMode");
 
                     b.HasIndex("IsAccountant");
 
@@ -333,7 +407,13 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasIndex("PortRole");
 
-                    b.HasIndex("CostType", "CostDetailType", "CarrierId", "AgentId", "PortId", "PortRole", "IsAccountant", "Name", "CurrencyId")
+                    b.HasIndex("PolId");
+
+                    b.HasIndex("PoeId");
+
+                    b.HasIndex("PodId");
+
+                    b.HasIndex("CostType", "CostDetailType", "CarrierId", "AgentId", "PortId", "PortRole", "PolId", "PoeId", "PodId", "ShipmentMode", "ChargeBasis", "IsAccountant", "Name", "CurrencyId")
                         .IsUnique()
                         .HasDatabaseName("ix_costs_template_unique")
                         .HasFilter("is_deleted = false");
@@ -885,6 +965,52 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.ToTable("PricingImportFromExtractionJobs", "pricing");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateContainerAllocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ContainerTypeCode")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("container_type_code");
+
+                    b.Property<Guid>("ContainerTypeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("container_type_id");
+
+                    b.Property<string>("ContainerTypeName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("container_type_name");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("RateHeaderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rate_header_id");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_rate_container_allocations");
+
+                    b.HasIndex("ContainerTypeId")
+                        .HasDatabaseName("i_x_rate_container_allocations_container_type_id");
+
+                    b.HasIndex("RateHeaderId")
+                        .HasDatabaseName("i_x_rate_container_allocations_rate_header_id");
+
+                    b.HasIndex("RateHeaderId", "ContainerTypeId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_rate_container_allocations_rate_container");
+
+                    b.ToTable("RateContainerAllocations", "pricing");
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateDetail", b =>
                 {
                     b.Property<Guid>("Id")
@@ -912,6 +1038,14 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("cost_type");
 
+                    b.Property<string>("ChargeBasis")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasDefaultValue("PerShipment")
+                        .HasColumnName("charge_basis");
+
                     b.Property<string>("CurrencyCode")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -938,10 +1072,11 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("notes");
 
-                    b.Property<int>("Quantity")
+                    b.Property<decimal>("Quantity")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(1)
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasDefaultValue(1m)
                         .HasColumnName("quantity");
 
                     b.Property<Guid>("RateHeaderId")
@@ -966,6 +1101,8 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.HasIndex("CostId");
 
                     b.HasIndex("CostType");
+
+                    b.HasIndex("ChargeBasis");
 
                     b.HasIndex("CurrencyId");
 
@@ -1055,6 +1192,58 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
                         .HasColumnName("container_type_name");
+
+                    b.Property<string>("CargoLinesJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("cargo_lines_json");
+
+                    b.Property<decimal>("ChargeableQuantity")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasDefaultValue(1m)
+                        .HasColumnName("chargeable_quantity");
+
+                    b.Property<decimal>("KgPerCbm")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasDefaultValue(500m)
+                        .HasColumnName("kg_per_cbm");
+
+                    b.Property<string>("ShipmentMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Fcl")
+                        .HasColumnName("shipment_mode");
+
+                    b.Property<int>("TotalPackages")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("total_packages");
+
+                    b.Property<int>("TotalPallets")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("total_pallets");
+
+                    b.Property<decimal>("TotalVolumeCbm")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("total_volume_cbm");
+
+                    b.Property<decimal>("TotalWeightKg")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("total_weight_kg");
 
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -1193,6 +1382,14 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("rate_name");
 
+                    b.Property<string>("RateType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Tariff")
+                        .HasColumnName("rate_type");
+
                     b.Property<bool>("RequiredApproval")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -1228,9 +1425,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("total_utility_amount");
 
-                    b.Property<int?>("TransitDays")
-                        .HasColumnType("integer")
-                        .HasColumnName("transit_days");
+                    b.Property<string>("TransitTime")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("transit_time");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -1257,11 +1455,15 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasIndex("ContainerTypeId");
 
+                    b.HasIndex("ShipmentMode");
+
                     b.HasIndex("CurrencyId");
 
                     b.HasIndex("IdtraNumber");
 
                     b.HasIndex("IncotermId");
+
+                    b.HasIndex("RateType");
 
                     b.HasIndex("PodId");
 
@@ -1338,6 +1540,16 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasConstraintName("f_k_cost_incoterms_costs_cost_id");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateContainerAllocation", b =>
+                {
+                    b.HasOne("Dhole.Pricing.Domain.Rates.Entities.RateHeader", null)
+                        .WithMany("RateContainers")
+                        .HasForeignKey("RateHeaderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_rate_container_allocations__rate_headers_rate_header_id");
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateDetail", b =>
                 {
                     b.HasOne("Dhole.Pricing.Domain.Rates.Entities.RateHeader", null)
@@ -1355,6 +1567,8 @@ namespace Dhole.Pricing.Persistence.Migrations
 
             modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateHeader", b =>
                 {
+                    b.Navigation("RateContainers");
+
                     b.Navigation("RateDetails");
                 });
 #pragma warning restore 612, 618

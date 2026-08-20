@@ -8,6 +8,7 @@ using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
 
 namespace Dhole.Pricing.Application.Features.Rates.UpdateRate;
@@ -16,6 +17,7 @@ public sealed class UpdateRateCommandHandler(
     IRateHeaderRepository rateHeaders,
     IRateFixedCostSynchronizer fixedCostSynchronizer,
     IRateExtraDetailResolver extraDetailResolver,
+    IPricingConfigCatalogClient configCatalog,
     IPricingAuditService audit,
     IRateHeaderCacheService cache,
     IUnitOfWork unitOfWork
@@ -41,6 +43,9 @@ public sealed class UpdateRateCommandHandler(
         {
             return Result.Failure(PricingErrors.RateInvalidStatus);
         }
+
+        if (rate.SourceImportFclRateId.HasValue && command.ShipmentMode != ShipmentMode.Fcl)
+            return Result.Failure(PricingErrors.RateInvalidStatus);
 
         var existingDetails = rate.RateDetails.ToDictionary(x => x.Id);
 
@@ -107,7 +112,9 @@ public sealed class UpdateRateCommandHandler(
                     detail.CurrencyCode,
                     detail.CostAmount,
                     detail.SaleAmount,
-                    detail.Notes
+                    detail.Notes,
+                    detail.Quantity,
+                    detail.ChargeBasis
                 ),
                 cancellationToken
             );
@@ -119,6 +126,76 @@ public sealed class UpdateRateCommandHandler(
 
             resolvedDetails.Add(resolution.Detail!);
         }
+
+        var normalizedIncoterm = await NormalizeIncotermAsync(
+            command.IncotermId,
+            configCatalog,
+            cancellationToken
+        );
+        if (command.IncotermId.HasValue && normalizedIncoterm is null)
+        {
+            return Result.Failure(PricingErrors.RateInvalidStatus);
+        }
+        if (normalizedIncoterm is not null)
+        {
+            command = command with
+            {
+                IncotermName = normalizedIncoterm.DisplayValue,
+                IncotermCode = normalizedIncoterm.Code,
+            };
+        }
+
+        var containerSpecs = (command.Containers ?? Array.Empty<UpdateRateContainerCommandItem>())
+            .Select(x => new RateContainerAllocationSpec(
+                x.ContainerTypeId,
+                x.ContainerTypeName,
+                x.ContainerTypeCode,
+                x.Quantity
+            ))
+            .ToArray();
+
+        if (containerSpecs.Length == 0)
+        {
+            containerSpecs =
+            [
+                new RateContainerAllocationSpec(
+                    command.ContainerTypeId,
+                    command.ContainerTypeName,
+                    command.ContainerTypeCode,
+                    command.ContainerQuantity
+                )
+            ];
+        }
+
+        if (
+            rate.SourceImportFclRateId.HasValue
+            && (
+                containerSpecs.Length != 1
+                || containerSpecs[0].ContainerTypeId != rate.ContainerTypeId
+            )
+        )
+        {
+            return Result.Failure(PricingErrors.RateInvalidStatus);
+        }
+
+        if (!HasValidFreightDistribution(rate, command.ShipmentMode, extraDetails, containerSpecs))
+        {
+            return Result.Failure(PricingErrors.RateInvalidStatus);
+        }
+
+        var primaryContainer = containerSpecs[0];
+        var requestedContainerQuantity = containerSpecs.Sum(x => x.Quantity);
+        var currentContainerSignature = rate.RateContainers.Count > 0
+            ? rate.RateContainers
+                .OrderBy(x => x.ContainerTypeId)
+                .Select(x => $"{x.ContainerTypeId:N}:{x.Quantity}")
+                .ToArray()
+            : [$"{rate.ContainerTypeId:N}:{rate.ContainerQuantity}"];
+        var requestedContainerSignature = containerSpecs
+            .OrderBy(x => x.ContainerTypeId)
+            .Select(x => $"{x.ContainerTypeId:N}:{x.Quantity}")
+            .ToArray();
+        var containersChanged = !currentContainerSignature.SequenceEqual(requestedContainerSignature);
 
         var agentId = command.AgentId;
         var agentName = command.AgentName;
@@ -135,9 +212,9 @@ public sealed class UpdateRateCommandHandler(
         var podId = command.PodId;
         var podName = command.PodName;
         var podCode = command.PodCode;
-        var containerTypeId = command.ContainerTypeId;
-        var containerTypeName = command.ContainerTypeName;
-        var containerTypeCode = command.ContainerTypeCode;
+        var containerTypeId = primaryContainer.ContainerTypeId;
+        var containerTypeName = primaryContainer.ContainerTypeName;
+        var containerTypeCode = primaryContainer.ContainerTypeCode;
         var incotermId = command.IncotermId;
         var incotermName = command.IncotermName;
         var incotermCode = command.IncotermCode;
@@ -147,8 +224,8 @@ public sealed class UpdateRateCommandHandler(
         var freeDays = command.FreeDays;
         var validFrom = command.ValidFrom;
         var validTo = command.ValidTo;
-        var containerQuantity = command.ContainerQuantity;
-        var transitDays = command.TransitDays;
+        var containerQuantity = requestedContainerQuantity;
+        var transitTime = command.TransitTime;
 
         var selectorsChanged =
             rate.AgentId != agentId
@@ -156,10 +233,10 @@ public sealed class UpdateRateCommandHandler(
             || rate.PolId != polId
             || rate.PoeId != poeId
             || rate.PodId != podId
-            || rate.ContainerTypeId != containerTypeId
+            || containersChanged
             || rate.IncotermId != incotermId
             || rate.CurrencyId != currencyId
-            || rate.ContainerQuantity != containerQuantity;
+            || rate.ShipmentMode != command.ShipmentMode;
 
         var headerBefore = PricingAuditSnapshots.From(rate);
 
@@ -210,11 +287,34 @@ public sealed class UpdateRateCommandHandler(
                 command.Includes,
                 command.SubjectTo,
                 command.Excludes,
-                transitDays,
+                transitTime,
+                command.RateType,
                 command.UpdatedBy
             );
 
-            if (selectorsChanged)
+            rate.ReplaceContainerAllocations(containerSpecs, command.UpdatedBy);
+
+            var cargoProfile = RateCargoProfileFactory.Create(
+                command.ShipmentMode,
+                command.KgPerCbm,
+                command.CargoLines,
+                command.TotalPackages,
+                command.TotalPallets,
+                command.TotalWeightKg,
+                command.TotalVolumeCbm
+            );
+            rate.ConfigureShipment(
+                command.ShipmentMode,
+                cargoProfile.TotalPackages,
+                cargoProfile.TotalPallets,
+                cargoProfile.TotalWeightKg,
+                cargoProfile.TotalVolumeCbm,
+                cargoProfile.KgPerCbm,
+                cargoProfile.CargoLinesJson,
+                command.UpdatedBy
+            );
+
+            if (selectorsChanged || command.ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl)
             {
                 await fixedCostSynchronizer.SynchronizeAsync(
                     rate,
@@ -232,19 +332,21 @@ public sealed class UpdateRateCommandHandler(
             {
                 if (detail.Id.HasValue)
                 {
+                    var chargeBasis = detail.ChargeBasis ?? DefaultChargeBasis(command.ShipmentMode, detail.CostDetailType);
                     rate.UpdateRateDetail(
                         detail.Id.Value,
                         detail.CostId,
                         detail.Name,
                         detail.CostDetailType,
                         detail.CostType,
+                        chargeBasis,
                         detail.CurrencyId,
                         detail.CurrencyName,
                         detail.CurrencyCode,
                         detail.CostAmount,
                         detail.SaleAmount,
                         detail.Notes,
-                        detail.IsAccountant ? containerQuantity : 1,
+                        detail.Quantity ?? 1m,
                         command.UpdatedBy
                     );
 
@@ -252,20 +354,22 @@ public sealed class UpdateRateCommandHandler(
                 }
                 else
                 {
+                    var chargeBasis = detail.ChargeBasis ?? DefaultChargeBasis(command.ShipmentMode, detail.CostDetailType);
                     var added = rate.AddRateDetail(
                         rate.Id,
                         detail.CostId,
                         detail.Name,
                         detail.CostDetailType,
                         detail.CostType,
+                        chargeBasis,
                         detail.CurrencyId,
                         detail.CurrencyName,
                         detail.CurrencyCode,
                         detail.CostAmount,
                         detail.SaleAmount,
                         detail.Notes,
-                        quantity: detail.IsAccountant ? containerQuantity : 1,
-                        command.UpdatedBy
+                        quantity: detail.Quantity ?? 1m,
+                        updatedBy: command.UpdatedBy
                     );
 
                     addedDetails.Add(added);
@@ -411,6 +515,64 @@ public sealed class UpdateRateCommandHandler(
 
         return Result.Success();
     }
+
+    private static ChargeBasis DefaultChargeBasis(ShipmentMode shipmentMode, CostDetailType detailType)
+    {
+        if (detailType == CostDetailType.Documentation)
+            return ChargeBasis.PerDocument;
+
+        if (detailType is not (CostDetailType.Freight or CostDetailType.InlandTransport))
+            return ChargeBasis.PerShipment;
+        return shipmentMode switch
+        {
+            ShipmentMode.Fcl => ChargeBasis.PerContainer,
+            ShipmentMode.Ftl => ChargeBasis.PerTruck,
+            ShipmentMode.Lcl or ShipmentMode.Ltl => ChargeBasis.PerChargeableCbm,
+            _ => ChargeBasis.PerShipment,
+        };
+    }
+
+    private static bool HasValidFreightDistribution(
+        RateHeader rate,
+        ShipmentMode shipmentMode,
+        IReadOnlyCollection<UpsertRateExtraDetailCommandItem> details,
+        IReadOnlyCollection<RateContainerAllocationSpec> containers
+    )
+    {
+        if (rate.SourceImportFclRateId.HasValue) return true;
+        if (shipmentMode != ShipmentMode.Fcl) return true;
+
+        var freight = details.Where(x => x.CostDetailType == CostDetailType.Freight).ToArray();
+        if (freight.Length != containers.Count) return false;
+        if (containers.Count == 1 && freight.Length == 1 && !freight[0].Quantity.HasValue)
+            return true;
+        if (freight.Any(x => !x.Quantity.HasValue || x.Quantity.Value <= 0)) return false;
+
+        return freight.Sum(x => x.Quantity!.Value) == containers.Sum(x => x.Quantity);
+    }
+
+    private static async Task<NormalizedIncoterm?> NormalizeIncotermAsync(
+        Guid? incotermId,
+        IPricingConfigCatalogClient configCatalog,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!incotermId.HasValue || incotermId.Value == Guid.Empty) return null;
+
+        var item = await configCatalog.GetActiveByIdAsync(incotermId.Value, cancellationToken);
+        if (
+            item is null
+            || !item.CatalogGroupSlug.Equals("incoterms", StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            return null;
+        }
+
+        var displayValue = string.IsNullOrWhiteSpace(item.Value) ? item.Name : item.Value.Trim();
+        return new NormalizedIncoterm(displayValue, item.Code);
+    }
+
+    private sealed record NormalizedIncoterm(string DisplayValue, string Code);
 
     private static bool IsAutomaticFixed(RateDetail detail)
     {

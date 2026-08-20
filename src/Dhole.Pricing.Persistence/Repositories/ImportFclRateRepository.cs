@@ -137,7 +137,6 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext, IConfigu
                 .Where(x =>
                     !x.IsDeleted
                     && x.Status != ImportStatus.Expired
-                    && x.ValidFrom.Date <= today
                     && x.ValidTo.Date >= today
                 ),
             search,

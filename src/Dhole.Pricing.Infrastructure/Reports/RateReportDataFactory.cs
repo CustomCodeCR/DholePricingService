@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Text.Json;
 using Dhole.Pricing.Application.Abstractions.Reports;
+using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Microsoft.Extensions.Configuration;
 
 namespace Dhole.Pricing.Infrastructure.Reports;
@@ -17,9 +19,48 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         string Text(string? value, string fallback = "No especificado") =>
             string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
 
-        var items = rate.RateDetails
+        var containers = (rate.RateContainers.Count > 0
+                ? rate.RateContainers
+                    .OrderBy(x => x.ContainerTypeName)
+                    .ThenBy(x => x.ContainerTypeCode)
+                    .Select(x => new
+                    {
+                        containerTypeId = x.ContainerTypeId,
+                        containerType = x.ContainerTypeName,
+                        containerTypeName = x.ContainerTypeName,
+                        containerTypeCode = x.ContainerTypeCode,
+                        quantity = x.Quantity,
+                        label = $"{x.Quantity} x {x.ContainerTypeName}"
+                    })
+                : new[]
+                {
+                    new
+                    {
+                        containerTypeId = rate.ContainerTypeId,
+                        containerType = rate.ContainerTypeName,
+                        containerTypeName = rate.ContainerTypeName,
+                        containerTypeCode = rate.ContainerTypeCode,
+                        quantity = rate.ContainerQuantity,
+                        label = $"{rate.ContainerQuantity} x {rate.ContainerTypeName}"
+                    }
+                })
+            .ToArray();
+        var equipmentSummary = string.Join(" + ", containers.Select(x => x.label));
+        var shipmentSummary = rate.ShipmentMode switch
+        {
+            ShipmentMode.Lcl => $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable",
+            ShipmentMode.Ltl => $"LTL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable",
+            ShipmentMode.Ftl => $"FTL · {rate.ContainerQuantity} camión{(rate.ContainerQuantity == 1 ? string.Empty : "es")}",
+            _ => equipmentSummary,
+        };
+
+        var reportDetails = rate.RateDetails
+            .Where(detail => detail.SaleAmount * detail.Quantity != 0m)
             .OrderBy(x => x.CostDetailType)
             .ThenBy(x => x.Name)
+            .ToArray();
+
+        var items = reportDetails
             .Select(detail => new
             {
                 description = detail.Name,
@@ -28,13 +69,13 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 unitSaleAmount = detail.SaleAmount,
                 lineTotal = Money(detail.SaleAmount * detail.Quantity),
                 lineTotalAmount = detail.SaleAmount * detail.Quantity,
-                notes = Text(detail.Notes, string.Empty)
+                notes = detail.CostDetailType == CostDetailType.Insurance
+                    ? string.Empty
+                    : Text(detail.Notes, string.Empty)
             })
             .ToArray();
 
-        var rows = rate.RateDetails
-            .OrderBy(x => x.CostDetailType)
-            .ThenBy(x => x.Name)
+        var rows = reportDetails
             .Select(detail => new Dictionary<string, object?>
             {
                 ["Concepto"] = detail.Name,
@@ -42,7 +83,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 ["Moneda"] = rate.CurrencyCode,
                 ["Precio unitario"] = detail.SaleAmount,
                 ["Total"] = detail.SaleAmount * detail.Quantity,
-                ["Notas"] = detail.Notes
+                ["Notas"] = detail.CostDetailType == CostDetailType.Insurance
+                    ? string.Empty
+                    : detail.Notes
             })
             .ToArray();
 
@@ -74,12 +117,21 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 poe = rate.PoeName,
                 pod = rate.PodName,
                 route = $"{rate.PolName} → {rate.PodName} vía {rate.PoeName}",
-                containerType = rate.ContainerTypeName,
-                containerQuantity = rate.ContainerQuantity,
+                rateType = rate.RateType == Dhole.Pricing.Domain.Rates.Enums.RateType.Spot ? "SPOT" : "TARIFARIO",
+                shipmentMode = rate.ShipmentMode.ToString(),
+                containerType = shipmentSummary,
+                containerQuantity = containers.Sum(x => x.quantity),
+                containerSummary = shipmentSummary,
+                totalPackages = rate.TotalPackages,
+                totalPallets = rate.TotalPallets,
+                totalWeightKg = rate.TotalWeightKg,
+                totalVolumeCbm = rate.TotalVolumeCbm,
+                kgPerCbm = rate.KgPerCbm,
+                chargeableQuantity = rate.ChargeableQuantity,
                 currency = rate.CurrencyCode,
                 freeDays = rate.FreeDays,
-                transitTime = rate.TransitDays.HasValue ? $"{rate.TransitDays.Value} días" : "Por confirmar",
-                transitDays = rate.TransitDays,
+                transitTime = string.IsNullOrWhiteSpace(rate.TransitTime) ? "Por confirmar" : rate.TransitTime,
+                transitDays = rate.TransitTime,
                 validFrom = rate.ValidFrom.ToString("dd/MM/yyyy"),
                 validTo = rate.ValidTo.ToString("dd/MM/yyyy"),
                 total = Money(rate.TotalSaleAmount),
@@ -89,6 +141,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 excludes = Text(rate.Excludes, string.Empty),
                 status = rate.Status.ToString()
             },
+            containers,
             items,
             rows
         };

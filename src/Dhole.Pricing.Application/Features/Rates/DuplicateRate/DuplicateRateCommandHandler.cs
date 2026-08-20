@@ -76,7 +76,38 @@ public sealed class DuplicateRateCommandHandler(
                 source.Includes,
                 source.SubjectTo,
                 source.Excludes,
-                source.TransitDays,
+                source.TransitTime,
+                source.RateType,
+                command.CreatedBy
+            );
+
+            var sourceContainers = source.RateContainers.Count > 0
+                ? source.RateContainers
+                    .Select(x => new RateContainerAllocationSpec(
+                        x.ContainerTypeId,
+                        x.ContainerTypeName,
+                        x.ContainerTypeCode,
+                        x.Quantity
+                    ))
+                    .ToArray()
+                :
+                [
+                    new RateContainerAllocationSpec(
+                        source.ContainerTypeId,
+                        source.ContainerTypeName,
+                        source.ContainerTypeCode,
+                        source.ContainerQuantity > 0 ? source.ContainerQuantity : 1
+                    )
+                ];
+            duplicate.ReplaceContainerAllocations(sourceContainers, command.CreatedBy);
+            duplicate.ConfigureShipment(
+                source.ShipmentMode,
+                source.TotalPackages,
+                source.TotalPallets,
+                source.TotalWeightKg,
+                source.TotalVolumeCbm,
+                source.KgPerCbm,
+                source.CargoLinesJson,
                 command.CreatedBy
             );
 
@@ -92,6 +123,7 @@ public sealed class DuplicateRateCommandHandler(
                     detail.Name,
                     detail.CostDetailType,
                     detail.CostType,
+                    detail.ChargeBasis,
                     detail.CurrencyId,
                     detail.CurrencyName,
                     detail.CurrencyCode,

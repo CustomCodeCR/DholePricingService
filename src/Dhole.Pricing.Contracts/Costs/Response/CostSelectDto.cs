@@ -23,5 +23,19 @@ public sealed record CostSelectDto(
     decimal UtilityAmount,
     string? Notes,
     bool IsAccountant,
-    IReadOnlyCollection<CostIncotermDto> Incoterms
+    IReadOnlyCollection<CostIncotermDto> Incoterms,
+    Guid? PolId = null,
+    string? PolName = null,
+    string? PolCode = null,
+    Guid? PoeId = null,
+    string? PoeName = null,
+    string? PoeCode = null,
+    Guid? PodId = null,
+    string? PodName = null,
+    string? PodCode = null,
+    string? ShipmentMode = null,
+    string ChargeBasis = "PerShipment",
+    decimal? MinimumCostAmount = null,
+    decimal? MinimumSaleAmount = null,
+    decimal? KgPerCbm = null
 );

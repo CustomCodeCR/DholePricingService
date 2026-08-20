@@ -26,6 +26,11 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
             );
         }
 
+        if (input.Quantity is <= 0)
+        {
+            return RateExtraDetailResolution.Failure(PricingErrors.RateInvalidStatus);
+        }
+
         if (input.CurrencyId == Guid.Empty)
         {
             return RateExtraDetailResolution.Failure(
@@ -70,7 +75,9 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
                     costAmount,
                     saleAmount,
                     Normalize(input.Notes),
-                    IsAccountant: false
+                    IsAccountant: false,
+                    input.Quantity,
+                    input.ChargeBasis
                 )
             );
         }
@@ -109,7 +116,9 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
                     costAmount,
                     saleAmount,
                     Normalize(input.Notes) ?? cost.Notes,
-                    cost.IsAccountant
+                    cost.IsAccountant,
+                    input.Quantity,
+                    cost.ChargeBasis
                 )
             );
         }
@@ -137,7 +146,9 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
                 input.CostAmount,
                 input.SaleAmount,
                 Normalize(input.Notes) ?? cost.Notes,
-                cost.IsAccountant
+                cost.IsAccountant,
+                input.Quantity,
+                cost.ChargeBasis
             )
         );
     }

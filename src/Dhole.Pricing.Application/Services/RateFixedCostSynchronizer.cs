@@ -5,6 +5,7 @@ using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Domain.Costs.Entities;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
 
 namespace Dhole.Pricing.Application.Services;
@@ -46,15 +47,33 @@ public sealed class RateFixedCostSynchronizer(
             cancellationToken: cancellationToken
         );
 
-        foreach (var cost in activeFixedCosts.Where(cost => MatchesRate(cost, rate)))
+        var hasExplicitFreight = rate.RateDetails.Any(x =>
+            x.CostDetailType == CostDetailType.Freight && !x.CostId.HasValue
+        );
+
+        foreach (var cost in activeFixedCosts.Where(cost =>
+            MatchesRate(cost, rate)
+            && !(hasExplicitFreight && cost.CostDetailType == CostDetailType.Freight)
+        ))
         {
             var hasExistingAmount = existingAmounts.TryGetValue(cost.Id, out var existingAmount);
-            var costAmount = hasExistingAmount ? existingAmount.CostAmount : cost.CostAmount;
+            var hasMinimumRule = cost.MinimumCostAmount.HasValue || cost.MinimumSaleAmount.HasValue;
+            var costAmount = hasExistingAmount && !hasMinimumRule
+                ? existingAmount.CostAmount
+                : cost.CostAmount;
             var saleAmount = cost.AgentId.HasValue
                 ? 0m
-                : hasExistingAmount
+                : hasExistingAmount && !hasMinimumRule
                     ? existingAmount.SaleAmount
                     : cost.SaleAmount;
+
+            var quantity = rate.ResolveChargeQuantity(cost.ChargeBasis, kgPerCbmOverride: cost.KgPerCbm);
+            var effectiveCostTotal = Math.Max(costAmount * quantity, cost.MinimumCostAmount ?? 0m);
+            var effectiveSaleTotal = cost.AgentId.HasValue
+                ? 0m
+                : Math.Max(saleAmount * quantity, cost.MinimumSaleAmount ?? 0m);
+            var effectiveCostAmount = quantity > 0m ? effectiveCostTotal / quantity : effectiveCostTotal;
+            var effectiveSaleAmount = quantity > 0m ? effectiveSaleTotal / quantity : effectiveSaleTotal;
 
             rate.AddRateDetail(
                 rate.Id,
@@ -62,13 +81,14 @@ public sealed class RateFixedCostSynchronizer(
                 cost.Name,
                 cost.CostDetailType,
                 cost.CostType,
+                cost.ChargeBasis,
                 cost.CurrencyId,
                 cost.CurrencyName,
                 cost.CurrencyCode,
-                costAmount,
-                saleAmount,
+                effectiveCostAmount,
+                effectiveSaleAmount,
                 cost.Notes,
-                cost.IsAccountant ? rate.ContainerQuantity : 1,
+                quantity,
                 updatedBy
             );
         }
@@ -82,7 +102,7 @@ public sealed class RateFixedCostSynchronizer(
         CancellationToken cancellationToken
     )
     {
-        if (!IsPanamaToGam(rate))
+        if (rate.ShipmentMode != ShipmentMode.Fcl || !IsPanamaToGam(rate))
             return;
 
         Guid currencyId;
@@ -119,6 +139,7 @@ public sealed class RateFixedCostSynchronizer(
             "Flete internacional terrestre",
             CostDetailType.InlandTransport,
             CostType.Fixed,
+            ChargeBasis.PerContainer,
             currencyId,
             currencyName,
             currencyCode,
@@ -134,6 +155,7 @@ public sealed class RateFixedCostSynchronizer(
     {
         var matchesAgent = !cost.AgentId.HasValue || cost.AgentId == rate.AgentId;
         var matchesCarrier = !cost.CarrierId.HasValue || cost.CarrierId == rate.CarrierId;
+        var matchesMode = !cost.ShipmentMode.HasValue || cost.ShipmentMode.Value == rate.ShipmentMode;
         var matchesIncoterm =
             cost.Incoterms.Count == 0
             || (
@@ -141,8 +163,21 @@ public sealed class RateFixedCostSynchronizer(
                 && cost.Incoterms.Any(x => x.IncotermId == rate.IncotermId.Value)
             );
 
-        if (!matchesAgent || !matchesCarrier || !matchesIncoterm)
+        if (!matchesAgent || !matchesCarrier || !matchesMode || !matchesIncoterm)
             return false;
+
+        var hasStructuredRoute = cost.PolId.HasValue || cost.PoeId.HasValue || cost.PodId.HasValue;
+        if (hasStructuredRoute)
+        {
+            if (cost.PolId.HasValue && cost.PolId != rate.PolId)
+                return false;
+            if (cost.PoeId.HasValue && cost.PoeId != rate.PoeId)
+                return false;
+            if (cost.PodId.HasValue && cost.PodId != rate.PodId)
+                return false;
+
+            return true;
+        }
 
         if (!cost.PortId.HasValue)
             return true;

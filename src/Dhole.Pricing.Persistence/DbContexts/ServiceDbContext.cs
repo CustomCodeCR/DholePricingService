@@ -30,6 +30,8 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
 
     public DbSet<RateDetail> RateDetails => Set<RateDetail>();
 
+    public DbSet<RateContainerAllocation> RateContainerAllocations => Set<RateContainerAllocation>();
+
     public DbSet<RateTermItem> RateTermItems => Set<RateTermItem>();
 
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();

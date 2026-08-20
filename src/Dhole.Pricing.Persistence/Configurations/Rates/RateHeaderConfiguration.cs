@@ -29,7 +29,8 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.Excludes).HasColumnType("text").IsRequired(false);
 
-        builder.Property(x => x.TransitDays).IsRequired(false);
+        builder.Property(x => x.TransitTime).HasMaxLength(160).IsRequired(false);
+        builder.Property(x => x.RateType).HasConversion<string>().HasMaxLength(20).IsRequired().HasDefaultValue(Dhole.Pricing.Domain.Rates.Enums.RateType.Tariff);
 
         builder.Property(x => x.AgentId).IsRequired();
 
@@ -89,6 +90,15 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.ContainerQuantity).IsRequired().HasDefaultValue(1);
 
+        builder.Property(x => x.ShipmentMode).HasConversion<string>().HasMaxLength(20).IsRequired().HasDefaultValue(Dhole.Pricing.Domain.Rates.Enums.ShipmentMode.Fcl);
+        builder.Property(x => x.TotalPackages).IsRequired().HasDefaultValue(0);
+        builder.Property(x => x.TotalPallets).IsRequired().HasDefaultValue(0);
+        builder.Property(x => x.TotalWeightKg).HasPrecision(18, 4).IsRequired().HasDefaultValue(0m);
+        builder.Property(x => x.TotalVolumeCbm).HasPrecision(18, 6).IsRequired().HasDefaultValue(0m);
+        builder.Property(x => x.KgPerCbm).HasPrecision(18, 4).IsRequired().HasDefaultValue(500m);
+        builder.Property(x => x.ChargeableQuantity).HasPrecision(18, 6).IsRequired().HasDefaultValue(1m);
+        builder.Property(x => x.CargoLinesJson).HasColumnType("jsonb").IsRequired(false);
+
         builder.Property(x => x.TotalCostAmount).HasPrecision(18, 2).IsRequired();
 
         builder.Property(x => x.TotalSaleAmount).HasPrecision(18, 2).IsRequired();
@@ -115,6 +125,14 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Navigation(x => x.RateDetails).UsePropertyAccessMode(PropertyAccessMode.Field);
 
+        builder
+            .HasMany(x => x.RateContainers)
+            .WithOne()
+            .HasForeignKey(x => x.RateHeaderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Navigation(x => x.RateContainers).UsePropertyAccessMode(PropertyAccessMode.Field);
+
         builder.HasIndex(x => x.SourceImportFclRateId);
         builder.HasIndex(x => x.AgentId);
         builder.HasIndex(x => x.CarrierId);
@@ -122,7 +140,9 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.HasIndex(x => x.PoeId);
         builder.HasIndex(x => x.PodId);
         builder.HasIndex(x => x.ContainerTypeId);
+        builder.HasIndex(x => x.ShipmentMode);
         builder.HasIndex(x => x.IncotermId);
+        builder.HasIndex(x => x.RateType);
         builder.HasIndex(x => x.CurrencyId);
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => x.RequiredApproval);

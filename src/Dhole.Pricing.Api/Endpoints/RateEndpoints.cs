@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Claims;
 using CustomCodeFramework.Core.Pagination;
 using CustomCodeFramework.Cqrs.Dispatching;
@@ -18,7 +19,9 @@ using Dhole.Pricing.Contracts.Rates.Request;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
+using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Dhole.Pricing.Api.Endpoints;
 
@@ -101,8 +104,17 @@ public static class RateEndpoints
                 poe = "Moín",
                 pod = "Puerto Caldera",
                 route = "Shanghai → Puerto Caldera vía Moín",
-                containerType = "40 HC",
+                rateType = "TARIFARIO",
+                shipmentMode = "Fcl",
+                totalPackages = 0,
+                totalPallets = 0,
+                totalWeightKg = 0m,
+                totalVolumeCbm = 0m,
+                kgPerCbm = 500m,
+                chargeableQuantity = 2m,
+                containerType = "1 x 40 HC + 1 x 20 DV",
                 containerQuantity = 2,
+                containerSummary = "1 x 40 HC + 1 x 20 DV",
                 currency = "USD",
                 freeDays = 21,
                 transitTime = "28 días",
@@ -115,6 +127,11 @@ public static class RateEndpoints
                 subjectTo = "Espacio y equipo disponibles.",
                 excludes = "Impuestos y gastos no indicados.",
                 status = "Open"
+            },
+            containers = new[]
+            {
+                new { containerTypeId = Guid.Empty, containerType = "40 HC", containerTypeName = "40 HC", containerTypeCode = "40HC", quantity = 1, label = "1 x 40 HC" },
+                new { containerTypeId = Guid.Empty, containerType = "20 DV", containerTypeName = "20 DV", containerTypeCode = "20DV", quantity = 1, label = "1 x 20 DV" }
             },
             items = new[]
             {
@@ -133,7 +150,10 @@ public static class RateEndpoints
             "company.name", "company.legalName", "company.phone", "company.email", "company.website", "company.logoDataUri",
             "generated.date", "generated.time",
             "rate.rateCode", "rate.quoteNumber", "rate.idtraNumber", "rate.clientName", "rate.agent", "rate.carrier",
-            "rate.pol", "rate.poe", "rate.pod", "rate.route", "rate.containerType", "rate.containerQuantity", "rate.currency",
+            "rate.pol", "rate.poe", "rate.pod", "rate.route", "rate.rateType", "rate.shipmentMode", "rate.totalPackages", "rate.totalPallets",
+            "rate.totalWeightKg", "rate.totalVolumeCbm", "rate.kgPerCbm", "rate.chargeableQuantity",
+            "rate.containerType", "rate.containerQuantity", "rate.containerSummary", "rate.currency",
+            "containers[].containerType", "containers[].containerTypeName", "containers[].containerTypeCode", "containers[].quantity", "containers[].label",
             "rate.freeDays", "rate.transitTime", "rate.transitDays", "rate.validFrom", "rate.validTo", "rate.total", "rate.totalAmount",
             "rate.includes", "rate.subjectTo", "rate.excludes", "rate.status",
             "items[].description", "items[].quantity", "items[].unitSale", "items[].unitSaleAmount", "items[].lineTotal", "items[].lineTotalAmount", "items[].notes"
@@ -288,10 +308,14 @@ public static class RateEndpoints
     private static async Task<IResult> CreateRateAsync(
         CreateRateRequest request,
         ICommandDispatcher dispatcher,
+        ServiceDbContext db,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
     {
+        var termValidation = ValidateExclusiveRateTerms(request.Includes, request.SubjectTo, request.Excludes, httpContext);
+        if (termValidation is not null) return termValidation;
+
         if (
             request.SourceImportFclRateId.HasValue
             && !HasScope(httpContext.User, PricingConstants.Scopes.ImportFclRateCreateAsRate)
@@ -322,6 +346,20 @@ public static class RateEndpoints
                 );
             }
 
+            ChargeBasis? chargeBasis = null;
+            if (!string.IsNullOrWhiteSpace(detail.ChargeBasis))
+            {
+                if (!TryParseDefinedEnum(detail.ChargeBasis, out ChargeBasis parsedChargeBasis))
+                {
+                    return EndpointResults.BadRequest(
+                        "Pricing.InvalidChargeBasis",
+                        $"La base de cobro '{detail.ChargeBasis}' no es válida.",
+                        httpContext
+                    );
+                }
+                chargeBasis = parsedChargeBasis;
+            }
+
             details.Add(
                 new CreateRateDetailCommandItem(
                     detail.CostId,
@@ -333,9 +371,50 @@ public static class RateEndpoints
                     detail.CurrencyCode,
                     detail.CostAmount,
                     detail.SaleAmount,
-                    detail.Notes
+                    detail.Notes,
+                    detail.Quantity,
+                    chargeBasis
                 )
             );
+        }
+
+        if (!TryParseDefinedEnum(request.ShipmentMode, out ShipmentMode shipmentMode))
+        {
+            return EndpointResults.BadRequest(
+                "Pricing.InvalidShipmentMode",
+                $"La modalidad '{request.ShipmentMode}' no es válida.",
+                httpContext
+            );
+        }
+
+        if (!TryParseDefinedEnum(request.RateType, out RateType rateType))
+        {
+            return EndpointResults.BadRequest(
+                "Pricing.InvalidRateType",
+                $"El tipo de tarifa '{request.RateType}' no es válido.",
+                httpContext
+            );
+        }
+
+        var cargoLines = (request.CargoLines ?? Array.Empty<RateCargoLineRequest>())
+            .Select(x => new Dhole.Pricing.Application.Features.Rates.RateCargoLineCommandItem(
+                x.Description, x.Packages, x.Pallets, x.WeightKg, x.LengthCm, x.WidthCm, x.HeightCm))
+            .ToArray();
+
+        var containers = (request.Containers ?? Array.Empty<RateContainerRequest>())
+            .Select(x => new RateContainerCommandItem(
+                x.ContainerTypeId,
+                x.ContainerTypeName,
+                x.ContainerTypeCode,
+                x.Quantity
+            ))
+            .ToList();
+
+        if (containers.Count == 0)
+        {
+            var synthetic = SyntheticEquipment(shipmentMode, request.ContainerTypeId, request.ContainerTypeName, request.ContainerTypeCode);
+            containers.Add(new RateContainerCommandItem(
+                synthetic.Id, synthetic.Name, synthetic.Code, Math.Max(request.ContainerQuantity, 1)));
         }
 
         /*
@@ -349,6 +428,12 @@ public static class RateEndpoints
         var canApproveLowMargin = HasScope(
             httpContext.User,
             PricingConstants.Scopes.RateApproveLowMargin
+        );
+        var freeDays = await ResolveConfiguredFreeDaysAsync(
+            db,
+            request.CarrierId,
+            request.FreeDays,
+            cancellationToken
         );
 
         var result = await dispatcher.DispatchAsync(
@@ -378,7 +463,7 @@ public static class RateEndpoints
                 request.CurrencyId,
                 request.CurrencyName,
                 request.CurrencyCode,
-                request.FreeDays,
+                freeDays,
                 request.ValidFrom,
                 request.ValidTo,
                 request.ContainerQuantity,
@@ -388,8 +473,17 @@ public static class RateEndpoints
                 request.Includes,
                 request.SubjectTo,
                 request.Excludes,
-                request.TransitDays,
+                request.TransitTime,
                 details,
+                containers,
+                rateType,
+                shipmentMode,
+                request.KgPerCbm,
+                request.TotalPackages,
+                request.TotalPallets,
+                request.TotalWeightKg,
+                request.TotalVolumeCbm,
+                cargoLines,
                 canApproveImportedRate,
                 canApproveLowMargin,
                 httpContext.GetCurrentUserId()
@@ -404,10 +498,14 @@ public static class RateEndpoints
         Guid rateId,
         UpdateRateRequest request,
         ICommandDispatcher dispatcher,
+        ServiceDbContext db,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
     {
+        var termValidation = ValidateExclusiveRateTerms(request.Includes, request.SubjectTo, request.Excludes, httpContext);
+        if (termValidation is not null) return termValidation;
+
         var extraDetails = new List<UpsertRateExtraDetailCommandItem>();
 
         foreach (var detail in request.ExtraDetails)
@@ -430,6 +528,20 @@ public static class RateEndpoints
                 );
             }
 
+            ChargeBasis? chargeBasis = null;
+            if (!string.IsNullOrWhiteSpace(detail.ChargeBasis))
+            {
+                if (!TryParseDefinedEnum(detail.ChargeBasis, out ChargeBasis parsedChargeBasis))
+                {
+                    return EndpointResults.BadRequest(
+                        "Pricing.InvalidChargeBasis",
+                        $"La base de cobro '{detail.ChargeBasis}' no es válida.",
+                        httpContext
+                    );
+                }
+                chargeBasis = parsedChargeBasis;
+            }
+
             extraDetails.Add(
                 new UpsertRateExtraDetailCommandItem(
                     detail.Id,
@@ -442,14 +554,61 @@ public static class RateEndpoints
                     detail.CurrencyCode,
                     detail.CostAmount,
                     detail.SaleAmount,
-                    detail.Notes
+                    detail.Notes,
+                    detail.Quantity,
+                    chargeBasis
                 )
             );
+        }
+
+        if (!TryParseDefinedEnum(request.ShipmentMode, out ShipmentMode shipmentMode))
+        {
+            return EndpointResults.BadRequest(
+                "Pricing.InvalidShipmentMode",
+                $"La modalidad '{request.ShipmentMode}' no es válida.",
+                httpContext
+            );
+        }
+
+        if (!TryParseDefinedEnum(request.RateType, out RateType rateType))
+        {
+            return EndpointResults.BadRequest(
+                "Pricing.InvalidRateType",
+                $"El tipo de tarifa '{request.RateType}' no es válido.",
+                httpContext
+            );
+        }
+
+        var cargoLines = (request.CargoLines ?? Array.Empty<RateCargoLineRequest>())
+            .Select(x => new Dhole.Pricing.Application.Features.Rates.RateCargoLineCommandItem(
+                x.Description, x.Packages, x.Pallets, x.WeightKg, x.LengthCm, x.WidthCm, x.HeightCm))
+            .ToArray();
+
+        var containers = (request.Containers ?? Array.Empty<RateContainerRequest>())
+            .Select(x => new UpdateRateContainerCommandItem(
+                x.ContainerTypeId,
+                x.ContainerTypeName,
+                x.ContainerTypeCode,
+                x.Quantity
+            ))
+            .ToList();
+
+        if (containers.Count == 0)
+        {
+            var synthetic = SyntheticEquipment(shipmentMode, request.ContainerTypeId, request.ContainerTypeName, request.ContainerTypeCode);
+            containers.Add(new UpdateRateContainerCommandItem(
+                synthetic.Id, synthetic.Name, synthetic.Code, Math.Max(request.ContainerQuantity, 1)));
         }
 
         var canApproveLowMargin = HasScope(
             httpContext.User,
             PricingConstants.Scopes.RateApproveLowMargin
+        );
+        var freeDays = await ResolveConfiguredFreeDaysAsync(
+            db,
+            request.CarrierId,
+            request.FreeDays,
+            cancellationToken
         );
 
         var result = await dispatcher.DispatchAsync(
@@ -479,7 +638,7 @@ public static class RateEndpoints
                 request.CurrencyId,
                 request.CurrencyName,
                 request.CurrencyCode,
-                request.FreeDays,
+                freeDays,
                 request.ValidFrom,
                 request.ValidTo,
                 request.ContainerQuantity,
@@ -489,9 +648,18 @@ public static class RateEndpoints
                 request.Includes,
                 request.SubjectTo,
                 request.Excludes,
-                request.TransitDays,
+                request.TransitTime,
                 extraDetails,
                 request.RemovedExtraDetailIds,
+                containers,
+                rateType,
+                shipmentMode,
+                request.KgPerCbm,
+                request.TotalPackages,
+                request.TotalPallets,
+                request.TotalWeightKg,
+                request.TotalVolumeCbm,
+                cargoLines,
                 canApproveLowMargin,
                 httpContext.GetCurrentUserId()
             ),
@@ -619,9 +787,89 @@ public static class RateEndpoints
             .Any(scope => string.Equals(scope, requiredScope, StringComparison.OrdinalIgnoreCase));
     }
 
+    private static (Guid Id, string Name, string Code) SyntheticEquipment(
+        ShipmentMode mode, Guid requestedId, string requestedName, string requestedCode)
+    {
+        if (requestedId != Guid.Empty && !string.IsNullOrWhiteSpace(requestedName) && !string.IsNullOrWhiteSpace(requestedCode))
+            return (requestedId, requestedName, requestedCode);
+
+        return mode switch
+        {
+            ShipmentMode.Lcl => (Guid.Parse("00000000-0000-4000-8000-0000000000C1"), "Carga consolidada LCL", "LCL"),
+            ShipmentMode.Ftl => (Guid.Parse("00000000-0000-4000-8000-0000000000F1"), "Camión completo FTL", "FTL"),
+            ShipmentMode.Ltl => (Guid.Parse("00000000-0000-4000-8000-0000000000D1"), "Carga consolidada LTL", "LTL"),
+            _ => (requestedId, requestedName, requestedCode),
+        };
+    }
+
     private static bool TryParseDefinedEnum<TEnum>(string? value, out TEnum result)
         where TEnum : struct, Enum
     {
         return Enum.TryParse(value, ignoreCase: true, out result) && Enum.IsDefined(result);
     }
+    private static IResult? ValidateExclusiveRateTerms(
+        string? includes,
+        string? subjectTo,
+        string? excludes,
+        HttpContext httpContext
+    )
+    {
+        static IEnumerable<string> Lines(string? value) =>
+            (value ?? string.Empty)
+                .Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(x => x.ToUpperInvariant());
+
+        var categories = new[] { Lines(includes), Lines(subjectTo), Lines(excludes) };
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var category in categories)
+        {
+            foreach (var item in category)
+            {
+                if (!seen.Add(item))
+                {
+                    return EndpointResults.BadRequest(
+                        "Pricing.RateTermItemDuplicated",
+                        "Un ítem de tarifa solo puede pertenecer a una categoría de la cotización.",
+                        httpContext
+                    );
+                }
+            }
+        }
+        return null;
+    }
+
+    private static async Task<int> ResolveConfiguredFreeDaysAsync(
+        ServiceDbContext db,
+        Guid? carrierId,
+        int fallback,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!carrierId.HasValue || carrierId.Value == Guid.Empty) return Math.Max(0, fallback);
+
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose) await connection.OpenAsync(cancellationToken);
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT free_days
+                FROM pricing."CarrierFreeDayRules"
+                WHERE carrier_id = @carrier_id AND is_active = TRUE
+                LIMIT 1;
+                """;
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "@carrier_id";
+            parameter.Value = carrierId.Value;
+            command.Parameters.Add(parameter);
+            var value = await command.ExecuteScalarAsync(cancellationToken);
+            return value is null or DBNull ? Math.Max(0, fallback) : Math.Max(0, Convert.ToInt32(value));
+        }
+        finally
+        {
+            if (shouldClose) await connection.CloseAsync();
+        }
+    }
+
 }

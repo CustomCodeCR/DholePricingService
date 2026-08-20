@@ -19,7 +19,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
     )
     {
         return dbContext
-            .RateHeaders.Include(x => x.RateDetails)
+            .RateHeaders.Include(x => x.RateDetails).Include(x => x.RateContainers)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
     }
 
@@ -40,6 +41,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             dbContext
                 .RateHeaders.AsNoTracking()
                 .Include(x => x.RateDetails)
+                .Include(x => x.RateContainers)
+                .AsSplitQuery()
                 .Where(x => !x.IsDeleted),
             search: null,
             idtraNumber: null,
@@ -89,6 +92,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             dbContext
                 .RateHeaders.AsNoTracking()
                 .Include(x => x.RateDetails)
+                .Include(x => x.RateContainers)
+                .AsSplitQuery()
                 .Where(x => !x.IsDeleted),
             search: null,
             idtraNumber: null,
@@ -210,7 +215,16 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.Includes,
                 x.SubjectTo,
                 x.Excludes,
-                x.TransitDays,
+                x.TransitTime,
+                x.RateType.ToString(),
+                x.ShipmentMode.ToString(),
+                x.TotalPackages,
+                x.TotalPallets,
+                x.TotalWeightKg,
+                x.TotalVolumeCbm,
+                x.KgPerCbm,
+                x.ChargeableQuantity,
+                Array.Empty<RateCargoLineDto>(),
                 x.TotalCostAmount,
                 x.TotalSaleAmount,
                 x.TotalUtilityAmount,
@@ -220,6 +234,18 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.ClosedReason,
                 x.ClosedAtUtc,
                 x.ClosedBy,
+                x.RateContainers
+                    .OrderBy(c => c.ContainerTypeName)
+                    .ThenBy(c => c.ContainerTypeCode)
+                    .Select(c => new RateContainerDto(
+                        c.Id,
+                        c.RateHeaderId,
+                        c.ContainerTypeId,
+                        c.ContainerTypeName,
+                        c.ContainerTypeCode,
+                        c.Quantity
+                    ))
+                    .ToList(),
                 x.RateDetails.OrderBy(d => d.CostDetailType)
                     .ThenBy(d => d.Name)
                     .Select(d => new RateDetailDto(
@@ -229,6 +255,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                         d.Name,
                         d.CostDetailType.ToString(),
                         d.CostType.ToString(),
+                        d.ChargeBasis.ToString(),
                         d.CurrencyId,
                         d.CurrencyName,
                         d.CurrencyCode,
@@ -534,6 +561,9 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 || x.PodCode.ToLower().Contains(value)
                 || x.ContainerTypeName.ToLower().Contains(value)
                 || x.ContainerTypeCode.ToLower().Contains(value)
+                || x.RateContainers.Any(c =>
+                    c.ContainerTypeName.ToLower().Contains(value)
+                    || c.ContainerTypeCode.ToLower().Contains(value))
                 || x.CurrencyName.ToLower().Contains(value)
                 || x.CurrencyCode.ToLower().Contains(value)
                 || x.Status.ToString().ToLower().Contains(value)
@@ -584,7 +614,10 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
 
         if (containerTypeId.HasValue)
         {
-            query = query.Where(x => x.ContainerTypeId == containerTypeId.Value);
+            query = query.Where(x =>
+                x.ContainerTypeId == containerTypeId.Value
+                || x.RateContainers.Any(c => c.ContainerTypeId == containerTypeId.Value)
+            );
         }
 
         if (currencyId.HasValue)

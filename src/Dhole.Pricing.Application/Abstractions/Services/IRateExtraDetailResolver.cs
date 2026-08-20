@@ -14,7 +14,9 @@ public sealed record RateExtraDetailInput(
     string CurrencyCode,
     decimal CostAmount,
     decimal SaleAmount,
-    string? Notes
+    string? Notes,
+    decimal? Quantity,
+    ChargeBasis? ChargeBasis
 );
 
 public sealed record ResolvedRateExtraDetail(
@@ -29,7 +31,9 @@ public sealed record ResolvedRateExtraDetail(
     decimal CostAmount,
     decimal SaleAmount,
     string? Notes,
-    bool IsAccountant
+    bool IsAccountant,
+    decimal? Quantity,
+    ChargeBasis? ChargeBasis
 );
 
 public sealed record RateExtraDetailResolution(ResolvedRateExtraDetail? Detail, Error? Error)

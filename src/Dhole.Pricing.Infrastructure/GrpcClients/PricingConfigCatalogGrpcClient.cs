@@ -78,7 +78,8 @@ public sealed class PricingConfigCatalogGrpcClient(
             response.Item.CatalogGroupSlug,
             response.Item.Code,
             response.Item.Slug,
-            response.Item.Name
+            response.Item.Name,
+            response.Item.Value
         );
     }
 }

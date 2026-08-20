@@ -2,6 +2,7 @@ using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Commands;
 using Dhole.Pricing.Domain.Costs.Entities;
 using Dhole.Pricing.Domain.Costs.Enums;
+using Dhole.Pricing.Domain.Rates.Enums;
 
 namespace Dhole.Pricing.Application.Features.Costs.Create;
 
@@ -19,6 +20,15 @@ public sealed record CreateCostCommand(
     string? PortName,
     string? PortCode,
     CostPortRole? PortRole,
+    Guid? PolId,
+    string? PolName,
+    string? PolCode,
+    Guid? PoeId,
+    string? PoeName,
+    string? PoeCode,
+    Guid? PodId,
+    string? PodName,
+    string? PodCode,
     Guid CurrencyId,
     string CurrencyName,
     string CurrencyCode,
@@ -27,5 +37,10 @@ public sealed record CreateCostCommand(
     string? Notes,
     bool IsAccountant,
     IReadOnlyCollection<CostIncotermSelection> Incoterms,
+    ShipmentMode? ShipmentMode,
+    ChargeBasis ChargeBasis,
+    decimal? MinimumCostAmount,
+    decimal? MinimumSaleAmount,
+    decimal? KgPerCbm,
     Guid? CreatedBy
 ) : ICommand<Result<Guid>>;

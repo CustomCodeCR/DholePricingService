@@ -34,8 +34,17 @@ public sealed record CreateRateRequest(
     string? Includes = null,
     string? SubjectTo = null,
     string? Excludes = null,
-    int? TransitDays = null,
+    string? TransitTime = null,
     Guid? IncotermId = null,
     string? IncotermName = null,
-    string? IncotermCode = null
+    string? IncotermCode = null,
+    IReadOnlyCollection<RateContainerRequest>? Containers = null,
+    string RateType = "Tariff",
+    string ShipmentMode = "Fcl",
+    int TotalPackages = 0,
+    int TotalPallets = 0,
+    decimal TotalWeightKg = 0m,
+    decimal TotalVolumeCbm = 0m,
+    decimal KgPerCbm = 500m,
+    IReadOnlyCollection<RateCargoLineRequest>? CargoLines = null
 );

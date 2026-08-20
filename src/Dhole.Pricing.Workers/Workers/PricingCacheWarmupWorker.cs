@@ -160,10 +160,14 @@ internal sealed class PricingCacheWarmupWorker(
         CancellationToken cancellationToken
     )
     {
-        foreach (var group in costs.GroupBy(x => x.PortId))
+        var groups = costs
+            .SelectMany(cost => RoutePortIds(cost).Select(portId => new { cost, portId }))
+            .GroupBy(x => x.portId);
+
+        foreach (var group in groups)
         {
             await costCache.SetActiveCostsAsync(
-                group.ToList(),
+                group.Select(x => x.cost).DistinctBy(x => x.Id).ToList(),
                 portId: group.Key,
                 cancellationToken: cancellationToken
             );
@@ -177,14 +181,15 @@ internal sealed class PricingCacheWarmupWorker(
     {
         var groups = costs
             .Where(x => x.CarrierId.HasValue)
-            .GroupBy(x => new { CarrierId = x.CarrierId!.Value, x.PortId });
+            .SelectMany(cost => RoutePortIds(cost).Select(portId => new { cost, portId }))
+            .GroupBy(x => new { CarrierId = x.cost.CarrierId!.Value, x.portId });
 
         foreach (var group in groups)
         {
             await costCache.SetActiveCostsAsync(
-                group.ToList(),
+                group.Select(x => x.cost).DistinctBy(x => x.Id).ToList(),
                 carrierId: group.Key.CarrierId,
-                portId: group.Key.PortId,
+                portId: group.Key.portId,
                 cancellationToken: cancellationToken
             );
         }
@@ -197,17 +202,30 @@ internal sealed class PricingCacheWarmupWorker(
     {
         var groups = costs
             .Where(x => x.AgentId.HasValue)
-            .GroupBy(x => new { AgentId = x.AgentId!.Value, x.PortId });
+            .SelectMany(cost => RoutePortIds(cost).Select(portId => new { cost, portId }))
+            .GroupBy(x => new { AgentId = x.cost.AgentId!.Value, x.portId });
 
         foreach (var group in groups)
         {
             await costCache.SetActiveCostsAsync(
-                group.ToList(),
+                group.Select(x => x.cost).DistinctBy(x => x.Id).ToList(),
                 agentId: group.Key.AgentId,
-                portId: group.Key.PortId,
+                portId: group.Key.portId,
                 cancellationToken: cancellationToken
             );
         }
+    }
+
+    private static IEnumerable<Guid> RoutePortIds(CostDto cost)
+    {
+        if (cost.PortId.HasValue)
+            yield return cost.PortId.Value;
+        if (cost.PolId.HasValue)
+            yield return cost.PolId.Value;
+        if (cost.PoeId.HasValue)
+            yield return cost.PoeId.Value;
+        if (cost.PodId.HasValue)
+            yield return cost.PodId.Value;
     }
 
     private async Task WarmImportRatesAsync(CancellationToken cancellationToken)
@@ -276,6 +294,7 @@ internal sealed class PricingCacheWarmupWorker(
         var rateHeaders = await dbContext
             .RateHeaders.AsNoTracking()
             .Include(x => x.RateDetails)
+            .Include(x => x.RateContainers)
             .AsSplitQuery()
             .Where(x => !x.IsDeleted)
             .OrderBy(x => x.ValidFrom)
@@ -439,7 +458,21 @@ internal sealed class PricingCacheWarmupWorker(
             cost.Incoterms
                 .OrderBy(x => x.IncotermName)
                 .Select(x => new CostIncotermDto(x.IncotermId, x.IncotermName, x.IncotermCode))
-                .ToArray()
+                .ToArray(),
+            cost.PolId,
+            cost.PolName,
+            cost.PolCode,
+            cost.PoeId,
+            cost.PoeName,
+            cost.PoeCode,
+            cost.PodId,
+            cost.PodName,
+            cost.PodCode,
+            cost.ShipmentMode?.ToString(),
+            cost.ChargeBasis.ToString(),
+            cost.MinimumCostAmount,
+            cost.MinimumSaleAmount,
+            cost.KgPerCbm
         );
     }
 
@@ -471,7 +504,21 @@ internal sealed class PricingCacheWarmupWorker(
             cost.Incoterms
                 .OrderBy(x => x.IncotermName)
                 .Select(x => new CostIncotermDto(x.IncotermId, x.IncotermName, x.IncotermCode))
-                .ToArray()
+                .ToArray(),
+            cost.PolId,
+            cost.PolName,
+            cost.PolCode,
+            cost.PoeId,
+            cost.PoeName,
+            cost.PoeCode,
+            cost.PodId,
+            cost.PodName,
+            cost.PodCode,
+            cost.ShipmentMode?.ToString(),
+            cost.ChargeBasis.ToString(),
+            cost.MinimumCostAmount,
+            cost.MinimumSaleAmount,
+            cost.KgPerCbm
         );
     }
 
@@ -579,7 +626,16 @@ internal sealed class PricingCacheWarmupWorker(
             rate.Includes,
             rate.SubjectTo,
             rate.Excludes,
-            rate.TransitDays,
+            rate.TransitTime,
+            rate.RateType.ToString(),
+            rate.ShipmentMode.ToString(),
+            rate.TotalPackages,
+            rate.TotalPallets,
+            rate.TotalWeightKg,
+            rate.TotalVolumeCbm,
+            rate.KgPerCbm,
+            rate.ChargeableQuantity,
+            Array.Empty<RateCargoLineDto>(),
             rate.TotalCostAmount,
             rate.TotalSaleAmount,
             rate.TotalUtilityAmount,
@@ -589,6 +645,30 @@ internal sealed class PricingCacheWarmupWorker(
             rate.ClosedReason,
             rate.ClosedAtUtc,
             rate.ClosedBy,
+            (rate.RateContainers.Count > 0
+                ? rate.RateContainers
+                    .OrderBy(x => x.ContainerTypeName)
+                    .ThenBy(x => x.ContainerTypeCode)
+                    .Select(x => new RateContainerDto(
+                        x.Id,
+                        x.RateHeaderId,
+                        x.ContainerTypeId,
+                        x.ContainerTypeName,
+                        x.ContainerTypeCode,
+                        x.Quantity
+                    ))
+                : new[]
+                {
+                    new RateContainerDto(
+                        Guid.Empty,
+                        rate.Id,
+                        rate.ContainerTypeId,
+                        rate.ContainerTypeName,
+                        rate.ContainerTypeCode,
+                        rate.ContainerQuantity
+                    )
+                })
+                .ToList(),
             rate.RateDetails.OrderBy(x => x.CostType)
                 .ThenBy(x => x.CostDetailType)
                 .ThenBy(x => x.Name)
@@ -606,6 +686,7 @@ internal sealed class PricingCacheWarmupWorker(
             detail.Name,
             detail.CostDetailType.ToString(),
             detail.CostType.ToString(),
+            detail.ChargeBasis.ToString(),
             detail.CurrencyId,
             detail.CurrencyName,
             detail.CurrencyCode,

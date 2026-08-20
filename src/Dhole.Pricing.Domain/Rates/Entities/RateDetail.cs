@@ -14,13 +14,14 @@ public sealed class RateDetail : Entity<Guid>
         string name,
         CostDetailType costDetailType,
         CostType costType,
+        ChargeBasis chargeBasis,
         Guid currencyId,
         string currencyName,
         string currencyCode,
         decimal costAmount,
         decimal saleAmount,
         string? notes,
-        int quantity
+        decimal quantity
     )
         : base(id)
     {
@@ -29,39 +30,31 @@ public sealed class RateDetail : Entity<Guid>
         Name = name;
         CostDetailType = costDetailType;
         CostType = costType;
+        ChargeBasis = chargeBasis;
         CurrencyId = currencyId;
         CurrencyName = currencyName;
         CurrencyCode = currencyCode;
         CostAmount = costAmount;
         SaleAmount = saleAmount;
-        UtilityAmount = (saleAmount - costAmount) * quantity;
-
         Quantity = quantity;
-
+        UtilityAmount = (saleAmount - costAmount) * quantity;
         Notes = notes;
     }
 
     public Guid RateHeaderId { get; private set; }
-
     public Guid? CostId { get; private set; }
-
     public string Name { get; private set; } = string.Empty;
-
     public CostDetailType CostDetailType { get; private set; }
-
     public CostType CostType { get; private set; }
-
+    public ChargeBasis ChargeBasis { get; private set; }
     public Guid CurrencyId { get; private set; }
     public string CurrencyName { get; private set; } = string.Empty;
     public string CurrencyCode { get; private set; } = string.Empty;
-
     public decimal CostAmount { get; private set; }
     public decimal SaleAmount { get; private set; }
     public decimal UtilityAmount { get; private set; }
-
     public string? Notes { get; private set; }
-
-    public int Quantity { get; private set; }
+    public decimal Quantity { get; private set; }
 
     internal static RateDetail Create(
         Guid rateHeaderId,
@@ -69,38 +62,26 @@ public sealed class RateDetail : Entity<Guid>
         string name,
         CostDetailType costDetailType,
         CostType costType,
+        ChargeBasis chargeBasis,
         Guid currencyId,
         string currencyName,
         string currencyCode,
         decimal costAmount,
         decimal saleAmount,
         string? notes,
-        int quantity
+        decimal quantity
     )
     {
         return new RateDetail(
-            Guid.NewGuid(),
-            rateHeaderId,
-            costId,
-            name,
-            costDetailType,
-            costType,
-            currencyId,
-            currencyName,
-            currencyCode,
-            costAmount,
-            saleAmount,
-            notes,
-            quantity
+            Guid.NewGuid(), rateHeaderId, costId, name, costDetailType, costType, chargeBasis,
+            currencyId, currencyName, currencyCode, costAmount, saleAmount, notes, quantity
         );
     }
 
-    internal void SetQuantity(int quantity)
+    internal void SetQuantity(decimal quantity)
     {
-        if (quantity <= 0)
-        {
+        if (quantity <= 0m)
             throw new InvalidOperationException("La cantidad del detalle debe ser mayor que cero.");
-        }
 
         Quantity = quantity;
         UtilityAmount = (SaleAmount - CostAmount) * quantity;
@@ -111,28 +92,28 @@ public sealed class RateDetail : Entity<Guid>
         string name,
         CostDetailType costDetailType,
         CostType costType,
+        ChargeBasis chargeBasis,
         Guid currencyId,
         string currencyName,
         string currencyCode,
         decimal costAmount,
         decimal saleAmount,
         string? notes,
-        int quantity
+        decimal quantity
     )
     {
         CostId = costId;
         Name = name;
         CostDetailType = costDetailType;
         CostType = costType;
+        ChargeBasis = chargeBasis;
         CurrencyId = currencyId;
         CurrencyName = currencyName;
         CurrencyCode = currencyCode;
         CostAmount = costAmount;
         SaleAmount = saleAmount;
-        UtilityAmount = (saleAmount - costAmount) * quantity;
-
-        Notes = notes;
-
         Quantity = quantity;
+        UtilityAmount = (saleAmount - costAmount) * quantity;
+        Notes = notes;
     }
 }

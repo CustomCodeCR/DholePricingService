@@ -49,6 +49,18 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
             .HasMaxLength(50)
             .IsRequired(false);
 
+        builder.Property(x => x.PolId).IsRequired(false);
+        builder.Property(x => x.PolName).HasMaxLength(250).IsRequired(false);
+        builder.Property(x => x.PolCode).HasMaxLength(80).IsRequired(false);
+
+        builder.Property(x => x.PoeId).IsRequired(false);
+        builder.Property(x => x.PoeName).HasMaxLength(250).IsRequired(false);
+        builder.Property(x => x.PoeCode).HasMaxLength(80).IsRequired(false);
+
+        builder.Property(x => x.PodId).IsRequired(false);
+        builder.Property(x => x.PodName).HasMaxLength(250).IsRequired(false);
+        builder.Property(x => x.PodCode).HasMaxLength(80).IsRequired(false);
+
         builder.Property(x => x.CurrencyId).IsRequired();
 
         builder.Property(x => x.CurrencyName).HasMaxLength(120).IsRequired();
@@ -60,6 +72,12 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
         builder.Property(x => x.SaleAmount).HasPrecision(18, 2).IsRequired();
 
         builder.Property(x => x.UtilityAmount).HasPrecision(18, 2).IsRequired();
+
+        builder.Property(x => x.ShipmentMode).HasConversion<string>().HasMaxLength(20).IsRequired(false);
+        builder.Property(x => x.ChargeBasis).HasConversion<string>().HasMaxLength(40).IsRequired().HasDefaultValue(Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerShipment);
+        builder.Property(x => x.MinimumCostAmount).HasPrecision(18, 2).IsRequired(false);
+        builder.Property(x => x.MinimumSaleAmount).HasPrecision(18, 2).IsRequired(false);
+        builder.Property(x => x.KgPerCbm).HasPrecision(18, 4).IsRequired(false);
 
         builder.Property(x => x.Notes).HasColumnType("text").IsRequired(false);
 
@@ -82,7 +100,12 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
         builder.HasIndex(x => x.AgentId);
         builder.HasIndex(x => x.PortId);
         builder.HasIndex(x => x.PortRole);
+        builder.HasIndex(x => x.PolId);
+        builder.HasIndex(x => x.PoeId);
+        builder.HasIndex(x => x.PodId);
         builder.HasIndex(x => x.CurrencyId);
+        builder.HasIndex(x => x.ShipmentMode);
+        builder.HasIndex(x => x.ChargeBasis);
         builder.HasIndex(x => x.IsAccountant);
         builder.HasIndex(x => x.IsActive);
 
@@ -95,6 +118,11 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
                 x.AgentId,
                 x.PortId,
                 x.PortRole,
+                x.PolId,
+                x.PoeId,
+                x.PodId,
+                x.ShipmentMode,
+                x.ChargeBasis,
                 x.IsAccountant,
                 x.Name,
                 x.CurrencyId,

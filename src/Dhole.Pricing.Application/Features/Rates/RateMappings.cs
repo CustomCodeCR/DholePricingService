@@ -46,7 +46,16 @@ internal static class RateMappings
             rate.Includes,
             rate.SubjectTo,
             rate.Excludes,
-            rate.TransitDays,
+            rate.TransitTime,
+            rate.RateType.ToString(),
+            rate.ShipmentMode.ToString(),
+            rate.TotalPackages,
+            rate.TotalPallets,
+            rate.TotalWeightKg,
+            rate.TotalVolumeCbm,
+            rate.KgPerCbm,
+            rate.ChargeableQuantity,
+            RateCargoProfileFactory.Deserialize(rate.CargoLinesJson),
             rate.TotalCostAmount,
             rate.TotalSaleAmount,
             rate.TotalUtilityAmount,
@@ -56,6 +65,30 @@ internal static class RateMappings
             rate.ClosedReason,
             rate.ClosedAtUtc,
             rate.ClosedBy,
+            (rate.RateContainers.Count > 0
+                ? rate.RateContainers
+                    .OrderBy(x => x.ContainerTypeName)
+                    .ThenBy(x => x.ContainerTypeCode)
+                    .Select(x => new RateContainerDto(
+                        x.Id,
+                        x.RateHeaderId,
+                        x.ContainerTypeId,
+                        x.ContainerTypeName,
+                        x.ContainerTypeCode,
+                        x.Quantity
+                    ))
+                : new[]
+                {
+                    new RateContainerDto(
+                        Guid.Empty,
+                        rate.Id,
+                        rate.ContainerTypeId,
+                        rate.ContainerTypeName,
+                        rate.ContainerTypeCode,
+                        rate.ContainerQuantity
+                    )
+                })
+                .ToList(),
             rate.RateDetails.OrderBy(x => x.CostDetailType)
                 .ThenBy(x => x.Name)
                 .Select(x => new RateDetailDto(
@@ -65,6 +98,7 @@ internal static class RateMappings
                     x.Name,
                     x.CostDetailType.ToString(),
                     x.CostType.ToString(),
+                    x.ChargeBasis.ToString(),
                     x.CurrencyId,
                     x.CurrencyName,
                     x.CurrencyCode,

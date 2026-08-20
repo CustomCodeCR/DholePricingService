@@ -9,6 +9,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 {
     private const decimal MinimumMarginPercentage = 12m;
     private readonly List<RateDetail> _rateDetails = [];
+    private readonly List<RateContainerAllocation> _rateContainers = [];
 
     private RateHeader() { }
 
@@ -50,7 +51,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         string? includes,
         string? subjectTo,
         string? excludes,
-        int? transitDays,
+        string? transitTime,
+        RateType rateType,
         Guid? createdBy
     )
         : base(id)
@@ -83,8 +85,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             freeDays,
             validFrom,
             validTo,
-            containerQuantity,
-            transitDays
+            containerQuantity
         );
 
         ValidateRateTerms(includes, subjectTo, excludes);
@@ -118,22 +119,31 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         ValidFrom = validFrom;
         ValidTo = validTo;
         ContainerQuantity = containerQuantity;
+        _rateContainers.Add(
+            RateContainerAllocation.Create(
+                Id,
+                containerTypeId,
+                containerTypeName,
+                containerTypeCode,
+                containerQuantity
+            )
+        );
         ClientName = Normalize(clientName);
         IdtraNumber = Normalize(idtraNumber);
         QuoNumber = Normalize(quoNumber);
         Includes = Normalize(includes);
         SubjectTo = Normalize(subjectTo);
         Excludes = Normalize(excludes);
-        TransitDays = transitDays;
+        TransitTime = Normalize(transitTime);
+        RateType = rateType;
         RateCode = ValidateRateCode(rateCode);
         RateName = CreateRateName(
             RateCode,
-            ContainerQuantity,
-            ContainerTypeName,
+            BuildContainerDescription(),
             PolName,
             PoeName,
             PodName,
-            IncotermCode ?? IncotermName,
+            IncotermName ?? IncotermCode,
             ClientName
         );
 
@@ -184,13 +194,23 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string RateName { get; private set; } = string.Empty;
     public int ContainerQuantity { get; private set; }
 
+    public ShipmentMode ShipmentMode { get; private set; } = ShipmentMode.Fcl;
+    public int TotalPackages { get; private set; }
+    public int TotalPallets { get; private set; }
+    public decimal TotalWeightKg { get; private set; }
+    public decimal TotalVolumeCbm { get; private set; }
+    public decimal KgPerCbm { get; private set; } = 500m;
+    public decimal ChargeableQuantity { get; private set; } = 1m;
+    public string? CargoLinesJson { get; private set; }
+
     public string? ClientName { get; private set; }
     public string? IdtraNumber { get; private set; }
     public string? QuoNumber { get; private set; }
     public string? Includes { get; private set; }
     public string? SubjectTo { get; private set; }
     public string? Excludes { get; private set; }
-    public int? TransitDays { get; private set; }
+    public string? TransitTime { get; private set; }
+    public RateType RateType { get; private set; } = RateType.Tariff;
 
     public decimal TotalCostAmount { get; private set; }
     public decimal TotalSaleAmount { get; private set; }
@@ -203,6 +223,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public Guid? ClosedBy { get; private set; }
 
     public IReadOnlyCollection<RateDetail> RateDetails => _rateDetails.AsReadOnly();
+    public IReadOnlyCollection<RateContainerAllocation> RateContainers => _rateContainers.AsReadOnly();
 
     public static RateHeader Create(
         string rateCode,
@@ -241,7 +262,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         string? includes,
         string? subjectTo,
         string? excludes,
-        int? transitDays,
+        string? transitTime,
+        RateType rateType,
         Guid? createdBy
     )
     {
@@ -283,7 +305,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             includes,
             subjectTo,
             excludes,
-            transitDays,
+            transitTime,
+            rateType,
             createdBy
         );
 
@@ -326,7 +349,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         string? includes,
         string? subjectTo,
         string? excludes,
-        int? transitDays,
+        string? transitTime,
+        RateType rateType,
         Guid? updatedBy
     )
     {
@@ -358,8 +382,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             freeDays,
             validFrom,
             validTo,
-            containerQuantity,
-            transitDays
+            containerQuantity
         );
 
         ValidateRateTerms(includes, subjectTo, excludes);
@@ -399,21 +422,219 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         Includes = Normalize(includes);
         SubjectTo = Normalize(subjectTo);
         Excludes = Normalize(excludes);
-        TransitDays = transitDays;
+        TransitTime = Normalize(transitTime);
+        RateType = rateType;
 
         RateName = CreateRateName(
             RateCode,
-            ContainerQuantity,
-            ContainerTypeName,
+            BuildContainerDescription(),
             PolName,
             PoeName,
             PodName,
-            IncotermCode ?? IncotermName,
+            IncotermName ?? IncotermCode,
             ClientName
         );
 
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
+    }
+
+    public void ReplaceContainerAllocations(
+        IReadOnlyCollection<RateContainerAllocationSpec> containers,
+        Guid? updatedBy
+    )
+    {
+        ReplaceContainerAllocationsInternal(containers, refreshRateName: true);
+        SynchronizeFreightQuantities();
+    }
+
+    private void ReplaceContainerAllocationsInternal(
+        IReadOnlyCollection<RateContainerAllocationSpec> containers,
+        bool refreshRateName
+    )
+    {
+        if (containers is null || containers.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "La tarifa debe contener al menos un tipo de contenedor."
+            );
+        }
+
+        var normalized = containers
+            .Select(x => new RateContainerAllocationSpec(
+                x.ContainerTypeId,
+                x.ContainerTypeName?.Trim() ?? string.Empty,
+                x.ContainerTypeCode?.Trim() ?? string.Empty,
+                x.Quantity
+            ))
+            .ToArray();
+
+        if (normalized.Any(x =>
+            x.ContainerTypeId == Guid.Empty
+            || string.IsNullOrWhiteSpace(x.ContainerTypeName)
+            || string.IsNullOrWhiteSpace(x.ContainerTypeCode)
+            || x.Quantity <= 0))
+        {
+            throw new InvalidOperationException(
+                "Cada tipo de contenedor debe tener catálogo válido y cantidad mayor que cero."
+            );
+        }
+
+        if (normalized.Select(x => x.ContainerTypeId).Distinct().Count() != normalized.Length)
+        {
+            throw new InvalidOperationException(
+                "Un tipo de contenedor no puede repetirse dentro de la misma tarifa."
+            );
+        }
+
+        var totalQuantity = normalized.Sum(x => x.Quantity);
+        if (totalQuantity <= 0)
+        {
+            throw new InvalidOperationException(
+                "La cantidad total de contenedores debe ser mayor que cero."
+            );
+        }
+
+        var requestedIds = normalized.Select(x => x.ContainerTypeId).ToHashSet();
+        _rateContainers.RemoveAll(x => !requestedIds.Contains(x.ContainerTypeId));
+
+        foreach (var item in normalized)
+        {
+            var existing = _rateContainers.FirstOrDefault(x =>
+                x.ContainerTypeId == item.ContainerTypeId
+            );
+            if (existing is not null)
+            {
+                existing.Update(item.ContainerTypeName, item.ContainerTypeCode, item.Quantity);
+                continue;
+            }
+
+            _rateContainers.Add(
+                RateContainerAllocation.Create(
+                    Id,
+                    item.ContainerTypeId,
+                    item.ContainerTypeName,
+                    item.ContainerTypeCode,
+                    item.Quantity
+                )
+            );
+        }
+
+        var primary = normalized[0];
+        ContainerTypeId = primary.ContainerTypeId;
+        ContainerTypeName = primary.ContainerTypeName;
+        ContainerTypeCode = primary.ContainerTypeCode;
+        ContainerQuantity = totalQuantity;
+        if (ShipmentMode is ShipmentMode.Fcl or ShipmentMode.Ftl)
+            ChargeableQuantity = Math.Max(ContainerQuantity, 1);
+
+        if (refreshRateName)
+        {
+            RateName = CreateRateName(
+                RateCode,
+                BuildShipmentDescription(),
+                PolName,
+                PoeName,
+                PodName,
+                IncotermName ?? IncotermCode,
+                ClientName
+            );
+        }
+    }
+
+    public void ConfigureShipment(
+        ShipmentMode shipmentMode,
+        int totalPackages,
+        int totalPallets,
+        decimal totalWeightKg,
+        decimal totalVolumeCbm,
+        decimal kgPerCbm,
+        string? cargoLinesJson,
+        Guid? updatedBy
+    )
+    {
+        if (totalPackages < 0 || totalPallets < 0 || totalWeightKg < 0m || totalVolumeCbm < 0m)
+            throw new InvalidOperationException("Las métricas de carga no pueden ser negativas.");
+
+        if (shipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl && kgPerCbm <= 0m)
+            throw new InvalidOperationException("El factor KG/CBM debe ser mayor que cero para LCL/LTL.");
+
+        ShipmentMode = shipmentMode;
+        TotalPackages = totalPackages;
+        TotalPallets = totalPallets;
+        TotalWeightKg = totalWeightKg;
+        TotalVolumeCbm = totalVolumeCbm;
+        KgPerCbm = kgPerCbm > 0m ? kgPerCbm : 500m;
+        CargoLinesJson = Normalize(cargoLinesJson);
+        ChargeableQuantity = shipmentMode switch
+        {
+            ShipmentMode.Lcl or ShipmentMode.Ltl => Math.Max(TotalVolumeCbm, TotalWeightKg / KgPerCbm),
+            ShipmentMode.Ftl or ShipmentMode.Fcl => Math.Max(ContainerQuantity, 1),
+            _ => 1m,
+        };
+
+        if (shipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl && ChargeableQuantity <= 0m)
+            throw new InvalidOperationException("La carga LCL/LTL debe tener peso o volumen cobrable.");
+
+        RateName = CreateRateName(
+            RateCode,
+            BuildShipmentDescription(),
+            PolName,
+            PoeName,
+            PodName,
+            IncotermName ?? IncotermCode,
+            ClientName
+        );
+
+        SynchronizeFreightQuantities();
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
+    public decimal ResolveChargeQuantity(
+        ChargeBasis chargeBasis,
+        decimal requestedQuantity = 0m,
+        decimal? kgPerCbmOverride = null
+    )
+    {
+        var explicitQuantity = requestedQuantity > 0m ? requestedQuantity : 1m;
+        var chargeableCbm = kgPerCbmOverride is > 0m
+            ? Math.Max(TotalVolumeCbm, TotalWeightKg / kgPerCbmOverride.Value)
+            : ChargeableQuantity;
+
+        return chargeBasis switch
+        {
+            // Per-container/per-truck details may represent only one equipment type (for example
+            // a 40 HC freight row inside a mixed FCL rate). When a quantity is supplied, preserve it.
+            // Callers that need the whole shipment can omit requestedQuantity.
+            ChargeBasis.PerContainer => requestedQuantity > 0m ? requestedQuantity : Math.Max(ContainerQuantity, 1),
+            ChargeBasis.PerTruck => requestedQuantity > 0m ? requestedQuantity : Math.Max(ContainerQuantity, 1),
+            ChargeBasis.PerCbm => Math.Max(TotalVolumeCbm, 0.001m),
+            ChargeBasis.PerChargeableCbm => Math.Max(chargeableCbm, 0.001m),
+            ChargeBasis.PerKg => Math.Max(TotalWeightKg, 0.001m),
+            ChargeBasis.Per100Kg => Math.Max(TotalWeightKg / 100m, 0.001m),
+            ChargeBasis.PerTon => Math.Max(TotalWeightKg / 1000m, 0.001m),
+            ChargeBasis.PerPallet => Math.Max(TotalPallets, 1),
+            ChargeBasis.PerPackage => Math.Max(TotalPackages, 1),
+            ChargeBasis.PerDocument => explicitQuantity,
+            _ => 1m,
+        };
+    }
+
+    private ChargeBasis InferChargeBasis(CostDetailType costDetailType)
+    {
+        if (costDetailType == CostDetailType.Documentation)
+            return ChargeBasis.PerDocument;
+
+        if (costDetailType is not (CostDetailType.Freight or CostDetailType.InlandTransport))
+            return ChargeBasis.PerShipment;
+
+        return ShipmentMode switch
+        {
+            ShipmentMode.Fcl => ChargeBasis.PerContainer,
+            ShipmentMode.Ftl => ChargeBasis.PerTruck,
+            ShipmentMode.Lcl or ShipmentMode.Ltl => ChargeBasis.PerChargeableCbm,
+            _ => ChargeBasis.PerShipment,
+        };
     }
 
     public RateDetail AddRateDetail(
@@ -439,7 +660,10 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
 
-        var effectiveQuantity = ResolveDetailQuantity(costDetailType, quantity);
+        var chargeBasis = InferChargeBasis(costDetailType);
+        var effectiveQuantity = costDetailType == CostDetailType.InlandTransport
+            ? ResolveChargeQuantity(chargeBasis)
+            : ResolveChargeQuantity(chargeBasis, quantity);
 
         var detail = RateDetail.Create(
             Id,
@@ -447,6 +671,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             name.Trim(),
             costDetailType,
             costType,
+            chargeBasis,
             currencyId,
             currencyName.Trim(),
             currencyCode.Trim(),
@@ -456,6 +681,38 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             effectiveQuantity
         );
 
+        _rateDetails.Add(detail);
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+        return detail;
+    }
+
+    public RateDetail AddRateDetail(
+        Guid rateHeaderId,
+        Guid? costId,
+        string name,
+        CostDetailType costDetailType,
+        CostType costType,
+        ChargeBasis chargeBasis,
+        Guid currencyId,
+        string currencyName,
+        string currencyCode,
+        decimal costAmount,
+        decimal saleAmount,
+        string? notes,
+        decimal quantity,
+        Guid? updatedBy
+    )
+    {
+        if (rateHeaderId != Id)
+            throw new InvalidOperationException("El detalle no corresponde a la tarifa.");
+
+        ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
+        var effectiveQuantity = ResolveChargeQuantity(chargeBasis, quantity);
+        var detail = RateDetail.Create(
+            Id, costId, name.Trim(), costDetailType, costType, chargeBasis, currencyId,
+            currencyName.Trim(), currencyCode.Trim(), costAmount, saleAmount, Normalize(notes),
+            effectiveQuantity
+        );
         _rateDetails.Add(detail);
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
         return detail;
@@ -486,13 +743,17 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
 
-        var effectiveQuantity = ResolveDetailQuantity(costDetailType, quantity);
+        var chargeBasis = InferChargeBasis(costDetailType);
+        var effectiveQuantity = costDetailType == CostDetailType.InlandTransport
+            ? ResolveChargeQuantity(chargeBasis)
+            : ResolveChargeQuantity(chargeBasis, quantity);
 
         detail.Update(
             costId,
             name.Trim(),
             costDetailType,
             costType,
+            chargeBasis,
             currencyId,
             currencyName.Trim(),
             currencyCode.Trim(),
@@ -502,6 +763,32 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             effectiveQuantity
         );
 
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
+    public void UpdateRateDetail(
+        Guid rateDetailId,
+        Guid? costId,
+        string name,
+        CostDetailType costDetailType,
+        CostType costType,
+        ChargeBasis chargeBasis,
+        Guid currencyId,
+        string currencyName,
+        string currencyCode,
+        decimal costAmount,
+        decimal saleAmount,
+        string? notes,
+        decimal quantity,
+        Guid? updatedBy
+    )
+    {
+        var detail = _rateDetails.FirstOrDefault(x => x.Id == rateDetailId)
+            ?? throw new InvalidOperationException("El detalle de la tarifa no existe.");
+        ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
+        var effectiveQuantity = ResolveChargeQuantity(chargeBasis, quantity);
+        detail.Update(costId, name.Trim(), costDetailType, costType, chargeBasis, currencyId,
+            currencyName.Trim(), currencyCode.Trim(), costAmount, saleAmount, Normalize(notes), effectiveQuantity);
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
     }
 
@@ -723,8 +1010,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
     private static string CreateRateName(
         string rateCode,
-        int containerQuantity,
-        string containerTypeName,
+        string containerDescription,
         string polName,
         string poeName,
         string podName,
@@ -754,8 +1040,35 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         var incotermLabel = string.IsNullOrWhiteSpace(incoterm) ? "FOB" : incoterm.Trim();
         var baseName =
-            $"{rateCode} - Tarifa {containerQuantity} x {containerTypeName} - {incotermLabel} - {polName} To {podName} Via {via}";
+            $"{rateCode} - Tarifa {containerDescription} - {incotermLabel} - {polName} To {podName} Via {via}";
         return string.IsNullOrWhiteSpace(clientName) ? baseName : $"{baseName} - {clientName}";
+    }
+
+    private string BuildShipmentDescription()
+    {
+        return ShipmentMode switch
+        {
+            ShipmentMode.Lcl => $"LCL · {ChargeableQuantity:0.###} CBM cobrable",
+            ShipmentMode.Ltl => $"LTL · {ChargeableQuantity:0.###} CBM cobrable",
+            ShipmentMode.Ftl => $"{Math.Max(ContainerQuantity, 1)} x FTL",
+            _ => BuildContainerDescription(),
+        };
+    }
+
+    private string BuildContainerDescription()
+    {
+        if (_rateContainers.Count == 0)
+        {
+            return $"{ContainerQuantity} x {ContainerTypeName}";
+        }
+
+        return string.Join(
+            " + ",
+            _rateContainers
+                .OrderBy(x => x.ContainerTypeName)
+                .ThenBy(x => x.ContainerTypeCode)
+                .Select(x => $"{x.Quantity} x {x.ContainerTypeName}")
+        );
     }
 
     private static void ValidateHeader(
@@ -786,8 +1099,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         int freeDays,
         DateTime validFrom,
         DateTime validTo,
-        int containerQuantity,
-        int? transitDays
+        int containerQuantity
     )
     {
         if (
@@ -872,11 +1184,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             throw new InvalidOperationException("La moneda es obligatoria.");
         }
 
-        if (freeDays < 0 || transitDays is < 0)
+        if (freeDays < 0)
         {
-            throw new InvalidOperationException(
-                "Los días libres y el tiempo de tránsito no pueden ser negativos."
-            );
+            throw new InvalidOperationException("Los días libres no pueden ser negativos.");
         }
 
         if (containerQuantity <= 0)
@@ -896,24 +1206,33 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
     private void SynchronizeFreightQuantities()
     {
-        foreach (var detail in _rateDetails.Where(x => IsFreightPerContainer(x.CostDetailType)))
+        foreach (var detail in _rateDetails)
         {
-            detail.SetQuantity(ContainerQuantity);
+            var isMetricBased = detail.ChargeBasis is
+                ChargeBasis.PerCbm or
+                ChargeBasis.PerChargeableCbm or
+                ChargeBasis.PerKg or
+                ChargeBasis.Per100Kg or
+                ChargeBasis.PerTon or
+                ChargeBasis.PerPallet or
+                ChargeBasis.PerPackage;
+
+            if (isMetricBased)
+            {
+                detail.SetQuantity(ResolveChargeQuantity(detail.ChargeBasis));
+                continue;
+            }
+
+            // Keep explicit ocean-freight quantities per equipment type. Inland transport and
+            // automatic fixed equipment costs still follow the shipment's equipment quantity.
+            var followsAllEquipment =
+                detail.CostDetailType == CostDetailType.InlandTransport
+                || (detail.CostId.HasValue && detail.CostType == CostType.Fixed);
+
+            if (followsAllEquipment && detail.ChargeBasis is ChargeBasis.PerContainer or ChargeBasis.PerTruck)
+                detail.SetQuantity(ResolveChargeQuantity(detail.ChargeBasis));
         }
     }
-
-    private int ResolveDetailQuantity(CostDetailType costDetailType, int requestedQuantity)
-    {
-        if (requestedQuantity <= 0)
-        {
-            throw new InvalidOperationException("La cantidad del detalle debe ser mayor que cero.");
-        }
-
-        return IsFreightPerContainer(costDetailType) ? ContainerQuantity : requestedQuantity;
-    }
-
-    private static bool IsFreightPerContainer(CostDetailType costDetailType) =>
-        costDetailType is CostDetailType.Freight or CostDetailType.InlandTransport;
 
     private static void ValidateDetail(
         string name,

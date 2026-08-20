@@ -1,6 +1,7 @@
 using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Commands;
 using Dhole.Pricing.Domain.Costs.Enums;
+using Dhole.Pricing.Domain.Rates.Enums;
 
 namespace Dhole.Pricing.Application.Features.Rates.CreateRate;
 
@@ -14,7 +15,16 @@ public sealed record CreateRateDetailCommandItem(
     string CurrencyCode,
     decimal CostAmount,
     decimal SaleAmount,
-    string? Notes
+    string? Notes,
+    decimal? Quantity,
+    ChargeBasis? ChargeBasis
+);
+
+public sealed record RateContainerCommandItem(
+    Guid ContainerTypeId,
+    string ContainerTypeName,
+    string ContainerTypeCode,
+    int Quantity
 );
 
 public sealed record CreateRateCommand(
@@ -53,8 +63,17 @@ public sealed record CreateRateCommand(
     string? Includes,
     string? SubjectTo,
     string? Excludes,
-    int? TransitDays,
+    string? TransitTime,
     IReadOnlyCollection<CreateRateDetailCommandItem> Details,
+    IReadOnlyCollection<RateContainerCommandItem> Containers,
+    RateType RateType,
+    ShipmentMode ShipmentMode,
+    decimal KgPerCbm,
+    int TotalPackages,
+    int TotalPallets,
+    decimal TotalWeightKg,
+    decimal TotalVolumeCbm,
+    IReadOnlyCollection<RateCargoLineCommandItem> CargoLines,
     bool CanApproveImportedRate,
     bool CanApproveLowMargin,
     Guid? CreatedBy
