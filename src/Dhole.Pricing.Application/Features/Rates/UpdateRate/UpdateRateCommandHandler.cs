@@ -35,17 +35,16 @@ public sealed class UpdateRateCommandHandler(
             return Result.Failure(PricingErrors.RateHeaderNotFound);
         }
 
-        if (
-            rate.Status
-            is Dhole.Pricing.Domain.Rates.Enums.RateStatus.Closed
-                or Dhole.Pricing.Domain.Rates.Enums.RateStatus.Expired
-        )
+        // Una tarifa cerrada es inmutable porque representa una decisión comercial final.
+        // Una tarifa vencida sí se puede editar para renovar su vigencia; al recalcularla
+        // se volverá a marcar como vencida si ValidTo continúa en el pasado.
+        if (rate.Status == Dhole.Pricing.Domain.Rates.Enums.RateStatus.Closed)
         {
             return Result.Failure(PricingErrors.RateInvalidStatus);
         }
 
         if (rate.SourceImportFclRateId.HasValue && command.ShipmentMode != ShipmentMode.Fcl)
-            return Result.Failure(PricingErrors.RateInvalidStatus);
+            return Result.Failure(PricingErrors.RateImportedStructureLocked);
 
         var existingDetails = rate.RateDetails.ToDictionary(x => x.Id);
 
@@ -134,7 +133,7 @@ public sealed class UpdateRateCommandHandler(
         );
         if (command.IncotermId.HasValue && normalizedIncoterm is null)
         {
-            return Result.Failure(PricingErrors.RateInvalidStatus);
+            return Result.Failure(PricingErrors.RateInvalidIncoterm);
         }
         if (normalizedIncoterm is not null)
         {
@@ -175,12 +174,12 @@ public sealed class UpdateRateCommandHandler(
             )
         )
         {
-            return Result.Failure(PricingErrors.RateInvalidStatus);
+            return Result.Failure(PricingErrors.RateImportedStructureLocked);
         }
 
         if (!HasValidFreightDistribution(rate, command.ShipmentMode, extraDetails, containerSpecs))
         {
-            return Result.Failure(PricingErrors.RateInvalidStatus);
+            return Result.Failure(PricingErrors.RateInvalidFreightDistribution);
         }
 
         var primaryContainer = containerSpecs[0];
@@ -314,15 +313,6 @@ public sealed class UpdateRateCommandHandler(
                 command.UpdatedBy
             );
 
-            if (selectorsChanged || command.ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl)
-            {
-                await fixedCostSynchronizer.SynchronizeAsync(
-                    rate,
-                    command.UpdatedBy,
-                    cancellationToken
-                );
-            }
-
             foreach (var id in removedIds)
             {
                 rate.RemoveRateDetail(id, command.UpdatedBy);
@@ -376,6 +366,27 @@ public sealed class UpdateRateCommandHandler(
                 }
             }
 
+            // Los costos fijos dependen de naviera, agente, ruta, incoterm y modo de embarque.
+            // Primero aplicamos los cambios del payload sobre los detalles existentes y después
+            // resincronizamos. De lo contrario SynchronizeAsync elimina los detalles fijos antiguos
+            // y el bucle anterior intenta actualizar sus IDs ya eliminados, produciendo
+            // "El detalle de la tarifa no existe" al cambiar, por ejemplo, la naviera.
+            if (selectorsChanged || command.ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl)
+            {
+                await fixedCostSynchronizer.SynchronizeAsync(
+                    rate,
+                    command.UpdatedBy,
+                    cancellationToken
+                );
+
+                // La resincronización reemplaza detalles fijos automáticos por nuevas instancias.
+                // No publiquemos auditorías de Added/Updated para IDs que ya no forman parte
+                // de la tarifa después de la sincronización.
+                var liveDetailIds = rate.RateDetails.Select(x => x.Id).ToHashSet();
+                addedDetails.RemoveAll(x => !liveDetailIds.Contains(x.Id));
+                modifiedDetails.RemoveAll(x => !liveDetailIds.Contains(x.Id));
+            }
+
             rate.SetAmounts(command.UpdatedBy);
 
             if (rate.RequiredApproval && command.CanApproveLowMargin)
@@ -388,10 +399,16 @@ public sealed class UpdateRateCommandHandler(
                 );
                 automaticallyApprovedLowMargin = true;
             }
+
+            // Permite renovar una tarifa Expired. Si la nueva vigencia sigue vencida,
+            // conserva Expired en vez de reabrirla accidentalmente por SetAmounts().
+            rate.MarkExpired(DateTime.UtcNow, command.UpdatedBy);
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException exception)
         {
-            return Result.Failure(PricingErrors.RateInvalidStatus);
+            // Antes cualquier validación de datos terminaba reportándose como un error
+            // de estado, ocultando la causa real al frontend.
+            return Result.Failure(PricingErrors.RateUpdateValidationFailed(exception.Message));
         }
 
         await audit.PublishAsync(
@@ -544,7 +561,11 @@ public sealed class UpdateRateCommandHandler(
 
         var freight = details.Where(x => x.CostDetailType == CostDetailType.Freight).ToArray();
         if (freight.Length != containers.Count) return false;
-        if (containers.Count == 1 && freight.Length == 1 && !freight[0].Quantity.HasValue)
+        if (
+            containers.Count == 1
+            && freight.Length == 1
+            && (!freight[0].Quantity.HasValue || freight[0].Quantity.Value == 0m)
+        )
             return true;
         if (freight.Any(x => !x.Quantity.HasValue || x.Quantity.Value <= 0)) return false;
 

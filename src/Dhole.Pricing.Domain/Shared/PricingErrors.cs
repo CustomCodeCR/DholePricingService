@@ -186,6 +186,33 @@ public static class PricingErrors
         "El estado de la tarifa no es válido para esta operación."
     );
 
+    public static readonly Error RateImportedStructureLocked = new(
+        "Pricing.RateImportedStructureLocked",
+        "Una tarifa creada desde una importación FCL debe conservar la modalidad y el tipo de contenedor de la tarifa importada."
+    );
+
+    public static readonly Error RateInvalidIncoterm = new(
+        "Pricing.RateInvalidIncoterm",
+        "El Incoterm seleccionado no existe, está inactivo o no pertenece al catálogo de Incoterms."
+    );
+
+    public static readonly Error RateInvalidFreightDistribution = new(
+        "Pricing.RateInvalidFreightDistribution",
+        "La distribución del flete no coincide con los contenedores de la tarifa. Revise tipo de contenedor y cantidad."
+    );
+
+    public static readonly Error RateInvalidDetailQuantity = new(
+        "Pricing.RateInvalidDetailQuantity",
+        "La cantidad de un detalle de tarifa no puede ser negativa."
+    );
+
+    public static Error RateUpdateValidationFailed(string? message) => new(
+        "Pricing.RateUpdateValidationFailed",
+        string.IsNullOrWhiteSpace(message)
+            ? "No se pudo actualizar la tarifa porque uno de sus datos no es válido."
+            : message.Trim()
+    );
+
     public static readonly Error RateClosureReasonIsRequired = new(
         "Pricing.RateClosureReasonIsRequired",
         "Debe indicar el motivo por el que se cerró la tarifa."

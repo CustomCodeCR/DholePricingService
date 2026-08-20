@@ -26,9 +26,12 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
             );
         }
 
-        if (input.Quantity is <= 0)
+        // Quantity = 0 puede venir de clientes anteriores para cargos únicos.
+        // El agregado normaliza esos casos a 1 (o a la cantidad derivada por base de cobro).
+        // Solo una cantidad negativa es realmente inválida.
+        if (input.Quantity is < 0)
         {
-            return RateExtraDetailResolution.Failure(PricingErrors.RateInvalidStatus);
+            return RateExtraDetailResolution.Failure(PricingErrors.RateInvalidDetailQuantity);
         }
 
         if (input.CurrencyId == Guid.Empty)
