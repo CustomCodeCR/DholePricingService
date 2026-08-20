@@ -1,0 +1,48 @@
+name: Deploy Dhole Pricing
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dhole-pricing-deploy
+  cancel-in-progress: true
+
+env:
+  COMPOSE_FILE: .dhole-system/deploy/docker-compose.services.yml
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: CustomCodeCR/DholeSystem
+          ref: main
+          path: .dhole-system
+      - name: Verify server
+        run: |
+          set -euo pipefail
+          docker version
+          docker compose version
+          docker network inspect dhole >/dev/null
+          test -f /opt/dhole/.env
+          docker compose --env-file /opt/dhole/.env -f "$COMPOSE_FILE" config -q
+      - name: Build images
+        run: |
+          set -euo pipefail
+          SHA_TAG="${GITHUB_SHA::12}"
+          docker build --pull -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-api:latest -t "dhole/pricing-api:$SHA_TAG" .
+          docker build --pull -f src/Dhole.Pricing.Workers/Dockerfile -t dhole/pricing-workers:latest -t "dhole/pricing-workers:$SHA_TAG" .
+      - name: Deploy Pricing
+        run: |
+          set -euo pipefail
+          docker compose --env-file /opt/dhole/.env -f "$COMPOSE_FILE" up -d --no-deps --force-recreate --pull never pricing-api pricing-workers
+          docker compose --env-file /opt/dhole/.env -f "$COMPOSE_FILE" ps pricing-api pricing-workers
+      - name: Cleanup old images
+        run: docker image prune -f
