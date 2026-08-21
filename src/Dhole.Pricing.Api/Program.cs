@@ -82,6 +82,7 @@ app.MapImportRateEndpoints();
 app.MapRateEndpoints();
 app.MapRateTermItemEndpoints();
 app.MapPricingRuleConfigurationEndpoints();
+app.MapPricingConfigCatalogEndpoints();
 app.MapDataExtractionImportEndpoints();
 
 using (var scope = app.Services.CreateScope())

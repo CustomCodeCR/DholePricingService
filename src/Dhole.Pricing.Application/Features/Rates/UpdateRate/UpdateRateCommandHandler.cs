@@ -6,6 +6,7 @@ using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Auditing;
+using Dhole.Pricing.Application.Services;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -45,6 +46,119 @@ public sealed class UpdateRateCommandHandler(
 
         if (rate.SourceImportFclRateId.HasValue && command.ShipmentMode != ShipmentMode.Fcl)
             return Result.Failure(PricingErrors.RateImportedStructureLocked);
+
+        // Rehidratamos todos los selectores desde Config. De esta manera cambiar naviera,
+        // agente, ruta, contenedor, moneda o Incoterm nunca persiste Name/Code enviados por Web.
+        try
+        {
+            var agent = await configCatalog.GetActiveInGroupAsync(
+                command.AgentId, PricingConstants.CatalogSlugs.Agents, cancellationToken);
+            if (agent is null)
+                return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                    "El agente", PricingConstants.CatalogSlugs.Agents));
+
+            var carrier = await configCatalog.GetActiveInGroupAsync(
+                command.CarrierId, PricingConstants.CatalogSlugs.Carriers, cancellationToken);
+            if (carrier is null)
+                return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                    "La naviera", PricingConstants.CatalogSlugs.Carriers));
+
+            var pol = await configCatalog.GetActiveInGroupAsync(
+                command.PolId, PricingConstants.CatalogSlugs.Pol, cancellationToken);
+            if (pol is null)
+                return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                    "El POL", PricingConstants.CatalogSlugs.Pol));
+
+            var poe = await configCatalog.GetActiveInGroupAsync(
+                command.PoeId, PricingConstants.CatalogSlugs.Poe, cancellationToken);
+            if (poe is null)
+                return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                    "El POE", PricingConstants.CatalogSlugs.Poe));
+
+            var pod = await configCatalog.GetActiveInGroupAsync(
+                command.PodId, PricingConstants.CatalogSlugs.Pod, cancellationToken);
+            if (pod is null)
+                return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                    "El POD", PricingConstants.CatalogSlugs.Pod));
+
+            var currency = await configCatalog.GetActiveInGroupAsync(
+                command.CurrencyId, PricingConstants.CatalogSlugs.Currencies, cancellationToken);
+            if (currency is null)
+                return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                    "La moneda", PricingConstants.CatalogSlugs.Currencies));
+
+            PricingConfigCatalogItem? incoterm = null;
+            if (command.IncotermId.HasValue && command.IncotermId.Value != Guid.Empty)
+            {
+                incoterm = await configCatalog.GetActiveInGroupAsync(
+                    command.IncotermId, PricingConstants.CatalogSlugs.Incoterms, cancellationToken);
+                if (incoterm is null)
+                    return Result.Failure(PricingErrors.RateInvalidIncoterm);
+            }
+
+            var normalizedContainers = new List<UpdateRateContainerCommandItem>();
+            var requestedContainers = command.Containers is { Count: > 0 }
+                ? command.Containers
+                : new[]
+                {
+                    new UpdateRateContainerCommandItem(
+                        command.ContainerTypeId,
+                        command.ContainerTypeName,
+                        command.ContainerTypeCode,
+                        command.ContainerQuantity
+                    )
+                };
+
+            foreach (var requested in requestedContainers)
+            {
+                var containerType = await configCatalog.GetActiveInGroupAsync(
+                    requested.ContainerTypeId,
+                    PricingConstants.CatalogSlugs.ContainerTypes,
+                    cancellationToken
+                );
+                if (containerType is null)
+                    return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                        "El tipo de contenedor", PricingConstants.CatalogSlugs.ContainerTypes));
+
+                normalizedContainers.Add(new UpdateRateContainerCommandItem(
+                    containerType.Id, containerType.SnapshotName(), containerType.Code, requested.Quantity));
+            }
+
+            var normalizedPrimaryContainer = normalizedContainers[0];
+            command = command with
+            {
+                AgentId = agent.Id,
+                AgentName = agent.SnapshotName(),
+                AgentCode = agent.Code,
+                CarrierId = carrier.Id,
+                CarrierName = carrier.SnapshotName(),
+                CarrierCode = carrier.Code,
+                PolId = pol.Id,
+                PolName = pol.SnapshotName(),
+                PolCode = pol.Code,
+                PoeId = poe.Id,
+                PoeName = poe.SnapshotName(),
+                PoeCode = poe.Code,
+                PodId = pod.Id,
+                PodName = pod.SnapshotName(),
+                PodCode = pod.Code,
+                ContainerTypeId = normalizedPrimaryContainer.ContainerTypeId,
+                ContainerTypeName = normalizedPrimaryContainer.ContainerTypeName,
+                ContainerTypeCode = normalizedPrimaryContainer.ContainerTypeCode,
+                ContainerQuantity = normalizedContainers.Sum(x => x.Quantity),
+                Containers = normalizedContainers,
+                IncotermId = incoterm?.Id,
+                IncotermName = incoterm?.SnapshotName(preferValue: true),
+                IncotermCode = incoterm?.Code,
+                CurrencyId = currency.Id,
+                CurrencyName = currency.SnapshotName(),
+                CurrencyCode = currency.Code,
+            };
+        }
+        catch (InvalidOperationException)
+        {
+            return Result.Failure(PricingErrors.ConfigServiceUnavailable);
+        }
 
         var existingDetails = rate.RateDetails.ToDictionary(x => x.Id);
 
@@ -124,24 +238,6 @@ public sealed class UpdateRateCommandHandler(
             }
 
             resolvedDetails.Add(resolution.Detail!);
-        }
-
-        var normalizedIncoterm = await NormalizeIncotermAsync(
-            command.IncotermId,
-            configCatalog,
-            cancellationToken
-        );
-        if (command.IncotermId.HasValue && normalizedIncoterm is null)
-        {
-            return Result.Failure(PricingErrors.RateInvalidIncoterm);
-        }
-        if (normalizedIncoterm is not null)
-        {
-            command = command with
-            {
-                IncotermName = normalizedIncoterm.DisplayValue,
-                IncotermCode = normalizedIncoterm.Code,
-            };
         }
 
         var containerSpecs = (command.Containers ?? Array.Empty<UpdateRateContainerCommandItem>())
@@ -404,6 +500,14 @@ public sealed class UpdateRateCommandHandler(
             // conserva Expired en vez de reabrirla accidentalmente por SetAmounts().
             rate.MarkExpired(DateTime.UtcNow, command.UpdatedBy);
         }
+        catch (InvalidOperationException exception) when (
+            exception.Message.StartsWith("Config.", StringComparison.OrdinalIgnoreCase)
+            || exception.Message.Contains("Config devolvió", StringComparison.OrdinalIgnoreCase)
+            || exception.Message.Contains("de Config", StringComparison.OrdinalIgnoreCase)
+        )
+        {
+            return Result.Failure(PricingErrors.ConfigServiceUnavailable);
+        }
         catch (InvalidOperationException exception)
         {
             // Antes cualquier validación de datos terminaba reportándose como un error
@@ -564,36 +668,13 @@ public sealed class UpdateRateCommandHandler(
         if (
             containers.Count == 1
             && freight.Length == 1
-            && (!freight[0].Quantity.HasValue || freight[0].Quantity.Value == 0m)
+            && freight[0].Quantity.GetValueOrDefault() == 0m
         )
             return true;
         if (freight.Any(x => !x.Quantity.HasValue || x.Quantity.Value <= 0)) return false;
 
         return freight.Sum(x => x.Quantity!.Value) == containers.Sum(x => x.Quantity);
     }
-
-    private static async Task<NormalizedIncoterm?> NormalizeIncotermAsync(
-        Guid? incotermId,
-        IPricingConfigCatalogClient configCatalog,
-        CancellationToken cancellationToken
-    )
-    {
-        if (!incotermId.HasValue || incotermId.Value == Guid.Empty) return null;
-
-        var item = await configCatalog.GetActiveByIdAsync(incotermId.Value, cancellationToken);
-        if (
-            item is null
-            || !item.CatalogGroupSlug.Equals("incoterms", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return null;
-        }
-
-        var displayValue = string.IsNullOrWhiteSpace(item.Value) ? item.Name : item.Value.Trim();
-        return new NormalizedIncoterm(displayValue, item.Code);
-    }
-
-    private sealed record NormalizedIncoterm(string DisplayValue, string Code);
 
     private static bool IsAutomaticFixed(RateDetail detail)
     {

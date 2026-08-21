@@ -25,6 +25,12 @@ internal sealed class PricingRateExpirationWorker(
 
         var todayUtc = DateTime.UtcNow.Date;
 
+        var batchSize = Math.Clamp(
+            configuration.GetValue("Pricing:RateExpiration:BatchSize", 250),
+            1,
+            1000
+        );
+
         var rates = await dbContext
             .RateHeaders.Where(rate =>
                 !rate.IsDeleted
@@ -34,6 +40,8 @@ internal sealed class PricingRateExpirationWorker(
                 && rate.Status != RateStatus.RejectedByManagement
                 && rate.Status != RateStatus.RejectedByClient
             )
+            .OrderBy(rate => rate.ValidTo)
+            .Take(batchSize)
             .ToListAsync(cancellationToken);
 
         if (rates.Count == 0)

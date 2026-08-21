@@ -15,9 +15,12 @@ internal sealed class PricingCacheWarmupWorker(
     ICostCacheService costCache,
     IImportRateCacheService importRateCache,
     IRateHeaderCacheService rateHeaderCache,
+    IConfiguration configuration,
     ILogger<PricingCacheWarmupWorker> logger
 ) : IBackgroundWorker
 {
+    private static readonly SemaphoreSlim ExecutionGate = new(1, 1);
+
     public string Name => "pricing.cache-warmup";
 
     public async Task ExecuteAsync(
@@ -25,17 +28,50 @@ internal sealed class PricingCacheWarmupWorker(
         CancellationToken cancellationToken
     )
     {
-        logger.LogInformation("Pricing cache warmup started.");
+        if (!configuration.GetValue<bool>("Pricing:CacheWarmup:Enabled"))
+        {
+            return;
+        }
 
-        await WarmCostsAsync(cancellationToken);
-        await WarmImportRatesAsync(cancellationToken);
-        await WarmRateHeadersAsync(cancellationToken);
+        // Evita dos warmups simultáneos si una ejecución tarda más que el intervalo
+        // configurado del scheduler. No esperar aquí es intencional: una ejecución
+        // solapada no aporta nada y duplica el uso de memoria.
+        if (!await ExecutionGate.WaitAsync(0, cancellationToken))
+        {
+            logger.LogWarning("Pricing cache warmup omitido porque ya existe una ejecución activa.");
+            return;
+        }
 
-        logger.LogInformation("Pricing cache warmup completed.");
+        try
+        {
+            logger.LogInformation("Pricing cache warmup started.");
+
+            await WarmCostsAsync(cancellationToken);
+            await WarmImportRatesAsync(cancellationToken);
+            await WarmRateHeadersAsync(cancellationToken);
+
+            logger.LogInformation("Pricing cache warmup completed.");
+        }
+        finally
+        {
+            ExecutionGate.Release();
+        }
     }
 
     private async Task WarmCostsAsync(CancellationToken cancellationToken)
     {
+        var total = await dbContext.Costs.AsNoTracking().CountAsync(x => !x.IsDeleted, cancellationToken);
+        var limit = ReadPositiveInt("Pricing:CacheWarmup:MaxCosts", 1000);
+        if (total > limit)
+        {
+            logger.LogWarning(
+                "Se omite warmup de Costs: {Total} registros exceden el límite seguro {Limit}. El cache se cargará bajo demanda.",
+                total,
+                limit
+            );
+            return;
+        }
+
         var entities = await dbContext
             .Costs.AsNoTracking()
             .Include(x => x.Incoterms)
@@ -230,6 +266,18 @@ internal sealed class PricingCacheWarmupWorker(
 
     private async Task WarmImportRatesAsync(CancellationToken cancellationToken)
     {
+        var total = await dbContext.ImportFclRates.AsNoTracking().CountAsync(x => !x.IsDeleted, cancellationToken);
+        var limit = ReadPositiveInt("Pricing:CacheWarmup:MaxImportRates", 250);
+        if (total > limit)
+        {
+            logger.LogWarning(
+                "Se omite warmup de ImportFclRates: {Total} registros exceden el límite seguro {Limit}. El cache se cargará bajo demanda.",
+                total,
+                limit
+            );
+            return;
+        }
+
         var entities = await dbContext
             .ImportFclRates.AsNoTracking()
             .Where(x => !x.IsDeleted)
@@ -291,6 +339,18 @@ internal sealed class PricingCacheWarmupWorker(
 
     private async Task WarmRateHeadersAsync(CancellationToken cancellationToken)
     {
+        var total = await dbContext.RateHeaders.AsNoTracking().CountAsync(x => !x.IsDeleted, cancellationToken);
+        var limit = ReadPositiveInt("Pricing:CacheWarmup:MaxRateHeaders", 500);
+        if (total > limit)
+        {
+            logger.LogWarning(
+                "Se omite warmup de RateHeaders: {Total} registros exceden el límite seguro {Limit}. El cache se cargará bajo demanda.",
+                total,
+                limit
+            );
+            return;
+        }
+
         var rateHeaders = await dbContext
             .RateHeaders.AsNoTracking()
             .Include(x => x.RateDetails)
@@ -427,6 +487,12 @@ internal sealed class PricingCacheWarmupWorker(
                 cancellationToken: cancellationToken
             );
         }
+    }
+
+    private int ReadPositiveInt(string key, int fallback)
+    {
+        var value = configuration[key];
+        return int.TryParse(value, out var parsed) && parsed > 0 ? parsed : fallback;
     }
 
     private static CostDto ToCostDto(Dhole.Pricing.Domain.Costs.Entities.Cost cost)

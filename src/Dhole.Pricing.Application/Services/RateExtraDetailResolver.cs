@@ -7,7 +7,10 @@ using System.Text.RegularExpressions;
 
 namespace Dhole.Pricing.Application.Services;
 
-public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraDetailResolver
+public sealed class RateExtraDetailResolver(
+    ICostRepository costs,
+    IPricingConfigCatalogClient configCatalog
+) : IRateExtraDetailResolver
 {
     public async Task<RateExtraDetailResolution> ResolveAsync(
         RateExtraDetailInput input,
@@ -41,13 +44,29 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
             );
         }
 
-        if (
-            string.IsNullOrWhiteSpace(input.CurrencyName)
-            || string.IsNullOrWhiteSpace(input.CurrencyCode)
-        )
+        // Config es la fuente de verdad para la moneda. El frontend únicamente aporta el Id;
+        // Name/Code son snapshots y se reemplazan por los valores vigentes de Config.
+        PricingConfigCatalogItem? currency;
+        try
+        {
+            currency = await configCatalog.GetActiveInGroupAsync(
+                input.CurrencyId,
+                PricingConstants.CatalogSlugs.Currencies,
+                cancellationToken
+            );
+        }
+        catch (InvalidOperationException)
+        {
+            return RateExtraDetailResolution.Failure(PricingErrors.ConfigServiceUnavailable);
+        }
+
+        if (currency is null)
         {
             return RateExtraDetailResolution.Failure(
-                PricingErrors.RateCostDetailCurrencySnapshotIsRequired
+                PricingErrors.InvalidConfigCatalogReference(
+                    "moneda del detalle",
+                    PricingConstants.CatalogSlugs.Currencies
+                )
             );
         }
 
@@ -72,9 +91,9 @@ public sealed class RateExtraDetailResolver(ICostRepository costs) : IRateExtraD
                     input.Name.Trim(),
                     input.CostDetailType,
                     input.CostType,
-                    input.CurrencyId,
-                    input.CurrencyName.Trim(),
-                    input.CurrencyCode.Trim(),
+                    currency.Id,
+                    currency.SnapshotName(),
+                    currency.Code,
                     costAmount,
                     saleAmount,
                     Normalize(input.Notes),

@@ -66,6 +66,16 @@ public static class PricingErrors
         "El costo no cumple las reglas requeridas. Revise si es fijo, variable, manual y sus catálogos vinculados."
     );
 
+    public static Error InvalidConfigCatalogReference(string field, string catalogGroupSlug) => new(
+        "Pricing.InvalidConfigCatalogReference",
+        $"{field} no existe, está inactivo o no pertenece al catálogo '{catalogGroupSlug}' de Config."
+    );
+
+    public static readonly Error ConfigServiceUnavailable = new(
+        "Pricing.ConfigServiceUnavailable",
+        "No fue posible validar los catálogos con Config. Intente nuevamente cuando el servicio de configuración esté disponible."
+    );
+
     public static readonly Error RateHeaderHasNoFclDetails = new(
         "Pricing.RateHeaderHasNoFclDetails",
         "No se puede activar la tarifa porque no tiene detalles FCL."

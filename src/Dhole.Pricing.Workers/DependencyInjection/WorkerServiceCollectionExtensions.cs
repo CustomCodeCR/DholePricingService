@@ -177,7 +177,15 @@ public static class WorkerServiceCollectionExtensions
     {
         services.AddCustomCodeWorkers(configuration);
 
-        services.AddCustomCodePeriodicWorker<PricingCacheWarmupWorker>();
+        // El warmup completo replica grandes colecciones de Pricing en memoria y Redis.
+        // Se deja opt-in porque los handlers ya cargan el cache de forma perezosa cuando
+        // existe un miss. En bases con historiales grandes ejecutar este worker al iniciar
+        // puede provocar un pico de memoria suficiente para activar el OOM killer.
+        if (configuration.GetValue<bool>("Pricing:CacheWarmup:Enabled"))
+        {
+            services.AddCustomCodePeriodicWorker<PricingCacheWarmupWorker>();
+        }
+
         services.AddCustomCodePeriodicWorker<PricingImportFromExtractionWorker>();
         services.AddCustomCodePeriodicWorker<PricingRateExpirationWorker>();
 
