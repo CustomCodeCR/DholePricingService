@@ -14,6 +14,8 @@ public static class PricingConfigCatalogEndpoints
         PricingConstants.CatalogSlugs.Currencies,
         PricingConstants.CatalogSlugs.Agents,
         PricingConstants.CatalogSlugs.ContainerTypes,
+        PricingConstants.CatalogSlugs.ContainerSizes,
+        PricingConstants.CatalogSlugs.ContainerKinds,
         PricingConstants.CatalogSlugs.PricingImportsProfiles,
         PricingConstants.CatalogSlugs.Incoterms,
     };
