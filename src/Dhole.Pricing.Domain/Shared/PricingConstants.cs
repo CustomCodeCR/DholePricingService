@@ -12,7 +12,10 @@ public static class PricingConstants
         public const string Poe = "poe";
         public const string Currencies = "currencies";
         public const string Agents = "agents";
+        // Canonical equipment catalog kept for backwards compatibility (20DV, 40HC, etc.).
         public const string ContainerTypes = "container-types";
+        public const string ContainerSizes = "container-sizes";
+        public const string ContainerKinds = "container-kinds";
         public const string PricingImportsProfiles = "pricing-imports-profiles";
         public const string Incoterms = "incoterms";
     }
