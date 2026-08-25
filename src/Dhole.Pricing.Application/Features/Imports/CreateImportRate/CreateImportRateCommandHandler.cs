@@ -65,6 +65,11 @@ public sealed class CreateImportRateCommandHandler(
 
         await importRates.AddAsync(importRate, cancellationToken);
 
+        await rateChangeNotifications.QueueApprovalRequiredNotificationsAsync(
+            importRate,
+            cancellationToken
+        );
+
         await rateChangeNotifications.QueueVariationNotificationsAsync(importRate, cancellationToken);
 
         await audit.PublishAsync(
