@@ -2,6 +2,8 @@ namespace Dhole.Pricing.Api.Authorization;
 
 internal static class PricingScopeNames
 {
+    public const string WorkspaceAccess = "pricing.workspace.access";
+
     // Costs
     public const string CostCreate = "pricing.cost.create";
     public const string CostView = "pricing.cost.view";
@@ -19,6 +21,7 @@ internal static class PricingScopeNames
     public const string RateTermSelect = "pricing.rate-term.select";
 
     // Imported FCL rates
+    public const string ImportFclRateReview = "pricing.import-fcl-rate.review";
     public const string ImportFclRateCreate = "pricing.import-fcl-rate.create";
     public const string ImportFclRateView = "pricing.import-fcl-rate.view";
     public const string ImportFclRateDelete = "pricing.import-fcl-rate.delete";
