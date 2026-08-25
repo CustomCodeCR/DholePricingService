@@ -24,6 +24,7 @@ public static class CommercialTermEndpoints
         string? direction,
         Guid? incotermId,
         string? serviceCodes,
+        string? routeText,
         ServiceDbContext db,
         CancellationToken cancellationToken
     )
@@ -45,6 +46,13 @@ public static class CommercialTermEndpoints
               AND (@direction IS NULL OR b.direction IS NULL OR lower(b.direction) = lower(@direction))
               AND (@incoterm_id IS NULL OR b.incoterm_id IS NULL OR b.incoterm_id = @incoterm_id)
               AND (
+                    b.route_key IS NULL
+                    OR (
+                        @route_text IS NOT NULL
+                        AND position(lower(b.route_key) in lower(@route_text)) > 0
+                    )
+                  )
+              AND (
                     NOT EXISTS (
                         SELECT 1 FROM pricing."RateTermBlockServices" bs0 WHERE bs0.block_id = b.id
                     )
@@ -63,6 +71,7 @@ public static class CommercialTermEndpoints
         Add(command, "direction", Normalize(direction), DbType.String);
         Add(command, "incoterm_id", incotermId, DbType.Guid);
         Add(command, "service_codes", NormalizeServiceCodes(serviceCodes), DbType.String);
+        Add(command, "route_text", NormalizeRouteText(routeText), DbType.String);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var resolved = new Dictionary<Guid, RankedTerm>();
@@ -104,6 +113,23 @@ public static class CommercialTermEndpoints
 
     private static string? Normalize(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string? NormalizeRouteText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        return value
+            .Normalize(System.Text.NormalizationForm.FormD)
+            .Where(character =>
+                System.Globalization.CharUnicodeInfo.GetUnicodeCategory(character)
+                != System.Globalization.UnicodeCategory.NonSpacingMark
+            )
+            .Aggregate(new System.Text.StringBuilder(), (builder, character) =>
+            {
+                builder.Append(char.IsLetterOrDigit(character) ? char.ToLowerInvariant(character) : ' ');
+                return builder;
+            })
+            .ToString();
+    }
 
     private static string? NormalizeServiceCodes(string? value)
     {
