@@ -2,6 +2,7 @@ using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Queries;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Contracts.Imports.Response;
+using Dhole.Pricing.Domain.Imports.Enums;
 
 namespace Dhole.Pricing.Application.Features.Imports.GetPricingDecisionDashboard;
 
@@ -20,6 +21,27 @@ public sealed class GetPricingDecisionDashboardQueryHandler(IImportFclRateReposi
             cancellationToken
         );
 
-        return Result.Success(dashboard);
+        var lanes = dashboard.Lanes
+            .Select(lane =>
+            {
+                IReadOnlyCollection<PricingDecisionRateDto> rates = lane.Rates
+                    .Where(rate => string.Equals(
+                        rate.Status,
+                        nameof(ImportStatus.Approved),
+                        StringComparison.OrdinalIgnoreCase
+                    ))
+                    .ToArray();
+
+                return lane with { TotalOptions = rates.Count, Rates = rates };
+            })
+            .ToArray();
+
+        var approvedDashboard = dashboard with
+        {
+            TotalOptions = lanes.Sum(x => x.TotalOptions),
+            Lanes = lanes,
+        };
+
+        return Result.Success(approvedDashboard);
     }
 }
