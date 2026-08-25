@@ -2,6 +2,7 @@ using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Queries;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Contracts.Imports.Response;
+using Dhole.Pricing.Domain.Imports.Enums;
 
 namespace Dhole.Pricing.Application.Features.Imports.GetImportRatesForSelect;
 
@@ -17,7 +18,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             query.Search,
             query.ImportBatchId,
             query.SourceType,
-            query.Status,
+            ImportStatus.Approved,
             query.Agent,
             query.Carrier,
             query.Pol,
@@ -29,6 +30,8 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             cancellationToken
         );
 
-        return Result.Success(result);
+        return Result.Success<IReadOnlyCollection<ImportRateSelectDto>>(
+            result.Where(x => string.Equals(x.Status, nameof(ImportStatus.Approved), StringComparison.OrdinalIgnoreCase)).ToArray()
+        );
     }
 }
