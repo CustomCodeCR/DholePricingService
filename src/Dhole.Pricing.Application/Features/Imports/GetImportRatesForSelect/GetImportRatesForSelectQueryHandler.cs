@@ -30,8 +30,10 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             cancellationToken
         );
 
-        return Result.Success<IReadOnlyCollection<ImportRateSelectDto>>(
-            result.Where(x => string.Equals(x.Status, nameof(ImportStatus.Approved), StringComparison.OrdinalIgnoreCase)).ToArray()
-        );
+        IReadOnlyCollection<ImportRateSelectDto> approved = result
+            .Where(x => string.Equals(x.Status, nameof(ImportStatus.Approved), StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        return Result.Success(approved);
     }
 }
