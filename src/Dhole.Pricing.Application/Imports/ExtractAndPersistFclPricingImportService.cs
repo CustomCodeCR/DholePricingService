@@ -140,6 +140,12 @@ public sealed class ExtractAndPersistFclPricingImportService(
 
         if (newRates.Length > 0)
         {
+            // One approval notification per email batch, even when the extraction contains many rows.
+            await rateChangeNotifications.QueueApprovalRequiredNotificationsAsync(
+                newRates[0],
+                cancellationToken
+            );
+
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
@@ -153,6 +159,7 @@ public sealed class ExtractAndPersistFclPricingImportService(
             null
         );
     }
+
     private static string BuildNoUsableRowsMessage(
         DataExtractionFclPricingResult extraction
     )
