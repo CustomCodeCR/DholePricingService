@@ -8,4 +8,9 @@ public interface IImportedRateChangeNotificationService
         ImportFclRates currentRate,
         CancellationToken cancellationToken = default
     );
+
+    Task QueueApprovalRequiredNotificationsAsync(
+        ImportFclRates currentRate,
+        CancellationToken cancellationToken = default
+    );
 }
