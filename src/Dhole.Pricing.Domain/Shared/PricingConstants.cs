@@ -16,12 +16,18 @@ public static class PricingConstants
         public const string ContainerTypes = "container-types";
         public const string ContainerSizes = "container-sizes";
         public const string ContainerKinds = "container-kinds";
+        public const string LandEquipmentTypes = "land-equipment-types";
+        public const string TransportModalities = "transport-modalities";
+        public const string ShipmentModes = "shipment-modes";
+        public const string PricingServices = "pricing-services";
         public const string PricingImportsProfiles = "pricing-imports-profiles";
         public const string Incoterms = "incoterms";
     }
 
     public static class Scopes
     {
+        public const string WorkspaceAccess = "pricing.workspace.access";
+
         // Costs
         public const string CostCreate = "pricing.cost.create";
         public const string CostView = "pricing.cost.view";
@@ -39,6 +45,7 @@ public static class PricingConstants
         public const string RateTermSelect = "pricing.rate-term.select";
 
         // Imported FCL rates
+        public const string ImportFclRateReview = "pricing.import-fcl-rate.review";
         public const string ImportFclRateCreate = "pricing.import-fcl-rate.create";
         public const string ImportFclRateView = "pricing.import-fcl-rate.view";
         public const string ImportFclRateDelete = "pricing.import-fcl-rate.delete";
