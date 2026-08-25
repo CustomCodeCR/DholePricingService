@@ -6,21 +6,25 @@ namespace Dhole.Pricing.UnitTests;
 public sealed class CargoInsurancePricingRulesTests
 {
     [TestMethod]
-    public void Calculate_AppliesMinimums_WhenPercentagesAreBelowMinimums()
+    public void Calculate_AppliesCommercialMinimum_WhenPercentageIsBelowMinimum()
     {
         var result = CargoInsurancePricingRules.Calculate(10_000m);
 
         Assert.AreEqual(35m, result.CostAmount);
-        Assert.AreEqual(95m, result.SaleAmount);
+        Assert.AreEqual(125m, result.SaleAmount);
     }
 
     [TestMethod]
-    public void Calculate_AppliesPercentages_WhenTheyExceedMinimums()
+    public void Calculate_UsesFobPlusFreightAndOneHundredTenPercentInsuredValue()
     {
-        var result = CargoInsurancePricingRules.Calculate(20_000m);
+        var result = CargoInsurancePricingRules.Calculate(
+            cargoValue: 20_000m,
+            freightAmount: 2_000m
+        );
 
-        Assert.AreEqual(40m, result.CostAmount);
-        Assert.AreEqual(130m, result.SaleAmount);
+        // Base asegurada: (20,000 + 2,000) x 110% = 24,200.
+        Assert.AreEqual(48.40m, result.CostAmount);
+        Assert.AreEqual(205.70m, result.SaleAmount);
     }
 
     [TestMethod]
@@ -32,7 +36,7 @@ public sealed class CargoInsurancePricingRulesTests
             saleMinimumAmount: 175m
         );
 
-        Assert.AreEqual(40m, result.CostAmount);
+        Assert.AreEqual(44m, result.CostAmount);
         Assert.AreEqual(175m, result.SaleAmount);
     }
 
@@ -42,11 +46,11 @@ public sealed class CargoInsurancePricingRulesTests
         var result = CargoInsurancePricingRules.Calculate(
             cargoValue: 20_000m,
             salePercentage: 0.65m,
-            saleMinimumAmount: 95m,
+            saleMinimumAmount: 125m,
             manualSaleAmount: 160m
         );
 
-        Assert.AreEqual(40m, result.CostAmount);
+        Assert.AreEqual(44m, result.CostAmount);
         Assert.AreEqual(160m, result.SaleAmount);
     }
 }
