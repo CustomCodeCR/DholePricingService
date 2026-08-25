@@ -31,19 +31,19 @@ public static class ImportRateEndpoints
 
         group
             .MapGet("/", GetImportRatesAsync)
-            .RequireScope(PricingConstants.Scopes.ImportFclRateView);
+            .RequireScope(PricingConstants.Scopes.ImportFclRateReview);
 
         group
             .MapGet("/select", GetImportRatesForSelectAsync)
-            .RequireScope(PricingConstants.Scopes.ImportFclRateView);
+            .RequireScope(PricingConstants.Scopes.WorkspaceAccess);
 
         group
             .MapGet("/decision-dashboard", GetPricingDecisionDashboardAsync)
-            .RequireScope(PricingConstants.Scopes.FclDecisionView);
+            .RequireScope(PricingConstants.Scopes.WorkspaceAccess);
 
         group
             .MapGet("/{importRateId:guid}", GetImportRateByIdAsync)
-            .RequireScope(PricingConstants.Scopes.ImportFclRateView);
+            .RequireScope(PricingConstants.Scopes.ImportFclRateReview);
 
         group
             .MapPost("/", CreateImportRateAsync)
@@ -56,27 +56,27 @@ public static class ImportRateEndpoints
 
         group
             .MapPost("/approve", ApproveImportRatesAsync)
-            .RequireScope(PricingConstants.Scopes.ImportFclRateApprove);
+            .RequireScope(PricingConstants.Scopes.ImportFclRateReview);
 
         group
             .MapPost("/{importRateId:guid}/approve", ApproveImportRateAsync)
-            .RequireScope(PricingConstants.Scopes.ImportFclRateApprove);
+            .RequireScope(PricingConstants.Scopes.ImportFclRateReview);
 
         group
             .MapPut("/{importRateId:guid}/poe", AssignImportRatePoeAsync)
-            .RequireScope(PricingConstants.Scopes.ImportFclRateApprove);
+            .RequireScope(PricingConstants.Scopes.ImportFclRateReview);
 
         group
             .MapPut("/{importRateId:guid}/review", ReviewImportRateAsync)
-            .RequireScope(PricingConstants.Scopes.ImportFclRateApprove);
+            .RequireScope(PricingConstants.Scopes.ImportFclRateReview);
 
         group
             .MapPost("/reject", RejectImportRatesAsync)
-            .RequireScope(PricingConstants.Scopes.ImportFclRateReject);
+            .RequireScope(PricingConstants.Scopes.ImportFclRateReview);
 
         group
             .MapPost("/{importRateId:guid}/reject", RejectImportRateAsync)
-            .RequireScope(PricingConstants.Scopes.ImportFclRateReject);
+            .RequireScope(PricingConstants.Scopes.ImportFclRateReview);
 
         group
             .MapDelete("/", DeleteImportRatesAsync)
