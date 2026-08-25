@@ -79,6 +79,7 @@ app.UseMiddleware<AuditEndpointMiddleware>();
 
 app.MapCostEndpoints();
 app.MapImportRateEndpoints();
+app.MapImportRateReviewQueueEndpoints();
 app.MapRateEndpoints();
 app.MapRateTermItemEndpoints();
 app.MapPricingRuleConfigurationEndpoints();
