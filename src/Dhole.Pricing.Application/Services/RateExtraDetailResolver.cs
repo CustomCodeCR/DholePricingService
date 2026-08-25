@@ -182,23 +182,34 @@ public sealed class RateExtraDetailResolver(
         if (
             input.CostDetailType != CostDetailType.Insurance
             || string.IsNullOrWhiteSpace(input.Notes)
-            || !input.Notes.StartsWith(
-                "Seguro de carga · valor carga USD",
-                StringComparison.OrdinalIgnoreCase
+            || !(
+                input.Notes.StartsWith(
+                    "Seguro de carga · valor FOB USD",
+                    StringComparison.OrdinalIgnoreCase
+                )
+                || input.Notes.StartsWith(
+                    "Seguro de carga · valor carga USD",
+                    StringComparison.OrdinalIgnoreCase
+                )
             )
         )
         {
             return (input.CostAmount, input.SaleAmount);
         }
 
-        var cargoValue = ReadDecimal(input.Notes, @"valor carga USD\s+([0-9]+(?:[.,][0-9]+)?)");
+        var cargoValue =
+            ReadDecimal(input.Notes, @"valor FOB USD\s+([0-9]+(?:[.,][0-9]+)?)")
+            ?? ReadDecimal(input.Notes, @"valor carga USD\s+([0-9]+(?:[.,][0-9]+)?)");
         if (!cargoValue.HasValue || cargoValue.Value <= 0m)
         {
             return (input.CostAmount, input.SaleAmount);
         }
 
+        var freightAmount =
+            ReadDecimal(input.Notes, @"flete USD\s+([0-9]+(?:[.,][0-9]+)?)") ?? 0m;
         var salePercentage =
-            ReadDecimal(input.Notes, @"·\s*([0-9]+(?:[.,][0-9]+)?)%")
+            ReadDecimal(input.Notes, @"tasa\s+([0-9]+(?:[.,][0-9]+)?)%")
+            ?? ReadDecimal(input.Notes, @"·\s*([0-9]+(?:[.,][0-9]+)?)%")
             ?? CargoInsurancePricingRules.DefaultSalePercentage;
         var saleMinimum =
             ReadDecimal(input.Notes, @"mínimo USD\s+([0-9]+(?:[.,][0-9]+)?)")
@@ -212,6 +223,7 @@ public sealed class RateExtraDetailResolver(
 
         var calculated = CargoInsurancePricingRules.Calculate(
             cargoValue.Value,
+            freightAmount,
             salePercentage,
             saleMinimum,
             manualSaleAmount
