@@ -22,9 +22,13 @@ public static class ImportRateReviewQueueEndpoints
         string? search,
         ImportSourceType? sourceType,
         ImportStatus? status,
+        Guid? polId,
+        Guid? poeId,
+        Guid? carrierId,
         DateTime? createdFrom,
         DateTime? createdTo,
-        int? take,
+        int? pageNumber,
+        int? pageSize,
         ServiceDbContext db,
         CancellationToken cancellationToken)
     {
@@ -37,6 +41,15 @@ public static class ImportRateReviewQueueEndpoints
 
         if (status.HasValue)
             query = query.Where(x => x.Status == status.Value);
+
+        if (polId.HasValue)
+            query = query.Where(x => x.PolId == polId.Value);
+
+        if (poeId.HasValue)
+            query = query.Where(x => x.PoeId == poeId.Value);
+
+        if (carrierId.HasValue)
+            query = query.Where(x => x.CarrierId == carrierId.Value);
 
         if (createdFrom.HasValue)
         {
@@ -60,14 +73,19 @@ public static class ImportRateReviewQueueEndpoints
                 || x.PoeName.ToLower().Contains(value)
                 || x.PodName.ToLower().Contains(value)
                 || x.ContainerTypeName.ToLower().Contains(value)
-                || x.Commodity!.ToLower().Contains(value)
+                || (x.Commodity != null && x.Commodity.ToLower().Contains(value))
             );
         }
 
-        var limit = Math.Clamp(take ?? 250, 1, 500);
+        var safePageSize = Math.Clamp(pageSize ?? 25, 10, 100);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)safePageSize));
+        var safePageNumber = Math.Clamp(pageNumber ?? 1, 1, totalPages);
+
         var rows = await query
             .OrderByDescending(x => x.CreatedAtUtc)
-            .Take(limit)
+            .Skip((safePageNumber - 1) * safePageSize)
+            .Take(safePageSize)
             .Select(x => new ImportRateReviewQueueItemDto(
                 x.Id,
                 x.ImportBatchId,
@@ -88,8 +106,22 @@ public static class ImportRateReviewQueueEndpoints
             ))
             .ToListAsync(cancellationToken);
 
-        return Results.Ok(rows);
+        return Results.Ok(new ImportRateReviewQueueResponseDto(
+            rows,
+            safePageNumber,
+            safePageSize,
+            totalCount,
+            totalPages
+        ));
     }
+
+    private sealed record ImportRateReviewQueueResponseDto(
+        IReadOnlyCollection<ImportRateReviewQueueItemDto> Items,
+        int PageNumber,
+        int PageSize,
+        int TotalCount,
+        int TotalPages
+    );
 
     private sealed record ImportRateReviewQueueItemDto(
         Guid Id,
