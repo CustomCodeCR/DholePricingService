@@ -38,10 +38,9 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         if (exactApproved.Count > 0)
             return Result.Success(exactApproved);
 
-        // El wizard debe poder proponer tarifas aprobadas que ya fueron recibidas aunque
-        // todavía no hayan iniciado vigencia. También debe tolerar importaciones cuyo POD
-        // siga sin asignarse y diferencias de presentación como "40HC" vs "40 High Cube".
-        // POL y POE siguen siendo obligatorios para no mezclar rutas distintas.
+        // Si no hay coincidencia estricta, el wizard todavía debe poder proponer una
+        // tarifa aprobada que ya fue recibida y no ha vencido. El fallback mantiene
+        // POL + POE, tolera POD sin asignar y normaliza equipos como 40HC/40 High Cube.
         var fallbackPage = await importRates.GetPagedAsync(
             PageRequest.Create(1, 100),
             query.Search,
@@ -54,11 +53,11 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             query.Poe,
             pod: null,
             containerType: null,
-            query.Currency,
+            currency: query.Currency,
             quoteDate: null,
             validFrom: null,
             validTo: null,
-            cancellationToken
+            cancellationToken: cancellationToken
         );
 
         var requestedDate = query.QuoteDate?.Date;
@@ -92,7 +91,17 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             rate.ValidTo,
             rate.RawDataJson,
             rate.Status,
-            rate.UsedAsRateCount
+            rate.UsedAsRateCount,
+            rate.PolId,
+            rate.PoeId,
+            rate.Poe,
+            rate.PodId,
+            rate.CarrierId,
+            rate.ContainerTypeId,
+            rate.ContainerTypeCode,
+            rate.CurrencyId,
+            rate.TotalSale,
+            rate.TransitDays
         );
 
     private static bool PodMatchesOrIsUnassigned(
@@ -140,14 +149,12 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
 
     private static string CanonicalEquipment(string value)
     {
-        var normalized = CanonicalText(value)
+        return CanonicalText(value)
             .Replace("highcube", "hc", StringComparison.Ordinal)
             .Replace("dryvan", "dv", StringComparison.Ordinal)
             .Replace("opentop", "ot", StringComparison.Ordinal)
             .Replace("flatrack", "fr", StringComparison.Ordinal)
             .Replace("reefer", "rf", StringComparison.Ordinal);
-
-        return normalized;
     }
 
     private static string CanonicalText(string value)
