@@ -103,7 +103,7 @@ public sealed class AddCostaRicaCommercialTermRules : Migration
                 ('d1000000-0000-4000-8000-000000000020'::uuid,'15d5b294-8c60-4a8f-b515-05d5e6ccdf09'::uuid,'SubjectTo',180),
                 ('d1000000-0000-4000-8000-000000000020'::uuid,'d49f9695-c43f-4c98-834a-0f038ae1f9a6'::uuid,'SubjectTo',190),
                 ('d1000000-0000-4000-8000-000000000020'::uuid,'34f3b077-6f81-4842-b98d-032cc94712cc'::uuid,'SubjectTo',200),
-                ('d1000000-0000-4000-8000-000000000020'::uuid,'2e1139d8-38ad-4e3b-8a11-aa83ad641dc7b'::uuid,'SubjectTo',210),
+                ('d1000000-0000-4000-8000-000000000020'::uuid,'2e1139d8-38ad-4e3b-8a11-aa83ad641dc7'::uuid,'SubjectTo',210),
                 ('d1000000-0000-4000-8000-000000000021'::uuid,'c3dfe13a-30d4-407e-821e-6a9f519ceed7'::uuid,'Includes',10),
                 ('d1000000-0000-4000-8000-000000000021'::uuid,'b6842365-4bbc-4efa-8316-8b54c9bb384d'::uuid,'Includes',15),
                 ('d1000000-0000-4000-8000-000000000021'::uuid,'6ddaea34-9a7d-4335-8543-a328a9805c1c'::uuid,'SubjectTo',20),
