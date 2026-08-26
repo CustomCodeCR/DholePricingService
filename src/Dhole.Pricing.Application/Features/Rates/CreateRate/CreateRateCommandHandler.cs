@@ -220,7 +220,10 @@ public sealed class CreateRateCommandHandler(
             var today = DateTime.UtcNow.Date;
             importedRate.ExpireIfNeeded(today, command.CreatedBy);
 
-            if (!importedRate.IsEffectiveOn(today))
+            // Una tarifa importada aprobada puede seleccionarse antes de que inicie su ventana
+            // comercial. CreateFromImportedRate conserva ValidFrom/ValidTo de la tarifa fuente,
+            // por lo que no debemos exigir que sea efectiva "hoy"; solo impedir usar una vencida.
+            if (importedRate.Status == ImportStatus.Expired)
             {
                 return Result.Failure<Guid>(PricingErrors.ImportFclRateOutsideValidity);
             }
