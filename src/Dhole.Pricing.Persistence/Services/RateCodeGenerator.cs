@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Persistence.DbContexts;
@@ -8,17 +7,28 @@ namespace Dhole.Pricing.Persistence.Services;
 
 public sealed class RateCodeGenerator(ServiceDbContext dbContext) : IRateCodeGenerator
 {
-    private const string Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    private const int FirstBlockLength = 5;
-    private const int SecondBlockLength = 6;
-    private const int MaximumGenerationAttempts = 32;
+    private const long MaximumConsecutive = 99_999_999_999L;
 
     public async Task<string> GenerateAsync(CancellationToken cancellationToken = default)
     {
-        for (var attempt = 0; attempt < MaximumGenerationAttempts; attempt++)
+        while (true)
         {
-            var candidate = $"QUO-{GenerateBlock(FirstBlockLength)}-{GenerateBlock(SecondBlockLength)}";
+            var consecutive = await dbContext.Database
+                .SqlQueryRaw<long>("SELECT nextval('pricing.rate_quote_consecutive') AS \"Value\"")
+                .SingleAsync(cancellationToken);
 
+            if (consecutive <= 0 || consecutive > MaximumConsecutive)
+            {
+                throw new InvalidOperationException(
+                    "El consecutivo de tarifas de Pricing excedió el rango soportado."
+                );
+            }
+
+            var digits = consecutive.ToString("D11");
+            var candidate = $"QUO-{digits[..5]}-{digits[5..]}";
+
+            // Las tarifas históricas usaron códigos aleatorios. Si alguno coincide por casualidad
+            // con el nuevo formato numérico, avanzamos la secuencia sin reutilizar el código.
             var alreadyExists = await dbContext
                 .Set<RateHeader>()
                 .AsNoTracking()
@@ -29,21 +39,5 @@ public sealed class RateCodeGenerator(ServiceDbContext dbContext) : IRateCodeGen
                 return candidate;
             }
         }
-
-        throw new InvalidOperationException(
-            "No se pudo generar un identificador QUO único después de varios intentos."
-        );
-    }
-
-    private static string GenerateBlock(int length)
-    {
-        Span<char> block = stackalloc char[length];
-
-        for (var index = 0; index < block.Length; index++)
-        {
-            block[index] = Alphabet[RandomNumberGenerator.GetInt32(Alphabet.Length)];
-        }
-
-        return new string(block);
     }
 }
