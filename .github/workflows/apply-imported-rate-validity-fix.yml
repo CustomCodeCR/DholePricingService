@@ -54,3 +54,5 @@ jobs:
           git add src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs
           git commit -m "fix(pricing): allow approved future imported rates"
           git push origin HEAD:master
+
+# trigger
