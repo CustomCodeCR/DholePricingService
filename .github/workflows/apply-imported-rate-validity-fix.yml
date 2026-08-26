@@ -1,0 +1,56 @@
+name: Apply imported rate validity fix
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-imported-rate-validity-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch imported rate validity
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs')
+          text = path.read_text()
+          old = '''            var today = DateTime.UtcNow.Date;
+            importedRate.ExpireIfNeeded(today, command.CreatedBy);
+
+            if (!importedRate.IsEffectiveOn(today))
+            {
+                return Result.Failure<Guid>(PricingErrors.ImportFclRateOutsideValidity);
+            }
+'''
+          new = '''            var today = DateTime.UtcNow.Date;
+            importedRate.ExpireIfNeeded(today, command.CreatedBy);
+
+            // Una tarifa importada aprobada puede seleccionarse antes de que inicie su ventana
+            // comercial. CreateFromImportedRate conserva ValidFrom/ValidTo de la tarifa fuente,
+            // por lo que no debemos exigir que sea efectiva "hoy"; solo impedir usar una vencida.
+            if (importedRate.Status == ImportStatus.Expired)
+            {
+                return Result.Failure<Guid>(PricingErrors.ImportFclRateOutsideValidity);
+            }
+'''
+          if old not in text:
+              raise SystemExit('Expected imported-rate validity block was not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Commit fix and remove helper workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-imported-rate-validity-fix.yml
+          git add src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs
+          git commit -m "fix(pricing): allow approved future imported rates"
+          git push origin HEAD:master
