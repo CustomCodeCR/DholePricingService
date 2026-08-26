@@ -1,0 +1,89 @@
+name: Apply Land Equipment Validation
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/apply-land-equipment-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch equipment catalog validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          files = [
+              Path('src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs'),
+              Path('src/Dhole.Pricing.Application/Features/Rates/UpdateRate/UpdateRateCommandHandler.cs'),
+          ]
+
+          for path in files:
+              text = path.read_text()
+              marker = '            foreach (var requested in requestedContainers)\n'
+              if text.count(marker) != 1:
+                  raise SystemExit(f'{path}: requestedContainers foreach marker count={text.count(marker)}')
+
+              insert = '''            var equipmentCatalogSlug = command.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl
+                ? PricingConstants.CatalogSlugs.LandEquipmentTypes
+                : PricingConstants.CatalogSlugs.ContainerTypes;
+            var equipmentCatalogLabel = command.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl
+                ? "El tipo de unidad terrestre"
+                : "El tipo de contenedor";
+
+'''
+              text = text.replace(marker, insert + marker, 1)
+
+              old_lookup = '''                    requested.ContainerTypeId,
+                    PricingConstants.CatalogSlugs.ContainerTypes,
+                    cancellationToken
+'''
+              if text.count(old_lookup) != 1:
+                  raise SystemExit(f'{path}: container lookup count={text.count(old_lookup)}')
+              text = text.replace(
+                  old_lookup,
+                  '''                    requested.ContainerTypeId,
+                    equipmentCatalogSlug,
+                    cancellationToken
+''',
+                  1,
+              )
+
+              old_error = '''                    return Result.Failure''' + ('''<Guid>''' if 'CreateRate' in str(path) else '') + '''(PricingErrors.InvalidConfigCatalogReference(
+                        "El tipo de contenedor", PricingConstants.CatalogSlugs.ContainerTypes));
+'''
+              if text.count(old_error) != 1:
+                  raise SystemExit(f'{path}: equipment error count={text.count(old_error)}')
+              new_error = '''                    return Result.Failure''' + ('''<Guid>''' if 'CreateRate' in str(path) else '') + '''(PricingErrors.InvalidConfigCatalogReference(
+                        equipmentCatalogLabel, equipmentCatalogSlug));
+'''
+              text = text.replace(old_error, new_error, 1)
+              path.write_text(text)
+          PY
+
+          git diff --check
+          git diff -- src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs src/Dhole.Pricing.Application/Features/Rates/UpdateRate/UpdateRateCommandHandler.cs
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs src/Dhole.Pricing.Application/Features/Rates/UpdateRate/UpdateRateCommandHandler.cs
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(pricing): validate land equipment for FTL and LTL"
+          git push origin HEAD:master
