@@ -13,6 +13,8 @@ public sealed class GenerateRateDocumentCommandHandler(
     IPricingReportsClient reportsClient)
     : ICommandHandler<GenerateRateDocumentCommand, Result<GeneratedRateDocumentDto>>
 {
+    private const string PricingClientQuoteTemplateCode = "pricing-fcl-client-quote";
+
     public async Task<Result<GeneratedRateDocumentDto>> HandleAsync(
         GenerateRateDocumentCommand command,
         CancellationToken cancellationToken = default)
@@ -28,9 +30,9 @@ public sealed class GenerateRateDocumentCommandHandler(
         if (format is not ("pdf" or "xlsx" or "csv"))
             return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.UnsupportedReportFormat);
 
-        var templateCode = string.IsNullOrWhiteSpace(command.TemplateCode)
-            ? "pricing-fcl-client-quote"
-            : command.TemplateCode.Trim();
+        // La impresión de Pricing usa una única plantilla cliente administrada desde Reports.
+        // No aceptamos que la UI sustituya el código por otra plantilla accidentalmente.
+        var templateCode = PricingClientQuoteTemplateCode;
 
         var fileName = rate.QuoNumber ?? rate.RateCode;
         var dataJson = dataFactory.CreateDataJson(rate);
