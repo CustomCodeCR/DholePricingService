@@ -11,9 +11,19 @@ public sealed record ImportRateSelectDto(
     string Currency,
     decimal Freight,
     int FreeDays,
-    DateTime validFrom,
-    DateTime validTo,
+    DateTime ValidFrom,
+    DateTime ValidTo,
     string RawDataJson,
     string Status,
-    int UsedAsRateCount
+    int UsedAsRateCount,
+    Guid? PolId = null,
+    Guid? PoeId = null,
+    string Poe = "",
+    Guid? PodId = null,
+    Guid? CarrierId = null,
+    Guid? ContainerTypeId = null,
+    string ContainerTypeCode = "",
+    Guid? CurrencyId = null,
+    decimal? TotalSale = null,
+    int? TransitDays = null
 );
