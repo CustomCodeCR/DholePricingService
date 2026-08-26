@@ -109,16 +109,23 @@ public sealed class UpdateRateCommandHandler(
                     )
                 };
 
+            var equipmentCatalogSlug = command.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl
+                ? PricingConstants.CatalogSlugs.LandEquipmentTypes
+                : PricingConstants.CatalogSlugs.ContainerTypes;
+            var equipmentCatalogLabel = command.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl
+                ? "El tipo de unidad terrestre"
+                : "El tipo de contenedor";
+
             foreach (var requested in requestedContainers)
             {
                 var containerType = await configCatalog.GetActiveInGroupAsync(
                     requested.ContainerTypeId,
-                    PricingConstants.CatalogSlugs.ContainerTypes,
+                    equipmentCatalogSlug,
                     cancellationToken
                 );
                 if (containerType is null)
                     return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
-                        "El tipo de contenedor", PricingConstants.CatalogSlugs.ContainerTypes));
+                        equipmentCatalogLabel, equipmentCatalogSlug));
 
                 normalizedContainers.Add(new UpdateRateContainerCommandItem(
                     containerType.Id, containerType.SnapshotName(), containerType.Code, requested.Quantity));
