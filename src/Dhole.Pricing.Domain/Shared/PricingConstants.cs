@@ -17,9 +17,9 @@ public static class PricingConstants
         public const string ContainerKinds = "container-kinds";
         public const string TransportModalities = "transport-modalities";
         public const string ShipmentModes = "shipment-modes";
-        // Compatibility alias for handlers created before FTL/LTL were modeled as shipment modes.
-        // There is intentionally no separate terrestrial-equipment catalog.
-        public const string LandEquipmentTypes = ShipmentModes;
+        public const string LandEquipmentTypes = "land-equipment-types";
+        public const string LandEquipmentSizes = "land-equipment-sizes";
+        public const string LandEquipmentKinds = "land-equipment-kinds";
         public const string AirEquipmentTypes = "air-equipment-types";
         public const string PricingServices = "pricing-services";
         public const string PricingImportsProfiles = "pricing-imports-profiles";
