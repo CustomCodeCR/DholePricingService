@@ -18,30 +18,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fix TEU allocation source
+      - name: Apply TEU fix
         shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('src/Dhole.Pricing.Domain/Rates/Entities/RateHeader.cs')
-          text = path.read_text(encoding='utf-8-sig')
-          old = '''        if (Containers.Count > 0)
-        {
-            return Containers.Sum(container =>'''
-          new = '''        if (_rateContainers.Count > 0)
-        {
-            return _rateContainers.Sum(container =>'''
-          if text.count(old) != 1:
-              raise SystemExit(f'expected TEU container block once, found {text.count(old)}')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
-          PY
+        run: python3 .github/scripts/fix_teu_container_reference.py
 
       - name: Commit fix
         shell: bash
         run: |
           set -euo pipefail
           rm -f .github/workflows/fix-teu-container-reference.yml
+          rm -f .github/scripts/fix_teu_container_reference.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
