@@ -61,7 +61,7 @@ replacement = r'''    private static IResult? ValidateExclusiveRateTerms(
 
     private static async Task<int> ResolveConfiguredFreeDaysAsync'''
 
-text, count = pattern.subn(replacement, text, count=1)
+text, count = pattern.subn(lambda _: replacement, text, count=1)
 if count != 1:
     raise SystemExit(f'ValidateExclusiveRateTerms no reemplazado: {count}')
 
