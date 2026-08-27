@@ -817,7 +817,18 @@ public static class RateEndpoints
         static IEnumerable<string> Lines(string? value) =>
             (value ?? string.Empty)
                 .Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(x => x.ToUpperInvariant());
+                .Select(x =>
+                {
+                    var normalized = System.Text.RegularExpressions.Regex.Replace(
+                        x.ToUpperInvariant(), @"[^\p{L}\p{N}]+", " "
+                    ).Trim();
+                    var qualifier = System.Text.RegularExpressions.Regex.Match(
+                        normalized, @"\s(?:USD|EUR|CRC|IVI|IVA|ITBMS|\d)"
+                    );
+                    return qualifier.Success && qualifier.Index > 0
+                        ? normalized[..qualifier.Index].Trim()
+                        : normalized;
+                });
 
         var categories = new[] { Lines(includes), Lines(subjectTo), Lines(excludes) };
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
