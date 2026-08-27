@@ -1,4 +1,5 @@
 name: Deploy Dhole Pricing
+# Pricing wizard release trigger — 2026-08-27
 
 on:
   push:
