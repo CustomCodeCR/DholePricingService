@@ -19,6 +19,21 @@ builder.Services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
 
 builder.Services.AddCustomCodeApiWithSwagger(title: "Dhole Pricing Service", version: "v1");
 
+var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"]
+    ?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    ?? [];
+var allowedOrigins = new[]
+{
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://192.168.1.193:5173",
+    "https://sistema.logisticacastrofallas.com",
+    "https://dhole.customcodecr.com",
+}
+.Concat(configuredOrigins)
+.Distinct(StringComparer.OrdinalIgnoreCase)
+.ToArray();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(
@@ -26,11 +41,7 @@ builder.Services.AddCors(options =>
         policy =>
         {
             policy
-                .WithOrigins(
-                    "http://localhost:5173",
-                    "http://127.0.0.1:5173",
-                    "http://192.168.1.193:5173"
-                )
+                .WithOrigins(allowedOrigins)
                 .AllowAnyHeader()
                 .AllowAnyMethod();
         }
