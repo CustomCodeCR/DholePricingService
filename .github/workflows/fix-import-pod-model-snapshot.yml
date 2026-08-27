@@ -1,4 +1,5 @@
 name: Sync import POD model snapshot
+# rerun after repairing self-hosted runner workspace permissions
 
 on:
   push:
