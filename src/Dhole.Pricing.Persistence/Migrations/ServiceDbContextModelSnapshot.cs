@@ -1321,12 +1321,11 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(80)")
                         .HasColumnName("pod_code");
 
-                    b.Property<Guid>("PodId")
+                    b.Property<Guid?>("PodId")
                         .HasColumnType("uuid")
                         .HasColumnName("pod_id");
 
                     b.Property<string>("PodName")
-                        .IsRequired()
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)")
                         .HasColumnName("pod_name");
