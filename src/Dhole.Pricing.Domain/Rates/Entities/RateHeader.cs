@@ -608,6 +608,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             // Callers that need the whole shipment can omit requestedQuantity.
             ChargeBasis.PerContainer => requestedQuantity > 0m ? requestedQuantity : Math.Max(ContainerQuantity, 1),
             ChargeBasis.PerTruck => requestedQuantity > 0m ? requestedQuantity : Math.Max(ContainerQuantity, 1),
+            ChargeBasis.PerTeu => ResolveTeuQuantity(requestedQuantity),
             ChargeBasis.PerCbm => Math.Max(TotalVolumeCbm, 0.001m),
             ChargeBasis.PerChargeableCbm => Math.Max(chargeableCbm, 0.001m),
             ChargeBasis.PerKg => Math.Max(TotalWeightKg, 0.001m),
@@ -618,6 +619,32 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             ChargeBasis.PerDocument => explicitQuantity,
             _ => 1m,
         };
+    }
+
+    private decimal ResolveTeuQuantity(decimal requestedQuantity)
+    {
+        if (requestedQuantity > 0m)
+            return requestedQuantity;
+
+        if (Containers.Count > 0)
+        {
+            return Containers.Sum(container =>
+            {
+                var equipment = $"{container.ContainerTypeCode} {container.ContainerTypeName}";
+                var isTwentyFoot = System.Text.RegularExpressions.Regex.IsMatch(
+                    equipment,
+                    @"(^|\D)20(\D|$)",
+                    System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+                return container.Quantity * (isTwentyFoot ? 1m : 2m);
+            });
+        }
+
+        var headerEquipment = $"{ContainerTypeCode} {ContainerTypeName}";
+        var headerIsTwentyFoot = System.Text.RegularExpressions.Regex.IsMatch(
+            headerEquipment,
+            @"(^|\D)20(\D|$)",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        return Math.Max(ContainerQuantity, 1) * (headerIsTwentyFoot ? 1m : 2m);
     }
 
     private ChargeBasis InferChargeBasis(CostDetailType costDetailType)
