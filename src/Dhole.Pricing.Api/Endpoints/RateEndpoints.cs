@@ -814,7 +814,7 @@ public static class RateEndpoints
         HttpContext httpContext
     )
     {
-        static IEnumerable<string> Lines(string? value) =>
+        static HashSet<string> Lines(string? value) =>
             (value ?? string.Empty)
                 .Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Select(x =>
@@ -828,15 +828,20 @@ public static class RateEndpoints
                     return qualifier.Success && qualifier.Index > 0
                         ? normalized[..qualifier.Index].Trim()
                         : normalized;
-                });
+                })
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        // Repetir accidentalmente una línea dentro de la misma categoría no viola
+        // exclusividad. El error aplica únicamente si el mismo ítem aparece en
+        // categorías distintas: Incluye / Sujeto a / No incluye.
         var categories = new[] { Lines(includes), Lines(subjectTo), Lines(excludes) };
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var category in categories)
         {
             foreach (var item in category)
             {
-                if (!seen.Add(item))
+                if (seen.Contains(item))
                 {
                     return EndpointResults.BadRequest(
                         "Pricing.RateTermItemDuplicated",
@@ -845,6 +850,8 @@ public static class RateEndpoints
                     );
                 }
             }
+
+            seen.UnionWith(category);
         }
         return null;
     }
