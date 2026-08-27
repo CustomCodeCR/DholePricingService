@@ -85,12 +85,18 @@ jobs:
             REPORTS_URL="${Reports__Client__BaseAddress:-http://reports-api:5208}"
             REPORTS_HEADER="${Reports__Client__InternalServiceKeyHeader:-X-Dhole-Service-Key}"
             REPORTS_KEY="${Reports__Client__InternalServiceKey:-dhole-local-reports-service-key-change-in-production}"
-            curl --fail --silent --show-error \
+            HTTP_CODE="$(curl --silent --show-error \
               -H "Content-Type: application/json" \
               -H "$REPORTS_HEADER: $REPORTS_KEY" \
-              --data "{\"format\":\"pdf\",\"dataJson\":\"{}\",\"fileName\":\"pricing-smoke-test\",\"sheetName\":\"Tarifa\"}" \
+              --data "{\"format\":\"pdf\",\"dataJson\":{\"company\":{\"name\":\"Grupo Castro Fallas\",\"website\":\"https://logisticacastrofallas.com\"},\"generated\":{\"date\":\"27/08/2026\"},\"rate\":{\"quoteNumber\":\"SMOKE-TEST\",\"clientName\":\"Validación Dhole\",\"route\":\"Origen → Destino\",\"carrier\":\"Naviera\",\"containerSummary\":\"1 x 40 HC\",\"transitTime\":\"Por confirmar\",\"freeDays\":0,\"validFrom\":\"27/08/2026\",\"validTo\":\"27/09/2026\",\"total\":\"USD 0.00\",\"includes\":\"\",\"subjectTo\":\"\",\"excludes\":\"\"},\"items\":[]},\"fileName\":\"pricing-smoke-test\",\"sheetName\":\"Tarifa\"}" \
               "$REPORTS_URL/api/internal/reports/templates/pricing-fcl-client-quote/generate" \
-              --output /tmp/pricing-smoke-test.pdf
+              --output /tmp/pricing-smoke-test.pdf \
+              --write-out "%{http_code}")"
+            if [ "$HTTP_CODE" != "200" ]; then
+              echo "Reports devolvió HTTP $HTTP_CODE para pricing-fcl-client-quote"
+              cat /tmp/pricing-smoke-test.pdf
+              exit 1
+            fi
             test -s /tmp/pricing-smoke-test.pdf
             head -c 4 /tmp/pricing-smoke-test.pdf | grep -q "%PDF"
             rm -f /tmp/pricing-smoke-test.pdf
