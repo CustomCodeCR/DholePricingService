@@ -1306,11 +1306,27 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
     private static void ValidateRateTerms(string? includes, string? subjectTo, string? excludes)
     {
+        static string TermKey(string value)
+        {
+            var normalized = System.Text.RegularExpressions.Regex.Replace(
+                value.Trim().ToUpperInvariant(),
+                @"[^\p{L}\p{N}]+",
+                " "
+            ).Trim();
+            var qualifier = System.Text.RegularExpressions.Regex.Match(
+                normalized,
+                @"\s(?:USD|EUR|CRC|IVI|IVA|ITBMS|\d)"
+            );
+            return qualifier.Success && qualifier.Index > 0
+                ? normalized[..qualifier.Index].Trim()
+                : normalized;
+        }
+
         static HashSet<string> Parse(string? value) => string.IsNullOrWhiteSpace(value)
             ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             : value
                 .Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(x => x.Trim())
+                .Select(TermKey)
                 .Where(x => x.Length > 0)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
