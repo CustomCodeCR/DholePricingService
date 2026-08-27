@@ -1,0 +1,56 @@
+name: Sync import POD model snapshot
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-import-pod-model-snapshot.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - name: Checkout service
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Repair ImportFclRates snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/Dhole.Pricing.Persistence/Migrations/ServiceDbContextModelSnapshot.cs')
+          text = path.read_text(encoding='utf-8-sig')
+          marker = 'modelBuilder.Entity("Dhole.Pricing.Domain.Imports.Entities.ImportFclRates", b =>'
+          start = text.index(marker)
+          end_marker = '                    b.ToTable("ImportFclRates", "pricing");'
+          end = text.index(end_marker, start) + len(end_marker)
+          block = text[start:end]
+
+          old_id = '''                    b.Property<Guid?>("PodId")\n                        .HasColumnType("uuid")\n                        .HasColumnName("pod_id");'''
+          new_id = '''                    b.Property<Guid>("PodId")\n                        .HasColumnType("uuid")\n                        .HasColumnName("pod_id");'''
+          if old_id not in block:
+              raise SystemExit('ImportFclRates nullable PodId snapshot definition not found')
+          block = block.replace(old_id, new_id, 1)
+
+          old_name = '''                    b.Property<string>("PodName")\n                        .HasMaxLength(250)\n                        .HasColumnType("character varying(250)")\n                        .HasColumnName("pod_name");'''
+          new_name = '''                    b.Property<string>("PodName")\n                        .IsRequired()\n                        .HasMaxLength(250)\n                        .HasColumnType("character varying(250)")\n                        .HasColumnName("pod_name");'''
+          if old_name not in block:
+              raise SystemExit('ImportFclRates optional PodName snapshot definition not found')
+          block = block.replace(old_name, new_name, 1)
+
+          text = text[:start] + block + text[end:]
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          rm .github/workflows/fix-import-pod-model-snapshot.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Dhole.Pricing.Persistence/Migrations/ServiceDbContextModelSnapshot.cs .github/workflows/fix-import-pod-model-snapshot.yml
+          git commit -m "fix(pricing): align import POD snapshot with model"
+          git push origin HEAD:master
