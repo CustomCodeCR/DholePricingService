@@ -1,0 +1,20 @@
+name: Repair Pricing runner workspace
+
+on:
+  push:
+    paths:
+      - '.github/workflows/repair-runner-workspace.yml'
+
+jobs:
+  repair:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - name: Repair workspace ownership
+        shell: bash
+        run: |
+          set -euo pipefail
+          UID_HOST="$(id -u)"
+          GID_HOST="$(id -g)"
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" alpine:3.22 sh -c "chown -R ${UID_HOST}:${GID_HOST} /workspace"
+          find "$GITHUB_WORKSPACE" -type d \( -name bin -o -name obj \) -prune -exec rm -rf {} + || true
+          echo "Workspace permissions repaired."
