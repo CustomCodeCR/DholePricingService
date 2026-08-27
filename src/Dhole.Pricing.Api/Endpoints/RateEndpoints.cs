@@ -484,6 +484,9 @@ public static class RateEndpoints
                 request.TotalWeightKg,
                 request.TotalVolumeCbm,
                 cargoLines,
+                request.PickupAddress,
+                request.PickupLatitude,
+                request.PickupLongitude,
                 canApproveImportedRate,
                 canApproveLowMargin,
                 httpContext.GetCurrentUserId()

@@ -182,6 +182,10 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string? IncotermName { get; private set; }
     public string? IncotermCode { get; private set; }
 
+    public string? PickupAddress { get; private set; }
+    public decimal? PickupLatitude { get; private set; }
+    public decimal? PickupLongitude { get; private set; }
+
     public Guid CurrencyId { get; private set; }
     public string CurrencyName { get; private set; } = string.Empty;
     public string CurrencyCode { get; private set; } = string.Empty;
@@ -437,6 +441,33 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
+    }
+
+    public void ConfigurePickupLocation(
+        string? pickupAddress,
+        decimal? pickupLatitude,
+        decimal? pickupLongitude
+    )
+    {
+        var applies = string.Equals(IncotermCode, "EXW", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(IncotermCode, "FCA", StringComparison.OrdinalIgnoreCase);
+
+        if (!applies)
+        {
+            PickupAddress = null;
+            PickupLatitude = null;
+            PickupLongitude = null;
+            return;
+        }
+
+        if (pickupLatitude is < -90m or > 90m)
+            throw new InvalidOperationException("La latitud de recolección no es válida.");
+        if (pickupLongitude is < -180m or > 180m)
+            throw new InvalidOperationException("La longitud de recolección no es válida.");
+
+        PickupAddress = Normalize(pickupAddress);
+        PickupLatitude = pickupLatitude;
+        PickupLongitude = pickupLongitude;
     }
 
     public void ReplaceContainerAllocations(

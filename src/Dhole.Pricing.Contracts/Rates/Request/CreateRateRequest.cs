@@ -46,5 +46,8 @@ public sealed record CreateRateRequest(
     decimal TotalWeightKg = 0m,
     decimal TotalVolumeCbm = 0m,
     decimal KgPerCbm = 500m,
-    IReadOnlyCollection<RateCargoLineRequest>? CargoLines = null
+    IReadOnlyCollection<RateCargoLineRequest>? CargoLines = null,
+    string? PickupAddress = null,
+    decimal? PickupLatitude = null,
+    decimal? PickupLongitude = null
 );

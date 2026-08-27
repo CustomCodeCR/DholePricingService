@@ -272,6 +272,12 @@ public sealed class CreateRateCommandHandler(
                 ? CreateManualRate(command, rateCode)
                 : CreateFromImportedRate(command, importedRate, rateCode);
 
+            rate.ConfigurePickupLocation(
+                command.PickupAddress,
+                command.PickupLatitude,
+                command.PickupLongitude
+            );
+
             var cargoProfile = RateCargoProfileFactory.Create(
                 command.ShipmentMode,
                 command.KgPerCbm,

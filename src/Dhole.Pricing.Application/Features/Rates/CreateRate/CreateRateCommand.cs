@@ -74,6 +74,9 @@ public sealed record CreateRateCommand(
     decimal TotalWeightKg,
     decimal TotalVolumeCbm,
     IReadOnlyCollection<RateCargoLineCommandItem> CargoLines,
+    string? PickupAddress,
+    decimal? PickupLatitude,
+    decimal? PickupLongitude,
     bool CanApproveImportedRate,
     bool CanApproveLowMargin,
     Guid? CreatedBy
