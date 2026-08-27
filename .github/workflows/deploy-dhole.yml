@@ -53,5 +53,27 @@ jobs:
           docker compose --env-file /opt/dhole/.env -f "$COMPOSE_FILE" up -d --no-deps --force-recreate --pull never pricing-api pricing-workers
           docker compose --env-file /opt/dhole/.env -f "$COMPOSE_FILE" ps pricing-api pricing-workers
 
+      - name: Verify Pricing API health
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONTAINER_ID="$(docker compose --env-file /opt/dhole/.env -f "$COMPOSE_FILE" ps -q pricing-api)"
+          test -n "$CONTAINER_ID"
+          for attempt in $(seq 1 18); do
+            STATUS="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$CONTAINER_ID")"
+            echo "Pricing API status: $STATUS (attempt $attempt/18)"
+            if [ "$STATUS" = "healthy" ]; then
+              exit 0
+            fi
+            if [ "$STATUS" = "exited" ] || [ "$STATUS" = "dead" ] || [ "$STATUS" = "unhealthy" ]; then
+              docker logs --tail 200 "$CONTAINER_ID" || true
+              exit 1
+            fi
+            sleep 5
+          done
+          docker logs --tail 200 "$CONTAINER_ID" || true
+          echo "Pricing API did not become healthy in time."
+          exit 1
+
       - name: Cleanup old images
         run: docker image prune -f
