@@ -626,9 +626,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         if (requestedQuantity > 0m)
             return requestedQuantity;
 
-        if (Containers.Count > 0)
+        if (_rateContainers.Count > 0)
         {
-            return Containers.Sum(container =>
+            return _rateContainers.Sum(container =>
             {
                 var equipment = $"{container.ContainerTypeCode} {container.ContainerTypeName}";
                 var isTwentyFoot = System.Text.RegularExpressions.Regex.IsMatch(
