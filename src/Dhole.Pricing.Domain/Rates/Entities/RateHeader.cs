@@ -29,9 +29,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         Guid poeId,
         string poeName,
         string poeCode,
-        Guid podId,
-        string podName,
-        string podCode,
+        Guid? podId,
+        string? podName,
+        string? podCode,
         Guid containerTypeId,
         string containerTypeName,
         string containerTypeCode,
@@ -103,9 +103,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         PoeId = poeId;
         PoeName = poeName.Trim();
         PoeCode = poeCode.Trim();
-        PodId = podId;
-        PodName = podName.Trim();
-        PodCode = podCode.Trim();
+        PodId = NormalizeId(podId);
+        PodName = PodId.HasValue ? Normalize(podName) : null;
+        PodCode = PodId.HasValue ? Normalize(podCode) : null;
         ContainerTypeId = containerTypeId;
         ContainerTypeName = containerTypeName.Trim();
         ContainerTypeCode = containerTypeCode.Trim();
@@ -170,9 +170,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string PoeName { get; private set; } = string.Empty;
     public string PoeCode { get; private set; } = string.Empty;
 
-    public Guid PodId { get; private set; }
-    public string PodName { get; private set; } = string.Empty;
-    public string PodCode { get; private set; } = string.Empty;
+    public Guid? PodId { get; private set; }
+    public string? PodName { get; private set; }
+    public string? PodCode { get; private set; }
 
     public Guid ContainerTypeId { get; private set; }
     public string ContainerTypeName { get; private set; } = string.Empty;
@@ -240,9 +240,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         Guid poeId,
         string poeName,
         string poeCode,
-        Guid podId,
-        string podName,
-        string podCode,
+        Guid? podId,
+        string? podName,
+        string? podCode,
         Guid containerTypeId,
         string containerTypeName,
         string containerTypeCode,
@@ -327,9 +327,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         Guid poeId,
         string poeName,
         string poeCode,
-        Guid podId,
-        string podName,
-        string podCode,
+        Guid? podId,
+        string? podName,
+        string? podCode,
         Guid containerTypeId,
         string containerTypeName,
         string containerTypeCode,
@@ -399,9 +399,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         PoeId = poeId;
         PoeName = poeName.Trim();
         PoeCode = poeCode.Trim();
-        PodId = podId;
-        PodName = podName.Trim();
-        PodCode = podCode.Trim();
+        PodId = NormalizeId(podId);
+        PodName = PodId.HasValue ? Normalize(podName) : null;
+        PodCode = PodId.HasValue ? Normalize(podCode) : null;
         ContainerTypeId = containerTypeId;
         ContainerTypeName = containerTypeName.Trim();
         ContainerTypeCode = containerTypeCode.Trim();
@@ -1013,7 +1013,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         string containerDescription,
         string polName,
         string poeName,
-        string podName,
+        string? podName,
         string? incoterm,
         string? clientName
     )
@@ -1039,8 +1039,13 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         };
 
         var incotermLabel = string.IsNullOrWhiteSpace(incoterm) ? "FOB" : incoterm.Trim();
+        var hasPod = !string.IsNullOrWhiteSpace(podName);
+        var destination = hasPod ? podName!.Trim() : poeName;
+        var route = hasPod && !string.Equals(destination, poeName, StringComparison.OrdinalIgnoreCase)
+            ? $"{polName} To {destination} Via {via}"
+            : $"{polName} To {destination}";
         var baseName =
-            $"{rateCode} - Tarifa {containerDescription} - {incotermLabel} - {polName} To {podName} Via {via}";
+            $"{rateCode} - Tarifa {containerDescription} - {incotermLabel} - {route}";
         return string.IsNullOrWhiteSpace(clientName) ? baseName : $"{baseName} - {clientName}";
     }
 
@@ -1084,9 +1089,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         Guid poeId,
         string poeName,
         string poeCode,
-        Guid podId,
-        string podName,
-        string podCode,
+        Guid? podId,
+        string? podName,
+        string? podCode,
         Guid containerTypeId,
         string containerTypeName,
         string containerTypeCode,
@@ -1157,13 +1162,21 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             throw new InvalidOperationException("El POE es obligatorio.");
         }
 
+        var normalizedPodId = NormalizeId(podId);
         if (
-            podId == Guid.Empty
-            || string.IsNullOrWhiteSpace(podName)
-            || string.IsNullOrWhiteSpace(podCode)
+            normalizedPodId.HasValue
+            && (string.IsNullOrWhiteSpace(podName) || string.IsNullOrWhiteSpace(podCode))
         )
         {
-            throw new InvalidOperationException("El POD es obligatorio.");
+            throw new InvalidOperationException("El POD seleccionado debe incluir nombre y código.");
+        }
+
+        if (
+            !normalizedPodId.HasValue
+            && (!string.IsNullOrWhiteSpace(podName) || !string.IsNullOrWhiteSpace(podCode))
+        )
+        {
+            throw new InvalidOperationException("El identificador del POD es obligatorio cuando se envía su información.");
         }
 
         if (

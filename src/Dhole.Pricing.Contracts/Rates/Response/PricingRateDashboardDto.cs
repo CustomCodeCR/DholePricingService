@@ -44,7 +44,7 @@ public sealed record PricingRateDashboardItemDto(
     string? CarrierName,
     string PolName,
     string PoeName,
-    string PodName,
+    string? PodName,
     string ContainerTypeName,
     string CurrencyCode,
     decimal TotalUtilityAmount,

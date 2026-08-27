@@ -557,8 +557,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 || x.PolCode.ToLower().Contains(value)
                 || x.PoeName.ToLower().Contains(value)
                 || x.PoeCode.ToLower().Contains(value)
-                || x.PodName.ToLower().Contains(value)
-                || x.PodCode.ToLower().Contains(value)
+                || (x.PodName ?? string.Empty).ToLower().Contains(value)
+                || (x.PodCode ?? string.Empty).ToLower().Contains(value)
                 || x.ContainerTypeName.ToLower().Contains(value)
                 || x.ContainerTypeCode.ToLower().Contains(value)
                 || x.RateContainers.Any(c =>
@@ -661,7 +661,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         string carrierCode,
         string polCode,
         string poeCode,
-        string podCode,
+        string? podCode,
         string containerTypeCode,
         string currencyCode,
         decimal totalSaleAmount,
@@ -675,9 +675,11 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             ? carrierCode.Trim()
             : carrierName.Trim();
 
-        var route = string.IsNullOrWhiteSpace(poeCode)
-            ? $"{polCode} → {podCode}"
-            : $"{polCode} → {poeCode} → {podCode}";
+        var route = string.IsNullOrWhiteSpace(podCode)
+            ? $"{polCode} → {poeCode}"
+            : string.IsNullOrWhiteSpace(poeCode)
+                ? $"{polCode} → {podCode}"
+                : $"{polCode} → {poeCode} → {podCode}";
 
         return $"{agent} | {carrier} | {route} | {containerTypeCode} | "
             + $"{currencyCode} {totalSaleAmount:N2} | Margen {marginPercentage:N2}% | {status}";

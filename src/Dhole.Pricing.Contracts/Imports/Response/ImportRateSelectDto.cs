@@ -25,5 +25,6 @@ public sealed record ImportRateSelectDto(
     string ContainerTypeCode = "",
     Guid? CurrencyId = null,
     decimal? TotalSale = null,
-    int? TransitDays = null
+    int? TransitDays = null,
+    string? SpaceComment = null
 );

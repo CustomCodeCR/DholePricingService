@@ -68,11 +68,15 @@ public sealed class CreateRateCommandHandler(
                 return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
                     "El POE", PricingConstants.CatalogSlugs.Poe));
 
-            var pod = await configCatalog.GetActiveInGroupAsync(
-                command.PodId, PricingConstants.CatalogSlugs.Pod, cancellationToken);
-            if (pod is null)
-                return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
-                    "El POD", PricingConstants.CatalogSlugs.Pod));
+            PricingConfigCatalogItem? pod = null;
+            if (command.PodId.HasValue && command.PodId.Value != Guid.Empty)
+            {
+                pod = await configCatalog.GetActiveInGroupAsync(
+                    command.PodId, PricingConstants.CatalogSlugs.Pod, cancellationToken);
+                if (pod is null)
+                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
+                        "El POD", PricingConstants.CatalogSlugs.Pod));
+            }
 
             var currency = await configCatalog.GetActiveInGroupAsync(
                 command.CurrencyId, PricingConstants.CatalogSlugs.Currencies, cancellationToken);
@@ -139,9 +143,9 @@ public sealed class CreateRateCommandHandler(
                 PoeId = poe.Id,
                 PoeName = poe.SnapshotName(),
                 PoeCode = poe.Code,
-                PodId = pod.Id,
-                PodName = pod.SnapshotName(),
-                PodCode = pod.Code,
+                PodId = pod?.Id,
+                PodName = pod?.SnapshotName(),
+                PodCode = pod?.Code,
                 ContainerTypeId = primaryContainer.ContainerTypeId,
                 ContainerTypeName = primaryContainer.ContainerTypeName,
                 ContainerTypeCode = primaryContainer.ContainerTypeCode,

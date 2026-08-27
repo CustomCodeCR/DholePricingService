@@ -56,11 +56,11 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.PoeCode).HasMaxLength(80).IsRequired();
 
-        builder.Property(x => x.PodId).IsRequired();
+        builder.Property(x => x.PodId).IsRequired(false);
 
-        builder.Property(x => x.PodName).HasMaxLength(250).IsRequired();
+        builder.Property(x => x.PodName).HasMaxLength(250).IsRequired(false);
 
-        builder.Property(x => x.PodCode).HasMaxLength(80).IsRequired();
+        builder.Property(x => x.PodCode).HasMaxLength(80).IsRequired(false);
 
         builder.Property(x => x.ContainerTypeId).IsRequired();
 

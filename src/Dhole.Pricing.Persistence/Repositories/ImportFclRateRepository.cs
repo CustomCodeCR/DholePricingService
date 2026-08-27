@@ -648,7 +648,18 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext, IConfigu
                 x.ValidTo,
                 x.RawDataJson ?? "{}",
                 x.Status.ToString(),
-                x.UsedAsRateCount
+                x.UsedAsRateCount,
+                x.PolId,
+                x.PoeId,
+                x.PoeName,
+                x.PodId,
+                x.CarrierId,
+                x.ContainerTypeId,
+                x.ContainerTypeCode,
+                x.CurrencyId,
+                x.TotalSale,
+                x.TransitDays,
+                x.SpaceComment
             ))
             .ToListAsync(cancellationToken);
     }

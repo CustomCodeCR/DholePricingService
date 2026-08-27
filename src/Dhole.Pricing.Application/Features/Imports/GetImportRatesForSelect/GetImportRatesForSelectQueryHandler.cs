@@ -101,7 +101,8 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             rate.ContainerTypeCode,
             rate.CurrencyId,
             rate.TotalSale,
-            rate.TransitDays
+            rate.TransitDays,
+            rate.SpaceComment
         );
 
     private static bool PodMatchesOrIsUnassigned(
