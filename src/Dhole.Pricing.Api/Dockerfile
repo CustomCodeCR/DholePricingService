@@ -3,7 +3,7 @@
 # Base image
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 RUN apt-get update && \
-  apt-get install -y tzdata apt-utils libgdiplus libc6-dev && \
+  apt-get install -y tzdata apt-utils libgdiplus libc6-dev curl && \
   ln -s /usr/lib/libgdiplus.so /usr/lib/gdiplus.dll && \
   rm -rf /var/lib/apt/lists/*
 
@@ -51,5 +51,8 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 RUN chmod 755 /app
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=6 \
+  CMD curl -fsS http://127.0.0.1:8080/health >/dev/null || exit 1
 
 ENTRYPOINT ["dotnet", "Dhole.Pricing.Api.dll"]
