@@ -25,6 +25,9 @@ public static class ImportRateReviewQueueEndpoints
         Guid? polId,
         Guid? poeId,
         Guid? carrierId,
+        Guid? agentId,
+        Guid? containerTypeId,
+        Guid? importBatchId,
         DateTime? createdFrom,
         DateTime? createdTo,
         int? pageNumber,
@@ -50,6 +53,15 @@ public static class ImportRateReviewQueueEndpoints
 
         if (carrierId.HasValue)
             query = query.Where(x => x.CarrierId == carrierId.Value);
+
+        if (agentId.HasValue)
+            query = query.Where(x => x.AgentId == agentId.Value);
+
+        if (containerTypeId.HasValue)
+            query = query.Where(x => x.ContainerTypeId == containerTypeId.Value);
+
+        if (importBatchId.HasValue)
+            query = query.Where(x => x.ImportBatchId == importBatchId.Value);
 
         if (createdFrom.HasValue)
         {

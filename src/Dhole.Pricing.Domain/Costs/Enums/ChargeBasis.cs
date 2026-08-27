@@ -5,6 +5,7 @@ public enum ChargeBasis
     PerShipment = 0,
     PerContainer = 1,
     PerTruck = 2,
+    PerTeu = 3,
     PerCbm = 10,
     PerChargeableCbm = 11,
     PerKg = 20,
