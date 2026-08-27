@@ -1,0 +1,35 @@
+name: Patch rate pickup location persistence
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/scripts/patch-rate-pickup-location-20260827.py'
+      - '.github/workflows/patch-rate-pickup-location-20260827.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply persistence patch
+        run: python3 .github/scripts/patch-rate-pickup-location-20260827.py
+
+      - name: Commit patch and cleanup helpers
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/scripts/patch-rate-pickup-location-20260827.py
+          rm -f .github/workflows/patch-rate-pickup-location-20260827.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(pricing): persist EXW and FCA pickup location'
+          git push origin HEAD:master
