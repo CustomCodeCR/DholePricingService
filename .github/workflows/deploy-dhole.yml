@@ -75,5 +75,27 @@ jobs:
           echo "Pricing API did not become healthy in time."
           exit 1
 
+      - name: Verify pricing client quote report
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONTAINER_ID="$(docker compose --env-file /opt/dhole/.env -f "$COMPOSE_FILE" ps -q pricing-api)"
+          test -n "$CONTAINER_ID"
+          docker exec "$CONTAINER_ID" sh -ec '
+            REPORTS_URL="${Reports__Client__BaseAddress:-http://reports-api:5208}"
+            REPORTS_HEADER="${Reports__Client__InternalServiceKeyHeader:-X-Dhole-Service-Key}"
+            REPORTS_KEY="${Reports__Client__InternalServiceKey:-dhole-local-reports-service-key-change-in-production}"
+            curl --fail --silent --show-error \
+              -H "Content-Type: application/json" \
+              -H "$REPORTS_HEADER: $REPORTS_KEY" \
+              --data "{\"format\":\"pdf\",\"dataJson\":\"{}\",\"fileName\":\"pricing-smoke-test\",\"sheetName\":\"Tarifa\"}" \
+              "$REPORTS_URL/api/internal/reports/templates/pricing-fcl-client-quote/generate" \
+              --output /tmp/pricing-smoke-test.pdf
+            test -s /tmp/pricing-smoke-test.pdf
+            head -c 4 /tmp/pricing-smoke-test.pdf | grep -q "%PDF"
+            rm -f /tmp/pricing-smoke-test.pdf
+          '
+
       - name: Cleanup old images
+        continue-on-error: true
         run: docker image prune -f
