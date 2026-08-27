@@ -96,6 +96,12 @@ public static class CostEndpoints
         CostPortRole? portRole,
         Guid? currencyId,
         bool? isActive,
+        Guid? polId,
+        Guid? poeId,
+        Guid? podId,
+        Guid? incotermId,
+        ShipmentMode? shipmentMode,
+        bool? applicableToContext,
         IQueryDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -111,7 +117,13 @@ public static class CostEndpoints
                 portId,
                 portRole,
                 currencyId,
-                isActive ?? true
+                isActive ?? true,
+                polId,
+                poeId,
+                podId,
+                incotermId,
+                shipmentMode,
+                applicableToContext ?? false
             ),
             cancellationToken
         );
