@@ -1022,17 +1022,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             ? evaluatedAtUtc.Date
             : evaluatedAtUtc.ToUniversalTime().Date;
 
-        if (ValidTo.Date >= effectiveDate || Status == RateStatus.Expired)
-        {
-            return false;
-        }
-
-        if (
-            Status
-            is RateStatus.Closed
-                or RateStatus.RejectedByManagement
-                or RateStatus.RejectedByClient
-        )
+        // Comercialmente una tarifa solo puede vencer después de haber sido enviada al cliente.
+        // Solicitudes abiertas, pendientes internas y tarifas ya decididas no deben convertirse en Vencidas.
+        if (ValidTo.Date >= effectiveDate || Status != RateStatus.Sent)
         {
             return false;
         }
