@@ -20,7 +20,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply commercial snapshot patch
-        run: python3 .github/scripts/apply_editable_client_executive_20260828.py
+        run: |
+          python3 .github/scripts/apply_editable_client_executive_20260828.py
+          python3 .github/scripts/fix_editable_client_executive_projection_20260828.py
 
       - name: Validate Pricing API image
         shell: bash
@@ -54,6 +56,7 @@ jobs:
           set -euo pipefail
           rm -f .github/workflows/apply-editable-client-executive-20260828.yml
           rm -f .github/scripts/apply_editable_client_executive_20260828.py
+          rm -f .github/scripts/fix_editable_client_executive_projection_20260828.py
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
