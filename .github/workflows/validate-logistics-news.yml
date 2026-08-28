@@ -17,16 +17,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate EF migration and synchronize model snapshot
+      - name: Build and generate EF migration
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if ls src/Dhole.Pricing.Persistence/Migrations/*AddLogisticsNewsAndSyncModel20260828.cs >/dev/null 2>&1; then
-            echo "Migration already generated."
-            exit 0
-          fi
-
           docker run --rm \
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp \
@@ -38,12 +33,16 @@ jobs:
             bash -lc '
               set -euo pipefail
               export NuGetPackageSourceCredentials_github="Username=${GITHUB_ACTOR};Password=${GITHUB_TOKEN};ValidAuthenticationTypes=Basic"
-              dotnet tool install --tool-path /tmp/dotnet-tools dotnet-ef --version 10.0.9
               dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile NuGet.Config
-              /tmp/dotnet-tools/dotnet-ef migrations add AddLogisticsNewsAndSyncModel20260828 \
-                --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
-                --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
-                --context ServiceDbContext
+              dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj -c Release --no-restore
+              if ! ls src/Dhole.Pricing.Persistence/Migrations/*AddLogisticsNewsAndSyncModel20260828.cs >/dev/null 2>&1; then
+                dotnet tool install --tool-path /tmp/dotnet-tools dotnet-ef --version 10.0.9
+                /tmp/dotnet-tools/dotnet-ef migrations add AddLogisticsNewsAndSyncModel20260828 \
+                  --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
+                  --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
+                  --context ServiceDbContext \
+                  --no-build
+              fi
             '
 
       - name: Validate Pricing API and Worker builds
