@@ -84,6 +84,14 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.CurrencyCode).HasMaxLength(20).IsRequired();
 
+        builder.Property(x => x.ExchangeRatePurchase).HasPrecision(18, 6).IsRequired(false);
+        builder.Property(x => x.ExchangeRateSale).HasPrecision(18, 6).IsRequired(false);
+        builder.Property(x => x.ExchangeRateApplied).HasPrecision(18, 6).IsRequired(false);
+        builder.Property(x => x.ExchangeRateDate).IsRequired(false);
+        builder.Property(x => x.ExchangeRateCapturedAtUtc).IsRequired(false);
+        builder.Property(x => x.ExchangeRateSource).HasMaxLength(160).IsRequired(false);
+        builder.Property(x => x.ExchangeRateManualOverride).IsRequired().HasDefaultValue(false);
+
         builder.Property(x => x.FreeDays).IsRequired();
 
         builder.Property(x => x.ValidFrom).IsRequired();

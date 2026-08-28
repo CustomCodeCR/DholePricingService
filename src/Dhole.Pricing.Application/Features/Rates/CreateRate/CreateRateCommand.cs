@@ -78,6 +78,7 @@ public sealed record CreateRateCommand(
     string? PickupAddress,
     decimal? PickupLatitude,
     decimal? PickupLongitude,
+    decimal? ExchangeRateApplied,
     bool CanApproveImportedRate,
     bool CanApproveLowMargin,
     Guid? CreatedBy

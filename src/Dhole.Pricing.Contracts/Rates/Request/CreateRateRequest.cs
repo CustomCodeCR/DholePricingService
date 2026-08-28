@@ -50,5 +50,6 @@ public sealed record CreateRateRequest(
     IReadOnlyCollection<RateCargoLineRequest>? CargoLines = null,
     string? PickupAddress = null,
     decimal? PickupLatitude = null,
-    decimal? PickupLongitude = null
+    decimal? PickupLongitude = null,
+    decimal? ExchangeRateApplied = null
 );

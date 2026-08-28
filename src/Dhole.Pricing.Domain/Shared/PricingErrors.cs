@@ -186,6 +186,11 @@ public static class PricingErrors
         "Los datos de la moneda de la tarifa son obligatorios."
     );
 
+    public static readonly Error ExchangeRateUnavailable = new(
+        "Pricing.ExchangeRateUnavailable",
+        "No fue posible obtener el tipo de cambio de Hacienda. Puede ingresar manualmente un tipo de cambio aplicado mayor que cero para continuar."
+    );
+
     public static readonly Error RateInvalidValidityRange = new(
         "Pricing.RateInvalidValidityRange",
         "La fecha final de vigencia no puede ser menor a la fecha inicial."

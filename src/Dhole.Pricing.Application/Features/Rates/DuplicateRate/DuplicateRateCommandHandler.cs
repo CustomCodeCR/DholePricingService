@@ -18,6 +18,7 @@ public sealed class DuplicateRateCommandHandler(
     IRateCodeGenerator rateCodeGenerator,
     IRateFixedCostSynchronizer fixedCostSynchronizer,
     IPricingConfigCatalogClient configCatalog,
+    IPricingExchangeRateProvider exchangeRateProvider,
     IPricingAuditService audit,
     IRateHeaderCacheService cache,
     IUnitOfWork unitOfWork
@@ -97,6 +98,7 @@ public sealed class DuplicateRateCommandHandler(
         }
 
         var rateCode = await rateCodeGenerator.GenerateAsync(cancellationToken);
+        var currentExchangeRate = await exchangeRateProvider.GetUsdCrcAsync(cancellationToken);
 
         RateHeader duplicate;
 
@@ -144,6 +146,19 @@ public sealed class DuplicateRateCommandHandler(
                 command.CreatedBy
             );
             duplicate.ConfigureExecutive(source.ExecutiveName);
+            var duplicateAppliedExchangeRate = currentExchangeRate?.Sale ?? source.ExchangeRateApplied;
+            if (duplicateAppliedExchangeRate is > 0m)
+            {
+                duplicate.ConfigureExchangeRateSnapshot(
+                    currentExchangeRate?.Purchase,
+                    currentExchangeRate?.Sale,
+                    duplicateAppliedExchangeRate.Value,
+                    currentExchangeRate?.RateDate ?? source.ExchangeRateDate,
+                    currentExchangeRate?.CapturedAtUtc ?? DateTime.UtcNow,
+                    currentExchangeRate?.Source ?? source.ExchangeRateSource ?? "Manual",
+                    command.CreatedBy
+                );
+            }
             duplicate.ConfigurePickupLocation(
                 source.PickupAddress,
                 source.PickupLatitude,

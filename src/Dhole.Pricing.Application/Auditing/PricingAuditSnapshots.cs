@@ -173,6 +173,13 @@ public static class PricingAuditSnapshots
             rateHeader.CurrencyId,
             rateHeader.CurrencyName,
             rateHeader.CurrencyCode,
+            rateHeader.ExchangeRatePurchase,
+            rateHeader.ExchangeRateSale,
+            rateHeader.ExchangeRateApplied,
+            rateHeader.ExchangeRateDate,
+            rateHeader.ExchangeRateCapturedAtUtc,
+            rateHeader.ExchangeRateSource,
+            rateHeader.ExchangeRateManualOverride,
 
             rateHeader.FreeDays,
             rateHeader.ValidFrom,

@@ -11,6 +11,7 @@ using Dhole.Pricing.Application.Imports;
 using Dhole.Pricing.Infrastructure.Cache;
 using Dhole.Pricing.Infrastructure.Auth;
 using Dhole.Pricing.Infrastructure.GrpcClients;
+using Dhole.Pricing.Infrastructure.ExchangeRates;
 using Dhole.Pricing.Infrastructure.Mongo;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -48,6 +49,12 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddPricingDataExtractionGrpcClient(configuration);
         services.AddPricingReportsClient(configuration);
         services.AddPricingAuthRecipientClient(configuration);
+        services.AddHttpClient<IPricingExchangeRateProvider, HaciendaExchangeRateProvider>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.hacienda.go.cr/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        });
 
         services.AddScoped<ExtractAndPersistFclPricingImportService>();
 

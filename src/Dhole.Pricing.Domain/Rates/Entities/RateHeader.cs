@@ -190,6 +190,14 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string CurrencyName { get; private set; } = string.Empty;
     public string CurrencyCode { get; private set; } = string.Empty;
 
+    public decimal? ExchangeRatePurchase { get; private set; }
+    public decimal? ExchangeRateSale { get; private set; }
+    public decimal? ExchangeRateApplied { get; private set; }
+    public DateTime? ExchangeRateDate { get; private set; }
+    public DateTime? ExchangeRateCapturedAtUtc { get; private set; }
+    public string? ExchangeRateSource { get; private set; }
+    public bool ExchangeRateManualOverride { get; private set; }
+
     public int FreeDays { get; private set; }
     public DateTime ValidFrom { get; private set; }
     public DateTime ValidTo { get; private set; }
@@ -469,6 +477,33 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         PickupAddress = Normalize(pickupAddress);
         PickupLatitude = pickupLatitude;
         PickupLongitude = pickupLongitude;
+    }
+
+    public void ConfigureExchangeRateSnapshot(
+        decimal? purchase,
+        decimal? sale,
+        decimal applied,
+        DateTime? rateDate,
+        DateTime capturedAtUtc,
+        string source,
+        Guid? updatedBy
+    )
+    {
+        if (applied <= 0m)
+            throw new InvalidOperationException("El tipo de cambio aplicado debe ser mayor que cero.");
+        if (purchase.HasValue && purchase.Value <= 0m)
+            throw new InvalidOperationException("El tipo de cambio de compra no es válido.");
+        if (sale.HasValue && sale.Value <= 0m)
+            throw new InvalidOperationException("El tipo de cambio de venta no es válido.");
+
+        ExchangeRatePurchase = purchase;
+        ExchangeRateSale = sale;
+        ExchangeRateApplied = applied;
+        ExchangeRateDate = rateDate?.Date;
+        ExchangeRateCapturedAtUtc = capturedAtUtc;
+        ExchangeRateSource = Normalize(source) ?? "Manual";
+        ExchangeRateManualOverride = !sale.HasValue || Math.Abs(applied - sale.Value) > 0.0001m;
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
     }
 
     public void ConfigureExecutive(string? executiveName)

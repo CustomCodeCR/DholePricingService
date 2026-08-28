@@ -4,6 +4,7 @@ using CustomCodeFramework.Core.Pagination;
 using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Features.Rates.ApproveRateMargin;
 using Dhole.Pricing.Application.Features.Rates.CreateRate;
 using Dhole.Pricing.Application.Features.Rates.DeleteRate;
@@ -50,6 +51,10 @@ public static class RateEndpoints
             .MapPost("/{rateId:guid}/documents", GenerateRateDocumentAsync)
             .RequireScope(PricingConstants.Scopes.RateReportGenerate);
 
+        group
+            .MapGet("/exchange-rate/usd-crc", GetUsdCrcExchangeRateAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
+
         group.MapPost("/", CreateRateAsync).RequireScope(PricingConstants.Scopes.RateCreate);
 
         group
@@ -77,6 +82,32 @@ public static class RateEndpoints
         return app;
     }
 
+
+    private static async Task<IResult> GetUsdCrcExchangeRateAsync(
+        IPricingExchangeRateProvider exchangeRateProvider,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var snapshot = await exchangeRateProvider.GetUsdCrcAsync(cancellationToken);
+        if (snapshot is null)
+        {
+            return Results.Problem(
+                title: "Tipo de cambio no disponible",
+                detail: "No fue posible consultar el tipo de cambio del dólar en Hacienda en este momento.",
+                statusCode: StatusCodes.Status503ServiceUnavailable
+            );
+        }
+
+        return EndpointResults.Ok(new
+        {
+            purchase = snapshot.Purchase,
+            sale = snapshot.Sale,
+            rateDate = snapshot.RateDate,
+            capturedAtUtc = snapshot.CapturedAtUtc,
+            source = snapshot.Source
+        });
+    }
 
     private static IResult GetRateReportTemplateDefinition()
     {
@@ -488,6 +519,7 @@ public static class RateEndpoints
                 request.PickupAddress,
                 request.PickupLatitude,
                 request.PickupLongitude,
+                request.ExchangeRateApplied,
                 canApproveImportedRate,
                 canApproveLowMargin,
                 httpContext.GetCurrentUserId()

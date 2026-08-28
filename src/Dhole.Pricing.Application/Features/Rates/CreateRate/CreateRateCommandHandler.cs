@@ -23,6 +23,7 @@ public sealed class CreateRateCommandHandler(
     IRateFixedCostSynchronizer fixedCostSynchronizer,
     IRateExtraDetailResolver extraDetailResolver,
     IPricingConfigCatalogClient configCatalog,
+    IPricingExchangeRateProvider exchangeRateProvider,
     IPricingAuditService audit,
     IRateHeaderCacheService cache,
     IImportRateCacheService importCache,
@@ -164,6 +165,13 @@ public sealed class CreateRateCommandHandler(
             return Result.Failure<Guid>(PricingErrors.ConfigServiceUnavailable);
         }
 
+        var officialExchangeRate = await exchangeRateProvider.GetUsdCrcAsync(cancellationToken);
+        var requestedAppliedExchangeRate = command.ExchangeRateApplied is > 0m
+            ? command.ExchangeRateApplied.Value
+            : officialExchangeRate?.Sale;
+        if (requestedAppliedExchangeRate is null or <= 0m)
+            return Result.Failure<Guid>(PricingErrors.ExchangeRateUnavailable);
+
         var resolvedDetails = new List<ResolvedRateExtraDetail>();
         var importedFreightOverride = command.SourceImportFclRateId.HasValue
             ? command.Details.FirstOrDefault(x => x.CostDetailType == CostDetailType.Freight)
@@ -285,6 +293,15 @@ public sealed class CreateRateCommandHandler(
                 command.PickupLongitude
             );
             rate.ConfigureExecutive(command.ExecutiveName);
+            rate.ConfigureExchangeRateSnapshot(
+                officialExchangeRate?.Purchase,
+                officialExchangeRate?.Sale,
+                requestedAppliedExchangeRate.Value,
+                officialExchangeRate?.RateDate,
+                officialExchangeRate?.CapturedAtUtc ?? DateTime.UtcNow,
+                officialExchangeRate?.Source ?? "Manual (Hacienda no disponible al crear)",
+                command.CreatedBy
+            );
 
             var cargoProfile = RateCargoProfileFactory.Create(
                 command.ShipmentMode,
