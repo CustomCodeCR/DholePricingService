@@ -2,6 +2,7 @@ using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Commands;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Enums;
+using Dhole.Pricing.Domain.Rates.Entities;
 
 namespace Dhole.Pricing.Application.Features.Rates.CreateRate;
 
@@ -82,6 +83,8 @@ public sealed record CreateRateCommand(
     decimal? ExchangeRateSale,
     decimal? ExchangeRateApplied,
     bool CanApproveImportedRate,
+    RateOperationType OperationType,
+    IReadOnlyCollection<RateServiceSelection> Services,
     bool CanApproveLowMargin,
     Guid? CreatedBy
 ) : ICommand<Result<Guid>>;

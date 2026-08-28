@@ -9,6 +9,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 {
     private const decimal MinimumMarginPercentage = 12m;
     private readonly List<RateDetail> _rateDetails = [];
+    private readonly List<RateService> _rateServices = [];
     private readonly List<RateContainerAllocation> _rateContainers = [];
 
     private RateHeader() { }
@@ -207,6 +208,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public int ContainerQuantity { get; private set; }
 
     public ShipmentMode ShipmentMode { get; private set; } = ShipmentMode.Fcl;
+    public RateOperationType OperationType { get; private set; } = RateOperationType.TransitDomestic;
     public int TotalPackages { get; private set; }
     public int TotalPallets { get; private set; }
     public decimal TotalWeightKg { get; private set; }
@@ -228,6 +230,12 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public decimal TotalCostAmount { get; private set; }
     public decimal TotalSaleAmount { get; private set; }
     public decimal TotalUtilityAmount { get; private set; }
+    public decimal TotalCostUsd { get; private set; }
+    public decimal TotalSaleUsd { get; private set; }
+    public decimal TotalUtilityUsd { get; private set; }
+    public decimal TotalCostCrc { get; private set; }
+    public decimal TotalSaleCrc { get; private set; }
+    public decimal TotalUtilityCrc { get; private set; }
     public decimal MarginPercentage { get; private set; }
     public bool RequiredApproval { get; private set; }
     public RateStatus Status { get; private set; }
@@ -236,6 +244,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public Guid? ClosedBy { get; private set; }
 
     public IReadOnlyCollection<RateDetail> RateDetails => _rateDetails.AsReadOnly();
+    public IReadOnlyCollection<RateService> RateServices => _rateServices.AsReadOnly();
     public IReadOnlyCollection<RateContainerAllocation> RateContainers => _rateContainers.AsReadOnly();
 
     public static RateHeader Create(
@@ -921,19 +930,82 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         }
     }
 
+    public void SetOperationType(RateOperationType operationType, Guid? updatedBy = null)
+    {
+        OperationType = operationType;
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
+    public void ConfigureServices(IReadOnlyCollection<RateServiceSelection>? services, Guid? updatedBy = null)
+    {
+        var selections = services ?? [];
+        var normalized = selections.Where(x => x.Id != Guid.Empty).GroupBy(x => x.Id).Select(x => x.First()).ToArray();
+        if (normalized.Length != selections.Count)
+            throw new InvalidOperationException("Los servicios de la tarifa no pueden estar vacíos ni repetidos.");
+        _rateServices.Clear();
+        foreach (var service in normalized)
+            _rateServices.Add(new RateService(Id, service.Id, service.Name, service.Code));
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
     public void SetAmounts(Guid? updatedBy)
     {
-        TotalCostAmount = _rateDetails.Sum(x => x.CostAmount * x.Quantity);
-        TotalSaleAmount = _rateDetails.Sum(x => x.SaleAmount * x.Quantity);
-        TotalUtilityAmount = TotalSaleAmount - TotalCostAmount;
-        MarginPercentage =
-            TotalSaleAmount <= 0m
-                ? 0m
-                : Math.Round(
-                    TotalUtilityAmount / TotalSaleAmount * 100m,
-                    2,
-                    MidpointRounding.AwayFromZero
-                );
+        TotalCostAmount = 0m;
+        TotalSaleAmount = 0m;
+        TotalUtilityAmount = 0m;
+        var exchangeRate = ExchangeRateApplied is > 0m ? ExchangeRateApplied.Value : ExchangeRateSale;
+        decimal costUsd = 0m, saleUsd = 0m, costCrc = 0m, saleCrc = 0m;
+        foreach (var detail in _rateDetails)
+        {
+            var cost = detail.CostAmount * detail.Quantity;
+            var sale = detail.SaleAmount * detail.Quantity;
+            var code = detail.CurrencyCode.Trim().ToUpperInvariant();
+            if (code == "USD")
+            {
+                costUsd += cost;
+                saleUsd += sale;
+                if (exchangeRate is > 0m) { costCrc += cost * exchangeRate.Value; saleCrc += sale * exchangeRate.Value; }
+            }
+            else if (code == "CRC")
+            {
+                costCrc += cost;
+                saleCrc += sale;
+                if (exchangeRate is > 0m) { costUsd += cost / exchangeRate.Value; saleUsd += sale / exchangeRate.Value; }
+            }
+            else
+            {
+                // Backward compatibility for currencies outside the current USD/CRC conversion scope.
+                if (string.Equals(CurrencyCode, code, StringComparison.OrdinalIgnoreCase))
+                {
+                    TotalCostAmount += cost;
+                    TotalSaleAmount += sale;
+                }
+            }
+        }
+        TotalCostUsd = decimal.Round(costUsd, 2, MidpointRounding.AwayFromZero);
+        TotalSaleUsd = decimal.Round(saleUsd, 2, MidpointRounding.AwayFromZero);
+        TotalUtilityUsd = TotalSaleUsd - TotalCostUsd;
+        TotalCostCrc = decimal.Round(costCrc, 2, MidpointRounding.AwayFromZero);
+        TotalSaleCrc = decimal.Round(saleCrc, 2, MidpointRounding.AwayFromZero);
+        TotalUtilityCrc = TotalSaleCrc - TotalCostCrc;
+
+        if (string.Equals(CurrencyCode, "CRC", StringComparison.OrdinalIgnoreCase))
+        {
+            TotalCostAmount = TotalCostCrc;
+            TotalSaleAmount = TotalSaleCrc;
+            TotalUtilityAmount = TotalUtilityCrc;
+        }
+        else if (string.Equals(CurrencyCode, "USD", StringComparison.OrdinalIgnoreCase))
+        {
+            TotalCostAmount = TotalCostUsd;
+            TotalSaleAmount = TotalSaleUsd;
+            TotalUtilityAmount = TotalUtilityUsd;
+        }
+        else
+        {
+            TotalUtilityAmount = TotalSaleAmount - TotalCostAmount;
+        }
+        MarginPercentage = TotalSaleAmount <= 0m ? 0m : (TotalUtilityAmount / TotalSaleAmount) * 100m;
 
         if (IdtraNumber is not null && QuoNumber is not null)
         {

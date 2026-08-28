@@ -8,6 +8,7 @@ namespace Dhole.Pricing.Domain.Costs.Entities;
 public sealed class Cost : SoftDeletableAggregateRoot<Guid>
 {
     private readonly List<CostIncoterm> _incoterms = [];
+    private readonly List<CostService> _services = [];
 
     private Cost() { }
 
@@ -120,6 +121,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
     public string? PodCode { get; private set; }
 
     public IReadOnlyCollection<CostIncoterm> Incoterms => _incoterms.AsReadOnly();
+    public IReadOnlyCollection<CostService> Services => _services.AsReadOnly();
     public Guid CurrencyId { get; private set; }
     public string CurrencyName { get; private set; } = string.Empty;
     public string CurrencyCode { get; private set; } = string.Empty;
@@ -437,6 +439,33 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
             }
 
             existing.UpdateSnapshot(incoterm.Name, incoterm.Code);
+        }
+    }
+
+    public void ConfigureServices(IReadOnlyCollection<CostServiceSelection>? services)
+    {
+        var selections = services ?? [];
+        var normalized = selections
+            .Where(x => x.Id != Guid.Empty)
+            .GroupBy(x => x.Id)
+            .Select(group => group.First())
+            .ToArray();
+
+        if (normalized.Length != selections.Count)
+            throw new InvalidOperationException("Los servicios de Pricing del costo no pueden estar vacíos ni repetidos.");
+
+        var selectedIds = normalized.Select(x => x.Id).ToHashSet();
+        _services.RemoveAll(x => !selectedIds.Contains(x.ServiceId));
+
+        foreach (var service in normalized)
+        {
+            var existing = _services.FirstOrDefault(x => x.ServiceId == service.Id);
+            if (existing is null)
+            {
+                _services.Add(new CostService(Id, service.Id, service.Name, service.Code));
+                continue;
+            }
+            existing.UpdateSnapshot(service.Name, service.Code);
         }
     }
 

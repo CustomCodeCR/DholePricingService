@@ -102,6 +102,7 @@ public static class CostEndpoints
         Guid? incotermId,
         ShipmentMode? shipmentMode,
         bool? applicableToContext,
+        string? serviceIds,
         IQueryDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -123,7 +124,8 @@ public static class CostEndpoints
                 podId,
                 incotermId,
                 shipmentMode,
-                applicableToContext ?? false
+                applicableToContext ?? false,
+                ParseGuidList(serviceIds)
             ),
             cancellationToken
         );
@@ -232,6 +234,9 @@ public static class CostEndpoints
                 (request.Incoterms ?? [])
                     .Select(x => new CostIncotermSelection(x.Id, x.Name, x.Code))
                     .ToArray(),
+                (request.Services ?? [])
+                    .Select(x => new CostServiceSelection(x.Id, x.Name, x.Code))
+                    .ToArray(),
                 shipmentMode,
                 chargeBasis,
                 request.MinimumCostAmount,
@@ -333,6 +338,9 @@ public static class CostEndpoints
                 (request.Incoterms ?? [])
                     .Select(x => new CostIncotermSelection(x.Id, x.Name, x.Code))
                     .ToArray(),
+                (request.Services ?? [])
+                    .Select(x => new CostServiceSelection(x.Id, x.Name, x.Code))
+                    .ToArray(),
                 shipmentMode,
                 chargeBasis,
                 request.MinimumCostAmount,
@@ -375,6 +383,16 @@ public static class CostEndpoints
         );
 
         return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static IReadOnlyCollection<Guid> ParseGuidList(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return Array.Empty<Guid>();
+        return value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(raw => Guid.TryParse(raw, out var id) ? id : Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
     }
 
     private static bool TryParseDefinedEnum<TEnum>(string? value, out TEnum result)

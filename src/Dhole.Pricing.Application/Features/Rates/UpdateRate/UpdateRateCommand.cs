@@ -2,6 +2,7 @@ using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Commands;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Enums;
+using Dhole.Pricing.Domain.Rates.Entities;
 
 namespace Dhole.Pricing.Application.Features.Rates.UpdateRate;
 
@@ -81,5 +82,7 @@ public sealed record UpdateRateCommand(
     decimal? PickupLatitude,
     decimal? PickupLongitude,
     bool CanApproveLowMargin,
+    RateOperationType OperationType,
+    IReadOnlyCollection<RateServiceSelection> Services,
     Guid? UpdatedBy
 ) : ICommand<Result>;

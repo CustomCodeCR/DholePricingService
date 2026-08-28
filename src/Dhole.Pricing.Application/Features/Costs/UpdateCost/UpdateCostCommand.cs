@@ -38,6 +38,7 @@ public sealed record UpdateCostCommand(
     string? Notes,
     bool IsAccountant,
     IReadOnlyCollection<CostIncotermSelection> Incoterms,
+    IReadOnlyCollection<CostServiceSelection> Services,
     ShipmentMode? ShipmentMode,
     ChargeBasis ChargeBasis,
     decimal? MinimumCostAmount,

@@ -87,6 +87,14 @@ public sealed class GetCostsForSelectQueryHandler(ICostRepository costs, ICostCa
             return false;
         }
 
+        if (cost.Services?.Count > 0)
+        {
+            if (query.ServiceIds is null || query.ServiceIds.Count == 0)
+                return false;
+            if (!cost.Services.Any(service => query.ServiceIds.Contains(service.Id)))
+                return false;
+        }
+
         if (
             query.ShipmentMode.HasValue
             && !string.IsNullOrWhiteSpace(cost.ShipmentMode)
@@ -129,6 +137,7 @@ public sealed class GetCostsForSelectQueryHandler(ICostRepository costs, ICostCa
         var score = 0;
         if (!string.IsNullOrWhiteSpace(cost.ShipmentMode)) score += 2;
         if (cost.Incoterms.Count > 0) score += 2;
+        if (cost.Services?.Count > 0) score += 2;
         if (cost.CarrierId.HasValue) score += 3;
         if (cost.AgentId.HasValue) score += 3;
         if (cost.PolId.HasValue) score += 4;
@@ -156,6 +165,7 @@ public sealed class GetCostsForSelectQueryHandler(ICostRepository costs, ICostCa
             && !query.PodId.HasValue
             && !query.IncotermId.HasValue
             && !query.ShipmentMode.HasValue
+            && (query.ServiceIds is null || query.ServiceIds.Count == 0)
             && query.IsActive == true;
     }
 }

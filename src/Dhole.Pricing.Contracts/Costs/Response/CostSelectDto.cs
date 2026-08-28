@@ -37,5 +37,6 @@ public sealed record CostSelectDto(
     string ChargeBasis = "PerShipment",
     decimal? MinimumCostAmount = null,
     decimal? MinimumSaleAmount = null,
-    decimal? KgPerCbm = null
+    decimal? KgPerCbm = null,
+    IReadOnlyCollection<CostServiceDto>? Services = null
 );

@@ -53,5 +53,7 @@ public sealed record CreateRateRequest(
     decimal? PickupLongitude = null,
     decimal? ExchangeRatePurchase = null,
     decimal? ExchangeRateSale = null,
-    decimal? ExchangeRateApplied = null
+    decimal? ExchangeRateApplied = null,
+    string OperationType = "TransitDomestic",
+    IReadOnlyCollection<RateServiceRequest>? Services = null
 );
