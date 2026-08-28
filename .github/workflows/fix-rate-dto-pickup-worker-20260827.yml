@@ -1,0 +1,30 @@
+name: Fix worker rate DTO pickup projection
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/scripts/fix-rate-dto-pickup-worker-20260827.py'
+      - '.github/workflows/fix-rate-dto-pickup-worker-20260827.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python3 .github/scripts/fix-rate-dto-pickup-worker-20260827.py
+      - shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/scripts/fix-rate-dto-pickup-worker-20260827.py
+          rm -f .github/workflows/fix-rate-dto-pickup-worker-20260827.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(pricing): project pickup location in cache worker'
+          git push origin HEAD:master
