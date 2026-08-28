@@ -53,6 +53,22 @@ builder.Services.AddGrpc();
 builder.Services.AddApplication();
 builder.Services.AddPersistence(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddHttpClient("DholeAI", client =>
+{
+    var baseAddress = builder.Configuration["AI:Client:BaseAddress"] ?? "http://ai-api:5206/";
+    if (!baseAddress.EndsWith('/'))
+    {
+        baseAddress += "/";
+    }
+
+    client.BaseAddress = new Uri(baseAddress);
+    client.Timeout = TimeSpan.FromSeconds(
+        int.TryParse(builder.Configuration["AI:Client:TimeoutSeconds"], out var timeoutSeconds)
+        && timeoutSeconds > 0
+            ? timeoutSeconds
+            : 180
+    );
+});
 
 var app = builder.Build();
 
@@ -98,6 +114,7 @@ app.MapPricingRuleConfigurationEndpoints();
 app.MapCommercialTermEndpoints();
 app.MapPricingConfigCatalogEndpoints();
 app.MapDataExtractionImportEndpoints();
+app.MapLogisticsNewsEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {
