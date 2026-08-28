@@ -8,5 +8,6 @@ public sealed record SetRateStatusCommand(
     Guid Id,
     RateStatus Status,
     string? Reason,
+    string? IdtraNumber,
     Guid? UpdatedBy
 ) : ICommand<Result>;
