@@ -398,15 +398,36 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             .Select(group => new { Status = group.Key, Count = group.Count() })
             .ToDictionaryAsync(x => x.Status, x => x.Count, cancellationToken);
 
-        var statuses = Enum.GetValues<RateStatus>()
-            .Select(status =>
+        var openCount =
+            statusCounts.GetValueOrDefault(RateStatus.PendingApproval)
+            + statusCounts.GetValueOrDefault(RateStatus.ApprovedByManagement)
+            + statusCounts.GetValueOrDefault(RateStatus.RejectedByManagement)
+            + statusCounts.GetValueOrDefault(RateStatus.Open)
+            + statusCounts.GetValueOrDefault(RateStatus.RequestedByClient);
+        var sentCount = statusCounts.GetValueOrDefault(RateStatus.Sent);
+        var expiredCount = statusCounts.GetValueOrDefault(RateStatus.Expired);
+        var acceptedCount = statusCounts.GetValueOrDefault(RateStatus.AcceptedByClient);
+        var notAcceptedCount =
+            statusCounts.GetValueOrDefault(RateStatus.RejectedByClient)
+            + statusCounts.GetValueOrDefault(RateStatus.Closed);
+
+        var commercialStatusCounts = new[]
+        {
+            (Status: RateStatus.Open, Count: openCount),
+            (Status: RateStatus.Sent, Count: sentCount),
+            (Status: RateStatus.Expired, Count: expiredCount),
+            (Status: RateStatus.AcceptedByClient, Count: acceptedCount),
+            (Status: RateStatus.RejectedByClient, Count: notAcceptedCount),
+        };
+
+        var statuses = commercialStatusCounts
+            .Select(item =>
             {
-                var count = statusCounts.GetValueOrDefault(status);
                 var percentage = totalRates == 0
                     ? 0m
-                    : Math.Round(count * 100m / totalRates, 2, MidpointRounding.AwayFromZero);
+                    : Math.Round(item.Count * 100m / totalRates, 2, MidpointRounding.AwayFromZero);
 
-                return new PricingRateStatusSummaryDto(status.ToString(), count, percentage);
+                return new PricingRateStatusSummaryDto(item.Status.ToString(), item.Count, percentage);
             })
             .ToList();
 
@@ -501,14 +522,13 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             totalRates,
             statusCounts.GetValueOrDefault(RateStatus.PendingApproval),
             statusCounts.GetValueOrDefault(RateStatus.ApprovedByManagement),
-            statusCounts.GetValueOrDefault(RateStatus.RejectedByManagement)
-                + statusCounts.GetValueOrDefault(RateStatus.RejectedByClient),
-            statusCounts.GetValueOrDefault(RateStatus.Open),
-            statusCounts.GetValueOrDefault(RateStatus.Sent),
+            notAcceptedCount,
+            openCount,
+            sentCount,
             statusCounts.GetValueOrDefault(RateStatus.RequestedByClient),
-            statusCounts.GetValueOrDefault(RateStatus.AcceptedByClient),
+            acceptedCount,
             statusCounts.GetValueOrDefault(RateStatus.Closed),
-            statusCounts.GetValueOrDefault(RateStatus.Expired),
+            expiredCount,
             lastCreatedAtUtc,
             lastModifiedAtUtc,
             statuses,
@@ -631,7 +651,20 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
 
         if (status.HasValue)
         {
-            query = query.Where(x => x.Status == status.Value);
+            query = status.Value switch
+            {
+                RateStatus.Open => query.Where(x =>
+                    x.Status == RateStatus.Open
+                    || x.Status == RateStatus.PendingApproval
+                    || x.Status == RateStatus.ApprovedByManagement
+                    || x.Status == RateStatus.RejectedByManagement
+                    || x.Status == RateStatus.RequestedByClient
+                ),
+                RateStatus.RejectedByClient => query.Where(x =>
+                    x.Status == RateStatus.RejectedByClient || x.Status == RateStatus.Closed
+                ),
+                _ => query.Where(x => x.Status == status.Value),
+            };
         }
 
         if (requiredApproval.HasValue)

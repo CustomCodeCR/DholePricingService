@@ -35,10 +35,7 @@ internal sealed class PricingRateExpirationWorker(
             .RateHeaders.Where(rate =>
                 !rate.IsDeleted
                 && rate.ValidTo < todayUtc
-                && rate.Status != RateStatus.Expired
-                && rate.Status != RateStatus.Closed
-                && rate.Status != RateStatus.RejectedByManagement
-                && rate.Status != RateStatus.RejectedByClient
+                && rate.Status == RateStatus.Sent
             )
             .OrderBy(rate => rate.ValidTo)
             .Take(batchSize)
@@ -46,7 +43,7 @@ internal sealed class PricingRateExpirationWorker(
 
         if (rates.Count == 0)
         {
-            logger.LogDebug("No hay tarifas vigentes pendientes de marcar como vencidas.");
+            logger.LogDebug("No hay tarifas enviadas pendientes de marcar como vencidas.");
             return;
         }
 
