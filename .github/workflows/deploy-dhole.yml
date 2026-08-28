@@ -1,5 +1,5 @@
 name: Deploy Dhole Pricing
-# Inline IDTRA client acceptance and five commercial states — 2026-08-28
+# Current duplicate workflow, inline IDTRA acceptance and five commercial states — 2026-08-28
 
 on:
   push:
