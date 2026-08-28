@@ -1,5 +1,5 @@
 name: Deploy Dhole Pricing
-# Current duplicate workflow, inline IDTRA acceptance and five commercial states — 2026-08-28
+# Hacienda exchange-rate snapshot release — 2026-08-28
 
 on:
   push:
