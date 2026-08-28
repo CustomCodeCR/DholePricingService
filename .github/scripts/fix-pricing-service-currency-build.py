@@ -12,6 +12,13 @@ replace_once(
 ''' + "'''using Dhole.Pricing.Application.Services;\nusing Dhole.Pricing.Domain.Costs.Entities;\nusing Dhole.Pricing.Domain.Shared;\n'''" + ''',
 )
 
+# Rate endpoints build service selections from request DTOs.
+replace_once(
+    'src/Dhole.Pricing.Api/Endpoints/RateEndpoints.cs',
+''' + "'''using Dhole.Pricing.Domain.Costs.Enums;\nusing Dhole.Pricing.Domain.Rates.Enums;\n'''" + ''',
+''' + "'''using Dhole.Pricing.Domain.Costs.Enums;\nusing Dhole.Pricing.Domain.Rates.Entities;\nusing Dhole.Pricing.Domain.Rates.Enums;\n'''" + ''',
+)
+
 # Paged RateDto is projected directly in persistence, so keep it aligned with the enriched contract.
 rate_repository = 'src/Dhole.Pricing.Persistence/Repositories/RateHeaderRepository.cs'
 replace_all(
