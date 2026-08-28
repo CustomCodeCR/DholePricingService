@@ -1,0 +1,94 @@
+name: Repair Pricing EF snapshot
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/repair-ef-snapshot-20260828.yml'
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  repair:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - name: Checkout pricing
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync ExecutiveName into EF snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/Dhole.Pricing.Persistence/Migrations/ServiceDbContextModelSnapshot.cs')
+          text = path.read_text(encoding='utf-8')
+
+          if 'b.Property<string>("ExecutiveName")' not in text:
+              marker = '''                    b.Property<string>("ClientName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("client_name");
+'''
+              addition = marker + '''
+                    b.Property<string>("ExecutiveName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("executive_name");
+'''
+              count = text.count(marker)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one RateHeader ClientName snapshot marker, found {count}')
+              text = text.replace(marker, addition, 1)
+              path.write_text(text, encoding='utf-8')
+
+          text = path.read_text(encoding='utf-8')
+          if text.count('b.Property<string>("ExecutiveName")') != 1:
+              raise SystemExit('ExecutiveName snapshot mapping is not exactly one occurrence')
+          if '.HasColumnName("executive_name");' not in text:
+              raise SystemExit('executive_name snapshot column mapping missing')
+          print('EF snapshot synchronized for ExecutiveName.')
+          PY
+
+      - name: Validate Pricing API image
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker build \
+            --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" \
+            --secret id=github_token,env=GITHUB_TOKEN \
+            -f src/Dhole.Pricing.Api/Dockerfile \
+            -t dhole/pricing-api:ef-snapshot-validation \
+            .
+
+      - name: Validate Pricing Workers image
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker build \
+            --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" \
+            --secret id=github_token,env=GITHUB_TOKEN \
+            -f src/Dhole.Pricing.Workers/Dockerfile \
+            -t dhole/pricing-workers:ef-snapshot-validation \
+            .
+
+      - name: Commit synchronized snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/repair-ef-snapshot-20260828.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix(pricing): synchronize EF model snapshot'
+          git push origin HEAD:master
