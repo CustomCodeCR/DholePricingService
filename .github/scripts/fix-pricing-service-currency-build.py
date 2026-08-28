@@ -54,6 +54,12 @@ replace_once(
 ''' + "'''            .RateHeaders.AsNoTracking()\n            .Include(x => x.RateDetails)\n            .Include(x => x.RateContainers)\n'''" + ''',
 ''' + "'''            .RateHeaders.AsNoTracking()\n            .Include(x => x.RateDetails)\n            .Include(x => x.RateContainers)\n            .Include(x => x.RateServices)\n'''" + ''',
 )
+replace_all(
+    worker,
+''' + "'''            cost.MinimumCostAmount,\n            cost.MinimumSaleAmount,\n            cost.KgPerCbm\n        );\n'''" + ''',
+''' + "'''            cost.MinimumCostAmount,\n            cost.MinimumSaleAmount,\n            cost.KgPerCbm,\n            cost.Services\n                .OrderBy(x => x.ServiceName)\n                .Select(x => new CostServiceDto(x.ServiceId, x.ServiceName, x.ServiceCode))\n                .ToArray()\n        );\n'''" + ''',
+    minimum=2,
+)
 replace_once(
     worker,
 ''' + "'''            rate.RateType.ToString(),\n            rate.ShipmentMode.ToString(),\n            rate.TotalPackages,\n'''" + ''',
