@@ -60,6 +60,7 @@ internal static class RateMappings
             rate.TransitTime,
             rate.RateType.ToString(),
             rate.ShipmentMode.ToString(),
+            rate.OperationType.ToString(),
             rate.TotalPackages,
             rate.TotalPallets,
             rate.TotalWeightKg,
@@ -70,6 +71,12 @@ internal static class RateMappings
             rate.TotalCostAmount,
             rate.TotalSaleAmount,
             rate.TotalUtilityAmount,
+            rate.TotalCostUsd,
+            rate.TotalSaleUsd,
+            rate.TotalUtilityUsd,
+            rate.TotalCostCrc,
+            rate.TotalSaleCrc,
+            rate.TotalUtilityCrc,
             rate.MarginPercentage,
             rate.RequiredApproval,
             rate.Status.ToString(),
@@ -119,6 +126,10 @@ internal static class RateMappings
                     x.Quantity,
                     x.Notes
                 ))
+                .ToList(),
+            rate.RateServices
+                .OrderBy(x => x.ServiceName)
+                .Select(x => new RateServiceDto(x.ServiceId, x.ServiceName, x.ServiceCode))
                 .ToList()
         );
     }

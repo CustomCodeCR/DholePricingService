@@ -100,6 +100,18 @@ public sealed class UpdateRateCommandHandler(
                     return Result.Failure(PricingErrors.RateInvalidIncoterm);
             }
 
+            var normalizedServices = new List<RateServiceSelection>();
+            foreach (var selected in command.Services ?? Array.Empty<RateServiceSelection>())
+            {
+                var service = await configCatalog.GetActiveInGroupAsync(
+                    selected.Id, PricingConstants.CatalogSlugs.PricingServices, cancellationToken);
+                if (service is null)
+                    return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                        "El servicio de Pricing", PricingConstants.CatalogSlugs.PricingServices));
+                normalizedServices.Add(new RateServiceSelection(
+                    service.Id, service.SnapshotName(preferValue: true), service.Code));
+            }
+
             var normalizedContainers = new List<UpdateRateContainerCommandItem>();
             var requestedContainers = command.Containers is { Count: > 0 }
                 ? command.Containers
@@ -164,6 +176,7 @@ public sealed class UpdateRateCommandHandler(
                 CurrencyId = currency.Id,
                 CurrencyName = currency.SnapshotName(),
                 CurrencyCode = currency.Code,
+                Services = normalizedServices,
             };
         }
         catch (InvalidOperationException)
@@ -398,6 +411,8 @@ public sealed class UpdateRateCommandHandler(
                 command.UpdatedBy
             );
             rate.ConfigureExecutive(command.ExecutiveName);
+            rate.SetOperationType(command.OperationType, command.UpdatedBy);
+            rate.ConfigureServices(command.Services, command.UpdatedBy);
             rate.ConfigurePickupLocation(
                 command.PickupAddress,
                 command.PickupLatitude,

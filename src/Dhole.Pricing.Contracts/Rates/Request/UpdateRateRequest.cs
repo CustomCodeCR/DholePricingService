@@ -50,5 +50,7 @@ public sealed record UpdateRateRequest(
     IReadOnlyCollection<RateCargoLineRequest>? CargoLines = null,
     string? PickupAddress = null,
     decimal? PickupLatitude = null,
-    decimal? PickupLongitude = null
+    decimal? PickupLongitude = null,
+    string OperationType = "TransitDomestic",
+    IReadOnlyCollection<RateServiceRequest>? Services = null
 );

@@ -7,6 +7,7 @@ using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Services;
+using Dhole.Pricing.Domain.Costs.Entities;
 using Dhole.Pricing.Domain.Shared;
 
 namespace Dhole.Pricing.Application.Features.Costs.Update;
@@ -99,6 +100,18 @@ public sealed class UpdateCostCommandHandler(
                     incoterm.Id, incoterm.SnapshotName(preferValue: true), incoterm.Code));
             }
 
+            var normalizedServices = new List<CostServiceSelection>();
+            foreach (var selected in command.Services ?? Array.Empty<CostServiceSelection>())
+            {
+                var service = await configCatalog.GetActiveInGroupAsync(
+                    selected.Id, PricingConstants.CatalogSlugs.PricingServices, cancellationToken);
+                if (service is null)
+                    return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                        "El servicio de Pricing", PricingConstants.CatalogSlugs.PricingServices));
+                normalizedServices.Add(new CostServiceSelection(
+                    service.Id, service.SnapshotName(preferValue: true), service.Code));
+            }
+
             command = command with
             {
                 CarrierId = carrier?.Id,
@@ -123,6 +136,7 @@ public sealed class UpdateCostCommandHandler(
                 CurrencyName = currency.SnapshotName(),
                 CurrencyCode = currency.Code,
                 Incoterms = normalizedIncoterms,
+                Services = normalizedServices,
             };
         }
         catch (InvalidOperationException)
@@ -194,6 +208,7 @@ public sealed class UpdateCostCommandHandler(
                 command.KgPerCbm,
                 command.UpdatedBy
             );
+            cost.ConfigureServices(command.Services);
         }
         catch (InvalidOperationException)
         {

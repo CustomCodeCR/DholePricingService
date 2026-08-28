@@ -42,6 +42,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 .RateHeaders.AsNoTracking()
                 .Include(x => x.RateDetails)
                 .Include(x => x.RateContainers)
+                .Include(x => x.RateServices)
                 .AsSplitQuery()
                 .Where(x => !x.IsDeleted),
             search: null,
@@ -93,6 +94,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 .RateHeaders.AsNoTracking()
                 .Include(x => x.RateDetails)
                 .Include(x => x.RateContainers)
+                .Include(x => x.RateServices)
                 .AsSplitQuery()
                 .Where(x => !x.IsDeleted),
             search: null,
@@ -229,6 +231,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.TransitTime,
                 x.RateType.ToString(),
                 x.ShipmentMode.ToString(),
+                x.OperationType.ToString(),
                 x.TotalPackages,
                 x.TotalPallets,
                 x.TotalWeightKg,
@@ -239,6 +242,12 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.TotalCostAmount,
                 x.TotalSaleAmount,
                 x.TotalUtilityAmount,
+                x.TotalCostUsd,
+                x.TotalSaleUsd,
+                x.TotalUtilityUsd,
+                x.TotalCostCrc,
+                x.TotalSaleCrc,
+                x.TotalUtilityCrc,
                 x.MarginPercentage,
                 x.RequiredApproval,
                 x.Status.ToString(),
@@ -276,6 +285,10 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                         d.Quantity,
                         d.Notes
                     ))
+                    .ToList(),
+                x.RateServices
+                    .OrderBy(s => s.ServiceName)
+                    .Select(s => new RateServiceDto(s.ServiceId, s.ServiceName, s.ServiceCode))
                     .ToList()
             ))
             .ToListAsync(cancellationToken);

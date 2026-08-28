@@ -19,6 +19,7 @@ public sealed class CostRepository(ServiceDbContext dbContext)
         CancellationToken cancellationToken = default
     ) => dbContext.Costs
         .Include(x => x.Incoterms)
+        .Include(x => x.Services)
         .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
     public Task<bool> ExistsByNameAsync(
@@ -72,7 +73,7 @@ public sealed class CostRepository(ServiceDbContext dbContext)
     )
     {
         var query = ApplyFilters(
-            dbContext.Costs.AsNoTracking().Include(x => x.Incoterms).Where(x => !x.IsDeleted && x.IsActive),
+            dbContext.Costs.AsNoTracking().Include(x => x.Incoterms).Include(x => x.Services).Where(x => !x.IsDeleted && x.IsActive),
             search: null,
             costType,
             costDetailType,
@@ -175,7 +176,11 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.ChargeBasis.ToString(),
                 x.MinimumCostAmount,
                 x.MinimumSaleAmount,
-                x.KgPerCbm
+                x.KgPerCbm,
+                x.Services
+                    .OrderBy(s => s.ServiceName)
+                    .Select(s => new CostServiceDto(s.ServiceId, s.ServiceName, s.ServiceCode))
+                    .ToList()
             ))
             .ToListAsync(cancellationToken);
 
@@ -256,7 +261,11 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.ChargeBasis.ToString(),
                 x.MinimumCostAmount,
                 x.MinimumSaleAmount,
-                x.KgPerCbm
+                x.KgPerCbm,
+                x.Services
+                    .OrderBy(s => s.ServiceName)
+                    .Select(s => new CostServiceDto(s.ServiceId, s.ServiceName, s.ServiceCode))
+                    .ToList()
             ))
             .ToListAsync(cancellationToken);
     }
@@ -297,6 +306,7 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 || (x.PodName ?? string.Empty).ToLower().Contains(value)
                 || (x.PodCode ?? string.Empty).ToLower().Contains(value)
                 || x.Incoterms.Any(i => i.IncotermName.ToLower().Contains(value) || i.IncotermCode.ToLower().Contains(value))
+                || x.Services.Any(s => s.ServiceName.ToLower().Contains(value) || s.ServiceCode.ToLower().Contains(value))
                 || x.CurrencyName.ToLower().Contains(value)
                 || x.CurrencyCode.ToLower().Contains(value)
                 || (x.Notes ?? string.Empty).ToLower().Contains(value)

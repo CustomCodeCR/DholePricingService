@@ -18,6 +18,7 @@ using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
 using Dhole.Pricing.Application.Features.Rates.UpdateRate;
 using Dhole.Pricing.Contracts.Rates.Request;
 using Dhole.Pricing.Domain.Costs.Enums;
+using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
@@ -418,6 +419,15 @@ public static class RateEndpoints
             );
         }
 
+        if (!TryParseDefinedEnum(request.OperationType, out RateOperationType operationType))
+        {
+            return EndpointResults.BadRequest(
+                "Pricing.InvalidOperationType",
+                $"El tipo de operación '{request.OperationType}' no es válido.",
+                httpContext
+            );
+        }
+
         if (!TryParseDefinedEnum(request.RateType, out RateType rateType))
         {
             return EndpointResults.BadRequest(
@@ -523,6 +533,10 @@ public static class RateEndpoints
                 request.ExchangeRateSale,
                 request.ExchangeRateApplied,
                 canApproveImportedRate,
+                operationType,
+                (request.Services ?? [])
+                    .Select(x => new RateServiceSelection(x.Id, x.Name, x.Code))
+                    .ToArray(),
                 canApproveLowMargin,
                 httpContext.GetCurrentUserId()
             ),
@@ -604,6 +618,15 @@ public static class RateEndpoints
             return EndpointResults.BadRequest(
                 "Pricing.InvalidShipmentMode",
                 $"La modalidad '{request.ShipmentMode}' no es válida.",
+                httpContext
+            );
+        }
+
+        if (!TryParseDefinedEnum(request.OperationType, out RateOperationType operationType))
+        {
+            return EndpointResults.BadRequest(
+                "Pricing.InvalidOperationType",
+                $"El tipo de operación '{request.OperationType}' no es válido.",
                 httpContext
             );
         }
@@ -703,6 +726,10 @@ public static class RateEndpoints
                 request.PickupLatitude,
                 request.PickupLongitude,
                 canApproveLowMargin,
+                operationType,
+                (request.Services ?? [])
+                    .Select(x => new RateServiceSelection(x.Id, x.Name, x.Code))
+                    .ToArray(),
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken

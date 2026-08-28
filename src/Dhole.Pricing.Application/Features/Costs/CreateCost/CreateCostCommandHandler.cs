@@ -93,6 +93,18 @@ public sealed class CreateCostCommandHandler(
                     incoterm.Id, incoterm.SnapshotName(preferValue: true), incoterm.Code));
             }
 
+            var normalizedServices = new List<CostServiceSelection>();
+            foreach (var selected in command.Services ?? Array.Empty<CostServiceSelection>())
+            {
+                var service = await configCatalog.GetActiveInGroupAsync(
+                    selected.Id, PricingConstants.CatalogSlugs.PricingServices, cancellationToken);
+                if (service is null)
+                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
+                        "El servicio de Pricing", PricingConstants.CatalogSlugs.PricingServices));
+                normalizedServices.Add(new CostServiceSelection(
+                    service.Id, service.SnapshotName(preferValue: true), service.Code));
+            }
+
             command = command with
             {
                 CarrierId = carrier?.Id,
@@ -117,6 +129,7 @@ public sealed class CreateCostCommandHandler(
                 CurrencyName = currency.SnapshotName(),
                 CurrencyCode = currency.Code,
                 Incoterms = normalizedIncoterms,
+                Services = normalizedServices,
             };
         }
         catch (InvalidOperationException)
@@ -188,6 +201,7 @@ public sealed class CreateCostCommandHandler(
                 command.KgPerCbm,
                 command.CreatedBy
             );
+            cost.ConfigureServices(command.Services);
         }
         catch (InvalidOperationException)
         {

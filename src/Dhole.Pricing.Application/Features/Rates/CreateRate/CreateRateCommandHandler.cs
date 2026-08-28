@@ -94,6 +94,18 @@ public sealed class CreateRateCommandHandler(
                     return Result.Failure<Guid>(PricingErrors.RateInvalidIncoterm);
             }
 
+            var normalizedServices = new List<RateServiceSelection>();
+            foreach (var selected in command.Services ?? Array.Empty<RateServiceSelection>())
+            {
+                var service = await configCatalog.GetActiveInGroupAsync(
+                    selected.Id, PricingConstants.CatalogSlugs.PricingServices, cancellationToken);
+                if (service is null)
+                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
+                        "El servicio de Pricing", PricingConstants.CatalogSlugs.PricingServices));
+                normalizedServices.Add(new RateServiceSelection(
+                    service.Id, service.SnapshotName(preferValue: true), service.Code));
+            }
+
             var normalizedContainers = new List<RateContainerCommandItem>();
             var requestedContainers = command.Containers.Count > 0
                 ? command.Containers
@@ -158,6 +170,7 @@ public sealed class CreateRateCommandHandler(
                 CurrencyId = currency.Id,
                 CurrencyName = currency.SnapshotName(),
                 CurrencyCode = currency.Code,
+                Services = normalizedServices,
             };
         }
         catch (InvalidOperationException)
@@ -313,6 +326,8 @@ public sealed class CreateRateCommandHandler(
                 command.PickupLongitude
             );
             rate.ConfigureExecutive(command.ExecutiveName);
+            rate.SetOperationType(command.OperationType, command.CreatedBy);
+            rate.ConfigureServices(command.Services, command.CreatedBy);
             rate.ConfigureExchangeRateSnapshot(
                 resolvedExchangeRatePurchase.Value,
                 resolvedExchangeRateSale.Value,

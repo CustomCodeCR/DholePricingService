@@ -35,5 +35,6 @@ public sealed record UpdateCostRequest(
     string ChargeBasis = "PerShipment",
     decimal? MinimumCostAmount = null,
     decimal? MinimumSaleAmount = null,
-    decimal? KgPerCbm = null
+    decimal? KgPerCbm = null,
+    IReadOnlyCollection<CostServiceRequest>? Services = null
 );

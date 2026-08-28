@@ -75,6 +75,7 @@ internal sealed class PricingCacheWarmupWorker(
         var entities = await dbContext
             .Costs.AsNoTracking()
             .Include(x => x.Incoterms)
+            .Include(x => x.Services)
             .Where(x => !x.IsDeleted)
             .OrderBy(x => x.CostType)
             .ThenBy(x => x.CarrierName)
@@ -355,6 +356,7 @@ internal sealed class PricingCacheWarmupWorker(
             .RateHeaders.AsNoTracking()
             .Include(x => x.RateDetails)
             .Include(x => x.RateContainers)
+            .Include(x => x.RateServices)
             .AsSplitQuery()
             .Where(x => !x.IsDeleted)
             .OrderBy(x => x.ValidFrom)
@@ -538,7 +540,11 @@ internal sealed class PricingCacheWarmupWorker(
             cost.ChargeBasis.ToString(),
             cost.MinimumCostAmount,
             cost.MinimumSaleAmount,
-            cost.KgPerCbm
+            cost.KgPerCbm,
+            cost.Services
+                .OrderBy(x => x.ServiceName)
+                .Select(x => new CostServiceDto(x.ServiceId, x.ServiceName, x.ServiceCode))
+                .ToArray()
         );
     }
 
@@ -584,7 +590,11 @@ internal sealed class PricingCacheWarmupWorker(
             cost.ChargeBasis.ToString(),
             cost.MinimumCostAmount,
             cost.MinimumSaleAmount,
-            cost.KgPerCbm
+            cost.KgPerCbm,
+            cost.Services
+                .OrderBy(x => x.ServiceName)
+                .Select(x => new CostServiceDto(x.ServiceId, x.ServiceName, x.ServiceCode))
+                .ToArray()
         );
     }
 
@@ -706,6 +716,7 @@ internal sealed class PricingCacheWarmupWorker(
             rate.TransitTime,
             rate.RateType.ToString(),
             rate.ShipmentMode.ToString(),
+            rate.OperationType.ToString(),
             rate.TotalPackages,
             rate.TotalPallets,
             rate.TotalWeightKg,
@@ -716,6 +727,12 @@ internal sealed class PricingCacheWarmupWorker(
             rate.TotalCostAmount,
             rate.TotalSaleAmount,
             rate.TotalUtilityAmount,
+            rate.TotalCostUsd,
+            rate.TotalSaleUsd,
+            rate.TotalUtilityUsd,
+            rate.TotalCostCrc,
+            rate.TotalSaleCrc,
+            rate.TotalUtilityCrc,
             rate.MarginPercentage,
             rate.RequiredApproval,
             rate.Status.ToString(),
@@ -750,6 +767,10 @@ internal sealed class PricingCacheWarmupWorker(
                 .ThenBy(x => x.CostDetailType)
                 .ThenBy(x => x.Name)
                 .Select(ToRateDetailDto)
+                .ToList(),
+            rate.RateServices
+                .OrderBy(x => x.ServiceName)
+                .Select(x => new RateServiceDto(x.ServiceId, x.ServiceName, x.ServiceCode))
                 .ToList()
         );
     }

@@ -53,6 +53,7 @@ public sealed record RateDto(
     string? TransitTime,
     string RateType,
     string ShipmentMode,
+    string OperationType,
     int TotalPackages,
     int TotalPallets,
     decimal TotalWeightKg,
@@ -63,6 +64,12 @@ public sealed record RateDto(
     decimal TotalCostAmount,
     decimal TotalSaleAmount,
     decimal TotalUtilityAmount,
+    decimal TotalCostUsd,
+    decimal TotalSaleUsd,
+    decimal TotalUtilityUsd,
+    decimal TotalCostCrc,
+    decimal TotalSaleCrc,
+    decimal TotalUtilityCrc,
     decimal MarginPercentage,
     bool RequiredApproval,
     string Status,
@@ -70,5 +77,6 @@ public sealed record RateDto(
     DateTime? ClosedAtUtc,
     Guid? ClosedBy,
     IReadOnlyCollection<RateContainerDto> Containers,
-    IReadOnlyCollection<RateDetailDto> RateDetails
+    IReadOnlyCollection<RateDetailDto> RateDetails,
+    IReadOnlyCollection<RateServiceDto> Services
 );

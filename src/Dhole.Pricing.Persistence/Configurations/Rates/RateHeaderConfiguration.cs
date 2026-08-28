@@ -105,6 +105,7 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.ContainerQuantity).IsRequired().HasDefaultValue(1);
 
         builder.Property(x => x.ShipmentMode).HasConversion<string>().HasMaxLength(20).IsRequired().HasDefaultValue(Dhole.Pricing.Domain.Rates.Enums.ShipmentMode.Fcl);
+        builder.Property(x => x.OperationType).HasConversion<string>().HasMaxLength(30).IsRequired().HasDefaultValue(Dhole.Pricing.Domain.Rates.Enums.RateOperationType.TransitDomestic);
         builder.Property(x => x.TotalPackages).IsRequired().HasDefaultValue(0);
         builder.Property(x => x.TotalPallets).IsRequired().HasDefaultValue(0);
         builder.Property(x => x.TotalWeightKg).HasPrecision(18, 4).IsRequired().HasDefaultValue(0m);
@@ -118,6 +119,12 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.TotalSaleAmount).HasPrecision(18, 2).IsRequired();
 
         builder.Property(x => x.TotalUtilityAmount).HasPrecision(18, 2).IsRequired();
+        builder.Property(x => x.TotalCostUsd).HasPrecision(18, 2).IsRequired();
+        builder.Property(x => x.TotalSaleUsd).HasPrecision(18, 2).IsRequired();
+        builder.Property(x => x.TotalUtilityUsd).HasPrecision(18, 2).IsRequired();
+        builder.Property(x => x.TotalCostCrc).HasPrecision(18, 2).IsRequired();
+        builder.Property(x => x.TotalSaleCrc).HasPrecision(18, 2).IsRequired();
+        builder.Property(x => x.TotalUtilityCrc).HasPrecision(18, 2).IsRequired();
 
         builder.Property(x => x.MarginPercentage).HasPrecision(18, 4).IsRequired();
 
@@ -130,6 +137,13 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.ClosedAtUtc).IsRequired(false);
 
         builder.Property(x => x.ClosedBy).IsRequired(false);
+
+        builder
+            .HasMany(x => x.RateServices)
+            .WithOne()
+            .HasForeignKey(x => x.RateHeaderId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(x => x.RateServices).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         builder
             .HasMany(x => x.RateDetails)
