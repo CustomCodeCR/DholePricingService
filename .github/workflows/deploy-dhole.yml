@@ -1,5 +1,5 @@
 name: Deploy Dhole Pricing
-# Complete pickup persistence release trigger — 2026-08-27
+# Pickup snapshot aligned release trigger — 2026-08-27
 
 on:
   push:
