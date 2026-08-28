@@ -957,6 +957,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             // Una solicitud puede guardarse antes de tener proveedor/costos terminados.
             // RequestedByClient funciona como la cola interna de "Abiertas" de Pricing.
             (RateStatus.PendingApproval, RateStatus.RequestedByClient) => true,
+            (RateStatus.PendingApproval, RateStatus.Open) => true,
             (RateStatus.Open, RateStatus.Sent) => true,
             (RateStatus.Sent, RateStatus.RequestedByClient) => true,
             (RateStatus.Sent, RateStatus.AcceptedByClient) => true,
