@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Imports;
 using Dhole.Pricing.Contracts.Imports.Request;
@@ -64,8 +65,18 @@ public static class DataExtractionImportEndpoints
 
         try
         {
+            var enrichedResponse = request.Response with
+            {
+                Rows = request.Response.Rows
+                    .Select(row => row with
+                    {
+                        RawJson = EnrichRawJson(row.RawJson, request),
+                    })
+                    .ToArray(),
+            };
+
             var extraction = DataExtractionPricingImportMapper.ToApplicationResult(
-                request.Response,
+                enrichedResponse,
                 request.ExtractionExecutionId,
                 request.PricingImportId
             );
@@ -109,6 +120,39 @@ public static class DataExtractionImportEndpoints
                 httpContext
             );
         }
+    }
+
+    private static string EnrichRawJson(
+        string? rawJson,
+        ImportRatesFromExtractionRequest request
+    )
+    {
+        object? extracted = null;
+        if (!string.IsNullOrWhiteSpace(rawJson))
+        {
+            try
+            {
+                extracted = JsonSerializer.Deserialize<JsonElement>(rawJson);
+            }
+            catch (JsonException)
+            {
+                extracted = rawJson;
+            }
+        }
+
+        return JsonSerializer.Serialize(new
+        {
+            _dholeSource = new
+            {
+                emailMessageId = request.EmailMessageId,
+                emailAttachmentId = request.EmailAttachmentId,
+                sourceType = request.SourceType,
+                fromAddress = request.FromAddress,
+                subject = request.Subject,
+                originalFileName = request.OriginalFileName,
+            },
+            extracted,
+        });
     }
 
 }
