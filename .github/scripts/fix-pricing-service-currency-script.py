@@ -1,12 +1,15 @@
 from pathlib import Path
+
 p = Path('.github/scripts/apply-pricing-service-currencies-20260828.py')
 t = p.read_text(encoding='utf-8')
+
 
 def swap(old: str, new: str, label: str):
     global t
     if old not in t:
         raise SystemExit(f'{label} patch block not found in implementation script')
     t = t.replace(old, new, 1)
+
 
 # CostConfiguration formats HasMany on a separate line.
 swap('''replace_once(cost_cfg,
@@ -46,8 +49,37 @@ swap('''replace_once(rate_cfg,
 ''' + "'''        builder\n            .HasMany(x => x.RateDetails)\n'''" + ''',
 ''' + "'''        builder\n            .HasMany(x => x.RateServices)\n            .WithOne()\n            .HasForeignKey(x => x.RateHeaderId)\n            .OnDelete(DeleteBehavior.Cascade);\n        builder.Navigation(x => x.RateServices).UsePropertyAccessMode(PropertyAccessMode.Field);\n\n        builder\n            .HasMany(x => x.RateDetails)\n'''" + ''')''', 'rate services relationship')
 
-# UpdateRate uses its own container command item type.
-swap("'''            var normalizedContainers = new List<RateContainerCommandItem>();\\n'''", "'''            var normalizedContainers = new List<UpdateRateContainerCommandItem>();\\n'''", 'update rate container marker')
+# UpdateRate has a different container command item than CreateRate. Limit the change to that block.
+update_start = t.index("update_handler = 'src/Dhole.Pricing.Application/Features/Rates/UpdateRate/UpdateRateCommandHandler.cs'")
+update_end = t.index('# API endpoint parses operation and maps services into commands.', update_start)
+update_block = t[update_start:update_end]
+if update_block.count('RateContainerCommandItem') < 2:
+    raise SystemExit('update rate container markers not found in implementation script')
+update_block = update_block.replace('RateContainerCommandItem', 'UpdateRateContainerCommandItem')
+t = t[:update_start] + update_block + t[update_end:]
+
+# RateEndpoints has Create + Update rateType parsing. The first insertion must not use replace_once.
+api_start = t.index("rate_ep = 'src/Dhole.Pricing.Api/Endpoints/RateEndpoints.cs'")
+api_second_marker = t.index('# In update method there is another shipment/rate type parse.', api_start)
+api_first_block = t[api_start:api_second_marker]
+old_api_call = '''rate_ep = 'src/Dhole.Pricing.Api/Endpoints/RateEndpoints.cs'
+replace_once(rate_ep,
+''' + "'''        if (!TryParseDefinedEnum(request.RateType, out RateType rateType))\n'''" + ''',
+''' + "'''        if (!TryParseDefinedEnum(request.OperationType, out RateOperationType operationType))\n        {\n            return EndpointResults.BadRequest(\n                \"Pricing.InvalidOperationType\",\n                $\"El tipo de operación '{request.OperationType}' no es válido.\",\n                httpContext\n            );\n        }\n\n        if (!TryParseDefinedEnum(request.RateType, out RateType rateType))\n'''" + ''')
+'''
+new_api_call = '''rate_ep = 'src/Dhole.Pricing.Api/Endpoints/RateEndpoints.cs'
+text = read(rate_ep)
+operation_marker = ''' + "'''        if (!TryParseDefinedEnum(request.RateType, out RateType rateType))\n'''" + '''
+operation_prefix = ''' + "'''        if (!TryParseDefinedEnum(request.OperationType, out RateOperationType operationType))\n        {\n            return EndpointResults.BadRequest(\n                \"Pricing.InvalidOperationType\",\n                $\"El tipo de operación '{request.OperationType}' no es válido.\",\n                httpContext\n            );\n        }\n\n'''" + '''
+if text.count(operation_marker) < 2:
+    raise RuntimeError('RateEndpoints: create/update rateType markers not found')
+text = text.replace(operation_marker, operation_prefix + operation_marker, 1)
+write(rate_ep, text)
+'''
+if old_api_call not in api_first_block:
+    raise SystemExit('RateEndpoints first operation parser block not found in implementation script')
+api_first_block = api_first_block.replace(old_api_call, new_api_call, 1)
+t = t[:api_start] + api_first_block + t[api_second_marker:]
 
 # Command records need the RateServiceSelection namespace.
 anchor = "# Rate DTO adds persisted context and both currency totals.\n"
