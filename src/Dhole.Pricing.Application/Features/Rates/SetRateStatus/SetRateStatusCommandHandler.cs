@@ -38,6 +38,12 @@ public sealed class SetRateStatusCommandHandler(
 
         try
         {
+            if (command.Status == Dhole.Pricing.Domain.Rates.Enums.RateStatus.AcceptedByClient
+                && !string.IsNullOrWhiteSpace(command.IdtraNumber))
+            {
+                rate.SetIdtraNumber(command.IdtraNumber, command.UpdatedBy);
+            }
+
             rate.SetCommercialStatus(command.Status, command.Reason, command.UpdatedBy);
         }
         catch (InvalidOperationException)
@@ -58,6 +64,7 @@ public sealed class SetRateStatusCommandHandler(
                 {
                     rate.Id,
                     Status = rate.Status.ToString(),
+                    rate.IdtraNumber,
                     rate.ClosedReason,
                     rate.ClosedAtUtc,
                     rate.ClosedBy,

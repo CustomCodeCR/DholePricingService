@@ -759,6 +759,7 @@ public static class RateEndpoints
                 rateId,
                 status,
                 request.Reason,
+                request.IdtraNumber,
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken

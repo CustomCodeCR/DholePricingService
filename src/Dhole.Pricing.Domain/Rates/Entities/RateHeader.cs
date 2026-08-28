@@ -948,6 +948,24 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
     }
 
+    public void SetIdtraNumber(string idtraNumber, Guid? updatedBy)
+    {
+        var normalized = Normalize(idtraNumber);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new InvalidOperationException("El IDTRA es obligatorio.");
+        }
+
+        if (normalized.Length > 100)
+        {
+            throw new InvalidOperationException("El IDTRA no puede superar los 100 caracteres.");
+        }
+
+        IdtraNumber = normalized;
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
+    }
+
     public void SetCommercialStatus(RateStatus status, string? reason, Guid? updatedBy)
     {
         var isClosing = status == RateStatus.Closed;
