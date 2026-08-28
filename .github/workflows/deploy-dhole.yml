@@ -1,5 +1,5 @@
 name: Deploy Dhole Pricing
-# Source trace and five commercial states release — 2026-08-28
+# Five commercial states and guaranteed QUO tracking — 2026-08-28
 
 on:
   push:
