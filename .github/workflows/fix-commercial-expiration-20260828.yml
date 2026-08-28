@@ -1,0 +1,51 @@
+name: Fix commercial expiration
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/fix-commercial-expiration-20260828.yml'
+permissions:
+  contents: write
+  packages: read
+jobs:
+  patch:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Enforce sent-only expiration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/Dhole.Pricing.Domain/Rates/Entities/RateHeader.cs')
+          text = path.read_text(encoding='utf-8-sig')
+          old = '''        if (ValidTo.Date >= effectiveDate || Status == RateStatus.Expired)\n        {\n            return false;\n        }\n\n        if (\n            Status\n            is RateStatus.Closed\n                or RateStatus.RejectedByManagement\n                or RateStatus.RejectedByClient\n        )\n        {\n            return false;\n        }\n\n        Status = RateStatus.Expired;\n'''
+          new = '''        // Comercialmente una tarifa solo puede vencer después de haber sido enviada al cliente.\n        // Solicitudes abiertas, pendientes internas y tarifas ya decididas no deben convertirse en Vencidas.\n        if (ValidTo.Date >= effectiveDate || Status != RateStatus.Sent)\n        {\n            return false;\n        }\n\n        Status = RateStatus.Expired;\n'''
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'MarkExpired anchor: expected 1 occurrence, found {count}')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          git diff --check
+      - name: Validate API build
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker build --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-expiration-validation .
+      - name: Commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/fix-commercial-expiration-20260828.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix(pricing): expire only sent commercial rates"
+          git push origin HEAD:master
