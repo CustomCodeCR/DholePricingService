@@ -1,0 +1,95 @@
+name: Enforce five commercial rate states
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/enforce-five-commercial-rate-states-20260828.yml'
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  patch:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Guarantee QUO tracking and validate commercial rules
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          handler = Path('src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs')
+          text = handler.read_text()
+          old = '''        var rateCode = await rateCodeGenerator.GenerateAsync(cancellationToken);
+
+        RateHeader rate;'''
+          new = '''        var rateCode = await rateCodeGenerator.GenerateAsync(cancellationToken);
+
+        // Toda solicitud/tarifa nace con un QUO de seguimiento. RateCode ya utiliza
+        // el consecutivo QUO del servicio; QuoNumber lo conserva como dato comercial explícito.
+        if (string.IsNullOrWhiteSpace(command.QuoNumber))
+        {
+            command = command with { QuoNumber = rateCode };
+        }
+
+        RateHeader rate;'''
+          if old not in text:
+              raise SystemExit('CreateRate QUO insertion point not found')
+          text = text.replace(old, new, 1)
+          handler.write_text(text)
+
+          domain = Path('src/Dhole.Pricing.Domain/Rates/Entities/RateHeader.cs').read_text()
+          required_domain = [
+              'status == RateStatus.AcceptedByClient && string.IsNullOrWhiteSpace(IdtraNumber)',
+              'status == RateStatus.RejectedByClient && string.IsNullOrWhiteSpace(reason)',
+              '(RateStatus.Open, RateStatus.Sent) => true',
+              '(RateStatus.Sent, RateStatus.AcceptedByClient) => true',
+              '(RateStatus.Sent, RateStatus.RejectedByClient) => true',
+          ]
+          for marker in required_domain:
+              if marker not in domain:
+                  raise SystemExit(f'Missing commercial domain rule: {marker}')
+
+          worker = Path('src/Dhole.Pricing.Workers/Workers/PricingRateExpirationWorker.cs').read_text()
+          if 'rate.Status == RateStatus.Sent' not in worker or 'rate.ValidTo < todayUtc' not in worker:
+              raise SystemExit('Expiration worker must expire only sent rates after ValidTo')
+
+          repository = Path('src/Dhole.Pricing.Persistence/Repositories/RateHeaderRepository.cs').read_text()
+          required_filter = [
+              'RateStatus.Open => query.Where(x =>',
+              'x.Status == RateStatus.PendingApproval',
+              'x.Status == RateStatus.RequestedByClient',
+              'RateStatus.RejectedByClient => query.Where(x =>',
+              'x.Status == RateStatus.RejectedByClient || x.Status == RateStatus.Closed',
+          ]
+          for marker in required_filter:
+              if marker not in repository:
+                  raise SystemExit(f'Missing commercial browse grouping: {marker}')
+          PY
+
+      - name: Validate Pricing images
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker build --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-five-states-api-validation .
+          docker build --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Workers/Dockerfile -t dhole/pricing-five-states-worker-validation .
+
+      - name: Commit functional change
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/enforce-five-commercial-rate-states-20260828.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs .github/workflows/enforce-five-commercial-rate-states-20260828.yml
+          git commit -m 'fix(pricing): guarantee QUO for commercial rates'
+          git push origin HEAD:master
