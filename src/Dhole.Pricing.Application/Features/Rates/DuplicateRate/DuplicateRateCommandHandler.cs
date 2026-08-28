@@ -62,8 +62,10 @@ public sealed class DuplicateRateCommandHandler(
                 source.PolId, PricingConstants.CatalogSlugs.Pol, cancellationToken);
             poe = await configCatalog.GetActiveInGroupAsync(
                 source.PoeId, PricingConstants.CatalogSlugs.Poe, cancellationToken);
-            pod = await configCatalog.GetActiveInGroupAsync(
-                source.PodId, PricingConstants.CatalogSlugs.Pod, cancellationToken);
+            pod = source.PodId.HasValue
+                ? await configCatalog.GetActiveInGroupAsync(
+                    source.PodId, PricingConstants.CatalogSlugs.Pod, cancellationToken)
+                : null;
             containerType = await configCatalog.GetActiveInGroupAsync(
                 source.ContainerTypeId, PricingConstants.CatalogSlugs.ContainerTypes, cancellationToken);
             currency = await configCatalog.GetActiveInGroupAsync(
@@ -73,8 +75,9 @@ public sealed class DuplicateRateCommandHandler(
                 "El POL", PricingConstants.CatalogSlugs.Pol));
             if (poe is null) return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
                 "El POE", PricingConstants.CatalogSlugs.Poe));
-            if (pod is null) return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
-                "El POD", PricingConstants.CatalogSlugs.Pod));
+            if (source.PodId.HasValue && pod is null)
+                return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
+                    "El POD", PricingConstants.CatalogSlugs.Pod));
             if (containerType is null) return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
                 "El tipo de contenedor", PricingConstants.CatalogSlugs.ContainerTypes));
             if (currency is null) return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
@@ -101,7 +104,7 @@ public sealed class DuplicateRateCommandHandler(
         {
             duplicate = RateHeader.Create(
                 rateCode,
-                sourceImportFclRateId: null,
+                sourceImportFclRateId: source.SourceImportFclRateId,
                 agent?.Id,
                 agent?.SnapshotName(),
                 agent?.Code,
@@ -114,9 +117,9 @@ public sealed class DuplicateRateCommandHandler(
                 poe.Id,
                 poe.SnapshotName(),
                 poe.Code,
-                pod.Id,
-                pod.SnapshotName(),
-                pod.Code,
+                pod?.Id,
+                pod?.SnapshotName(),
+                pod?.Code,
                 containerType.Id,
                 containerType.SnapshotName(),
                 containerType.Code,
@@ -132,7 +135,7 @@ public sealed class DuplicateRateCommandHandler(
                 source.ContainerQuantity > 0 ? source.ContainerQuantity : 1,
                 source.ClientName,
                 null,
-                null,
+                rateCode,
                 source.Includes,
                 source.SubjectTo,
                 source.Excludes,
