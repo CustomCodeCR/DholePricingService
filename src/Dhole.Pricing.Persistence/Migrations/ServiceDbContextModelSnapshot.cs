@@ -1299,6 +1299,21 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(40)")
                         .HasColumnName("incoterm_code");
 
+                    b.Property<string>("PickupAddress")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("pickup_address");
+
+                    b.Property<decimal?>("PickupLatitude")
+                        .HasPrecision(10, 7)
+                        .HasColumnType("numeric(10,7)")
+                        .HasColumnName("pickup_latitude");
+
+                    b.Property<decimal?>("PickupLongitude")
+                        .HasPrecision(10, 7)
+                        .HasColumnType("numeric(10,7)")
+                        .HasColumnName("pickup_longitude");
+
                     b.Property<Guid?>("IncotermId")
                         .HasColumnType("uuid")
                         .HasColumnName("incoterm_id");
