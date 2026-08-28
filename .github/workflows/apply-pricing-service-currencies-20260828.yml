@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/scripts/apply-pricing-service-currencies-20260828.py'
       - '.github/scripts/fix-pricing-service-currency-script.py'
+      - '.github/scripts/fix-pricing-service-currency-build.py'
       - '.github/workflows/apply-pricing-service-currencies-20260828.yml'
   workflow_dispatch:
 
@@ -27,6 +28,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 .github/scripts/fix-pricing-service-currency-script.py
+          python3 .github/scripts/fix-pricing-service-currency-build.py
           python3 .github/scripts/apply-pricing-service-currencies-20260828.py
 
       - name: Restore, build and generate migration
