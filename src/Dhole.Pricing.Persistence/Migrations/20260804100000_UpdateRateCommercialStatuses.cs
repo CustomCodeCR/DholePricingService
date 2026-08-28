@@ -14,6 +14,16 @@ public sealed class UpdateRateCommercialStatuses : Migration
     {
         migrationBuilder.Sql(
             """
+            -- Algunas instalaciones antiguas de Pricing fueron creadas con
+            -- RateHeaders.status como varchar(10). Los estados comerciales
+            -- actuales (por ejemplo ApprovedByManagement/AcceptedByClient)
+            -- exceden ese largo y PostgreSQL falla con 22001 antes de poder
+            -- completar esta migración. Normalizamos primero la columna al
+            -- largo que define actualmente RateHeaderConfiguration.
+            ALTER TABLE pricing."RateHeaders"
+            ALTER COLUMN status TYPE character varying(50)
+            USING status::character varying(50);
+
             UPDATE pricing."RateHeaders"
             SET status = CASE
                 WHEN status <> 'RejectedByClient'
