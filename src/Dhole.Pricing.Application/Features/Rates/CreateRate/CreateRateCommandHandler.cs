@@ -264,6 +264,13 @@ public sealed class CreateRateCommandHandler(
 
         var rateCode = await rateCodeGenerator.GenerateAsync(cancellationToken);
 
+        // Toda solicitud/tarifa nace con un QUO de seguimiento. RateCode ya utiliza
+        // el consecutivo QUO del servicio; QuoNumber lo conserva como dato comercial explícito.
+        if (string.IsNullOrWhiteSpace(command.QuoNumber))
+        {
+            command = command with { QuoNumber = rateCode };
+        }
+
         RateHeader rate;
 
         try
