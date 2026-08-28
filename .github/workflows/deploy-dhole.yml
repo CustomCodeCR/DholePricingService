@@ -1,5 +1,5 @@
 name: Deploy Dhole Pricing
-# Five commercial states and guaranteed QUO tracking — 2026-08-28
+# Inline IDTRA client acceptance and five commercial states — 2026-08-28
 
 on:
   push:
