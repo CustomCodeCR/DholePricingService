@@ -1,5 +1,5 @@
 name: Deploy Dhole Pricing
-# Editable Hacienda Compra/Venta persistence release — 2026-08-28
+# Editable Hacienda Compra/Venta + EF snapshot release — 2026-08-28
 
 on:
   push:
