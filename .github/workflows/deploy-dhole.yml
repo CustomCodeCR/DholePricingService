@@ -1,5 +1,5 @@
 name: Deploy Dhole Pricing
-# Pickup snapshot aligned release trigger — 2026-08-27
+# Editable client/executive commercial snapshots release — 2026-08-28
 
 on:
   push:
