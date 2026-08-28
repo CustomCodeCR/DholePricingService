@@ -1,0 +1,39 @@
+name: Apply resilient rate edit payload
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/apply-edit-rate-resilience-20260828.yml'
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  patch:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply patch
+        run: python .github/scripts/patch_edit_rate_resilience_20260828.py
+
+      - name: Validate API build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: docker build --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-edit-resilience-validation .
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/apply-edit-rate-resilience-20260828.yml
+          rm -f .github/scripts/patch_edit_rate_resilience_20260828.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(pricing): make rate editing resilient to wizard payloads'
+          git push origin master
