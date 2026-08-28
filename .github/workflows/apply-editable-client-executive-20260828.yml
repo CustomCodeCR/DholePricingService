@@ -1,4 +1,5 @@
 name: Apply editable client executive persistence
+# Validate API + worker RateDto projections — 2026-08-28
 
 on:
   push:
