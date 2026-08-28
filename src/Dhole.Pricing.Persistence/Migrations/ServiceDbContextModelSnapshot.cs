@@ -1158,6 +1158,11 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(250)")
                         .HasColumnName("client_name");
 
+                    b.Property<string>("ExecutiveName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("executive_name");
+
                     b.Property<DateTime?>("ClosedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("closed_at_utc");
