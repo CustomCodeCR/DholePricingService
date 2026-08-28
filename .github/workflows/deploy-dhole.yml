@@ -1,5 +1,5 @@
 name: Deploy Dhole Pricing
-# Editable client/executive commercial snapshots release — 2026-08-28
+# Source trace and five commercial states release — 2026-08-28
 
 on:
   push:
