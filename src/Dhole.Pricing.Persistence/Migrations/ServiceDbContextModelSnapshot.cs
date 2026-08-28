@@ -267,6 +267,40 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("currency_name");
 
+                    b.Property<decimal?>("ExchangeRateApplied")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("exchange_rate_applied");
+
+                    b.Property<DateTime?>("ExchangeRateCapturedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("exchange_rate_captured_at_utc");
+
+                    b.Property<DateTime?>("ExchangeRateDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("exchange_rate_date");
+
+                    b.Property<bool>("ExchangeRateManualOverride")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("exchange_rate_manual_override");
+
+                    b.Property<decimal?>("ExchangeRatePurchase")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("exchange_rate_purchase");
+
+                    b.Property<decimal?>("ExchangeRateSale")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("exchange_rate_sale");
+
+                    b.Property<string>("ExchangeRateSource")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("exchange_rate_source");
+
                     b.Property<DateTime?>("DeletedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at_utc");
