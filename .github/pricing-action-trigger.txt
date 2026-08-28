@@ -1,1 +1,1 @@
-verify-pricing-pdf-after-reports-template-fix-2026-08-27
+deploy-synchronized-ef-snapshot-2026-08-28-0223
