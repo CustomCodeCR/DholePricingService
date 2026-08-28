@@ -12,6 +12,29 @@ replace_once(
 ''' + "'''using Dhole.Pricing.Application.Services;\nusing Dhole.Pricing.Domain.Costs.Entities;\nusing Dhole.Pricing.Domain.Shared;\n'''" + ''',
 )
 
+# Paged RateDto is projected directly in persistence, so keep it aligned with the enriched contract.
+rate_repository = 'src/Dhole.Pricing.Persistence/Repositories/RateHeaderRepository.cs'
+replace_all(
+    rate_repository,
+''' + "'''                .Include(x => x.RateContainers)\n'''" + ''',
+''' + "'''                .Include(x => x.RateContainers)\n                .Include(x => x.RateServices)\n'''" + ''',
+)
+replace_once(
+    rate_repository,
+''' + "'''                x.RateType.ToString(),\n                x.ShipmentMode.ToString(),\n                x.TotalPackages,\n'''" + ''',
+''' + "'''                x.RateType.ToString(),\n                x.ShipmentMode.ToString(),\n                x.OperationType.ToString(),\n                x.TotalPackages,\n'''" + ''',
+)
+replace_once(
+    rate_repository,
+''' + "'''                x.TotalCostAmount,\n                x.TotalSaleAmount,\n                x.TotalUtilityAmount,\n                x.MarginPercentage,\n'''" + ''',
+''' + "'''                x.TotalCostAmount,\n                x.TotalSaleAmount,\n                x.TotalUtilityAmount,\n                x.TotalCostUsd,\n                x.TotalSaleUsd,\n                x.TotalUtilityUsd,\n                x.TotalCostCrc,\n                x.TotalSaleCrc,\n                x.TotalUtilityCrc,\n                x.MarginPercentage,\n'''" + ''',
+)
+replace_once(
+    rate_repository,
+''' + "'''                    ))\n                    .ToList()\n            ))\n'''" + ''',
+''' + "'''                    ))\n                    .ToList(),\n                x.RateServices\n                    .OrderBy(s => s.ServiceName)\n                    .Select(s => new RateServiceDto(s.ServiceId, s.ServiceName, s.ServiceCode))\n                    .ToList()\n            ))\n'''" + ''',
+)
+
 '''
 t = t.replace(anchor, addition + anchor, 1)
 p.write_text(t, encoding='utf-8')
