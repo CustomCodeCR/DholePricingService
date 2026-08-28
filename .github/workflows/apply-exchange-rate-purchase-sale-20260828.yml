@@ -1,4 +1,5 @@
 name: Apply editable Hacienda purchase and sale
+# Retry with duplicate-rate snapshot compatibility — 2026-08-28
 
 on:
   push:
