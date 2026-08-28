@@ -51,5 +51,7 @@ public sealed record CreateRateRequest(
     string? PickupAddress = null,
     decimal? PickupLatitude = null,
     decimal? PickupLongitude = null,
+    decimal? ExchangeRatePurchase = null,
+    decimal? ExchangeRateSale = null,
     decimal? ExchangeRateApplied = null
 );

@@ -166,11 +166,31 @@ public sealed class CreateRateCommandHandler(
         }
 
         var officialExchangeRate = await exchangeRateProvider.GetUsdCrcAsync(cancellationToken);
+        var resolvedExchangeRatePurchase = command.ExchangeRatePurchase is > 0m
+            ? command.ExchangeRatePurchase.Value
+            : officialExchangeRate?.Purchase;
+        var resolvedExchangeRateSale = command.ExchangeRateSale is > 0m
+            ? command.ExchangeRateSale.Value
+            : officialExchangeRate?.Sale;
+
+        if (resolvedExchangeRatePurchase is null or <= 0m || resolvedExchangeRateSale is null or <= 0m)
+            return Result.Failure<Guid>(PricingErrors.ExchangeRateUnavailable);
+
+        // ExchangeRateApplied is kept only for backwards compatibility. New screens use
+        // Compra/Venta directly and internally the sale rate remains the conversion default.
         var requestedAppliedExchangeRate = command.ExchangeRateApplied is > 0m
             ? command.ExchangeRateApplied.Value
-            : officialExchangeRate?.Sale;
-        if (requestedAppliedExchangeRate is null or <= 0m)
-            return Result.Failure<Guid>(PricingErrors.ExchangeRateUnavailable);
+            : resolvedExchangeRateSale.Value;
+
+        var exchangeRateWasAdjustedManually = officialExchangeRate is null
+            || Math.Abs(resolvedExchangeRatePurchase.Value - officialExchangeRate.Purchase) > 0.0001m
+            || Math.Abs(resolvedExchangeRateSale.Value - officialExchangeRate.Sale) > 0.0001m;
+
+        var exchangeRateSource = officialExchangeRate is null
+            ? "Manual"
+            : exchangeRateWasAdjustedManually
+                ? $"{officialExchangeRate.Source} (ajustado manualmente)"
+                : officialExchangeRate.Source;
 
         var resolvedDetails = new List<ResolvedRateExtraDetail>();
         var importedFreightOverride = command.SourceImportFclRateId.HasValue
@@ -294,12 +314,13 @@ public sealed class CreateRateCommandHandler(
             );
             rate.ConfigureExecutive(command.ExecutiveName);
             rate.ConfigureExchangeRateSnapshot(
-                officialExchangeRate?.Purchase,
-                officialExchangeRate?.Sale,
-                requestedAppliedExchangeRate.Value,
+                resolvedExchangeRatePurchase.Value,
+                resolvedExchangeRateSale.Value,
+                requestedAppliedExchangeRate,
                 officialExchangeRate?.RateDate,
                 officialExchangeRate?.CapturedAtUtc ?? DateTime.UtcNow,
-                officialExchangeRate?.Source ?? "Manual (Hacienda no disponible al crear)",
+                exchangeRateSource,
+                exchangeRateWasAdjustedManually,
                 command.CreatedBy
             );
 

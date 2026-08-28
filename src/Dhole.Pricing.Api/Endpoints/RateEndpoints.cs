@@ -519,6 +519,8 @@ public static class RateEndpoints
                 request.PickupAddress,
                 request.PickupLatitude,
                 request.PickupLongitude,
+                request.ExchangeRatePurchase,
+                request.ExchangeRateSale,
                 request.ExchangeRateApplied,
                 canApproveImportedRate,
                 canApproveLowMargin,

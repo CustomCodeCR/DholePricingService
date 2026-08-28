@@ -156,6 +156,7 @@ public sealed class DuplicateRateCommandHandler(
                     currentExchangeRate?.RateDate ?? source.ExchangeRateDate,
                     currentExchangeRate?.CapturedAtUtc ?? DateTime.UtcNow,
                     currentExchangeRate?.Source ?? source.ExchangeRateSource ?? "Manual",
+                    currentExchangeRate is null ? source.ExchangeRateManualOverride : false,
                     command.CreatedBy
                 );
             }

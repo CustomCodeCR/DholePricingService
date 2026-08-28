@@ -486,6 +486,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         DateTime? rateDate,
         DateTime capturedAtUtc,
         string source,
+        bool manualOverride,
         Guid? updatedBy
     )
     {
@@ -502,7 +503,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         ExchangeRateDate = rateDate?.Date;
         ExchangeRateCapturedAtUtc = capturedAtUtc;
         ExchangeRateSource = Normalize(source) ?? "Manual";
-        ExchangeRateManualOverride = !sale.HasValue || Math.Abs(applied - sale.Value) > 0.0001m;
+        ExchangeRateManualOverride = manualOverride;
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
     }
 
