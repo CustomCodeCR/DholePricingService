@@ -19,6 +19,8 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.ClientName).HasMaxLength(250).IsRequired(false);
 
+        builder.Property(x => x.ExecutiveName).HasMaxLength(250).IsRequired(false);
+
         builder.Property(x => x.IdtraNumber).HasMaxLength(100).IsRequired(false);
 
         builder.Property(x => x.QuoNumber).HasMaxLength(100).IsRequired(false);

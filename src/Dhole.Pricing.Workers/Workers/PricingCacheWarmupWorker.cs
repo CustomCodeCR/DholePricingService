@@ -690,6 +690,7 @@ internal sealed class PricingCacheWarmupWorker(
             rate.ValidFrom,
             rate.ValidTo,
             rate.ClientName,
+            rate.ExecutiveName,
             rate.IdtraNumber,
             rate.QuoNumber,
             rate.Includes,

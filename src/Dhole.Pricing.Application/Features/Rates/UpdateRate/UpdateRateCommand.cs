@@ -59,6 +59,7 @@ public sealed record UpdateRateCommand(
     DateTime ValidTo,
     int ContainerQuantity,
     string? ClientName,
+    string? ExecutiveName,
     string? IdtraNumber,
     string? QuoNumber,
     string? Includes,
@@ -76,6 +77,9 @@ public sealed record UpdateRateCommand(
     decimal TotalWeightKg,
     decimal TotalVolumeCbm,
     IReadOnlyCollection<RateCargoLineCommandItem> CargoLines,
+    string? PickupAddress,
+    decimal? PickupLatitude,
+    decimal? PickupLongitude,
     bool CanApproveLowMargin,
     Guid? UpdatedBy
 ) : ICommand<Result>;

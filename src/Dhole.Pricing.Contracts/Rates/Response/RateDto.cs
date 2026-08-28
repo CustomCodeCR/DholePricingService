@@ -37,6 +37,7 @@ public sealed record RateDto(
     DateTime ValidFrom,
     DateTime ValidTo,
     string? ClientName,
+    string? ExecutiveName,
     string? IdtraNumber,
     string? QuoNumber,
     string? Includes,

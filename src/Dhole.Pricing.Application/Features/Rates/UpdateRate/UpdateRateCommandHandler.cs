@@ -397,6 +397,12 @@ public sealed class UpdateRateCommandHandler(
                 command.RateType,
                 command.UpdatedBy
             );
+            rate.ConfigureExecutive(command.ExecutiveName);
+            rate.ConfigurePickupLocation(
+                command.PickupAddress,
+                command.PickupLatitude,
+                command.PickupLongitude
+            );
 
             rate.ReplaceContainerAllocations(containerSpecs, command.UpdatedBy);
 

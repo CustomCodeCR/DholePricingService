@@ -29,6 +29,7 @@ public sealed record CreateRateRequest(
     IReadOnlyCollection<CreateRateDetailRequest> Details,
     int ContainerQuantity = 1,
     string? ClientName = null,
+    string? ExecutiveName = null,
     string? IdtraNumber = null,
     string? QuoNumber = null,
     string? Includes = null,

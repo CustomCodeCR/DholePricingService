@@ -44,6 +44,7 @@ internal static class RateMappings
             rate.ValidFrom,
             rate.ValidTo,
             rate.ClientName,
+            rate.ExecutiveName,
             rate.IdtraNumber,
             rate.QuoNumber,
             rate.Includes,

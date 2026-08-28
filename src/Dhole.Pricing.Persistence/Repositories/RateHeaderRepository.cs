@@ -213,6 +213,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.ValidFrom,
                 x.ValidTo,
                 x.ClientName,
+                x.ExecutiveName,
                 x.IdtraNumber,
                 x.QuoNumber,
                 x.Includes,

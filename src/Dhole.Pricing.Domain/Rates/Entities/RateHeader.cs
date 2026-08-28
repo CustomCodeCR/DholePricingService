@@ -208,6 +208,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string? CargoLinesJson { get; private set; }
 
     public string? ClientName { get; private set; }
+    public string? ExecutiveName { get; private set; }
     public string? IdtraNumber { get; private set; }
     public string? QuoNumber { get; private set; }
     public string? Includes { get; private set; }
@@ -468,6 +469,13 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         PickupAddress = Normalize(pickupAddress);
         PickupLatitude = pickupLatitude;
         PickupLongitude = pickupLongitude;
+    }
+
+    public void ConfigureExecutive(string? executiveName)
+    {
+        // El ejecutivo comercial es editable por Pricing hasta nuevo aviso.
+        // No se deriva del usuario autenticado ni se bloquea contra Auth.
+        ExecutiveName = Normalize(executiveName);
     }
 
     public void ReplaceContainerAllocations(

@@ -140,6 +140,12 @@ public sealed class DuplicateRateCommandHandler(
                 source.RateType,
                 command.CreatedBy
             );
+            duplicate.ConfigureExecutive(source.ExecutiveName);
+            duplicate.ConfigurePickupLocation(
+                source.PickupAddress,
+                source.PickupLatitude,
+                source.PickupLongitude
+            );
 
             IReadOnlyCollection<(Guid ContainerTypeId, int Quantity)> requestedContainers =
                 source.RateContainers.Count > 0

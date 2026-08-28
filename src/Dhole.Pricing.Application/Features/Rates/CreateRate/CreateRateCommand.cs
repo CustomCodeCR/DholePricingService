@@ -58,6 +58,7 @@ public sealed record CreateRateCommand(
     DateTime ValidTo,
     int ContainerQuantity,
     string? ClientName,
+    string? ExecutiveName,
     string? IdtraNumber,
     string? QuoNumber,
     string? Includes,

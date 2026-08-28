@@ -277,6 +277,7 @@ public sealed class CreateRateCommandHandler(
                 command.PickupLatitude,
                 command.PickupLongitude
             );
+            rate.ConfigureExecutive(command.ExecutiveName);
 
             var cargoProfile = RateCargoProfileFactory.Create(
                 command.ShipmentMode,
