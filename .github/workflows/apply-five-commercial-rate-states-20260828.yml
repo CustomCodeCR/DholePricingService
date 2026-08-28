@@ -1,0 +1,36 @@
+name: Apply five commercial rate states
+on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/apply-five-commercial-rate-states-20260828.yml
+permissions:
+  contents: write
+  packages: read
+jobs:
+  patch:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patch
+        run: python3 .github/scripts/apply_five_commercial_rate_states_20260828.py
+      - name: Validate API image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: docker build --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-five-states-api-validation .
+      - name: Validate worker image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: docker build --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Workers/Dockerfile -t dhole/pricing-five-states-worker-validation .
+      - name: Commit changes
+        run: |
+          rm -f .github/workflows/apply-five-commercial-rate-states-20260828.yml
+          rm -f .github/workflows/enforce-five-commercial-rate-states-20260828.yml
+          rm -f .github/scripts/apply_five_commercial_rate_states_20260828.py
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs .github/workflows .github/scripts
+          git commit -m 'fix(pricing): guarantee QUO for commercial rates'
+          git push origin HEAD:master
