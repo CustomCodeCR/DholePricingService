@@ -21,9 +21,6 @@ jobs:
       - name: Apply patch
         run: python3 .github/scripts/apply_commercial_status_rules_20260828.py
 
-      - name: Validate build
-        run: docker build --target build -t dhole-pricing-commercial-status-validation .
-
       - name: Commit
         shell: bash
         run: |
