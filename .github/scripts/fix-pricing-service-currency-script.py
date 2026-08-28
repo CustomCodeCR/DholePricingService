@@ -81,6 +81,15 @@ if old_api_call not in api_first_block:
 api_first_block = api_first_block.replace(old_api_call, new_api_call, 1)
 t = t[:api_start] + api_first_block + t[api_second_marker:]
 
+# UpdateRate endpoint has CanApproveLowMargin immediately before the user id.
+old_update_endpoint = '''replace_once(rate_ep,
+''' + "'''                request.PickupLongitude,\n                httpContext.GetCurrentUserId()\n'''" + ''',
+''' + "'''                request.PickupLongitude,\n                operationType,\n                (request.Services ?? [])\n                    .Select(x => new RateServiceSelection(x.Id, x.Name, x.Code))\n                    .ToArray(),\n                httpContext.GetCurrentUserId()\n'''" + ''')'''
+new_update_endpoint = '''replace_once(rate_ep,
+''' + "'''                request.PickupLongitude,\n                canApproveLowMargin,\n                httpContext.GetCurrentUserId()\n'''" + ''',
+''' + "'''                request.PickupLongitude,\n                canApproveLowMargin,\n                operationType,\n                (request.Services ?? [])\n                    .Select(x => new RateServiceSelection(x.Id, x.Name, x.Code))\n                    .ToArray(),\n                httpContext.GetCurrentUserId()\n'''" + ''')'''
+swap(old_update_endpoint, new_update_endpoint, 'update RateEndpoint command arguments')
+
 # Command records need the RateServiceSelection namespace.
 anchor = "# Rate DTO adds persisted context and both currency totals.\n"
 if anchor not in t:
