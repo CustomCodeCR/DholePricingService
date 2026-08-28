@@ -55,4 +55,12 @@ replace_once(
     "        ExchangeRateSource = Normalize(source) ?? \"Manual\";\n        ExchangeRateManualOverride = manualOverride;",
 )
 
+# Duplicating a rate keeps the manual flag if Hacienda is unavailable; otherwise it uses
+# the newly consulted official snapshot.
+replace_once(
+    "src/Dhole.Pricing.Application/Features/Rates/DuplicateRate/DuplicateRateCommandHandler.cs",
+    "                    currentExchangeRate?.CapturedAtUtc ?? DateTime.UtcNow,\n                    currentExchangeRate?.Source ?? source.ExchangeRateSource ?? \"Manual\",\n                    command.CreatedBy",
+    "                    currentExchangeRate?.CapturedAtUtc ?? DateTime.UtcNow,\n                    currentExchangeRate?.Source ?? source.ExchangeRateSource ?? \"Manual\",\n                    currentExchangeRate is null ? source.ExchangeRateManualOverride : false,\n                    command.CreatedBy",
+)
+
 print("Editable Hacienda purchase/sale backend patch applied")
