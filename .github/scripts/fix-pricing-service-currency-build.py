@@ -42,6 +42,34 @@ replace_once(
 ''' + "'''                    ))\n                    .ToList(),\n                x.RateServices\n                    .OrderBy(s => s.ServiceName)\n                    .Select(s => new RateServiceDto(s.ServiceId, s.ServiceName, s.ServiceCode))\n                    .ToList()\n            ))\n'''" + ''',
 )
 
+# Cache warmup worker projects the same CostDto/RateDto contracts and must load the new relations.
+worker = 'src/Dhole.Pricing.Workers/Workers/PricingCacheWarmupWorker.cs'
+replace_once(
+    worker,
+''' + "'''            .Costs.AsNoTracking()\n            .Include(x => x.Incoterms)\n'''" + ''',
+''' + "'''            .Costs.AsNoTracking()\n            .Include(x => x.Incoterms)\n            .Include(x => x.Services)\n'''" + ''',
+)
+replace_once(
+    worker,
+''' + "'''            .RateHeaders.AsNoTracking()\n            .Include(x => x.RateDetails)\n            .Include(x => x.RateContainers)\n'''" + ''',
+''' + "'''            .RateHeaders.AsNoTracking()\n            .Include(x => x.RateDetails)\n            .Include(x => x.RateContainers)\n            .Include(x => x.RateServices)\n'''" + ''',
+)
+replace_once(
+    worker,
+''' + "'''            rate.RateType.ToString(),\n            rate.ShipmentMode.ToString(),\n            rate.TotalPackages,\n'''" + ''',
+''' + "'''            rate.RateType.ToString(),\n            rate.ShipmentMode.ToString(),\n            rate.OperationType.ToString(),\n            rate.TotalPackages,\n'''" + ''',
+)
+replace_once(
+    worker,
+''' + "'''            rate.TotalCostAmount,\n            rate.TotalSaleAmount,\n            rate.TotalUtilityAmount,\n            rate.MarginPercentage,\n'''" + ''',
+''' + "'''            rate.TotalCostAmount,\n            rate.TotalSaleAmount,\n            rate.TotalUtilityAmount,\n            rate.TotalCostUsd,\n            rate.TotalSaleUsd,\n            rate.TotalUtilityUsd,\n            rate.TotalCostCrc,\n            rate.TotalSaleCrc,\n            rate.TotalUtilityCrc,\n            rate.MarginPercentage,\n'''" + ''',
+)
+replace_once(
+    worker,
+''' + "'''            rate.RateDetails.OrderBy(x => x.CostType)\n                .ThenBy(x => x.CostDetailType)\n                .ThenBy(x => x.Name)\n                .Select(ToRateDetailDto)\n                .ToList()\n        );\n'''" + ''',
+''' + "'''            rate.RateDetails.OrderBy(x => x.CostType)\n                .ThenBy(x => x.CostDetailType)\n                .ThenBy(x => x.Name)\n                .Select(ToRateDetailDto)\n                .ToList(),\n            rate.RateServices\n                .OrderBy(x => x.ServiceName)\n                .Select(x => new RateServiceDto(x.ServiceId, x.ServiceName, x.ServiceCode))\n                .ToList()\n        );\n'''" + ''',
+)
+
 '''
 t = t.replace(anchor, addition + anchor, 1)
 p.write_text(t, encoding='utf-8')
