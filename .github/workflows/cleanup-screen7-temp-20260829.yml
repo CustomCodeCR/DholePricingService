@@ -1,0 +1,41 @@
+name: Cleanup temporary Screen 7 patch files
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/cleanup-screen7-temp-20260829.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Remove temporary patch files
+        run: |
+          set -euo pipefail
+          git rm -f --ignore-unmatch \
+            README.md \
+            .gitkeep-do-not-use \
+            .github/scripts/fix_screen7_pricing_20260829.py \
+            .github/workflows/fix-screen7-pricing-20260829.yml \
+            .github/workflows/fix-screen7-pricing-v2-20260829.yml \
+            .github/workflows/fix-screen7-pricing-v3-20260829.yml \
+            .github/workflows/fix-screen7-pricing-v4-20260829.yml \
+            .github/workflows/cleanup-screen7-temp-20260829.yml
+          git diff --cached --check
+
+      - name: Commit cleanup directly to master
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(pricing): remove temporary Screen 7 patch files'
+          git push origin HEAD:master
