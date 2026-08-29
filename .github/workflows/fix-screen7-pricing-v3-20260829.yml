@@ -1,0 +1,49 @@
+name: Apply Screen 7 Pricing Repair v3
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/fix-screen7-pricing-v3-20260829.yml'
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply source patch
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/fix_screen7_pricing_20260829.py
+          git diff --check
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore and build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          dotnet nuget update source github --username "$GITHUB_ACTOR" --password "$GITHUB_TOKEN" --store-password-in-clear-text --configfile NuGet.Config
+          dotnet restore DholePricingService.slnx --configfile NuGet.Config
+          dotnet build DholePricingService.slnx -c Release --no-restore
+
+      - name: Commit directly to master
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Dhole.Pricing.Application/Services/RateExtraDetailResolver.cs src/Dhole.Pricing.Contracts/Rates/Response/RateDto.cs src/Dhole.Pricing.Contracts/Rates/Response/RateDtoFinancialExtensions.cs src/Dhole.Pricing.Application/Features/Rates/RateMappings.cs src/Dhole.Pricing.Persistence/Repositories/RateHeaderRepository.cs
+          git commit -m 'fix(pricing): persist VAT and repair rate financial summaries'
+          git push origin HEAD:master
