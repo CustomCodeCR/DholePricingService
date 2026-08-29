@@ -17,6 +17,13 @@ jobs:
   validate:
     runs-on: [self-hosted, linux, x64, dhole]
     steps:
+      - name: Repair workspace permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE"
+          docker run --rm -v "$GITHUB_WORKSPACE:/workspace" alpine:3.22 sh -c "chown -R $(id -u):$(id -g) /workspace"
+
       - uses: actions/checkout@v4
         with:
           ref: feature/rate-wizard-revisions-20260828
@@ -33,6 +40,10 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/tmp \
+            -e DOTNET_CLI_HOME=/tmp \
+            -e NUGET_PACKAGES=/tmp/.nuget/packages \
             -e GITHUB_TOKEN="$GITHUB_TOKEN" \
             -e GITHUB_ACTOR="$GITHUB_ACTOR" \
             -v "$PWD:/src" -w /src \
