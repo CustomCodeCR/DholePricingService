@@ -137,7 +137,7 @@ if 'added.ConfigureDestinationTax' not in text:
     text = text.replace(old, new, 1)
 write(path, text)
 
-# 9) DTO mapping (single get + paged browse projection).
+# 9) DTO mapping (single get + paged browse + cache projection).
 path = 'src/Dhole.Pricing.Application/Features/Rates/RateMappings.cs'
 text = read(path)
 if 'x.DestinationTaxAmount' not in text:
@@ -153,6 +153,15 @@ if 'd.DestinationTaxAmount' not in text:
     old = '''                        d.UtilityAmount,\n                        d.Quantity,\n                        d.Notes\n                    ))'''
     new = '''                        d.UtilityAmount,\n                        d.Quantity,\n                        d.Notes,\n                        d.ApplyDestinationTax,\n                        d.DestinationTaxRate,\n                        d.DestinationTaxAmount\n                    ))'''
     if old not in text: raise SystemExit('RateHeaderRepository detail projection missing')
+    text = text.replace(old, new, 1)
+    write(path, text)
+
+path = 'src/Dhole.Pricing.Workers/Workers/PricingCacheWarmupWorker.cs'
+text = read(path)
+if 'detail.DestinationTaxAmount' not in text:
+    old = '''            detail.UtilityAmount,\n            detail.Quantity,\n            detail.Notes\n        );'''
+    new = '''            detail.UtilityAmount,\n            detail.Quantity,\n            detail.Notes,\n            detail.ApplyDestinationTax,\n            detail.DestinationTaxRate,\n            detail.DestinationTaxAmount\n        );'''
+    if old not in text: raise SystemExit('PricingCacheWarmupWorker detail projection missing')
     text = text.replace(old, new, 1)
     write(path, text)
 
