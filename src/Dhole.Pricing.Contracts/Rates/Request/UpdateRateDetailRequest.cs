@@ -9,5 +9,7 @@ public sealed record UpdateRateDetailRequest(
     string CurrencyName,
     string CurrencyCode,
     decimal CostAmount,
-    decimal SaleAmount
+    decimal SaleAmount,
+    bool ApplyDestinationTax = false,
+    decimal DestinationTaxRate = 0m
 );

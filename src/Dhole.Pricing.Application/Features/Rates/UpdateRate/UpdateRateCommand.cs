@@ -19,7 +19,9 @@ public sealed record UpsertRateExtraDetailCommandItem(
     decimal SaleAmount,
     string? Notes,
     decimal? Quantity,
-    ChargeBasis? ChargeBasis
+    ChargeBasis? ChargeBasis,
+    bool ApplyDestinationTax = false,
+    decimal DestinationTaxRate = 0m
 );
 
 public sealed record UpdateRateContainerCommandItem(

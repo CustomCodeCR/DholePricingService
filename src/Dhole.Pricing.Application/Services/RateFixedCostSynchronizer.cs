@@ -42,7 +42,9 @@ public sealed class RateFixedCostSynchronizer(
                         detail.Quantity,
                         detail.CurrencyId,
                         detail.CurrencyName,
-                        detail.CurrencyCode
+                        detail.CurrencyCode,
+                        detail.ApplyDestinationTax,
+                        detail.DestinationTaxRate
                     );
                 }
             );
@@ -139,7 +141,7 @@ public sealed class RateFixedCostSynchronizer(
             var effectiveCostAmount = quantity > 0m ? effectiveCostTotal / quantity : effectiveCostTotal;
             var effectiveSaleAmount = quantity > 0m ? effectiveSaleTotal / quantity : effectiveSaleTotal;
 
-            rate.AddRateDetail(
+            var synchronizedDetail = rate.AddRateDetail(
                 rate.Id,
                 cost.Id,
                 cost.Name,
@@ -155,6 +157,14 @@ public sealed class RateFixedCostSynchronizer(
                 quantity,
                 updatedBy
             );
+
+            if (hasExistingAmount)
+            {
+                synchronizedDetail.ConfigureDestinationTax(
+                    existingAmount.ApplyDestinationTax,
+                    existingAmount.DestinationTaxRate
+                );
+            }
         }
 
         await AddPanamaGamInternationalLandFreightAsync(rate, updatedBy, cancellationToken);

@@ -30,7 +30,7 @@ internal static class RateRevisionSnapshotFactory
             Containers = rate.RateContainers.Select(x => new { x.ContainerTypeId, x.ContainerTypeName, x.ContainerTypeCode, x.Quantity }),
             Services = rate.RateServices.Select(x => new { x.ServiceId, x.ServiceName, x.ServiceCode }),
             Details = rate.RateDetails.Select(x => new { x.Id, x.CostId, x.Name, x.CostDetailType, x.CostType, x.ChargeBasis,
-                x.CurrencyId, x.CurrencyName, x.CurrencyCode, x.CostAmount, x.SaleAmount, x.UtilityAmount, x.Quantity, x.Notes })
+                x.CurrencyId, x.CurrencyName, x.CurrencyCode, x.CostAmount, x.SaleAmount, x.UtilityAmount, x.Quantity, x.Notes, x.ApplyDestinationTax, x.DestinationTaxRate, x.DestinationTaxAmount })
         });
         return new(rate.Status.ToString(), rate.RateName, rate.IdtraNumber, rate.QuoNumber,
             rate.TotalSaleUsd, rate.TotalSaleCrc, rate.MarginPercentage, json);

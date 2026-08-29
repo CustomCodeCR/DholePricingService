@@ -417,7 +417,9 @@ public static class RateEndpoints
                     detail.SaleAmount,
                     detail.Notes,
                     detail.Quantity,
-                    chargeBasis
+                    chargeBasis,
+                    detail.ApplyDestinationTax,
+                    detail.DestinationTaxRate
                 )
             );
         }
@@ -620,7 +622,9 @@ public static class RateEndpoints
                     detail.SaleAmount,
                     detail.Notes,
                     detail.Quantity,
-                    chargeBasis
+                    chargeBasis,
+                    detail.ApplyDestinationTax,
+                    detail.DestinationTaxRate
                 )
             );
         }

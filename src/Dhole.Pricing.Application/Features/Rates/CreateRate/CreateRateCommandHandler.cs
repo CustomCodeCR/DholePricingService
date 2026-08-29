@@ -231,7 +231,9 @@ public sealed class CreateRateCommandHandler(
                     detail.SaleAmount,
                     detail.Notes,
                     detail.Quantity,
-                    detail.ChargeBasis
+                    detail.ChargeBasis,
+                    detail.ApplyDestinationTax,
+                    detail.DestinationTaxRate
                 ),
                 cancellationToken
             );
@@ -367,7 +369,7 @@ public sealed class CreateRateCommandHandler(
             foreach (var detail in resolvedDetails)
             {
                 var chargeBasis = detail.ChargeBasis ?? DefaultChargeBasis(command.ShipmentMode, detail.CostDetailType);
-                rate.AddRateDetail(
+                var addedDetail = rate.AddRateDetail(
                     rate.Id,
                     detail.CostId,
                     detail.Name,
@@ -382,6 +384,10 @@ public sealed class CreateRateCommandHandler(
                     detail.Notes,
                     quantity: detail.Quantity ?? 1m,
                     updatedBy: command.CreatedBy
+                );
+                addedDetail.ConfigureDestinationTax(
+                    detail.ApplyDestinationTax,
+                    detail.DestinationTaxRate
                 );
             }
 

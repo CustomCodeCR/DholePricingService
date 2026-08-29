@@ -257,7 +257,9 @@ public sealed class UpdateRateCommandHandler(
                     detail.SaleAmount,
                     detail.Notes,
                     detail.Quantity,
-                    detail.ChargeBasis
+                    detail.ChargeBasis,
+                    detail.ApplyDestinationTax,
+                    detail.DestinationTaxRate
                 ),
                 cancellationToken
             );
@@ -512,7 +514,12 @@ public sealed class UpdateRateCommandHandler(
                         command.UpdatedBy
                     );
 
-                    modifiedDetails.Add(rate.RateDetails.First(x => x.Id == detail.Id.Value));
+                    var modified = rate.RateDetails.First(x => x.Id == detail.Id.Value);
+                    modified.ConfigureDestinationTax(
+                        detail.ApplyDestinationTax,
+                        detail.DestinationTaxRate
+                    );
+                    modifiedDetails.Add(modified);
                 }
                 else
                 {
@@ -534,6 +541,10 @@ public sealed class UpdateRateCommandHandler(
                         updatedBy: command.UpdatedBy
                     );
 
+                    added.ConfigureDestinationTax(
+                        detail.ApplyDestinationTax,
+                        detail.DestinationTaxRate
+                    );
                     addedDetails.Add(added);
                 }
             }

@@ -125,7 +125,10 @@ internal static class RateMappings
                     x.SaleAmount,
                     x.UtilityAmount,
                     x.Quantity,
-                    x.Notes
+                    x.Notes,
+                    x.ApplyDestinationTax,
+                    x.DestinationTaxRate,
+                    x.DestinationTaxAmount
                 ))
                 .ToList(),
             rate.RateServices
