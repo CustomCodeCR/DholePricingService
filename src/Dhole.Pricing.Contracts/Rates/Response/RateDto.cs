@@ -4,6 +4,7 @@ public sealed record RateDto(
     Guid Id,
     string RateCode,
     string RateName,
+    int RevisionNumber,
     Guid? SourceImportFclRateId,
     Guid? AgentId,
     string? AgentName,

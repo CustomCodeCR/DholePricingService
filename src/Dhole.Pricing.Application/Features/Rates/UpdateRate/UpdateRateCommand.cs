@@ -84,5 +84,8 @@ public sealed record UpdateRateCommand(
     bool CanApproveLowMargin,
     RateOperationType OperationType,
     IReadOnlyCollection<RateServiceSelection> Services,
+    decimal? ExchangeRatePurchase,
+    decimal? ExchangeRateSale,
+    decimal? ExchangeRateApplied,
     Guid? UpdatedBy
 ) : ICommand<Result>;

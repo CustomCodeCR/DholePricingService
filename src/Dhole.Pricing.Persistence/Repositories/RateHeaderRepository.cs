@@ -19,7 +19,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
     )
     {
         return dbContext
-            .RateHeaders.Include(x => x.RateDetails).Include(x => x.RateContainers)
+            .RateHeaders.Include(x => x.RateDetails).Include(x => x.RateContainers).Include(x => x.RateServices)
             .AsSplitQuery()
             .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
     }
@@ -182,6 +182,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.Id,
                 x.RateCode,
                 x.RateName,
+                x.RevisionNumber,
                 x.SourceImportFclRateId,
                 x.AgentId,
                 x.AgentName,

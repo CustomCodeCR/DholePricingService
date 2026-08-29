@@ -10,6 +10,7 @@ using Dhole.Pricing.Application.Features.Rates.CreateRate;
 using Dhole.Pricing.Application.Features.Rates.DeleteRate;
 using Dhole.Pricing.Application.Features.Rates.DuplicateRate;
 using Dhole.Pricing.Application.Features.Rates.GetRateById;
+using Dhole.Pricing.Application.Features.Rates.GetRateRevisions;
 using Dhole.Pricing.Application.Features.Rates.GetRateDashboard;
 using Dhole.Pricing.Application.Features.Rates.GetRates;
 using Dhole.Pricing.Application.Features.Rates.GenerateRateDocument;
@@ -41,6 +42,10 @@ public static class RateEndpoints
 
         group
             .MapGet("/{rateId:guid}", GetRateByIdAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
+
+        group
+            .MapGet("/{rateId:guid}/revisions", GetRateRevisionsAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
 
 
@@ -334,6 +339,13 @@ public static class RateEndpoints
             cancellationToken
         );
 
+        return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static async Task<IResult> GetRateRevisionsAsync(
+        Guid rateId, IQueryDispatcher dispatcher, HttpContext httpContext, CancellationToken cancellationToken)
+    {
+        var result = await dispatcher.DispatchAsync(new GetRateRevisionsQuery(rateId), cancellationToken);
         return EndpointResults.FromResult(result, httpContext);
     }
 
@@ -730,6 +742,9 @@ public static class RateEndpoints
                 (request.Services ?? [])
                     .Select(x => new RateServiceSelection(x.Id, x.Name, x.Code))
                     .ToArray(),
+                request.ExchangeRatePurchase,
+                request.ExchangeRateSale,
+                request.ExchangeRateApplied,
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken
