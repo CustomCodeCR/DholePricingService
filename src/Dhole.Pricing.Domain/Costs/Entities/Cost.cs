@@ -454,6 +454,9 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         if (normalized.Length != selections.Count)
             throw new InvalidOperationException("Los servicios de Pricing del costo no pueden estar vacíos ni repetidos.");
 
+        if (ChargeBasis == Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerService && normalized.Length != 1)
+            throw new InvalidOperationException("La base de cobro Por Servicio requiere exactamente un servicio de Pricing.");
+
         var selectedIds = normalized.Select(x => x.Id).ToHashSet();
         _services.RemoveAll(x => !selectedIds.Contains(x.ServiceId));
 
