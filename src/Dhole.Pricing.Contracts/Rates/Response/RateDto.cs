@@ -80,4 +80,40 @@ public sealed record RateDto(
     IReadOnlyCollection<RateContainerDto> Containers,
     IReadOnlyCollection<RateDetailDto> RateDetails,
     IReadOnlyCollection<RateServiceDto> Services
-);
+)
+{
+    public decimal TotalTaxUsd => CalculateTaxTotals().TaxUsd;
+    public decimal TotalTaxCrc => CalculateTaxTotals().TaxCrc;
+    public decimal TotalSaleWithTaxUsd => TotalSaleUsd + TotalTaxUsd;
+    public decimal TotalSaleWithTaxCrc => TotalSaleCrc + TotalTaxCrc;
+
+    private (decimal TaxUsd, decimal TaxCrc) CalculateTaxTotals()
+    {
+        decimal taxUsd = 0m;
+        decimal taxCrc = 0m;
+        var exchangeRate = ExchangeRateApplied is > 0m ? ExchangeRateApplied : ExchangeRateSale;
+
+        foreach (var detail in RateDetails)
+        {
+            var tax = detail.DestinationTaxAmount;
+            if (tax <= 0m) continue;
+
+            var code = detail.CurrencyCode.Trim().ToUpperInvariant();
+            if (code == "USD")
+            {
+                taxUsd += tax;
+                if (exchangeRate is > 0m) taxCrc += tax * exchangeRate.Value;
+            }
+            else if (code == "CRC")
+            {
+                taxCrc += tax;
+                if (exchangeRate is > 0m) taxUsd += tax / exchangeRate.Value;
+            }
+        }
+
+        return (
+            decimal.Round(taxUsd, 2, MidpointRounding.AwayFromZero),
+            decimal.Round(taxCrc, 2, MidpointRounding.AwayFromZero)
+        );
+    }
+}

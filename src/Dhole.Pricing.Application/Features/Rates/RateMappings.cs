@@ -7,7 +7,7 @@ internal static class RateMappings
 {
     public static RateDto ToDto(this RateHeader rate)
     {
-        return new RateDto(
+        var dto = new RateDto(
             rate.Id,
             rate.RateCode,
             rate.RateName,
@@ -136,5 +136,7 @@ internal static class RateMappings
                 .Select(x => new RateServiceDto(x.ServiceId, x.ServiceName, x.ServiceCode))
                 .ToList()
         );
+
+        return dto.WithRecalculatedFinancials();
     }
 }

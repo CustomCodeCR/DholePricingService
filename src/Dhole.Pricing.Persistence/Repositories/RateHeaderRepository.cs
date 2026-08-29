@@ -297,6 +297,10 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             ))
             .ToListAsync(cancellationToken);
 
+        // RateDetails are the source of truth. Recalculate the read snapshot so historical
+        // rates created before aggregate USD/CRC fields were populated never render as 0.00.
+        items = items.Select(item => item.WithRecalculatedFinancials()).ToList();
+
         return PagedResult<RateDto>.Create(items, page.PageNumber, page.PageSize, total);
     }
 
