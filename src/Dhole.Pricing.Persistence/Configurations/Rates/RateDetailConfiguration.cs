@@ -47,6 +47,15 @@ internal sealed class RateDetailConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.Quantity).HasPrecision(18, 6).IsRequired().HasDefaultValue(1m);
 
+        builder.Property(x => x.ApplyDestinationTax)
+            .HasColumnName("apply_destination_tax")
+            .HasDefaultValue(false);
+
+        builder.Property(x => x.DestinationTaxRate)
+            .HasColumnName("destination_tax_rate")
+            .HasPrecision(5, 2)
+            .HasDefaultValue(0m);
+
         builder.HasIndex(x => x.RateHeaderId);
         builder.HasIndex(x => x.CostId);
         builder.HasIndex(x => x.CostDetailType);
