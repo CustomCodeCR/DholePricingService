@@ -1,0 +1,32 @@
+name: Validate Quote Rejection Reason 20260829
+
+on:
+  push:
+    branches: [feature/quote-rejection-reason-20260829]
+    paths:
+      - 'src/Dhole.Pricing.Infrastructure/Reports/RateReportDataFactory.cs'
+      - '.github/workflows/validate-quote-rejection-reason-20260829.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  validate:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/quote-rejection-reason-20260829
+
+      - name: Build Pricing API image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker build --pull \
+            --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" \
+            --secret id=github_token,env=GITHUB_TOKEN \
+            -f src/Dhole.Pricing.Api/Dockerfile \
+            -t dhole/pricing-quote-rejection-validation .
