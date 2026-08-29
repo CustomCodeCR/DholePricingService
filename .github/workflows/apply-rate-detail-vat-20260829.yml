@@ -136,7 +136,8 @@ jobs:
             src/Dhole.Pricing.Persistence \
             src/Dhole.Pricing.Contracts \
             src/Dhole.Pricing.Application \
-            src/Dhole.Pricing.Api
+            src/Dhole.Pricing.Api \
+            src/Dhole.Pricing.Workers
           if git diff --cached --quiet; then
             echo 'No functional changes to commit.'
             exit 0
