@@ -81,7 +81,7 @@ jobs:
           import sys
           p = Path(sys.argv[1])
           text = p.read_text(encoding='utf-8')
-          if 'Backfill legacy IVA state from notes' not in text:
+          if 'Backfill legacy IVA state that older Web versions stored only in Notes.' not in text:
               up_start = text.index('        protected override void Up(MigrationBuilder migrationBuilder)')
               down_start = text.index('        protected override void Down(MigrationBuilder migrationBuilder)')
               up = text[up_start:down_start]
@@ -91,12 +91,11 @@ jobs:
               text = text[:up_start] + up + text[down_start:]
               p.write_text(text, encoding='utf-8')
           PY
-          grep -n -A18 -B5 'Backfill legacy IVA' "$MIGRATION"
+          COUNT=$(grep -c 'Backfill legacy IVA state that older Web versions stored only in Notes.' "$MIGRATION")
+          test "$COUNT" -eq 1
 
       - name: Rebuild API after migration in SDK container
         shell: bash
-        env:
-          GH_NUGET_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           docker run --rm \
@@ -107,6 +106,15 @@ jobs:
             -w /src \
             mcr.microsoft.com/dotnet/sdk:10.0 \
             bash -lc 'set -euo pipefail; dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj -c Release --no-restore'
+
+      - name: Free runner disk before image validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .tmp/vat-validation
+          docker builder prune -af || true
+          docker image prune -af || true
+          df -h
 
       - name: Build production API and Worker images
         shell: bash
