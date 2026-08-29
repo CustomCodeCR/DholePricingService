@@ -4,9 +4,6 @@ public static class RateDtoFinancialExtensions
 {
     public static RateDto WithRecalculatedFinancials(this RateDto rate)
     {
-        if (rate.RateDetails.Count == 0)
-            return rate;
-
         var exchangeRate = rate.ExchangeRateApplied is > 0m
             ? rate.ExchangeRateApplied
             : rate.ExchangeRateSale;
@@ -15,18 +12,18 @@ public static class RateDtoFinancialExtensions
         decimal saleUsd = 0m;
         decimal costCrc = 0m;
         decimal saleCrc = 0m;
-        var recognized = false;
+        var recognizedDetailCurrency = false;
 
         foreach (var detail in rate.RateDetails)
         {
             var quantity = detail.Quantity > 0m ? detail.Quantity : 1m;
             var cost = detail.CostAmount * quantity;
             var sale = detail.SaleAmount * quantity;
-            var code = detail.CurrencyCode.Trim().ToUpperInvariant();
+            var code = CanonicalCurrency(detail.CurrencyCode, detail.CurrencyName);
 
             if (code == "USD")
             {
-                recognized = true;
+                recognizedDetailCurrency = true;
                 costUsd += cost;
                 saleUsd += sale;
                 if (exchangeRate is > 0m)
@@ -37,7 +34,7 @@ public static class RateDtoFinancialExtensions
             }
             else if (code == "CRC")
             {
-                recognized = true;
+                recognizedDetailCurrency = true;
                 costCrc += cost;
                 saleCrc += sale;
                 if (exchangeRate is > 0m)
@@ -48,8 +45,70 @@ public static class RateDtoFinancialExtensions
             }
         }
 
-        if (!recognized)
-            return rate;
+        var detailsHaveFinancialValues = recognizedDetailCurrency &&
+            (costUsd != 0m || saleUsd != 0m || costCrc != 0m || saleCrc != 0m);
+
+        // Listados antiguos o snapshots incompletos pueden no traer RateDetails con una
+        // divisa canónica. En ese caso jamás debemos borrar los importes ya persistidos.
+        if (!detailsHaveFinancialValues)
+        {
+            costUsd = rate.TotalCostUsd;
+            saleUsd = rate.TotalSaleUsd;
+            costCrc = rate.TotalCostCrc;
+            saleCrc = rate.TotalSaleCrc;
+
+            var dualTotalsHaveValues =
+                costUsd != 0m || saleUsd != 0m || costCrc != 0m || saleCrc != 0m;
+
+            // Último respaldo: TotalCostAmount/TotalSaleAmount son los totales nativos
+            // de la tarifa y sí existen incluso en tarifas creadas antes de los campos
+            // duales USD/CRC.
+            if (!dualTotalsHaveValues &&
+                (rate.TotalCostAmount != 0m || rate.TotalSaleAmount != 0m))
+            {
+                var nativeCode = CanonicalCurrency(rate.CurrencyCode, rate.CurrencyName);
+
+                if (nativeCode == "CRC")
+                {
+                    costCrc = rate.TotalCostAmount;
+                    saleCrc = rate.TotalSaleAmount;
+                    if (exchangeRate is > 0m)
+                    {
+                        costUsd = costCrc / exchangeRate.Value;
+                        saleUsd = saleCrc / exchangeRate.Value;
+                    }
+                }
+                else
+                {
+                    // Pricing históricamente usa USD como moneda comercial base. Si el
+                    // catálogo no permite reconocer el código, conservar el monto nativo
+                    // como USD es preferible a mostrar falsamente cero en Tarifas oficiales.
+                    costUsd = rate.TotalCostAmount;
+                    saleUsd = rate.TotalSaleAmount;
+                    if (exchangeRate is > 0m)
+                    {
+                        costCrc = costUsd * exchangeRate.Value;
+                        saleCrc = saleUsd * exchangeRate.Value;
+                    }
+                }
+            }
+        }
+
+        // Si solamente uno de los pares estaba persistido, completar el otro usando el
+        // mismo TC de venta/aplicado que usa Pricing para la revisión.
+        if (exchangeRate is > 0m)
+        {
+            if ((costUsd != 0m || saleUsd != 0m) && costCrc == 0m && saleCrc == 0m)
+            {
+                costCrc = costUsd * exchangeRate.Value;
+                saleCrc = saleUsd * exchangeRate.Value;
+            }
+            else if ((costCrc != 0m || saleCrc != 0m) && costUsd == 0m && saleUsd == 0m)
+            {
+                costUsd = costCrc / exchangeRate.Value;
+                saleUsd = saleCrc / exchangeRate.Value;
+            }
+        }
 
         costUsd = decimal.Round(costUsd, 2, MidpointRounding.AwayFromZero);
         saleUsd = decimal.Round(saleUsd, 2, MidpointRounding.AwayFromZero);
@@ -58,21 +117,25 @@ public static class RateDtoFinancialExtensions
 
         var utilityUsd = saleUsd - costUsd;
         var utilityCrc = saleCrc - costCrc;
-        var nativeCode = rate.CurrencyCode.Trim().ToUpperInvariant();
-        var totalCostAmount = nativeCode == "CRC"
+        var nativeCurrency = CanonicalCurrency(rate.CurrencyCode, rate.CurrencyName);
+        var totalCostAmount = nativeCurrency == "CRC"
             ? costCrc
-            : nativeCode == "USD"
+            : nativeCurrency == "USD"
                 ? costUsd
-                : rate.TotalCostAmount;
-        var totalSaleAmount = nativeCode == "CRC"
+                : rate.TotalCostAmount != 0m
+                    ? rate.TotalCostAmount
+                    : costUsd;
+        var totalSaleAmount = nativeCurrency == "CRC"
             ? saleCrc
-            : nativeCode == "USD"
+            : nativeCurrency == "USD"
                 ? saleUsd
-                : rate.TotalSaleAmount;
+                : rate.TotalSaleAmount != 0m
+                    ? rate.TotalSaleAmount
+                    : saleUsd;
         var totalUtilityAmount = totalSaleAmount - totalCostAmount;
-        var margin = totalSaleAmount <= 0m
-            ? 0m
-            : totalUtilityAmount / totalSaleAmount * 100m;
+        var margin = totalSaleAmount > 0m
+            ? totalUtilityAmount / totalSaleAmount * 100m
+            : rate.MarginPercentage;
 
         return rate with
         {
@@ -87,5 +150,24 @@ public static class RateDtoFinancialExtensions
             TotalUtilityCrc = utilityCrc,
             MarginPercentage = margin,
         };
+    }
+
+    private static string CanonicalCurrency(string? code, string? name)
+    {
+        var value = $"{code} {name}".Trim().ToUpperInvariant();
+
+        if (value.Contains("CRC", StringComparison.Ordinal) ||
+            value.Contains("COLÓN", StringComparison.Ordinal) ||
+            value.Contains("COLON", StringComparison.Ordinal) ||
+            value.Contains("COLONES", StringComparison.Ordinal))
+            return "CRC";
+
+        if (value.Contains("USD", StringComparison.Ordinal) ||
+            value.Contains("DÓLAR", StringComparison.Ordinal) ||
+            value.Contains("DOLAR", StringComparison.Ordinal) ||
+            value.Contains("DOLLAR", StringComparison.Ordinal))
+            return "USD";
+
+        return string.Empty;
     }
 }
