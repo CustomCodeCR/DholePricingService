@@ -14,4 +14,5 @@ public enum ChargeBasis
     PerPallet = 30,
     PerPackage = 31,
     PerDocument = 40,
+    PerService = 50,
 }
