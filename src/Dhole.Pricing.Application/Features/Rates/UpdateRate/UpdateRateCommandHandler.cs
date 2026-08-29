@@ -346,6 +346,14 @@ public sealed class UpdateRateCommandHandler(
         var containerQuantity = requestedContainerQuantity;
         var transitTime = command.TransitTime;
 
+        var currentServiceIds = rate.RateServices.Select(x => x.ServiceId).OrderBy(x => x).ToArray();
+        var requestedServiceIds = (command.Services ?? Array.Empty<RateServiceSelection>())
+            .Select(x => x.Id).OrderBy(x => x).ToArray();
+        var servicesChanged = !currentServiceIds.SequenceEqual(requestedServiceIds);
+        var operationTypeChanged = rate.OperationType != command.OperationType;
+        var fixedDetailsTouched = resolvedDetails.Any(x =>
+            x.CostId.HasValue && x.CostType == CostType.Fixed);
+
         var selectorsChanged =
             rate.AgentId != agentId
             || rate.CarrierId != carrierId
@@ -355,7 +363,9 @@ public sealed class UpdateRateCommandHandler(
             || containersChanged
             || rate.IncotermId != incotermId
             || rate.CurrencyId != currencyId
-            || rate.ShipmentMode != command.ShipmentMode;
+            || rate.ShipmentMode != command.ShipmentMode
+            || servicesChanged
+            || operationTypeChanged;
 
         var headerBefore = PricingAuditSnapshots.From(rate);
 
@@ -499,7 +509,7 @@ public sealed class UpdateRateCommandHandler(
             // resincronizamos. De lo contrario SynchronizeAsync elimina los detalles fijos antiguos
             // y el bucle anterior intenta actualizar sus IDs ya eliminados, produciendo
             // "El detalle de la tarifa no existe" al cambiar, por ejemplo, la naviera.
-            if (selectorsChanged || command.ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl)
+            if (selectorsChanged || fixedDetailsTouched || command.ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl)
             {
                 await fixedCostSynchronizer.SynchronizeAsync(
                     rate,

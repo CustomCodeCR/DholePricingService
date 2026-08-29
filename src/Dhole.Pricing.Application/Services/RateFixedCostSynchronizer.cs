@@ -36,7 +36,14 @@ public sealed class RateFixedCostSynchronizer(
                 group =>
                 {
                     var detail = group.First();
-                    return (detail.CostAmount, detail.SaleAmount, detail.Quantity);
+                    return (
+                        detail.CostAmount,
+                        detail.SaleAmount,
+                        detail.Quantity,
+                        detail.CurrencyId,
+                        detail.CurrencyName,
+                        detail.CurrencyCode
+                    );
                 }
             );
 
@@ -50,6 +57,12 @@ public sealed class RateFixedCostSynchronizer(
         var hasExplicitFreight = rate.RateDetails.Any(x =>
             x.CostDetailType == CostDetailType.Freight && !x.CostId.HasValue
         );
+        var exchangeRateSale = rate.ExchangeRateApplied is > 0m
+            ? rate.ExchangeRateApplied.Value
+            : rate.ExchangeRateSale is > 0m
+                ? rate.ExchangeRateSale.Value
+                : 0m;
+        PricingConfigCatalogItem? crcCurrency = null;
 
         foreach (var cost in activeFixedCosts.Where(cost =>
             MatchesRate(cost, rate)
@@ -58,20 +71,71 @@ public sealed class RateFixedCostSynchronizer(
         {
             var hasExistingAmount = existingAmounts.TryGetValue(cost.Id, out var existingAmount);
             var hasMinimumRule = cost.MinimumCostAmount.HasValue || cost.MinimumSaleAmount.HasValue;
-            var costAmount = hasExistingAmount && !hasMinimumRule
-                ? existingAmount.CostAmount
-                : cost.CostAmount;
+            var forceCrc = CostaRicaServiceCurrencyRules.RequiresCrc(cost, rate);
+
+            Guid targetCurrencyId;
+            string targetCurrencyName;
+            string targetCurrencyCode;
+
+            if (forceCrc)
+            {
+                crcCurrency ??= await configCatalog.GetActiveByCodeAsync(
+                    PricingConstants.CatalogSlugs.Currencies,
+                    "CRC",
+                    cancellationToken
+                );
+                if (crcCurrency is null)
+                    throw new InvalidOperationException(
+                        "No se encontró la moneda CRC activa en el catálogo 'currencies' de Config."
+                    );
+
+                targetCurrencyId = crcCurrency.Id;
+                targetCurrencyName = crcCurrency.SnapshotName();
+                targetCurrencyCode = crcCurrency.Code;
+            }
+            else if (hasExistingAmount)
+            {
+                // Si Pricing escogió una moneda por línea, conservarla al resincronizar el fijo.
+                targetCurrencyId = existingAmount.CurrencyId;
+                targetCurrencyName = existingAmount.CurrencyName;
+                targetCurrencyCode = existingAmount.CurrencyCode;
+            }
+            else
+            {
+                targetCurrencyId = cost.CurrencyId;
+                targetCurrencyName = cost.CurrencyName;
+                targetCurrencyCode = cost.CurrencyCode;
+            }
+
+            // El costo contable de un fijo siempre parte del maestro y se convierte a la moneda
+            // de la línea. La venta puede conservar el override de Pricing, convirtiéndolo si hace falta.
+            var costAmount = CostaRicaServiceCurrencyRules.ConvertUsdCrc(
+                cost.CostAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
             var saleAmount = cost.AgentId.HasValue
                 ? 0m
                 : hasExistingAmount && !hasMinimumRule
-                    ? existingAmount.SaleAmount
-                    : cost.SaleAmount;
+                    ? CostaRicaServiceCurrencyRules.ConvertUsdCrc(
+                        existingAmount.SaleAmount,
+                        existingAmount.CurrencyCode,
+                        targetCurrencyCode,
+                        exchangeRateSale)
+                    : CostaRicaServiceCurrencyRules.ConvertUsdCrc(
+                        cost.SaleAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
+
+            var minimumCostAmount = cost.MinimumCostAmount.HasValue
+                ? CostaRicaServiceCurrencyRules.ConvertUsdCrc(
+                    cost.MinimumCostAmount.Value, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale)
+                : 0m;
+            var minimumSaleAmount = cost.MinimumSaleAmount.HasValue
+                ? CostaRicaServiceCurrencyRules.ConvertUsdCrc(
+                    cost.MinimumSaleAmount.Value, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale)
+                : 0m;
 
             var quantity = rate.ResolveChargeQuantity(cost.ChargeBasis, kgPerCbmOverride: cost.KgPerCbm);
-            var effectiveCostTotal = Math.Max(costAmount * quantity, cost.MinimumCostAmount ?? 0m);
+            var effectiveCostTotal = Math.Max(costAmount * quantity, minimumCostAmount);
             var effectiveSaleTotal = cost.AgentId.HasValue
                 ? 0m
-                : Math.Max(saleAmount * quantity, cost.MinimumSaleAmount ?? 0m);
+                : Math.Max(saleAmount * quantity, minimumSaleAmount);
             var effectiveCostAmount = quantity > 0m ? effectiveCostTotal / quantity : effectiveCostTotal;
             var effectiveSaleAmount = quantity > 0m ? effectiveSaleTotal / quantity : effectiveSaleTotal;
 
@@ -82,9 +146,9 @@ public sealed class RateFixedCostSynchronizer(
                 cost.CostDetailType,
                 cost.CostType,
                 cost.ChargeBasis,
-                cost.CurrencyId,
-                cost.CurrencyName,
-                cost.CurrencyCode,
+                targetCurrencyId,
+                targetCurrencyName,
+                targetCurrencyCode,
                 effectiveCostAmount,
                 effectiveSaleAmount,
                 cost.Notes,
@@ -162,8 +226,12 @@ public sealed class RateFixedCostSynchronizer(
                 rate.IncotermId.HasValue
                 && cost.Incoterms.Any(x => x.IncotermId == rate.IncotermId.Value)
             );
+        var matchesServices =
+            cost.Services.Count == 0
+            || cost.Services.Any(costService =>
+                rate.RateServices.Any(rateService => rateService.ServiceId == costService.ServiceId));
 
-        if (!matchesAgent || !matchesCarrier || !matchesMode || !matchesIncoterm)
+        if (!matchesAgent || !matchesCarrier || !matchesMode || !matchesIncoterm || !matchesServices)
             return false;
 
         var hasStructuredRoute = cost.PolId.HasValue || cost.PoeId.HasValue || cost.PodId.HasValue;
