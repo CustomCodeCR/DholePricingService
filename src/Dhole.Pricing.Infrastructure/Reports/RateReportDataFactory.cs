@@ -141,7 +141,10 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 includes = commercialTerms.Includes,
                 subjectTo = commercialTerms.SubjectTo,
                 excludes = commercialTerms.Excludes,
-                status = rate.Status.ToString()
+                status = rate.Status.ToString(),
+                rejectionReason = rate.Status == RateStatus.RejectedByClient
+                    ? Text(rate.ClosedReason, string.Empty)
+                    : string.Empty
             },
             containers,
             items,
