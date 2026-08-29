@@ -1,6 +1,7 @@
 name: Deploy Dhole Pricing
 # Editable Hacienda Compra/Venta + EF snapshot release — 2026-08-28
 # Screen 7 VAT persistence and financial summary release — 2026-08-29
+# Final deployment trigger after Screen 7 source cleanup — 2026-08-29
 
 on:
   push:
