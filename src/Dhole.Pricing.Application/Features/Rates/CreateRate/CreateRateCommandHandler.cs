@@ -302,7 +302,7 @@ public sealed class CreateRateCommandHandler(
 
         if (!HasValidFreightDistribution(command))
         {
-            return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);
+            return Result.Failure<Guid>(PricingErrors.RateInvalidFreightDistribution);
         }
 
         var rateCode = await rateCodeGenerator.GenerateAsync(cancellationToken);
@@ -417,9 +417,11 @@ public sealed class CreateRateCommandHandler(
         {
             return Result.Failure<Guid>(PricingErrors.ConfigServiceUnavailable);
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException exception)
         {
-            return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);
+            // No ocultar validaciones reales detrás de RateInvalidStatus. El mensaje de
+            // dominio permite corregir el dato exacto que impidió crear la tarifa.
+            return Result.Failure<Guid>(PricingErrors.RateUpdateValidationFailed(exception.Message));
         }
 
         await rateHeaders.AddAsync(rate, cancellationToken);

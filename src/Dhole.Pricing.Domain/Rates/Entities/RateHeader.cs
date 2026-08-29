@@ -1094,6 +1094,12 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
     public void SetCommercialStatus(RateStatus status, string? reason, Guid? updatedBy)
     {
+        // Los comandos HTTP pueden reintentarse y el frontend puede refrescar el estado
+        // antes de confirmar la transición. Repetir el mismo estado debe ser idempotente,
+        // no una operación inválida (por ejemplo Open -> Open al crear una solicitud).
+        if (Status == status)
+            return;
+
         var isClosing = status == RateStatus.Closed;
         var isValidTransition = (Status, status) switch
         {
