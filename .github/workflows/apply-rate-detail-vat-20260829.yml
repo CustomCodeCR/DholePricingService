@@ -1,5 +1,4 @@
 name: Apply Rate Detail VAT 20260829
-# rerun after aligning RateDetail quantity precision
 
 on:
   push:
@@ -25,42 +24,57 @@ jobs:
       - name: Apply VAT persistence patch
         run: python3 .github/scripts/patch-rate-detail-vat-20260829.py
 
-      - name: Configure authenticated NuGet source
+      - name: Prepare container NuGet configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .tmp/vat-validation
+          mkdir -p .tmp/vat-validation/home .tmp/vat-validation/tools
+          cp NuGet.Config .tmp/vat-validation/NuGet.Config
+
+      - name: Restore, build and generate EF migration in SDK container
         shell: bash
         env:
           GH_NUGET_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          cp NuGet.Config /tmp/DholePricing.NuGet.Config
-          dotnet nuget update source github \
-            --source https://nuget.pkg.github.com/CustomCodeCR/index.json \
-            --username "$GITHUB_ACTOR" \
-            --password "$GH_NUGET_TOKEN" \
-            --store-password-in-clear-text \
-            --configfile /tmp/DholePricing.NuGet.Config
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/src/.tmp/vat-validation/home \
+            -e DOTNET_CLI_HOME=/src/.tmp/vat-validation/home \
+            -e GITHUB_ACTOR="$GITHUB_ACTOR" \
+            -e GH_NUGET_TOKEN="$GH_NUGET_TOKEN" \
+            -v "$PWD:/src" \
+            -w /src \
+            mcr.microsoft.com/dotnet/sdk:10.0 \
+            bash -lc '
+              set -euo pipefail
+              dotnet nuget update source github \
+                --source https://nuget.pkg.github.com/CustomCodeCR/index.json \
+                --username "$GITHUB_ACTOR" \
+                --password "$GH_NUGET_TOKEN" \
+                --store-password-in-clear-text \
+                --configfile .tmp/vat-validation/NuGet.Config
+              dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
+                --configfile .tmp/vat-validation/NuGet.Config
+              dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
+                -c Release --no-restore
+              dotnet tool install --tool-path .tmp/vat-validation/tools dotnet-ef --version 10.0.9
+              if ! ls src/Dhole.Pricing.Persistence/Migrations/*PersistRateDetailDestinationTax.cs >/dev/null 2>&1; then
+                .tmp/vat-validation/tools/dotnet-ef migrations add PersistRateDetailDestinationTax \
+                  --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
+                  --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
+                  --context ServiceDbContext \
+                  --output-dir Migrations \
+                  --configuration Release \
+                  --no-build
+              fi
+            '
 
-      - name: Restore and build API for EF
+      - name: Backfill legacy VAT state in migration
         shell: bash
         run: |
           set -euo pipefail
-          dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile /tmp/DholePricing.NuGet.Config
-          dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj -c Release --no-restore
-
-      - name: Generate VAT migration
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PATH="$PATH:$HOME/.dotnet/tools"
-          dotnet tool update --global dotnet-ef --version 10.0.9 || dotnet tool install --global dotnet-ef --version 10.0.9
-          if ! ls src/Dhole.Pricing.Persistence/Migrations/*PersistRateDetailDestinationTax*.cs >/dev/null 2>&1; then
-            dotnet ef migrations add PersistRateDetailDestinationTax \
-              --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
-              --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
-              --context ServiceDbContext \
-              --output-dir Migrations \
-              --configuration Release \
-              --no-build
-          fi
           MIGRATION=$(ls src/Dhole.Pricing.Persistence/Migrations/*PersistRateDetailDestinationTax.cs | tail -n1)
           python3 - "$MIGRATION" <<'PY'
           from pathlib import Path
@@ -77,14 +91,22 @@ jobs:
               text = text[:up_start] + up + text[down_start:]
               p.write_text(text, encoding='utf-8')
           PY
-          echo "Migration: $MIGRATION"
-          sed -n '1,220p' "$MIGRATION"
+          grep -n -A18 -B5 'Backfill legacy IVA' "$MIGRATION"
 
-      - name: Rebuild API with migration
+      - name: Rebuild API after migration in SDK container
         shell: bash
+        env:
+          GH_NUGET_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj -c Release --no-restore
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -e HOME=/src/.tmp/vat-validation/home \
+            -e DOTNET_CLI_HOME=/src/.tmp/vat-validation/home \
+            -v "$PWD:/src" \
+            -w /src \
+            mcr.microsoft.com/dotnet/sdk:10.0 \
+            bash -lc 'set -euo pipefail; dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj -c Release --no-restore'
 
       - name: Build production API and Worker images
         shell: bash
@@ -122,7 +144,8 @@ jobs:
           git commit -m 'fix(pricing): persist VAT state per rate detail'
           git push origin HEAD:fix/rate-detail-vat-persistence-20260829
 
-      - name: Cleanup validation images
+      - name: Cleanup validation assets
         if: always()
         run: |
           docker image rm -f dhole/pricing-api:vat-validation dhole/pricing-worker:vat-validation || true
+          rm -rf .tmp/vat-validation || true
