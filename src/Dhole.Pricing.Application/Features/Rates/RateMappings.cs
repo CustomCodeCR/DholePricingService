@@ -11,6 +11,7 @@ internal static class RateMappings
             rate.Id,
             rate.RateCode,
             rate.RateName,
+            rate.RevisionNumber,
             rate.SourceImportFclRateId,
             rate.AgentId,
             rate.AgentName,

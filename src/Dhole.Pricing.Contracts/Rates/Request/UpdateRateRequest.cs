@@ -52,5 +52,8 @@ public sealed record UpdateRateRequest(
     decimal? PickupLatitude = null,
     decimal? PickupLongitude = null,
     string OperationType = "TransitDomestic",
-    IReadOnlyCollection<RateServiceRequest>? Services = null
+    IReadOnlyCollection<RateServiceRequest>? Services = null,
+    decimal? ExchangeRatePurchase = null,
+    decimal? ExchangeRateSale = null,
+    decimal? ExchangeRateApplied = null
 );

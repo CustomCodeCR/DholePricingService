@@ -16,6 +16,7 @@ namespace Dhole.Pricing.Application.Features.Rates.UpdateRate;
 
 public sealed class UpdateRateCommandHandler(
     IRateHeaderRepository rateHeaders,
+    IRateRevisionRepository rateRevisions,
     IRateFixedCostSynchronizer fixedCostSynchronizer,
     IRateExtraDetailResolver extraDetailResolver,
     IPricingConfigCatalogClient configCatalog,
@@ -43,6 +44,11 @@ public sealed class UpdateRateCommandHandler(
         {
             return Result.Failure(PricingErrors.RateInvalidStatus);
         }
+
+        var acceptedRevision = rate.Status == Dhole.Pricing.Domain.Rates.Enums.RateStatus.AcceptedByClient
+            ? RateRevisionSnapshotFactory.Capture(rate)
+            : null;
+        var acceptedRevisionNumber = rate.RevisionNumber;
 
         if (rate.SourceImportFclRateId.HasValue && command.ShipmentMode != ShipmentMode.Fcl)
             return Result.Failure(PricingErrors.RateImportedStructureLocked);
@@ -429,6 +435,34 @@ public sealed class UpdateRateCommandHandler(
                 command.PickupLongitude
             );
 
+            if (command.ExchangeRateApplied is > 0m || command.ExchangeRateSale is > 0m)
+            {
+                var appliedRate = command.ExchangeRateApplied is > 0m
+                    ? command.ExchangeRateApplied.Value
+                    : command.ExchangeRateSale!.Value;
+                var purchaseRate = command.ExchangeRatePurchase is > 0m
+                    ? command.ExchangeRatePurchase
+                    : rate.ExchangeRatePurchase;
+                var saleRate = command.ExchangeRateSale is > 0m
+                    ? command.ExchangeRateSale
+                    : rate.ExchangeRateSale;
+                var exchangeChanged =
+                    purchaseRate != rate.ExchangeRatePurchase
+                    || saleRate != rate.ExchangeRateSale
+                    || appliedRate != rate.ExchangeRateApplied;
+
+                rate.ConfigureExchangeRateSnapshot(
+                    purchaseRate,
+                    saleRate,
+                    appliedRate,
+                    exchangeChanged ? DateTime.UtcNow.Date : rate.ExchangeRateDate,
+                    DateTime.UtcNow,
+                    exchangeChanged ? "Wizard Pricing · ajuste manual" : rate.ExchangeRateSource ?? "Wizard Pricing",
+                    exchangeChanged || rate.ExchangeRateManualOverride,
+                    command.UpdatedBy
+                );
+            }
+
             rate.ReplaceContainerAllocations(containerSpecs, command.UpdatedBy);
 
             var cargoProfile = RateCargoProfileFactory.Create(
@@ -555,6 +589,19 @@ public sealed class UpdateRateCommandHandler(
             // Antes cualquier validación de datos terminaba reportándose como un error
             // de estado, ocultando la causa real al frontend.
             return Result.Failure(PricingErrors.RateUpdateValidationFailed(exception.Message));
+        }
+
+        if (acceptedRevision is not null)
+        {
+            await rateRevisions.AddAsync(
+                RateRevision.Create(
+                    rate.Id, acceptedRevisionNumber, acceptedRevision.Status, acceptedRevision.RateName,
+                    acceptedRevision.IdtraNumber, acceptedRevision.QuoNumber, acceptedRevision.TotalSaleUsd,
+                    acceptedRevision.TotalSaleCrc, acceptedRevision.MarginPercentage, acceptedRevision.Json, command.UpdatedBy
+                ),
+                cancellationToken
+            );
+            rate.BeginRevision(command.UpdatedBy);
         }
 
         await audit.PublishAsync(

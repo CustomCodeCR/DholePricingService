@@ -667,6 +667,7 @@ internal sealed class PricingCacheWarmupWorker(
             rate.Id,
             rate.RateCode,
             rate.RateName,
+            rate.RevisionNumber,
             rate.SourceImportFclRateId,
             rate.AgentId,
             rate.AgentName,

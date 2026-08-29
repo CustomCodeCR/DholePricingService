@@ -205,6 +205,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
     public string RateCode { get; private set; } = string.Empty;
     public string RateName { get; private set; } = string.Empty;
+    public int RevisionNumber { get; private set; } = 1;
     public int ContainerQuantity { get; private set; }
 
     public ShipmentMode ShipmentMode { get; private set; } = ShipmentMode.Fcl;
@@ -457,6 +458,21 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             ClientName
         );
 
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
+    }
+
+    public void BeginRevision(Guid? updatedBy)
+    {
+        if (Status != RateStatus.AcceptedByClient)
+            throw new InvalidOperationException("Solo una tarifa aceptada puede iniciar una nueva revisión.");
+
+        RevisionNumber = Math.Max(1, RevisionNumber) + 1;
+        RequiredApproval = MarginPercentage < MinimumMarginPercentage;
+        Status = RequiredApproval ? RateStatus.PendingApproval : RateStatus.Open;
+        ClosedReason = null;
+        ClosedAtUtc = null;
+        ClosedBy = null;
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
     }
@@ -1007,10 +1023,12 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         }
         MarginPercentage = TotalSaleAmount <= 0m ? 0m : (TotalUtilityAmount / TotalSaleAmount) * 100m;
 
-        if (IdtraNumber is not null && QuoNumber is not null)
+        if (Status == RateStatus.AcceptedByClient)
         {
+            // Recalcular una revisión aceptada conserva su estado únicamente durante la
+            // mutación actual. UpdateRateCommandHandler la convierte después en una nueva
+            // revisión Open/PendingApproval, preservando primero la versión aceptada.
             RequiredApproval = false;
-            Status = RateStatus.AcceptedByClient;
         }
         else if (MarginPercentage >= MinimumMarginPercentage)
         {
