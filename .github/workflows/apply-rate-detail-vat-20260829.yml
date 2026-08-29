@@ -1,0 +1,129 @@
+name: Apply Rate Detail VAT 20260829
+
+on:
+  push:
+    branches: [fix/rate-detail-vat-persistence-20260829]
+    paths:
+      - '.github/scripts/patch-rate-detail-vat-20260829.py'
+      - '.github/workflows/apply-rate-detail-vat-20260829.yml'
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  apply-and-validate:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/rate-detail-vat-persistence-20260829
+          fetch-depth: 0
+
+      - name: Apply VAT persistence patch
+        run: python3 .github/scripts/patch-rate-detail-vat-20260829.py
+
+      - name: Configure authenticated NuGet source
+        shell: bash
+        env:
+          GH_NUGET_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cp NuGet.Config /tmp/DholePricing.NuGet.Config
+          dotnet nuget update source github \
+            --source https://nuget.pkg.github.com/CustomCodeCR/index.json \
+            --username "$GITHUB_ACTOR" \
+            --password "$GH_NUGET_TOKEN" \
+            --store-password-in-clear-text \
+            --configfile /tmp/DholePricing.NuGet.Config
+
+      - name: Restore and build API for EF
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile /tmp/DholePricing.NuGet.Config
+          dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj -c Release --no-restore
+
+      - name: Generate VAT migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet tool update --global dotnet-ef --version 10.0.9 || dotnet tool install --global dotnet-ef --version 10.0.9
+          if ! ls src/Dhole.Pricing.Persistence/Migrations/*PersistRateDetailDestinationTax*.cs >/dev/null 2>&1; then
+            dotnet ef migrations add PersistRateDetailDestinationTax \
+              --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
+              --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
+              --context ServiceDbContext \
+              --output-dir Migrations \
+              --configuration Release \
+              --no-build
+          fi
+          MIGRATION=$(ls src/Dhole.Pricing.Persistence/Migrations/*PersistRateDetailDestinationTax.cs | tail -n1)
+          python3 - "$MIGRATION" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          text = p.read_text(encoding='utf-8')
+          marker = '            migrationBuilder.AddColumn<decimal>(\n                name: "destination_tax_rate",'
+          if 'Backfill legacy IVA state from notes' not in text:
+              # Insert SQL after both AddColumn calls, immediately before the closing brace of Up.
+              up_start = text.index('        protected override void Up(MigrationBuilder migrationBuilder)')
+              down_start = text.index('        protected override void Down(MigrationBuilder migrationBuilder)')
+              up = text[up_start:down_start]
+              insert_at = up.rfind('        }')
+              sql = '''\n            // Backfill legacy IVA state that older Web versions stored only in Notes.\n            migrationBuilder.Sql(\n                """\n                UPDATE pricing."RateDetails"\n                SET apply_destination_tax = TRUE,\n                    destination_tax_rate = COALESCE(\n                        NULLIF(substring(notes from 'IVA\\s+([0-9]+(?:\\.[0-9]+)?)%'), '')::numeric,\n                        13\n                    )\n                WHERE notes ~* 'IVA\\s+[0-9]+(?:\\.[0-9]+)?%';\n                """\n            );\n'''
+              up = up[:insert_at] + sql + up[insert_at:]
+              text = text[:up_start] + up + text[down_start:]
+              p.write_text(text, encoding='utf-8')
+          PY
+          echo "Migration: $MIGRATION"
+          sed -n '1,220p' "$MIGRATION"
+
+      - name: Rebuild API with migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj -c Release --no-restore
+
+      - name: Build production API and Worker images
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker build --pull \
+            --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" \
+            --secret id=github_token,env=GITHUB_TOKEN \
+            -f src/Dhole.Pricing.Api/Dockerfile \
+            -t dhole/pricing-api:vat-validation .
+          docker build --pull \
+            --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" \
+            --secret id=github_token,env=GITHUB_TOKEN \
+            -f src/Dhole.Pricing.Workers/Dockerfile \
+            -t dhole/pricing-worker:vat-validation .
+
+      - name: Commit validated implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Maurice Lang'
+          git config user.email '106346768+MauLang18@users.noreply.github.com'
+          git add \
+            src/Dhole.Pricing.Domain \
+            src/Dhole.Pricing.Persistence \
+            src/Dhole.Pricing.Contracts \
+            src/Dhole.Pricing.Application \
+            src/Dhole.Pricing.Api
+          if git diff --cached --quiet; then
+            echo 'No functional changes to commit.'
+            exit 0
+          fi
+          git commit -m 'fix(pricing): persist VAT state per rate detail'
+          git push origin HEAD:fix/rate-detail-vat-persistence-20260829
+
+      - name: Cleanup validation images
+        if: always()
+        run: |
+          docker image rm -f dhole/pricing-api:vat-validation dhole/pricing-worker:vat-validation || true
