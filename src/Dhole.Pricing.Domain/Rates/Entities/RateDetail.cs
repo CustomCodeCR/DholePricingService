@@ -55,6 +55,24 @@ public sealed class RateDetail : Entity<Guid>
     public decimal UtilityAmount { get; private set; }
     public string? Notes { get; private set; }
     public decimal Quantity { get; private set; }
+    public bool ApplyDestinationTax { get; private set; }
+    public decimal DestinationTaxRate { get; private set; }
+
+    public decimal DestinationTaxAmount =>
+        ApplyDestinationTax && DestinationTaxRate > 0m
+            ? decimal.Round(SaleAmount * Quantity * DestinationTaxRate / 100m, 2, MidpointRounding.AwayFromZero)
+            : 0m;
+
+    public void ConfigureDestinationTax(bool applyDestinationTax, decimal destinationTaxRate)
+    {
+        if (destinationTaxRate < 0m || destinationTaxRate > 100m)
+        {
+            throw new ArgumentOutOfRangeException(nameof(destinationTaxRate));
+        }
+
+        ApplyDestinationTax = applyDestinationTax && destinationTaxRate > 0m;
+        DestinationTaxRate = ApplyDestinationTax ? destinationTaxRate : 0m;
+    }
 
     internal static RateDetail Create(
         Guid rateHeaderId,

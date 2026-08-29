@@ -13,5 +13,7 @@ public sealed record UpsertRateExtraDetailRequest(
     decimal SaleAmount,
     string? Notes,
     decimal? Quantity = null,
-    string? ChargeBasis = null
+    string? ChargeBasis = null,
+    bool ApplyDestinationTax = false,
+    decimal DestinationTaxRate = 0m
 );

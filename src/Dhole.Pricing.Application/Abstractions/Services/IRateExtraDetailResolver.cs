@@ -16,7 +16,9 @@ public sealed record RateExtraDetailInput(
     decimal SaleAmount,
     string? Notes,
     decimal? Quantity,
-    ChargeBasis? ChargeBasis
+    ChargeBasis? ChargeBasis,
+    bool ApplyDestinationTax = false,
+    decimal DestinationTaxRate = 0m
 );
 
 public sealed record ResolvedRateExtraDetail(
@@ -33,7 +35,9 @@ public sealed record ResolvedRateExtraDetail(
     string? Notes,
     bool IsAccountant,
     decimal? Quantity,
-    ChargeBasis? ChargeBasis
+    ChargeBasis? ChargeBasis,
+    bool ApplyDestinationTax = false,
+    decimal DestinationTaxRate = 0m
 );
 
 public sealed record RateExtraDetailResolution(ResolvedRateExtraDetail? Detail, Error? Error)

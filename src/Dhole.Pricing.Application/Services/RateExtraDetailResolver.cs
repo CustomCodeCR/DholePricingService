@@ -99,7 +99,9 @@ public sealed class RateExtraDetailResolver(
                     Normalize(input.Notes),
                     IsAccountant: false,
                     input.Quantity,
-                    input.ChargeBasis
+                    input.ChargeBasis,
+                    input.ApplyDestinationTax,
+                    input.DestinationTaxRate
                 )
             );
         }
@@ -147,7 +149,9 @@ public sealed class RateExtraDetailResolver(
                     Normalize(input.Notes) ?? cost.Notes,
                     cost.IsAccountant,
                     input.Quantity,
-                    cost.ChargeBasis
+                    cost.ChargeBasis,
+                    input.ApplyDestinationTax,
+                    input.DestinationTaxRate
                 )
             );
         }
