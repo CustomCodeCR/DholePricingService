@@ -5,6 +5,7 @@ on:
     branches: [feature/rate-wizard-revisions-20260828]
     paths:
       - '.github/scripts/apply-rate-revisions-20260828.py'
+      - '.github/scripts/fix-rate-revision-worker-20260828.py'
       - '.github/workflows/apply-rate-revisions-20260828.yml'
   workflow_dispatch:
 
@@ -22,7 +23,9 @@ jobs:
           fetch-depth: 0
 
       - name: Apply implementation
-        run: python3 .github/scripts/apply-rate-revisions-20260828.py
+        run: |
+          python3 .github/scripts/apply-rate-revisions-20260828.py
+          python3 .github/scripts/fix-rate-revision-worker-20260828.py
 
       - name: Restore build and generate EF migration
         env:
