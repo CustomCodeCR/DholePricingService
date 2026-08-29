@@ -122,7 +122,14 @@ public sealed class RateExtraDetailResolver(
                 );
             }
 
-            var costAmount = input.Id.HasValue ? input.CostAmount : cost.CostAmount;
+            // La moneda es una decisión de la línea de tarifa. Config valida el CurrencyId,
+            // pero no debe volver a imponer la moneda original del maestro de costos.
+            // Para un fijo nuevo en su moneda original el costo contable sigue viniendo del maestro;
+            // si la línea fue convertida a otra moneda, el synchronizer recalcula el fijo desde el maestro.
+            var selectedCurrencyDiffers = currency.Id != cost.CurrencyId;
+            var costAmount = input.Id.HasValue || selectedCurrencyDiffers
+                ? input.CostAmount
+                : cost.CostAmount;
             var saleAmount = cost.AgentId.HasValue ? 0m : input.SaleAmount;
 
             return RateExtraDetailResolution.Success(
@@ -132,9 +139,9 @@ public sealed class RateExtraDetailResolver(
                     cost.Name,
                     cost.CostDetailType,
                     cost.CostType,
-                    cost.CurrencyId,
-                    cost.CurrencyName,
-                    cost.CurrencyCode,
+                    currency.Id,
+                    currency.SnapshotName(),
+                    currency.Code,
                     costAmount,
                     saleAmount,
                     Normalize(input.Notes) ?? cost.Notes,
@@ -162,9 +169,9 @@ public sealed class RateExtraDetailResolver(
                 cost.Name,
                 cost.CostDetailType,
                 cost.CostType,
-                cost.CurrencyId,
-                cost.CurrencyName,
-                cost.CurrencyCode,
+                currency.Id,
+                currency.SnapshotName(),
+                currency.Code,
                 input.CostAmount,
                 input.SaleAmount,
                 Normalize(input.Notes) ?? cost.Notes,
