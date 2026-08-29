@@ -1,0 +1,86 @@
+name: Apply create status resilience fix
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Patch create/status validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str, label: str):
+              text = path.read_text(encoding='utf-8-sig')
+              if old not in text:
+                  if new in text:
+                      return
+                  raise SystemExit(f'{label}: anchor not found')
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          rate_header = Path('src/Dhole.Pricing.Domain/Rates/Entities/RateHeader.cs')
+          replace_once(
+              rate_header,
+              "    public void SetCommercialStatus(RateStatus status, string? reason, Guid? updatedBy)\n    {\n        var isClosing = status == RateStatus.Closed;",
+              "    public void SetCommercialStatus(RateStatus status, string? reason, Guid? updatedBy)\n    {\n        // Los comandos HTTP pueden reintentarse y el frontend puede refrescar el estado\n        // antes de confirmar la transición. Repetir el mismo estado debe ser idempotente,\n        // no una operación inválida (por ejemplo Open -> Open al crear una solicitud).\n        if (Status == status)\n            return;\n\n        var isClosing = status == RateStatus.Closed;",
+              'idempotent commercial status',
+          )
+
+          create_handler = Path('src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs')
+          replace_once(
+              create_handler,
+              "        if (!HasValidFreightDistribution(command))\n        {\n            return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);\n        }",
+              "        if (!HasValidFreightDistribution(command))\n        {\n            return Result.Failure<Guid>(PricingErrors.RateInvalidFreightDistribution);\n        }",
+              'freight distribution error',
+          )
+          replace_once(
+              create_handler,
+              "        catch (InvalidOperationException)\n        {\n            return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);\n        }",
+              "        catch (InvalidOperationException exception)\n        {\n            // No ocultar validaciones reales detrás de RateInvalidStatus. El mensaje de\n            // dominio permite corregir el dato exacto que impidió crear la tarifa.\n            return Result.Failure<Guid>(PricingErrors.RateUpdateValidationFailed(exception.Message));\n        }",
+              'create domain validation error',
+          )
+          PY
+          git diff --check
+      - name: Configure GitHub Packages
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          dotnet nuget update source github --username "$GITHUB_ACTOR" --password "$GITHUB_TOKEN" --store-password-in-clear-text --configfile NuGet.Config
+      - name: Restore production projects
+        run: |
+          dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile NuGet.Config
+          dotnet restore src/Dhole.Pricing.Workers/Dhole.Pricing.Workers.csproj --configfile NuGet.Config
+      - name: Build production projects
+        run: |
+          dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj -c Release --no-restore
+          dotnet build src/Dhole.Pricing.Workers/Dhole.Pricing.Workers.csproj -c Release --no-restore
+      - name: Commit directly to master
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'No source changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Dhole.Pricing.Domain/Rates/Entities/RateHeader.cs src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs
+          git commit -m 'fix(pricing): make create status transitions resilient'
+          git push origin HEAD:master
