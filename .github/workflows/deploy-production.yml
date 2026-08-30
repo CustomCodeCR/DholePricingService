@@ -1,0 +1,82 @@
+name: Deploy Dhole Pricing - Production
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: write
+  packages: read
+concurrency:
+  group: dhole-pricing-production
+  cancel-in-progress: false
+env:
+  COMPOSE_FILE: .dhole-system/deploy/docker-compose.services.yml
+  DHOLE_IMAGE_TAG: latest
+  DHOLE_NETWORK: dhole
+  COMPOSE_PROJECT: dhole
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load Dhole deployment infrastructure
+        run: |
+          set -euo pipefail
+          rm -rf .dhole-system
+          git clone --depth 1 --branch master https://github.com/CustomCodeCR/DholeSystem.git .dhole-system
+          mkdir -p "$RUNNER_TEMP/dhole-env"
+          bash .dhole-system/deploy/prepare-environments.sh /opt/dhole/.env "$RUNNER_TEMP/dhole-env"
+          echo "DHOLE_ENV_FILE=$RUNNER_TEMP/dhole-env/.env.production" >> "$GITHUB_ENV"
+      - name: Verify production server
+        run: docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" config -q
+      - name: Build images
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          SHA_TAG="${GITHUB_SHA::12}"
+          docker build --pull --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-api:latest -t "dhole/pricing-api:$SHA_TAG" .
+          docker build --pull --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Workers/Dockerfile -t dhole/pricing-workers:latest -t "dhole/pricing-workers:$SHA_TAG" .
+      - name: Deploy Pricing
+        run: |
+          set -euo pipefail
+          docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" up -d --no-deps --force-recreate --pull never pricing-api pricing-workers
+          docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" ps pricing-api pricing-workers
+      - name: Verify Pricing API health
+        run: |
+          set -euo pipefail
+          CONTAINER_ID="$(docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" ps -q pricing-api)"
+          test -n "$CONTAINER_ID"
+          for attempt in $(seq 1 18); do
+            STATUS="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$CONTAINER_ID")"
+            echo "Pricing API status: $STATUS (attempt $attempt/18)"
+            if [ "$STATUS" = "healthy" ]; then exit 0; fi
+            if [ "$STATUS" = "exited" ] || [ "$STATUS" = "dead" ] || [ "$STATUS" = "unhealthy" ]; then docker logs --tail 200 "$CONTAINER_ID" || true; exit 1; fi
+            sleep 5
+          done
+          docker logs --tail 200 "$CONTAINER_ID" || true
+          exit 1
+      - name: Verify pricing client quote report
+        run: |
+          set -euo pipefail
+          CONTAINER_ID="$(docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" ps -q pricing-api)"
+          test -n "$CONTAINER_ID"
+          docker exec "$CONTAINER_ID" sh -ec '
+            REPORTS_URL="${Reports__Client__BaseAddress:-http://reports-api:5208}"
+            REPORTS_HEADER="${Reports__Client__InternalServiceKeyHeader:-X-Dhole-Service-Key}"
+            REPORTS_KEY="${Reports__Client__InternalServiceKey:-dhole-local-reports-service-key-change-in-production}"
+            HTTP_CODE="$(curl --silent --show-error -H "Content-Type: application/json" -H "$REPORTS_HEADER: $REPORTS_KEY" --data "{\"format\":\"pdf\",\"dataJson\":{\"company\":{\"name\":\"Grupo Castro Fallas\",\"website\":\"https://logisticacastrofallas.com\"},\"generated\":{\"date\":\"30/08/2026\"},\"rate\":{\"quoteNumber\":\"SMOKE-TEST\",\"clientName\":\"Validación Dhole\",\"route\":\"Origen → Destino\",\"carrier\":\"Naviera\",\"containerSummary\":\"1 x 40 HC\",\"transitTime\":\"Por confirmar\",\"freeDays\":0,\"validFrom\":\"30/08/2026\",\"validTo\":\"30/09/2026\",\"total\":\"USD 0.00\",\"includes\":\"\",\"subjectTo\":\"\",\"excludes\":\"\"},\"items\":[]},\"fileName\":\"pricing-smoke-test\",\"sheetName\":\"Tarifa\"}" "$REPORTS_URL/api/internal/reports/templates/pricing-fcl-client-quote/generate" --output /tmp/pricing-smoke-test.pdf --write-out "%{http_code}")"
+            if [ "$HTTP_CODE" != "200" ]; then cat /tmp/pricing-smoke-test.pdf; exit 1; fi
+            test -s /tmp/pricing-smoke-test.pdf
+            head -c 4 /tmp/pricing-smoke-test.pdf | grep -q "%PDF"
+            rm -f /tmp/pricing-smoke-test.pdf
+          '
+      - name: Keep only master and develop branches
+        run: |
+          set -euo pipefail
+          git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'
+          while IFS= read -r branch; do case "$branch" in master|develop) continue ;; esac; git push origin --delete "$branch"; done < <(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin | grep -v '^HEAD$' || true)
+      - name: Cleanup old images
+        if: always()
+        run: docker image prune -f
