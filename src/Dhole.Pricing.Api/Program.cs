@@ -143,6 +143,7 @@ app.MapPricingConfigCatalogEndpoints();
 app.MapDataExtractionImportEndpoints();
 app.MapLogisticsNewsEndpoints();
 app.MapOwnLclPricingMatrixEndpoints();
+app.MapOwnLclRouteMatrixV2Endpoints();
 app.MapOwnLclDestinationAutomationEndpoints();
 app.MapLclRateSourceEndpoints();
 
