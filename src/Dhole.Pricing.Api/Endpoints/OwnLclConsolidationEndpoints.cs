@@ -53,6 +53,8 @@ public static class OwnLclConsolidationEndpoints
         command.CommandText = """
             SELECT id, consolidation_number, name, booking, etd, carrier_id, carrier_name, carrier_code,
                    container_id, container_name, container_code, pol_id, pol_name, pol_code,
+                   panama_arrival_port_id, panama_arrival_port_name, panama_arrival_port_code,
+                   pod_id, pod_name, pod_code,
                    ocean_freight, maximum_cbm, carrier_destination_cost_total, panama_to_cr_cost,
                    bunker_cost, cr_transfer_base_cbm, matrix_version, status, is_active
             FROM pricing."OwnLclConsolidations"
@@ -354,6 +356,8 @@ public static class OwnLclConsolidationEndpoints
         command.CommandText = """
             SELECT id, consolidation_number, name, booking, etd, carrier_id, carrier_name, carrier_code,
                    container_id, container_name, container_code, pol_id, pol_name, pol_code,
+                   panama_arrival_port_id, panama_arrival_port_name, panama_arrival_port_code,
+                   pod_id, pod_name, pod_code,
                    ocean_freight, maximum_cbm, carrier_destination_cost_total, panama_to_cr_cost,
                    bunker_cost, cr_transfer_base_cbm, matrix_version, status, is_active
             FROM pricing."OwnLclConsolidations"
@@ -370,8 +374,10 @@ public static class OwnLclConsolidationEndpoints
         GetNullableGuid(reader, 5), GetNullableString(reader, 6), GetNullableString(reader, 7),
         GetNullableGuid(reader, 8), GetNullableString(reader, 9), GetNullableString(reader, 10),
         GetNullableGuid(reader, 11), GetNullableString(reader, 12), reader.GetString(13),
-        reader.GetDecimal(14), reader.GetDecimal(15), reader.GetDecimal(16), reader.GetDecimal(17), reader.GetDecimal(18), reader.GetDecimal(19),
-        reader.GetString(20), reader.GetString(21), reader.GetBoolean(22));
+        GetNullableGuid(reader, 14), GetNullableString(reader, 15), GetNullableString(reader, 16),
+        GetNullableGuid(reader, 17), GetNullableString(reader, 18), GetNullableString(reader, 19),
+        reader.GetDecimal(20), reader.GetDecimal(21), reader.GetDecimal(22), reader.GetDecimal(23), reader.GetDecimal(24), reader.GetDecimal(25),
+        reader.GetString(26), reader.GetString(27), reader.GetBoolean(28));
 
     private static object? Validate(string? booking, string? polCode, decimal oceanFreight, decimal? maximumCbm)
     {
@@ -490,6 +496,12 @@ public sealed record OwnLclConsolidationDto(
     Guid? PolId,
     string? PolName,
     string PolCode,
+    Guid? PoeId,
+    string? PoeName,
+    string? PoeCode,
+    Guid? PodId,
+    string? PodName,
+    string? PodCode,
     decimal OceanFreight,
     decimal MaximumCbm,
     decimal CarrierDestinationCostTotal,

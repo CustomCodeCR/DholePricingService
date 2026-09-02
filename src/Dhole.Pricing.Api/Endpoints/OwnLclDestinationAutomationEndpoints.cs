@@ -12,6 +12,9 @@ namespace Dhole.Pricing.Api.Endpoints;
 public static class OwnLclDestinationAutomationEndpoints
 {
     private const decimal DefaultMaximumCbm = 50m;
+    private const decimal DefaultPanamaToCostaRicaCost = 2140m;
+    private const decimal DefaultBunkerCost = 280m;
+    private const decimal DefaultCostaRicaTransferBaseCbm = 95m;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static IEndpointRouteBuilder MapOwnLclDestinationAutomationEndpoints(this IEndpointRouteBuilder app)
@@ -39,6 +42,7 @@ public static class OwnLclDestinationAutomationEndpoints
         decimal? maximumCbm,
         bool? includeEmptyReturn,
         string? containerCode,
+        decimal? bunkerCost,
         ServiceDbContext db,
         CancellationToken ct)
     {
@@ -49,6 +53,7 @@ public static class OwnLclDestinationAutomationEndpoints
             maximumCbm is > 0 ? maximumCbm.Value : DefaultMaximumCbm,
             includeEmptyReturn,
             containerCode,
+            bunkerCost,
             db,
             ct);
 
@@ -77,6 +82,7 @@ public static class OwnLclDestinationAutomationEndpoints
             maximumCbm,
             request.IncludeEmptyReturn,
             request.ContainerCode,
+            request.BunkerCost,
             db,
             ct);
 
@@ -188,6 +194,7 @@ public static class OwnLclDestinationAutomationEndpoints
             maximumCbm,
             request.IncludeEmptyReturn,
             request.ContainerCode,
+            request.BunkerCost,
             db,
             ct);
 
@@ -293,6 +300,12 @@ public static class OwnLclDestinationAutomationEndpoints
     {
         if (string.IsNullOrWhiteSpace(request.CarrierCode) && string.IsNullOrWhiteSpace(request.CarrierName))
             return new { code = "Pricing.OwnLclCarrierRequired", message = "Seleccione la naviera." };
+        if (string.IsNullOrWhiteSpace(request.Booking))
+            return new { code = "Pricing.OwnLclBookingRequired", message = "Ingrese el número de booking." };
+        if (!request.Etd.HasValue)
+            return new { code = "Pricing.OwnLclEtdRequired", message = "Ingrese el ETD del consolidado." };
+        if (string.IsNullOrWhiteSpace(request.ContainerCode) && string.IsNullOrWhiteSpace(request.ContainerName))
+            return new { code = "Pricing.OwnLclContainerRequired", message = "Seleccione el tamaño y tipo de contenedor." };
         if (string.IsNullOrWhiteSpace(request.PanamaArrivalPortCode))
             return new { code = "Pricing.OwnLclPanamaArrivalPortRequired", message = "Seleccione el puerto de llegada en Panamá." };
         if (string.IsNullOrWhiteSpace(request.PolCode))
@@ -301,6 +314,8 @@ public static class OwnLclDestinationAutomationEndpoints
             return new { code = "Pricing.OwnLclOceanFreightRequired", message = "Ingrese el flete marítimo del consolidado." };
         if (request.MaximumCbm is <= 0)
             return new { code = "Pricing.OwnLclMaximumCbmInvalid", message = "La base máxima de CBM debe ser mayor a cero." };
+        if (request.BunkerCost is < 0)
+            return new { code = "Pricing.OwnLclBunkerInvalid", message = "El Bunker no puede ser negativo." };
         return null;
     }
 
@@ -311,6 +326,7 @@ public static class OwnLclDestinationAutomationEndpoints
         decimal maximumCbm,
         bool? includeEmptyReturn,
         string? containerCode,
+        decimal? bunkerCost,
         ServiceDbContext db,
         CancellationToken ct)
     {
@@ -331,6 +347,7 @@ public static class OwnLclDestinationAutomationEndpoints
             maximumCbm,
             includeEmptyReturn,
             containerCode,
+            bunkerCost,
             db,
             ct);
         if (matrixProfile is not null) return matrixProfile;
@@ -343,7 +360,8 @@ public static class OwnLclDestinationAutomationEndpoints
             arrivalPortCode,
             portCandidate,
             maximumCbm,
-            includeEmptyReturn);
+            includeEmptyReturn,
+            bunkerCost);
     }
 
     private static async Task<AutomaticDestinationProfileDto?> ResolveFromCostMatrixAsync(
@@ -353,6 +371,7 @@ public static class OwnLclDestinationAutomationEndpoints
         decimal maximumCbm,
         bool? includeEmptyReturn,
         string? containerCode,
+        decimal? bunkerCost,
         ServiceDbContext db,
         CancellationToken ct)
     {
@@ -482,7 +501,10 @@ public static class OwnLclDestinationAutomationEndpoints
             charges,
             total,
             total / Math.Max(0.01m, maximumCbm),
-            new CostaRicaTransferDto(2140m, 280m, 95m),
+            new CostaRicaTransferDto(
+                DefaultPanamaToCostaRicaCost,
+                bunkerCost ?? DefaultBunkerCost,
+                DefaultCostaRicaTransferBaseCbm),
             false,
             "Pricing: Matriz de costos (naviera + POE)");
     }
@@ -493,7 +515,8 @@ public static class OwnLclDestinationAutomationEndpoints
         string? arrivalPortCode,
         string portCandidate,
         decimal maximumCbm,
-        bool? includeEmptyReturn)
+        bool? includeEmptyReturn,
+        decimal? bunkerCost)
     {
         var carrierLabel = !string.IsNullOrWhiteSpace(carrierName)
             ? carrierName.Trim()
@@ -515,7 +538,10 @@ public static class OwnLclDestinationAutomationEndpoints
             Array.Empty<AutomaticDestinationChargeDto>(),
             0m,
             0m / Math.Max(0.01m, maximumCbm),
-            new CostaRicaTransferDto(2140m, 280m, 95m),
+            new CostaRicaTransferDto(
+                DefaultPanamaToCostaRicaCost,
+                bunkerCost ?? DefaultBunkerCost,
+                DefaultCostaRicaTransferBaseCbm),
             false,
             "Pricing: Matriz de costos (sin cargos LCL/Any aplicables)");
     }
@@ -581,7 +607,8 @@ public sealed record AutomaticOwnLclConsolidationRequest(
     Guid? PanamaArrivalPortId,
     string? PanamaArrivalPortName,
     string PanamaArrivalPortCode,
-    bool? IncludeEmptyReturn);
+    bool? IncludeEmptyReturn,
+    decimal? BunkerCost = 280m);
 
 public sealed record AutomaticOwnLclCreatedResponse(
     Guid Id,
