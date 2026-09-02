@@ -30,18 +30,22 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
+
           path = Path('src/Dhole.Pricing.Infrastructure/Reports/RateReportDataFactory.cs')
           text = path.read_text(encoding='utf-8')
-          old = '''        return $"{baseAddress}/origen/{Uri.EscapeDataString(polCode)}"
-                      + $"?shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
-                      + $"&route={Uri.EscapeDataString(routeKey)}";'''
-          new = '''        return $"{baseAddress}/origin"
-                      + $"?pol={Uri.EscapeDataString(polCode)}"
-                      + $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
-                      + $"&route={Uri.EscapeDataString(routeKey)}";'''
-          if old not in text:
-              raise SystemExit('Could not find legacy /origen QR URL block')
-          text = text.replace(old, new, 1)
+          pattern = re.compile(
+              r'return\s+\$"\{baseAddress\}/origen/\{Uri\.EscapeDataString\(polCode\)\}"\s*'
+              r'\+\s*\$"\?shipmentMode=\{Uri\.EscapeDataString\(rate\.ShipmentMode\.ToString\(\)\)\}"\s*'
+              r'\+\s*\$"&route=\{Uri\.EscapeDataString\(routeKey\)\}";'
+          )
+          replacement = '''return $"{baseAddress}/origin"
+            + $"?pol={Uri.EscapeDataString(polCode)}"
+            + $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
+            + $"&route={Uri.EscapeDataString(routeKey)}";'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected one legacy /origen QR URL block, found {count}')
           if '/origen/' in text:
               raise SystemExit('Legacy /origen QR URL is still present')
           path.write_text(text, encoding='utf-8')
