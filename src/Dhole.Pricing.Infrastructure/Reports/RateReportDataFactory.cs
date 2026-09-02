@@ -22,8 +22,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         string Text(string? value, string fallback = "No especificado") =>
             string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         var commercialTerms = ExclusiveCommercialTerms(rate.Includes, rate.SubjectTo, rate.Excludes);
-        var originOfficeQrContent = CreateOriginOfficeVCard(rate);
-        var originOfficeQrDataUri = CreateQrDataUri(originOfficeQrContent);
+        var originOfficePublicUrl = CreateOriginOfficePublicUrl(rate);
+        var originOfficeQrDataUri = CreateQrDataUri(originOfficePublicUrl);
 
         var containers = (rate.RateContainers.Count > 0
                 ? rate.RateContainers
@@ -116,8 +116,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 message = OriginOfficeMessage,
                 polCode = rate.PolCode,
                 polName = rate.PolName,
-                qrContentType = "text/vcard",
+                qrContentType = "text/url",
                 opensInternalSystem = false,
+                publicPageUrl = originOfficePublicUrl,
                 qrDataUri = originOfficeQrDataUri
             },
             rate = new
@@ -167,48 +168,21 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         return JsonSerializer.Serialize(data, JsonOptions);
     }
 
-    private string CreateOriginOfficeVCard(RateHeader rate)
+    private string CreateOriginOfficePublicUrl(RateHeader rate)
     {
+        var baseAddress = (configuration["Reports:PublicWebBaseAddress"] ?? "https://dhole.customcodecr.com")
+            .Trim()
+            .TrimEnd('/');
         var polCode = rate.PolCode.Trim().ToUpperInvariant();
-        string OriginValue(string key, string fallback = "") =>
-            configuration[$"Reports:OriginOffices:{polCode}:{key}"]
-            ?? configuration[$"Reports:OriginOffice:{key}"]
-            ?? fallback;
+        var destinationCode = !string.IsNullOrWhiteSpace(rate.PodCode)
+            ? rate.PodCode.Trim().ToUpperInvariant()
+            : rate.PoeCode.Trim().ToUpperInvariant();
+        var routeKey = $"{polCode}-{destinationCode}";
 
-        var companyName = configuration["Reports:Company:Name"] ?? "Grupo Castro Fallas";
-        var contactName = OriginValue("ContactName", $"{companyName} - {rate.PolName}");
-        var phone = OriginValue("Phone", configuration["Reports:Company:Phone"] ?? string.Empty);
-        var email = OriginValue("Email", configuration["Reports:Company:Email"] ?? string.Empty);
-        var address = OriginValue("Address");
-        var latitude = OriginValue("Latitude");
-        var longitude = OriginValue("Longitude");
-
-        var lines = new List<string>
-        {
-            "BEGIN:VCARD",
-            "VERSION:3.0",
-            $"FN:{EscapeVCard(contactName)}",
-            $"ORG:{EscapeVCard(companyName)}"
-        };
-
-        if (!string.IsNullOrWhiteSpace(phone)) lines.Add($"TEL;TYPE=WORK,VOICE:{EscapeVCard(phone)}");
-        if (!string.IsNullOrWhiteSpace(email)) lines.Add($"EMAIL;TYPE=INTERNET,WORK:{EscapeVCard(email)}");
-        if (!string.IsNullOrWhiteSpace(address)) lines.Add($"ADR;TYPE=WORK:;;{EscapeVCard(address)};;;;");
-        if (!string.IsNullOrWhiteSpace(latitude) && !string.IsNullOrWhiteSpace(longitude))
-            lines.Add($"GEO:{EscapeVCard(latitude)};{EscapeVCard(longitude)}");
-
-        lines.Add($"NOTE:{EscapeVCard($"{OriginOfficeMessage} POL: {rate.PolName}.")}");
-        lines.Add("END:VCARD");
-        return string.Join("\r\n", lines);
+        return $"{baseAddress}/origen/{Uri.EscapeDataString(polCode)}"
+            + $"?shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
+            + $"&route={Uri.EscapeDataString(routeKey)}";
     }
-
-    private static string EscapeVCard(string value) => value
-        .Replace("\\", "\\\\", StringComparison.Ordinal)
-        .Replace(";", "\\;", StringComparison.Ordinal)
-        .Replace(",", "\\,", StringComparison.Ordinal)
-        .Replace("\r\n", "\\n", StringComparison.Ordinal)
-        .Replace("\n", "\\n", StringComparison.Ordinal)
-        .Replace("\r", "\\n", StringComparison.Ordinal);
 
     private static string CreateQrDataUri(string value)
     {
