@@ -411,11 +411,9 @@ public static class OwnLclDestinationAutomationEndpoints
             .AsNoTracking()
             .Where(cost =>
                 cost.IsActive
-                // NULL means "cualquier modalidad" and must apply to both FCL and LCL.
-                // Explicit FCL/LCL maritime rows also apply; only terrestrial modes are excluded.
-                && (cost.ShipmentMode == null
-                    || cost.ShipmentMode == ShipmentMode.Fcl
-                    || cost.ShipmentMode == ShipmentMode.Lcl)
+                // Own-LCL only accepts costs configured for every mode (NULL) or explicitly for LCL.
+                // FCL, FTL and LTL rows must never leak into an LCL destination profile.
+                && (cost.ShipmentMode == null || cost.ShipmentMode == ShipmentMode.Lcl)
                 && cost.PolId == null
                 && cost.PodId == null
                 && cost.CurrencyCode == "USD"
