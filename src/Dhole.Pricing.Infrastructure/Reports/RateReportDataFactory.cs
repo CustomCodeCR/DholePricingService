@@ -179,9 +179,10 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             : rate.PoeCode.Trim().ToUpperInvariant();
         var routeKey = $"{polCode}-{destinationCode}";
 
-        return $"{baseAddress}/origen/{Uri.EscapeDataString(polCode)}"
-            + $"?shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
-            + $"&route={Uri.EscapeDataString(routeKey)}";
+        return $"{baseAddress}/origin"
+  + $"?pol={Uri.EscapeDataString(polCode)}"
+  + $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
+  + $"&route={Uri.EscapeDataString(routeKey)}";
     }
 
     private static string CreateQrDataUri(string value)

@@ -3,6 +3,8 @@ using System.Data.Common;
 using System.Text.Json;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Application.Abstractions.Services;
+using Dhole.Pricing.Domain.Costs.Enums;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
@@ -39,7 +41,9 @@ public static class OwnLclDestinationAutomationEndpoints
         string? arrivalPortCode,
         decimal? maximumCbm,
         bool? includeEmptyReturn,
+        string? containerCode,
         IPricingConfigCatalogClient config,
+        ServiceDbContext db,
         CancellationToken ct)
     {
         var result = await ResolveAsync(
@@ -48,14 +52,16 @@ public static class OwnLclDestinationAutomationEndpoints
             arrivalPortCode,
             maximumCbm is > 0 ? maximumCbm.Value : DefaultMaximumCbm,
             includeEmptyReturn,
+            containerCode,
             config,
+            db,
             ct);
 
         return result is null
             ? Results.NotFound(new
             {
                 code = "Pricing.OwnLclDestinationProfileNotConfigured",
-                message = "No hay cargos en destino configurados para la combinación de naviera y puerto de llegada en Panamá.",
+                message = "No hay costos activos aplicables en la Matriz de costos para la combinación de naviera y POE seleccionada.",
                 carrierCode,
                 carrierName,
                 arrivalPortCode,
@@ -79,14 +85,16 @@ public static class OwnLclDestinationAutomationEndpoints
             request.PanamaArrivalPortCode,
             maximumCbm,
             request.IncludeEmptyReturn,
+            request.ContainerCode,
             config,
+            db,
             ct);
 
         if (profile is null)
             return Results.BadRequest(new
             {
                 code = "Pricing.OwnLclDestinationProfileNotConfigured",
-                message = "Configure en Config los cargos de esta naviera para el puerto de llegada seleccionado antes de crear el consolidado.",
+                message = "Configure los cargos de esta naviera + POE en la Matriz de costos de Pricing antes de crear el consolidado.",
             });
 
         await using var connection = db.Database.GetDbConnection();
@@ -190,14 +198,16 @@ public static class OwnLclDestinationAutomationEndpoints
             request.PanamaArrivalPortCode,
             maximumCbm,
             request.IncludeEmptyReturn,
+            request.ContainerCode,
             config,
+            db,
             ct);
 
         if (profile is null)
             return Results.BadRequest(new
             {
                 code = "Pricing.OwnLclDestinationProfileNotConfigured",
-                message = "No existe un perfil automático para esta naviera y puerto de llegada. El costo no puede ingresarse manualmente desde Pricing.",
+                message = "No existen costos automáticos para esta naviera + POE en la Matriz de costos. El costo no puede ingresarse manualmente.",
             });
 
         var snapshot = JsonSerializer.Serialize(profile, JsonOptions);
@@ -312,7 +322,9 @@ public static class OwnLclDestinationAutomationEndpoints
         string? arrivalPortCode,
         decimal maximumCbm,
         bool? includeEmptyReturn,
+        string? containerCode,
         IPricingConfigCatalogClient config,
+        ServiceDbContext db,
         CancellationToken ct)
     {
         var carrierCandidates = new[] { carrierCode, carrierName }
@@ -322,6 +334,19 @@ public static class OwnLclDestinationAutomationEndpoints
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var portCandidate = NormalizeMatch(arrivalPortCode);
         if (carrierCandidates.Count == 0 || portCandidate.Length == 0) return null;
+
+        // Pricing's Cost Matrix is the source of truth for own-LCL destination costs.
+        // Config profiles remain only as a backwards-compatible fallback.
+        var matrixProfile = await ResolveFromCostMatrixAsync(
+            carrierCandidates,
+            portCandidate,
+            arrivalPortCode,
+            maximumCbm,
+            includeEmptyReturn,
+            containerCode,
+            db,
+            ct);
+        if (matrixProfile is not null) return matrixProfile;
 
         var items = await config.GetActiveByGroupAsync(ProfileCatalogSlug, ct);
         foreach (var item in items)
@@ -370,6 +395,152 @@ public static class OwnLclDestinationAutomationEndpoints
         }
 
         return null;
+    }
+
+    private static async Task<AutomaticDestinationProfileDto?> ResolveFromCostMatrixAsync(
+        IReadOnlySet<string> carrierCandidates,
+        string portCandidate,
+        string? arrivalPortCode,
+        decimal maximumCbm,
+        bool? includeEmptyReturn,
+        string? containerCode,
+        ServiceDbContext db,
+        CancellationToken ct)
+    {
+        var candidates = await db.Costs
+            .AsNoTracking()
+            .Where(cost =>
+                cost.IsActive
+                // Destination matrix entries are shared by the maritime FCL/LCL flows when
+                // carrier + POE match. Older PerContainer entries can be marked FCL by the
+                // legacy factory, so filtering them out would incorrectly hide valid LCL costs.
+                && cost.ShipmentMode != ShipmentMode.Ftl
+                && cost.ShipmentMode != ShipmentMode.Ltl
+                && cost.PolId == null
+                && cost.PodId == null
+                && cost.CurrencyCode == "USD"
+                && cost.CostDetailType != CostDetailType.Freight
+                && cost.CostDetailType != CostDetailType.OriginCharge
+                && cost.CostDetailType != CostDetailType.Insurance)
+            .ToListAsync(ct);
+
+        bool CarrierMatches(Dhole.Pricing.Domain.Costs.Entities.Cost cost)
+        {
+            var hasCarrierRestriction = cost.CarrierId.HasValue
+                || !string.IsNullOrWhiteSpace(cost.CarrierCode)
+                || !string.IsNullOrWhiteSpace(cost.CarrierName);
+            if (!hasCarrierRestriction) return true;
+
+            return new[] { cost.CarrierCode, cost.CarrierName }
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(NormalizeMatch)
+                .Any(carrierCandidates.Contains);
+        }
+
+        bool PortMatches(Dhole.Pricing.Domain.Costs.Entities.Cost cost)
+        {
+            var structured = new[] { cost.PoeCode, cost.PoeName }
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(NormalizeMatch)
+                .Any(value => value == portCandidate);
+            if (structured) return true;
+
+            if (cost.PortRole != CostPortRole.Poe) return false;
+            return new[] { cost.PortCode, cost.PortName }
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(NormalizeMatch)
+                .Any(value => value == portCandidate);
+        }
+
+        var matches = candidates
+            .Where(cost => CarrierMatches(cost) && PortMatches(cost))
+            .OrderBy(cost => cost.Name)
+            .ToArray();
+        if (matches.Length == 0) return null;
+
+        var useEmptyReturn = includeEmptyReturn ?? true;
+        var compactContainer = NormalizeMatch(containerCode);
+        var teuMultiplier = compactContainer.StartsWith("20", StringComparison.Ordinal) ? 1m
+            : compactContainer.StartsWith("40", StringComparison.Ordinal)
+                || compactContainer.StartsWith("45", StringComparison.Ordinal)
+                || compactContainer.StartsWith("48", StringComparison.Ordinal)
+                || compactContainer.StartsWith("53", StringComparison.Ordinal)
+                ? 2m
+                : 1m;
+
+        decimal ProjectAmount(Dhole.Pricing.Domain.Costs.Entities.Cost cost)
+        {
+            var projected = cost.ChargeBasis switch
+            {
+                ChargeBasis.PerCbm or ChargeBasis.PerChargeableCbm => cost.CostAmount * maximumCbm,
+                ChargeBasis.PerTeu => cost.CostAmount * teuMultiplier,
+                _ => cost.CostAmount,
+            };
+            return Math.Max(projected, cost.MinimumCostAmount ?? 0m);
+        }
+
+        bool IsEmptyReturn(Dhole.Pricing.Domain.Costs.Entities.Cost cost)
+        {
+            var name = NormalizeMatch(cost.Name);
+            return name.Contains("EMPTYRETURN", StringComparison.Ordinal)
+                || name.Contains("RETIRODEVACIO", StringComparison.Ordinal)
+                || name.Contains("RETIROVACIO", StringComparison.Ordinal)
+                || name.Contains("VACIOYROLEO", StringComparison.Ordinal);
+        }
+
+        var charges = matches
+            .Select(cost =>
+            {
+                var emptyReturn = IsEmptyReturn(cost);
+                var optional = cost.CostType == CostType.Optional || emptyReturn;
+                var included = !emptyReturn || useEmptyReturn;
+                return new AutomaticDestinationChargeDto(
+                    $"COST-{cost.Id:N}",
+                    cost.Name,
+                    ProjectAmount(cost),
+                    cost.ChargeBasis.ToString(),
+                    !optional,
+                    optional,
+                    included,
+                    new[]
+                    {
+                        cost.CostDetailType.ToString(),
+                        cost.CostType.ToString(),
+                        cost.ChargeBasis.ToString(),
+                    });
+            })
+            .ToArray();
+
+        var total = charges.Where(charge => charge.Included).Sum(charge => charge.Amount);
+        var carrierLabel = matches.Select(cost => cost.CarrierName)
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
+            ?? matches.Select(cost => cost.CarrierCode).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
+            ?? "Naviera";
+        var portLabel = matches.Select(cost => cost.PoeName)
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
+            ?? matches.Select(cost => cost.PortName).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
+            ?? Normalize(arrivalPortCode);
+
+        var profileCode = $"MATRIX-{NormalizeMatch(carrierLabel)}-{portCandidate}";
+        if (profileCode.Length > 90) profileCode = profileCode[..90];
+
+        return new AutomaticDestinationProfileDto(
+            profileCode,
+            "MATRIX-LIVE",
+            $"Matriz de costos · {carrierLabel} · {portLabel}",
+            "USD",
+            Normalize(arrivalPortCode),
+            "CFZ",
+            "Colón Free Zone",
+            useEmptyReturn,
+            charges,
+            total,
+            total / Math.Max(0.01m, maximumCbm),
+            // Existing China -> Central America operational baseline. It remains a separate
+            // transfer component while destination charges come from the live Cost Matrix.
+            new CostaRicaTransferDto(2140m, 280m, 95m),
+            false,
+            "Pricing: Matriz de costos (naviera + POE)");
     }
 
     private static DestinationProfileDefinition? ParseDefinition(PricingConfigCatalogItem item)
