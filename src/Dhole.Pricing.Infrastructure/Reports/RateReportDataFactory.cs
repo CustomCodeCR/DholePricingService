@@ -176,10 +176,10 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             .TrimEnd('/');
         var polName = rate.PolName.Trim();
         var polCode = rate.PolCode.Trim().ToUpperInvariant();
-        var destinationCode = !string.IsNullOrWhiteSpace(rate.PodCode)
-            ? rate.PodCode.Trim().ToUpperInvariant()
-            : rate.PoeCode.Trim().ToUpperInvariant();
-        var routeKey = $"{polCode}-{destinationCode}";
+        var destinationName = !string.IsNullOrWhiteSpace(rate.PodName)
+            ? rate.PodName.Trim()
+            : rate.PoeName.Trim();
+        var routeKey = $"{polName} - {destinationName}";
 
         return $"{baseAddress}/origin"
             + $"?pol={Uri.EscapeDataString(polName)}"
