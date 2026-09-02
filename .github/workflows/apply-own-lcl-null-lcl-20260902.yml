@@ -26,14 +26,8 @@ jobs:
 
           path = Path('src/Dhole.Pricing.Api/Endpoints/OwnLclDestinationAutomationEndpoints.cs')
           text = path.read_text(encoding='utf-8')
-
-          old = '''                // Own-LCL accepts only rows configured for every mode (NULL) or explicitly LCL.
-                // FCL, FTL and LTL rows are intentionally excluded.
-                && (cost.ShipmentMode == null || cost.ShipmentMode == ShipmentMode.Lcl)'''
-
-          new = '''                // In the cost matrix, NULL is the wildcard persisted for costs that apply to every mode.
-                // Own-LCL must therefore accept NULL and explicit LCL, while excluding FCL, FTL and LTL.
-                && (!cost.ShipmentMode.HasValue || cost.ShipmentMode.Value == ShipmentMode.Lcl)'''
+          old = '&& (cost.ShipmentMode == null || cost.ShipmentMode == ShipmentMode.Lcl)'
+          new = '&& (!cost.ShipmentMode.HasValue || cost.ShipmentMode.Value == ShipmentMode.Lcl)'
 
           if old not in text:
               raise SystemExit('Expected own-LCL shipment mode filter was not found; refusing to patch a different shape.')
