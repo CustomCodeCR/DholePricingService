@@ -6,6 +6,7 @@ using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Microsoft.Extensions.Configuration;
+using QRCoder;
 
 namespace Dhole.Pricing.Infrastructure.Reports;
 
@@ -13,6 +14,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("en-US");
+    private const string OriginOfficeMessage = "Estos son los datos de Castro Fallas en origen.";
 
     public string CreateDataJson(RateHeader rate)
     {
@@ -20,6 +22,13 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         string Text(string? value, string fallback = "No especificado") =>
             string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         var commercialTerms = ExclusiveCommercialTerms(rate.Includes, rate.SubjectTo, rate.Excludes);
+        var publicBaseUrl = (configuration["Reports:PublicBaseUrl"] ?? "https://dhole.customcodecr.com").TrimEnd('/');
+        var polCode = rate.PolCode.Trim().ToUpperInvariant();
+        var routeKey = $"{polCode}-{rate.PodName}";
+        var originOfficeUrl = $"{publicBaseUrl}/origin-office/{Uri.EscapeDataString(polCode)}"
+            + $"?shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
+            + $"&route={Uri.EscapeDataString(routeKey)}";
+        var originOfficeQrDataUri = CreateQrDataUri(originOfficeUrl);
 
         var containers = (rate.RateContainers.Count > 0
                 ? rate.RateContainers
@@ -107,6 +116,14 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 date = DateTime.UtcNow.ToString("dd/MM/yyyy"),
                 time = DateTime.UtcNow.ToString("HH:mm")
             },
+            originOffice = new
+            {
+                message = OriginOfficeMessage,
+                polCode = rate.PolCode,
+                polName = rate.PolName,
+                url = originOfficeUrl,
+                qrDataUri = originOfficeQrDataUri
+            },
             rate = new
             {
                 rateCode = rate.RateCode,
@@ -154,6 +171,15 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         return JsonSerializer.Serialize(data, JsonOptions);
     }
 
+    private static string CreateQrDataUri(string value)
+    {
+        using var generator = new QRCodeGenerator();
+        using var data = generator.CreateQrCode(value, QRCodeGenerator.ECCLevel.Q);
+        var png = new PngByteQRCode(data);
+        var bytes = png.GetGraphic(8);
+        return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
+    }
+
     private static (string Includes, string SubjectTo, string Excludes) ExclusiveCommercialTerms(
         string? includes,
         string? subjectTo,
@@ -184,6 +210,6 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return (string.Join('\n', included), string.Join('\n', subject), string.Join('\n', excluded));
+        return (string.Join(", ", included), string.Join(", ", subject), string.Join(", ", excluded));
     }
 }

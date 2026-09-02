@@ -115,6 +115,7 @@ app.MapCommercialTermEndpoints();
 app.MapPricingConfigCatalogEndpoints();
 app.MapDataExtractionImportEndpoints();
 app.MapLogisticsNewsEndpoints();
+app.MapOwnLclConsolidationEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {

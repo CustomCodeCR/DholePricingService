@@ -17,6 +17,7 @@
     <PackageReference Include="CustomCodeFramework.Mongo" Version="0.2.0" />
     <PackageReference Include="Grpc.Net.ClientFactory" Version="2.80.0" />
     <PackageReference Include="Google.Protobuf" Version="3.35.1" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
     <PackageReference Include="Grpc.Tools" Version="2.76.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
