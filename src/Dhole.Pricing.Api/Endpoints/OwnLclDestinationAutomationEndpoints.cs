@@ -2,10 +2,8 @@ using System.Data;
 using System.Data.Common;
 using System.Text.Json;
 using Dhole.Pricing.Api.Authorization;
-using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Enums;
-using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,7 +11,6 @@ namespace Dhole.Pricing.Api.Endpoints;
 
 public static class OwnLclDestinationAutomationEndpoints
 {
-    private const string ProfileCatalogSlug = "pricing-own-lcl-destination-profiles";
     private const decimal DefaultMaximumCbm = 50m;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -42,7 +39,6 @@ public static class OwnLclDestinationAutomationEndpoints
         decimal? maximumCbm,
         bool? includeEmptyReturn,
         string? containerCode,
-        IPricingConfigCatalogClient config,
         ServiceDbContext db,
         CancellationToken ct)
     {
@@ -53,18 +49,14 @@ public static class OwnLclDestinationAutomationEndpoints
             maximumCbm is > 0 ? maximumCbm.Value : DefaultMaximumCbm,
             includeEmptyReturn,
             containerCode,
-            config,
             db,
             ct);
 
         return result is null
-            ? Results.NotFound(new
+            ? Results.BadRequest(new
             {
-                code = "Pricing.OwnLclDestinationProfileNotConfigured",
-                message = "No hay costos activos aplicables en la Matriz de costos para la combinación de naviera y POE seleccionada.",
-                carrierCode,
-                carrierName,
-                arrivalPortCode,
+                code = "Pricing.OwnLclDestinationSelectionRequired",
+                message = "Seleccione naviera y POE para calcular los cargos de destino.",
             })
             : Results.Ok(result);
     }
@@ -72,7 +64,6 @@ public static class OwnLclDestinationAutomationEndpoints
     private static async Task<IResult> CreateAsync(
         AutomaticOwnLclConsolidationRequest request,
         ServiceDbContext db,
-        IPricingConfigCatalogClient config,
         CancellationToken ct)
     {
         var validation = Validate(request);
@@ -86,15 +77,14 @@ public static class OwnLclDestinationAutomationEndpoints
             maximumCbm,
             request.IncludeEmptyReturn,
             request.ContainerCode,
-            config,
             db,
             ct);
 
         if (profile is null)
             return Results.BadRequest(new
             {
-                code = "Pricing.OwnLclDestinationProfileNotConfigured",
-                message = "Configure los cargos de esta naviera + POE en la Matriz de costos de Pricing antes de crear el consolidado.",
+                code = "Pricing.OwnLclDestinationSelectionRequired",
+                message = "Seleccione naviera y POE para calcular el consolidado.",
             });
 
         await using var connection = db.Database.GetDbConnection();
@@ -185,7 +175,6 @@ public static class OwnLclDestinationAutomationEndpoints
         Guid id,
         AutomaticOwnLclConsolidationRequest request,
         ServiceDbContext db,
-        IPricingConfigCatalogClient config,
         CancellationToken ct)
     {
         var validation = Validate(request);
@@ -199,15 +188,14 @@ public static class OwnLclDestinationAutomationEndpoints
             maximumCbm,
             request.IncludeEmptyReturn,
             request.ContainerCode,
-            config,
             db,
             ct);
 
         if (profile is null)
             return Results.BadRequest(new
             {
-                code = "Pricing.OwnLclDestinationProfileNotConfigured",
-                message = "No existen costos automáticos para esta naviera + POE en la Matriz de costos. El costo no puede ingresarse manualmente.",
+                code = "Pricing.OwnLclDestinationSelectionRequired",
+                message = "Seleccione naviera y POE para calcular el consolidado.",
             });
 
         var snapshot = JsonSerializer.Serialize(profile, JsonOptions);
@@ -323,7 +311,6 @@ public static class OwnLclDestinationAutomationEndpoints
         decimal maximumCbm,
         bool? includeEmptyReturn,
         string? containerCode,
-        IPricingConfigCatalogClient config,
         ServiceDbContext db,
         CancellationToken ct)
     {
@@ -335,8 +322,8 @@ public static class OwnLclDestinationAutomationEndpoints
         var portCandidate = NormalizeMatch(arrivalPortCode);
         if (carrierCandidates.Count == 0 || portCandidate.Length == 0) return null;
 
-        // Pricing's Cost Matrix is the source of truth for own-LCL destination costs.
-        // Config profiles remain only as a backwards-compatible fallback.
+        // The Pricing Cost Matrix is the only source of own-LCL destination charges.
+        // There is deliberately no Config profile requirement or fallback here.
         var matrixProfile = await ResolveFromCostMatrixAsync(
             carrierCandidates,
             portCandidate,
@@ -348,53 +335,15 @@ public static class OwnLclDestinationAutomationEndpoints
             ct);
         if (matrixProfile is not null) return matrixProfile;
 
-        var items = await config.GetActiveByGroupAsync(ProfileCatalogSlug, ct);
-        foreach (var item in items)
-        {
-            var definition = ParseDefinition(item);
-            if (definition is null) continue;
-            if (!definition.CarrierAliases.Any(alias => carrierCandidates.Contains(NormalizeMatch(alias)))) continue;
-            if (!definition.ArrivalPortAliases.Any(alias => NormalizeMatch(alias) == portCandidate)) continue;
-
-            var useEmptyReturn = includeEmptyReturn ?? definition.DefaultIncludeEmptyReturn;
-            var charges = definition.Charges
-                .Select(charge =>
-                {
-                    var included = charge.Required
-                        || (string.Equals(charge.Code, "EMPTY_RETURN", StringComparison.OrdinalIgnoreCase)
-                            ? useEmptyReturn
-                            : charge.DefaultIncluded);
-                    return new AutomaticDestinationChargeDto(
-                        charge.Code,
-                        charge.Name,
-                        charge.Amount,
-                        charge.Basis,
-                        charge.Required,
-                        !charge.Required,
-                        included,
-                        charge.Components);
-                })
-                .ToArray();
-            var total = charges.Where(charge => charge.Included).Sum(charge => charge.Amount);
-
-            return new AutomaticDestinationProfileDto(
-                item.Code,
-                definition.Version,
-                item.Name,
-                definition.Currency,
-                Normalize(arrivalPortCode),
-                definition.FinalRatePointCode,
-                definition.FinalRatePointName,
-                useEmptyReturn,
-                charges,
-                total,
-                total / Math.Max(0.01m, maximumCbm),
-                definition.CostaRicaTransfer,
-                false,
-                "Config: naviera + puerto de llegada");
-        }
-
-        return null;
+        // Missing matrix rows must never block an own-LCL project. Keep the destination
+        // amount at zero and preserve the Panama -> Costa Rica operational baseline.
+        return BuildEmptyMatrixProfile(
+            carrierCode,
+            carrierName,
+            arrivalPortCode,
+            portCandidate,
+            maximumCbm,
+            includeEmptyReturn);
     }
 
     private static async Task<AutomaticDestinationProfileDto?> ResolveFromCostMatrixAsync(
@@ -411,8 +360,8 @@ public static class OwnLclDestinationAutomationEndpoints
             .AsNoTracking()
             .Where(cost =>
                 cost.IsActive
-                // Own-LCL only accepts costs configured for every mode (NULL) or explicitly for LCL.
-                // FCL, FTL and LTL rows must never leak into an LCL destination profile.
+                // Own-LCL accepts only rows configured for every mode (NULL) or explicitly LCL.
+                // FCL, FTL and LTL rows are intentionally excluded.
                 && (cost.ShipmentMode == null || cost.ShipmentMode == ShipmentMode.Lcl)
                 && cost.PolId == null
                 && cost.PodId == null
@@ -519,8 +468,7 @@ public static class OwnLclDestinationAutomationEndpoints
             ?? matches.Select(cost => cost.PortName).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))
             ?? Normalize(arrivalPortCode);
 
-        var profileCode = $"MATRIX-{NormalizeMatch(carrierLabel)}-{portCandidate}";
-        if (profileCode.Length > 90) profileCode = profileCode[..90];
+        var profileCode = BuildProfileCode(carrierLabel, portCandidate);
 
         return new AutomaticDestinationProfileDto(
             profileCode,
@@ -534,58 +482,48 @@ public static class OwnLclDestinationAutomationEndpoints
             charges,
             total,
             total / Math.Max(0.01m, maximumCbm),
-            // Existing China -> Central America operational baseline. It remains a separate
-            // transfer component while destination charges come from the live Cost Matrix.
             new CostaRicaTransferDto(2140m, 280m, 95m),
             false,
             "Pricing: Matriz de costos (naviera + POE)");
     }
 
-    private static DestinationProfileDefinition? ParseDefinition(PricingConfigCatalogItem item)
+    private static AutomaticDestinationProfileDto BuildEmptyMatrixProfile(
+        string? carrierCode,
+        string? carrierName,
+        string? arrivalPortCode,
+        string portCandidate,
+        decimal maximumCbm,
+        bool? includeEmptyReturn)
     {
-        if (string.IsNullOrWhiteSpace(item.MetadataJson)) return null;
-        try
-        {
-            using var doc = JsonDocument.Parse(item.MetadataJson);
-            var root = doc.RootElement;
-            var charges = new List<DestinationChargeDefinition>();
-            if (root.TryGetProperty("charges", out var chargeArray) && chargeArray.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var charge in chargeArray.EnumerateArray())
-                {
-                    charges.Add(new DestinationChargeDefinition(
-                        GetString(charge, "code") ?? string.Empty,
-                        GetString(charge, "name") ?? string.Empty,
-                        GetDecimal(charge, "amount"),
-                        GetString(charge, "basis") ?? "CONTAINER",
-                        GetBool(charge, "required", true),
-                        GetBool(charge, "defaultIncluded", true),
-                        GetStringArray(charge, "components")));
-                }
-            }
+        var carrierLabel = !string.IsNullOrWhiteSpace(carrierName)
+            ? carrierName.Trim()
+            : !string.IsNullOrWhiteSpace(carrierCode)
+                ? carrierCode.Trim()
+                : "Naviera";
+        var portLabel = Normalize(arrivalPortCode);
+        var useEmptyReturn = includeEmptyReturn ?? true;
 
-            var cr = root.TryGetProperty("costaRicaTransfer", out var crElement)
-                ? new CostaRicaTransferDto(
-                    GetDecimal(crElement, "panamaToCostaRica"),
-                    GetDecimal(crElement, "bunker"),
-                    Math.Max(0.01m, GetDecimal(crElement, "baseCbm", 95m)))
-                : new CostaRicaTransferDto(2140m, 280m, 95m);
+        return new AutomaticDestinationProfileDto(
+            BuildProfileCode(carrierLabel, portCandidate),
+            "MATRIX-EMPTY",
+            $"Matriz de costos · {carrierLabel} · {portLabel}",
+            "USD",
+            portLabel,
+            "CFZ",
+            "Colón Free Zone",
+            useEmptyReturn,
+            Array.Empty<AutomaticDestinationChargeDto>(),
+            0m,
+            0m / Math.Max(0.01m, maximumCbm),
+            new CostaRicaTransferDto(2140m, 280m, 95m),
+            false,
+            "Pricing: Matriz de costos (sin cargos LCL/Any aplicables)");
+    }
 
-            return new DestinationProfileDefinition(
-                GetString(root, "version") ?? item.Code,
-                GetString(root, "currency") ?? "USD",
-                GetStringArray(root, "carrierAliases"),
-                GetStringArray(root, "arrivalPortAliases"),
-                GetString(root, "finalRatePointCode") ?? "CFZ",
-                GetString(root, "finalRatePointName") ?? "Colón Free Zone",
-                GetBool(root, "defaultIncludeEmptyReturn", true),
-                charges,
-                cr);
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
+    private static string BuildProfileCode(string carrierLabel, string portCandidate)
+    {
+        var profileCode = $"MATRIX-{NormalizeMatch(carrierLabel)}-{portCandidate}";
+        return profileCode.Length > 90 ? profileCode[..90] : profileCode;
     }
 
     private static object? ParseSnapshot(string? json)
@@ -594,34 +532,6 @@ public static class OwnLclDestinationAutomationEndpoints
         try { return JsonSerializer.Deserialize<JsonElement>(json); }
         catch (JsonException) { return null; }
     }
-
-    private static string[] GetStringArray(JsonElement element, string property)
-    {
-        if (!element.TryGetProperty(property, out var value) || value.ValueKind != JsonValueKind.Array)
-            return [];
-        return value.EnumerateArray()
-            .Where(x => x.ValueKind == JsonValueKind.String)
-            .Select(x => x.GetString())
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Cast<string>()
-            .ToArray();
-    }
-
-    private static string? GetString(JsonElement element, string property)
-        => element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
-
-    private static decimal GetDecimal(JsonElement element, string property, decimal fallback = 0m)
-        => element.TryGetProperty(property, out var value) && value.TryGetDecimal(out var result)
-            ? result
-            : fallback;
-
-    private static bool GetBool(JsonElement element, string property, bool fallback)
-        => element.TryGetProperty(property, out var value)
-            && value.ValueKind is JsonValueKind.True or JsonValueKind.False
-            ? value.GetBoolean()
-            : fallback;
 
     private static string Normalize(string? value) => (value ?? string.Empty).Trim().ToUpperInvariant();
 
@@ -652,26 +562,6 @@ public static class OwnLclDestinationAutomationEndpoints
 
     private static string? DbString(DbDataReader reader, int ordinal)
         => reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
-
-    private sealed record DestinationProfileDefinition(
-        string Version,
-        string Currency,
-        IReadOnlyCollection<string> CarrierAliases,
-        IReadOnlyCollection<string> ArrivalPortAliases,
-        string FinalRatePointCode,
-        string FinalRatePointName,
-        bool DefaultIncludeEmptyReturn,
-        IReadOnlyCollection<DestinationChargeDefinition> Charges,
-        CostaRicaTransferDto CostaRicaTransfer);
-
-    private sealed record DestinationChargeDefinition(
-        string Code,
-        string Name,
-        decimal Amount,
-        string Basis,
-        bool Required,
-        bool DefaultIncluded,
-        IReadOnlyCollection<string> Components);
 }
 
 public sealed record AutomaticOwnLclConsolidationRequest(
