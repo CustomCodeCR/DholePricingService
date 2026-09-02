@@ -1,9 +1,13 @@
+using Dhole.Pricing.Persistence.DbContexts;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Dhole.Pricing.Persistence.Migrations;
 
+[DbContext(typeof(ServiceDbContext))]
+[Migration("20260902183000_AddLclRateSources")]
 public partial class AddLclRateSources : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
