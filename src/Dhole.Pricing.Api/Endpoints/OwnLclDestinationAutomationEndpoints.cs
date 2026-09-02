@@ -411,11 +411,11 @@ public static class OwnLclDestinationAutomationEndpoints
             .AsNoTracking()
             .Where(cost =>
                 cost.IsActive
-                // Destination matrix entries are shared by the maritime FCL/LCL flows when
-                // carrier + POE match. Older PerContainer entries can be marked FCL by the
-                // legacy factory, so filtering them out would incorrectly hide valid LCL costs.
-                && cost.ShipmentMode != ShipmentMode.Ftl
-                && cost.ShipmentMode != ShipmentMode.Ltl
+                // NULL means "cualquier modalidad" and must apply to both FCL and LCL.
+                // Explicit FCL/LCL maritime rows also apply; only terrestrial modes are excluded.
+                && (cost.ShipmentMode == null
+                    || cost.ShipmentMode == ShipmentMode.Fcl
+                    || cost.ShipmentMode == ShipmentMode.Lcl)
                 && cost.PolId == null
                 && cost.PodId == null
                 && cost.CurrencyCode == "USD"
