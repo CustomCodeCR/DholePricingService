@@ -192,9 +192,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
     private static string CreateQrDataUri(string value)
     {
         using var generator = new QRCodeGenerator();
-        using var data = generator.CreateQrCode(value, QRCodeGenerator.ECCLevel.Q);
+        using var data = generator.CreateQrCode(value, QRCodeGenerator.ECCLevel.M);
         var png = new PngByteQRCode(data);
-        var bytes = png.GetGraphic(8);
+        var bytes = png.GetGraphic(14);
         return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
     }
 
