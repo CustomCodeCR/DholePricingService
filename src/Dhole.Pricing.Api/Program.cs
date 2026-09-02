@@ -102,6 +102,33 @@ app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<AuditEndpointMiddleware>();
 
+// Own-LCL writes must go through /api/pricing/own-lcl-automation so destination costs
+// are resolved server-side from Config (carrier + Panama arrival port). Keep legacy GET
+// and calculate routes for backwards-compatible reads/calculations, but block manual writes.
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value?.TrimEnd('/') ?? string.Empty;
+    var method = context.Request.Method;
+
+    var isLegacyCreate = HttpMethods.IsPost(method)
+        && string.Equals(path, "/api/pricing/own-lcl-consolidations", StringComparison.OrdinalIgnoreCase);
+    var isLegacyUpdate = HttpMethods.IsPut(method)
+        && path.StartsWith("/api/pricing/own-lcl-consolidations/", StringComparison.OrdinalIgnoreCase);
+
+    if (isLegacyCreate || isLegacyUpdate)
+    {
+        context.Response.StatusCode = StatusCodes.Status409Conflict;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            code = "Pricing.OwnLclAutomaticDestinationCostsRequired",
+            message = "Los consolidados LCL propios deben crearse o actualizarse mediante el flujo automático de naviera + puerto de llegada en Panamá. Los costos no se aceptan manualmente.",
+        });
+        return;
+    }
+
+    await next();
+});
+
 //app.MapGrpcService<ConfigCatalogGrpcService>();
 
 app.MapCostEndpoints();
