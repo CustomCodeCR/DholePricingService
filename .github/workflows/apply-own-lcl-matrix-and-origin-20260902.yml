@@ -22,7 +22,9 @@ jobs:
         shell: bash
         run: |
           set -u
-          python .github/scripts/patch_own_lcl_matrix_and_origin_20260902.py || true
+          # The script intentionally treats maritime FCL/LCL destination costs as shared
+          # when carrier + POE match; legacy PerContainer rows may be stored as FCL.
+          python .github/scripts/patch_own_lcl_matrix_and_origin_20260902.py
           grep -q 'ResolveFromCostMatrixAsync' src/Dhole.Pricing.Api/Endpoints/OwnLclDestinationAutomationEndpoints.cs
 
       - name: Point quote QR to isolated /origin page
