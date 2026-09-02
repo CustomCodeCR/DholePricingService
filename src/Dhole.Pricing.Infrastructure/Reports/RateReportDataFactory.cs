@@ -22,13 +22,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         string Text(string? value, string fallback = "No especificado") =>
             string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         var commercialTerms = ExclusiveCommercialTerms(rate.Includes, rate.SubjectTo, rate.Excludes);
-        var publicBaseUrl = (configuration["Reports:PublicBaseUrl"] ?? "https://dhole.customcodecr.com").TrimEnd('/');
-        var polCode = rate.PolCode.Trim().ToUpperInvariant();
-        var routeKey = $"{polCode}-{rate.PodName}";
-        var originOfficeUrl = $"{publicBaseUrl}/origin-office/{Uri.EscapeDataString(polCode)}"
-            + $"?shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
-            + $"&route={Uri.EscapeDataString(routeKey)}";
-        var originOfficeQrDataUri = CreateQrDataUri(originOfficeUrl);
+        var originOfficeQrContent = CreateOriginOfficeVCard(rate);
+        var originOfficeQrDataUri = CreateQrDataUri(originOfficeQrContent);
 
         var containers = (rate.RateContainers.Count > 0
                 ? rate.RateContainers
@@ -121,7 +116,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 message = OriginOfficeMessage,
                 polCode = rate.PolCode,
                 polName = rate.PolName,
-                url = originOfficeUrl,
+                qrContentType = "text/vcard",
+                opensInternalSystem = false,
                 qrDataUri = originOfficeQrDataUri
             },
             rate = new
@@ -170,6 +166,49 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
 
         return JsonSerializer.Serialize(data, JsonOptions);
     }
+
+    private string CreateOriginOfficeVCard(RateHeader rate)
+    {
+        var polCode = rate.PolCode.Trim().ToUpperInvariant();
+        string OriginValue(string key, string fallback = "") =>
+            configuration[$"Reports:OriginOffices:{polCode}:{key}"]
+            ?? configuration[$"Reports:OriginOffice:{key}"]
+            ?? fallback;
+
+        var companyName = configuration["Reports:Company:Name"] ?? "Grupo Castro Fallas";
+        var contactName = OriginValue("ContactName", $"{companyName} - {rate.PolName}");
+        var phone = OriginValue("Phone", configuration["Reports:Company:Phone"] ?? string.Empty);
+        var email = OriginValue("Email", configuration["Reports:Company:Email"] ?? string.Empty);
+        var address = OriginValue("Address");
+        var latitude = OriginValue("Latitude");
+        var longitude = OriginValue("Longitude");
+
+        var lines = new List<string>
+        {
+            "BEGIN:VCARD",
+            "VERSION:3.0",
+            $"FN:{EscapeVCard(contactName)}",
+            $"ORG:{EscapeVCard(companyName)}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(phone)) lines.Add($"TEL;TYPE=WORK,VOICE:{EscapeVCard(phone)}");
+        if (!string.IsNullOrWhiteSpace(email)) lines.Add($"EMAIL;TYPE=INTERNET,WORK:{EscapeVCard(email)}");
+        if (!string.IsNullOrWhiteSpace(address)) lines.Add($"ADR;TYPE=WORK:;;{EscapeVCard(address)};;;;");
+        if (!string.IsNullOrWhiteSpace(latitude) && !string.IsNullOrWhiteSpace(longitude))
+            lines.Add($"GEO:{EscapeVCard(latitude)};{EscapeVCard(longitude)}");
+
+        lines.Add($"NOTE:{EscapeVCard($"{OriginOfficeMessage} POL: {rate.PolName}.")}");
+        lines.Add("END:VCARD");
+        return string.Join("\r\n", lines);
+    }
+
+    private static string EscapeVCard(string value) => value
+        .Replace("\\", "\\\\", StringComparison.Ordinal)
+        .Replace(";", "\\;", StringComparison.Ordinal)
+        .Replace(",", "\\,", StringComparison.Ordinal)
+        .Replace("\r\n", "\\n", StringComparison.Ordinal)
+        .Replace("\n", "\\n", StringComparison.Ordinal)
+        .Replace("\r", "\\n", StringComparison.Ordinal);
 
     private static string CreateQrDataUri(string value)
     {
