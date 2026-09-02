@@ -12,6 +12,8 @@ public static class OwnLclConsolidationEndpoints
     private const decimal DefaultMaximumCbm = 50m;
     private const decimal MinimumCentralAmericaProfitPerCbm = 5.70m;
     private const decimal MinimumPanamaOceanProfitPerCbm = 3.40m;
+    private const decimal CentralAmericaOperationBaseCbm = 70m;
+    private const decimal CostaRicaWarehouseOperation = 415m;
 
     private static readonly IReadOnlyDictionary<string, decimal> OriginSurcharges =
         new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
@@ -28,6 +30,15 @@ public static class OwnLclConsolidationEndpoints
             ["XINGANG"] = 62m,
             ["SHEKOU"] = 62m,
             ["GUANGZHOU"] = 62m,
+        };
+
+    private static readonly IReadOnlyDictionary<string, (string Label, decimal Total)> CentralAmericaLandFreight =
+        new Dictionary<string, (string Label, decimal Total)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["NI"] = ("Flete Terrestre CRC → Nicaragua", 1150m),
+            ["HN"] = ("Flete Terrestre CRC → San Pedro Sula, Honduras", 1825m),
+            ["SV"] = ("Flete Terrestre CRC → El Salvador", 2200m),
+            ["GT"] = ("Flete Terrestre CRC → Guatemala", 2450m),
         };
 
     public static IEndpointRouteBuilder MapOwnLclConsolidationEndpoints(this IEndpointRouteBuilder app)
@@ -205,11 +216,13 @@ public static class OwnLclConsolidationEndpoints
         var destinationCostPerCbm = consolidation.CarrierDestinationCostTotal / maximumCbm;
         var crTransferCostPerCbm = (consolidation.PanamaToCostaRicaCost + consolidation.BunkerCost) / Math.Max(1m, consolidation.CostaRicaTransferBaseCbm);
 
-        var freightCostPerCbm = destination == "CR"
-            ? oceanCostWithOrigin + destinationCostPerCbm + crTransferCostPerCbm
-            : oceanCostWithOrigin;
+        // Panamá termina el tramo marítimo en Balboa. Costa Rica y el resto de
+        // Centroamérica continúan por CFZ y el tramo terrestre Panamá -> CRC.
+        var freightCostPerCbm = destination == "PA"
+            ? oceanCostWithOrigin
+            : oceanCostWithOrigin + destinationCostPerCbm + crTransferCostPerCbm;
 
-        var historicalDestination = destination == "CR" ? "CR" : "PA";
+        var historicalDestination = destination == "PA" ? "PA" : "CR";
         var historicalSale = await LoadHistoricalSaleAsync(consolidation.ConsolidationNumber, historicalDestination, request.PolCode ?? consolidation.PolCode, db, ct);
         var minimumForRecommendation = destination == "PA" ? MinimumPanamaOceanProfitPerCbm : MinimumCentralAmericaProfitPerCbm;
         var calculatedRecommended = CeilingCent(freightCostPerCbm + minimumForRecommendation);
@@ -281,37 +294,28 @@ public static class OwnLclConsolidationEndpoints
         {
             case "PA":
                 AddLine(lines, "Destination Charge", "CBM", cbm, destinationCostPerCbm, 20m);
-                AddLine(lines, "DMCE", "Flat", 1, 65m, 65m);
-                AddLine(lines, "Manejos", "Flat", 1, 25m, 25m);
-                AddLine(lines, "Zone Charge", "Flat", 1, 30m, 30m);
+                AddLine(lines, "DMCE", "HBL", 1, 65m, 65m);
+                AddLine(lines, "Manejos", "HBL", 1, 25m, 25m);
+                AddLine(lines, "Zone Charge", "HBL", 1, 30m, 30m);
                 break;
             case "CR":
-                AddLine(lines, "Manejos", "Flat", 1, 65m, 65m);
-                AddLine(lines, "Zone Charge", "Flat", 1, 50m, 50m);
+                AddLine(lines, "Manejos", "HBL", 1, 65m, 65m);
+                AddLine(lines, "Zone Charge", "HBL", 1, 50m, 50m);
                 break;
-            case "NI":
-                AddCentralAmericaLines(lines, cbm, 40m);
-                break;
-            case "HN":
-                AddCentralAmericaLines(lines, cbm, 50m);
-                break;
-            case "GT":
-                AddCentralAmericaLines(lines, cbm, 48m);
-                break;
-            case "SV":
-                AddCentralAmericaLines(lines, cbm, 40m);
+            default:
+                AddCentralAmericaLines(lines, destination, cbm);
                 break;
         }
     }
 
-    private static void AddCentralAmericaLines(List<OwnLclQuoteLine> lines, decimal cbm, decimal inland)
+    private static void AddCentralAmericaLines(List<OwnLclQuoteLine> lines, string destination, decimal cbm)
     {
-        AddLine(lines, "Transbordo", "CBM", cbm, 29m, 29m);
-        AddLine(lines, "Flete Terrestre", "CBM", cbm, inland, inland);
-        AddLine(lines, "Stuffing", "CBM", cbm, 10m, 10m);
-        AddLine(lines, "Documentación", "Documentación", 1, 140m, 140m);
-        AddLine(lines, "Manejos", "Flat", 1, 45m, 45m);
-        AddLine(lines, "Manejos en Destino", "Flat", 1, 70m, 70m);
+        if (!CentralAmericaLandFreight.TryGetValue(destination, out var inland)) return;
+
+        var warehousePerCbm = CostaRicaWarehouseOperation / CentralAmericaOperationBaseCbm;
+        var inlandPerCbm = inland.Total / CentralAmericaOperationBaseCbm;
+        AddLine(lines, "Almacenaje CRC", "CBM", cbm, warehousePerCbm, warehousePerCbm);
+        AddLine(lines, inland.Label, "CBM", cbm, inlandPerCbm, inlandPerCbm);
     }
 
     private static void AddOriginLines(List<OwnLclQuoteLine> lines, string incoterm, decimal cbm, int sets, int hbl, decimal pickupCost, decimal pickupSale)
@@ -322,6 +326,7 @@ public static class OwnLclConsolidationEndpoints
         AddLine(lines, "DOC FEE", "HBL", hbl, 15m, 65m);
         AddLine(lines, "VGM", "HBL", hbl, 0m, 25m);
         AddLine(lines, "MANIFEST", "HBL", hbl, 15m, 25m);
+        AddLine(lines, "WHSE FEE", "CBM", cbm, 12m, 12m);
         if (incoterm == "EXW") AddLine(lines, "Recolecta", "Flat", 1, Math.Max(0m, pickupCost), Math.Max(0m, pickupSale));
     }
 
@@ -381,6 +386,7 @@ public static class OwnLclConsolidationEndpoints
 
     private static object? Validate(string? booking, string? polCode, decimal oceanFreight, decimal? maximumCbm)
     {
+        if (string.IsNullOrWhiteSpace(booking)) return new { code = "Pricing.OwnLclBookingRequired", message = "Ingrese el número de booking." };
         if (string.IsNullOrWhiteSpace(polCode)) return new { code = "Pricing.OwnLclPolRequired", message = "Seleccione el POL del consolidado." };
         if (oceanFreight <= 0) return new { code = "Pricing.OwnLclOceanFreightRequired", message = "El flete marítimo debe ser mayor a cero." };
         if (maximumCbm is <= 0) return new { code = "Pricing.OwnLclMaximumCbmInvalid", message = "El máximo CBM debe ser mayor a cero." };
