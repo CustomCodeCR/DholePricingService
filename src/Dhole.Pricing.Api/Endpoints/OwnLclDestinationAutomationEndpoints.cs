@@ -362,7 +362,7 @@ public static class OwnLclDestinationAutomationEndpoints
                 cost.IsActive
                 // Own-LCL accepts only rows configured for every mode (NULL) or explicitly LCL.
                 // FCL, FTL and LTL rows are intentionally excluded.
-                && (cost.ShipmentMode == null || cost.ShipmentMode == ShipmentMode.Lcl)
+                && (!cost.ShipmentMode.HasValue || cost.ShipmentMode.Value == ShipmentMode.Lcl)
                 && cost.PolId == null
                 && cost.PodId == null
                 && cost.CurrencyCode == "USD"
