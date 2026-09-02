@@ -151,29 +151,6 @@ using (var scope = app.Services.CreateScope())
     var dbContext = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
 
     await dbContext.Database.MigrateAsync();
-
-    // One-time staging correction for the existing MAERSK + Balboa destination rows.
-    // These records predate the LCL mode rule and were stored as Fcl even though they
-    // are the destination-cost matrix used by the own-LCL consolidation flow.
-    if (app.Environment.IsStaging())
-    {
-        var normalizedRows = await dbContext.Database.ExecuteSqlRawAsync("""
-            UPDATE pricing."Costs"
-            SET shipment_mode = 'Lcl'
-            WHERE is_deleted = FALSE
-              AND is_active = TRUE
-              AND shipment_mode = 'Fcl'
-              AND (
-                    UPPER(COALESCE(carrier_code, '')) = 'NAV-2026-001'
-                    OR UPPER(COALESCE(carrier_name, '')) = 'MAERSK'
-                  )
-              AND (
-                    UPPER(COALESCE(poe_code, '')) = 'POE-2026-003'
-                    OR UPPER(COALESCE(poe_name, '')) IN ('BALBOA, PANAMÁ', 'BALBOA, PANAMA')
-                  );
-            """);
-        Console.WriteLine($"Staging MAERSK/Balboa LCL normalization updated {normalizedRows} cost row(s).");
-    }
 }
 
 app.Run();
