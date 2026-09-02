@@ -112,7 +112,8 @@ public sealed class PricingConfigCatalogGrpcClient(
             item.Code,
             item.Slug,
             item.Name,
-            item.Value
+            item.Value,
+            string.IsNullOrWhiteSpace(item.MetadataJson) ? null : item.MetadataJson
         );
     }
 
