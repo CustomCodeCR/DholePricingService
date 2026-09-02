@@ -13,8 +13,6 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("en-US");
-    private const string DefaultPublicOriginUrl = "https://dhole.customcodecr.com/origin";
-    private const string OriginQrText = "Estos son los datos de Castro Fallas en origen.";
 
     public string CreateDataJson(RateHeader rate)
     {
@@ -22,7 +20,6 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         string Text(string? value, string fallback = "No especificado") =>
             string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         var commercialTerms = ExclusiveCommercialTerms(rate.Includes, rate.SubjectTo, rate.Excludes);
-        var originUrl = BuildPublicOriginUrl(rate);
 
         var containers = (rate.RateContainers.Count > 0
                 ? rate.RateContainers
@@ -144,8 +141,6 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 includes = commercialTerms.Includes,
                 subjectTo = commercialTerms.SubjectTo,
                 excludes = commercialTerms.Excludes,
-                originUrl,
-                originQrText = OriginQrText,
                 status = rate.Status.ToString(),
                 rejectionReason = rate.Status == RateStatus.RejectedByClient
                     ? Text(rate.ClosedReason, string.Empty)
@@ -157,33 +152,6 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         };
 
         return JsonSerializer.Serialize(data, JsonOptions);
-    }
-
-    private string BuildPublicOriginUrl(RateHeader rate)
-    {
-        var pol = rate.PolName?.Trim() ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(pol)) return string.Empty;
-
-        // The public origin page resolves the WHS using the maritime origin (POL),
-        // shipment mode and the operational route. For FCL this must match links like:
-        // /origin?pol=Qingdao, China&shipmentMode=Fcl&route=Qingdao, China - Puerto Caldera, Costa Rica
-        var destination = string.IsNullOrWhiteSpace(rate.PoeName)
-            ? rate.PodName?.Trim() ?? string.Empty
-            : rate.PoeName.Trim();
-        var route = string.IsNullOrWhiteSpace(destination)
-            ? pol
-            : $"{pol} - {destination}";
-
-        var baseUrl = configuration["Reports:PublicOriginBaseUrl"]?.Trim();
-        if (string.IsNullOrWhiteSpace(baseUrl)) baseUrl = DefaultPublicOriginUrl;
-
-        var separator = baseUrl.Contains('?')
-            ? baseUrl.EndsWith('?') || baseUrl.EndsWith('&') ? string.Empty : "&"
-            : "?";
-
-        return $"{baseUrl}{separator}pol={Uri.EscapeDataString(pol)}" +
-               $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}" +
-               $"&route={Uri.EscapeDataString(route)}";
     }
 
     private static (string Includes, string SubjectTo, string Excludes) ExclusiveCommercialTerms(
