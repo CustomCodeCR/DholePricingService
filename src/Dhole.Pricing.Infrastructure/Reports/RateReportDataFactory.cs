@@ -114,6 +114,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             originOffice = new
             {
                 message = OriginOfficeMessage,
+                polId = rate.PolId,
                 polCode = rate.PolCode,
                 polName = rate.PolName,
                 qrContentType = "text/url",
@@ -173,6 +174,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var baseAddress = (configuration["Reports:PublicWebBaseAddress"] ?? "https://dhole.customcodecr.com")
             .Trim()
             .TrimEnd('/');
+        var polName = rate.PolName.Trim();
         var polCode = rate.PolCode.Trim().ToUpperInvariant();
         var destinationCode = !string.IsNullOrWhiteSpace(rate.PodCode)
             ? rate.PodCode.Trim().ToUpperInvariant()
@@ -180,9 +182,11 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var routeKey = $"{polCode}-{destinationCode}";
 
         return $"{baseAddress}/origin"
-  + $"?pol={Uri.EscapeDataString(polCode)}"
-  + $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
-  + $"&route={Uri.EscapeDataString(routeKey)}";
+            + $"?pol={Uri.EscapeDataString(polName)}"
+            + $"&polCode={Uri.EscapeDataString(polCode)}"
+            + $"&polId={Uri.EscapeDataString(rate.PolId.ToString("D"))}"
+            + $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
+            + $"&route={Uri.EscapeDataString(routeKey)}";
     }
 
     private static string CreateQrDataUri(string value)
