@@ -144,6 +144,7 @@ app.MapDataExtractionImportEndpoints();
 app.MapLogisticsNewsEndpoints();
 app.MapOwnLclConsolidationEndpoints();
 app.MapOwnLclDestinationAutomationEndpoints();
+app.MapLclRateSourceEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {
