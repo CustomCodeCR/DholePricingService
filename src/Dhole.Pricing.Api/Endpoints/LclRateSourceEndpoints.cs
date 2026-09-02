@@ -28,45 +28,30 @@ public static class LclRateSourceEndpoints
         Guid? poeId,
         Guid? podId,
         Guid? incotermId,
+        string? pol,
+        string? poe,
+        string? pod,
         DateTime? quoteDate,
         ServiceDbContext db,
         CancellationToken cancellationToken)
     {
         var effectiveDate = (quoteDate ?? DateTime.UtcNow).Date;
 
-        var query = db.RateHeaders
+        // Keep the same selection philosophy used by the approved FCL picker:
+        // approved/open tariffs + requested loading date first, then resolve the
+        // route with catalog ids OR the stored textual snapshots. This matters
+        // when a coloader tariff was approved with an older catalog snapshot.
+        var candidates = await db.RateHeaders
             .AsNoTracking()
             .Where(rate =>
                 rate.ShipmentMode == ShipmentMode.Lcl
                 && rate.RateType == RateType.Tariff
                 && rate.ValidFrom <= effectiveDate
                 && rate.ValidTo >= effectiveDate
-                && (rate.Status == RateStatus.Open || rate.Status == RateStatus.ApprovedByManagement));
-
-        if (polId.HasValue)
-        {
-            query = query.Where(rate => rate.PolId == polId.Value);
-        }
-
-        if (poeId.HasValue)
-        {
-            query = query.Where(rate => rate.PoeId == poeId.Value);
-        }
-
-        if (podId.HasValue)
-        {
-            query = query.Where(rate => rate.PodId == podId.Value);
-        }
-
-        if (incotermId.HasValue)
-        {
-            query = query.Where(rate => rate.IncotermId == incotermId.Value || rate.IncotermId == null);
-        }
-
-        var headers = await query
+                && (rate.Status == RateStatus.Open || rate.Status == RateStatus.ApprovedByManagement))
             .OrderBy(rate => rate.ValidTo)
             .ThenBy(rate => rate.TotalSaleAmount)
-            .Take(100)
+            .Take(250)
             .Select(rate => new
             {
                 rate.Id,
@@ -108,6 +93,23 @@ public static class LclRateSourceEndpoints
                 rate.Status,
             })
             .ToListAsync(cancellationToken);
+
+        var routeMatches = candidates
+            .Where(header => LocationMatches(polId, pol, header.PolId, header.PolName, header.PolCode))
+            .Where(header => LocationMatches(poeId, poe, header.PoeId, header.PoeName, header.PoeCode))
+            .Where(header => PodMatchesOrIsUnassigned(podId, pod, header.PodId, header.PodName, header.PodCode))
+            .ToList();
+
+        // Incoterm is a soft filter for coloaders: prefer the same Incoterm (or a
+        // generic tariff with no Incoterm). If none exists, keep the same route
+        // available just like the FCL pre-approved fallback does.
+        var incotermMatches = incotermId.HasValue
+            ? routeMatches.Where(header => header.IncotermId == incotermId || header.IncotermId == null).ToList()
+            : routeMatches;
+
+        var headers = (incotermMatches.Count > 0 ? incotermMatches : routeMatches)
+            .Take(100)
+            .ToList();
 
         var ids = headers.Select(header => header.Id).ToArray();
         List<ColoaderLine> details;
@@ -198,6 +200,68 @@ public static class LclRateSourceEndpoints
         });
 
         return Results.Ok(new { items });
+    }
+
+    private static bool LocationMatches(
+        Guid? requestedId,
+        string? requestedText,
+        Guid candidateId,
+        string candidateName,
+        string candidateCode)
+    {
+        if (!requestedId.HasValue && string.IsNullOrWhiteSpace(requestedText)) return true;
+        if (requestedId.HasValue && requestedId.Value == candidateId) return true;
+        if (string.IsNullOrWhiteSpace(requestedText)) return false;
+
+        var requested = CanonicalText(requestedText);
+        var name = CanonicalText(candidateName);
+        var code = CanonicalText(candidateCode);
+        if (string.IsNullOrEmpty(requested)) return false;
+
+        return (!string.IsNullOrEmpty(name)
+                && (requested.Contains(name, StringComparison.Ordinal)
+                    || name.Contains(requested, StringComparison.Ordinal)))
+            || (!string.IsNullOrEmpty(code)
+                && (requested.Contains(code, StringComparison.Ordinal)
+                    || code.Contains(requested, StringComparison.Ordinal)));
+    }
+
+    private static bool PodMatchesOrIsUnassigned(
+        Guid? requestedId,
+        string? requestedText,
+        Guid? candidateId,
+        string? candidateName,
+        string? candidateCode)
+    {
+        if (!requestedId.HasValue && string.IsNullOrWhiteSpace(requestedText)) return true;
+        if (!candidateId.HasValue && string.IsNullOrWhiteSpace(candidateName) && string.IsNullOrWhiteSpace(candidateCode)) return true;
+        if (requestedId.HasValue && candidateId.HasValue && requestedId.Value == candidateId.Value) return true;
+        if (string.IsNullOrWhiteSpace(requestedText)) return false;
+
+        var requested = CanonicalText(requestedText);
+        var name = CanonicalText(candidateName);
+        var code = CanonicalText(candidateCode);
+        if (string.IsNullOrEmpty(name) || name is "porasignar" or "unassigned" or "pending") return true;
+
+        return requested.Contains(name, StringComparison.Ordinal)
+            || name.Contains(requested, StringComparison.Ordinal)
+            || (!string.IsNullOrEmpty(code)
+                && (requested.Contains(code, StringComparison.Ordinal)
+                    || code.Contains(requested, StringComparison.Ordinal)));
+    }
+
+    private static string CanonicalText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var normalized = value
+            .Normalize(System.Text.NormalizationForm.FormD)
+            .Where(character =>
+                System.Globalization.CharUnicodeInfo.GetUnicodeCategory(character)
+                != System.Globalization.UnicodeCategory.NonSpacingMark)
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant)
+            .ToArray();
+        return new string(normalized);
     }
 
     private sealed record ColoaderLine(
