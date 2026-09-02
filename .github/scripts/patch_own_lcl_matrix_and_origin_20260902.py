@@ -61,7 +61,11 @@ helper = r'''    private static async Task<AutomaticDestinationProfileDto?> Reso
             .AsNoTracking()
             .Where(cost =>
                 cost.IsActive
-                && (cost.ShipmentMode == null || cost.ShipmentMode == ShipmentMode.Lcl)
+                // Destination matrix entries are shared by the maritime FCL/LCL flows when
+                // carrier + POE match. Older PerContainer entries can be marked FCL by the
+                // legacy factory, so filtering them out would incorrectly hide valid LCL costs.
+                && cost.ShipmentMode != ShipmentMode.Ftl
+                && cost.ShipmentMode != ShipmentMode.Ltl
                 && cost.PolId == null
                 && cost.PodId == null
                 && cost.CurrencyCode == "USD"
@@ -208,13 +212,5 @@ text = text.replace(
 
 endpoint_path.write_text(text, encoding='utf-8')
 
-# QR must point to the stable isolated /origin page in the same Dhole host.
-report_path = Path('src/Dhole.Pricing.Infrastructure/Reports/RateReportDataFactory.cs')
-report = report_path.read_text(encoding='utf-8')
-report = report.replace('return $"{baseUrl}/origen/{Uri.EscapeDataString(polCode)}?{string.Join("&", query)}";',
-                        'query.Insert(0, $"pol={Uri.EscapeDataString(polCode)}");\n        return $"{baseUrl}/origin?{string.Join("&", query)}";')
-if '/origen/' in report:
-    raise SystemExit('Legacy /origen QR URL still present after patch')
-report_path.write_text(report, encoding='utf-8')
-
-print('Own LCL destination costs now resolve from Pricing Cost Matrix and QR points to /origin.')
+# QR is patched in a separate workflow step to the stable isolated /origin page.
+print('Own LCL destination costs now resolve from Pricing Cost Matrix.')
