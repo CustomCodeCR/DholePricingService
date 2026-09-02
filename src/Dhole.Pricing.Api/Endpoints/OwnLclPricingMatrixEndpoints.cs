@@ -85,7 +85,7 @@ public static class OwnLclPricingMatrixEndpoints
 
     private static async Task<IResult> BrowseAsync(ServiceDbContext db, CancellationToken ct)
     {
-        await using var connection = db.Database.GetDbConnection();
+        var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
         await using var command = connection.CreateCommand();
         command.CommandText = BaseSelect + " WHERE is_active = TRUE ORDER BY consolidation_number DESC;";
@@ -326,7 +326,7 @@ public static class OwnLclPricingMatrixEndpoints
         ServiceDbContext db,
         CancellationToken ct)
     {
-        await using var connection = db.Database.GetDbConnection();
+        var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
         await using var command = connection.CreateCommand();
         command.CommandText = """
@@ -349,7 +349,7 @@ public static class OwnLclPricingMatrixEndpoints
         ServiceDbContext db,
         CancellationToken ct)
     {
-        await using var connection = db.Database.GetDbConnection();
+        var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
         await using var command = connection.CreateCommand();
         command.CommandText = BaseSelect + " WHERE id=@id AND is_active=TRUE LIMIT 1;";
