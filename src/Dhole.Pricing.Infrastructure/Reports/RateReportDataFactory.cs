@@ -175,16 +175,16 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             .Trim()
             .TrimEnd('/');
         var polName = rate.PolName.Trim();
-        var polCode = rate.PolCode.Trim().ToUpperInvariant();
         var destinationName = !string.IsNullOrWhiteSpace(rate.PodName)
             ? rate.PodName.Trim()
             : rate.PoeName.Trim();
         var routeKey = $"{polName} - {destinationName}";
 
+        // WHS selection must be driven by the exact public lookup context used by /origin:
+        // POL + shipment mode + route. Example:
+        // /origin?pol=Qingdao, China&shipmentMode=Fcl&route=Qingdao, China - Puerto Caldera, Costa Rica
         return $"{baseAddress}/origin"
             + $"?pol={Uri.EscapeDataString(polName)}"
-            + $"&polCode={Uri.EscapeDataString(polCode)}"
-            + $"&polId={Uri.EscapeDataString(rate.PolId.ToString("D"))}"
             + $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
             + $"&route={Uri.EscapeDataString(routeKey)}";
     }
