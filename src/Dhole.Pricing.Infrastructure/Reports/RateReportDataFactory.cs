@@ -23,7 +23,11 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         var commercialTerms = ExclusiveCommercialTerms(rate.Includes, rate.SubjectTo, rate.Excludes);
         var publicBaseUrl = (configuration["Reports:PublicBaseUrl"] ?? "https://dhole.customcodecr.com").TrimEnd('/');
-        var originOfficeUrl = $"{publicBaseUrl}/origin-office/{Uri.EscapeDataString(rate.PolCode.Trim().ToUpperInvariant())}";
+        var polCode = rate.PolCode.Trim().ToUpperInvariant();
+        var routeKey = $"{polCode}-{rate.PodName}";
+        var originOfficeUrl = $"{publicBaseUrl}/origin-office/{Uri.EscapeDataString(polCode)}"
+            + $"?shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
+            + $"&route={Uri.EscapeDataString(routeKey)}";
         var originOfficeQrDataUri = CreateQrDataUri(originOfficeUrl);
 
         var containers = (rate.RateContainers.Count > 0
