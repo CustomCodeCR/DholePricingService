@@ -109,9 +109,15 @@ public static class LclRateSourceEndpoints
             .ToListAsync(cancellationToken);
 
         var ids = headers.Select(header => header.Id).ToArray();
-        var details = ids.Length == 0
-            ? []
-            : await db.RateDetails
+        List<ColoaderLine> details;
+
+        if (ids.Length == 0)
+        {
+            details = [];
+        }
+        else
+        {
+            details = await db.RateDetails
                 .AsNoTracking()
                 .Where(detail => ids.Contains(detail.RateHeaderId))
                 .OrderBy(detail => detail.Name)
@@ -134,52 +140,60 @@ public static class LclRateSourceEndpoints
                     detail.ApplyDestinationTax,
                     detail.DestinationTaxRate))
                 .ToListAsync(cancellationToken);
+        }
 
         var linesByRate = details
             .GroupBy(detail => detail.RateHeaderId)
-            .ToDictionary(group => group.Key, group => group.Cast<object>().ToArray());
+            .ToDictionary(group => group.Key, group => group.ToArray());
 
-        var items = headers.Select(header => new
+        var items = headers.Select(header =>
         {
-            sourceType = "Coloader",
-            id = header.Id,
-            header.RateCode,
-            header.RateName,
-            providerId = header.AgentId,
-            providerName = header.AgentName,
-            providerCode = header.AgentCode,
-            header.CarrierId,
-            header.CarrierName,
-            header.CarrierCode,
-            header.PolId,
-            header.PolName,
-            header.PolCode,
-            header.PoeId,
-            header.PoeName,
-            header.PoeCode,
-            header.PodId,
-            header.PodName,
-            header.PodCode,
-            header.IncotermId,
-            header.IncotermName,
-            header.IncotermCode,
-            header.CurrencyId,
-            header.CurrencyName,
-            header.CurrencyCode,
-            header.FreeDays,
-            header.TransitTime,
-            header.ValidFrom,
-            header.ValidTo,
-            header.ChargeableQuantity,
-            header.TotalCostAmount,
-            header.TotalSaleAmount,
-            header.TotalUtilityAmount,
-            header.MarginPercentage,
-            header.Includes,
-            header.SubjectTo,
-            header.Excludes,
-            status = header.Status.ToString(),
-            lines = linesByRate.GetValueOrDefault(header.Id, []),
+            var lines = linesByRate.TryGetValue(header.Id, out var rateLines)
+                ? rateLines
+                : Array.Empty<ColoaderLine>();
+
+            return new
+            {
+                sourceType = "Coloader",
+                id = header.Id,
+                header.RateCode,
+                header.RateName,
+                providerId = header.AgentId,
+                providerName = header.AgentName,
+                providerCode = header.AgentCode,
+                header.CarrierId,
+                header.CarrierName,
+                header.CarrierCode,
+                header.PolId,
+                header.PolName,
+                header.PolCode,
+                header.PoeId,
+                header.PoeName,
+                header.PoeCode,
+                header.PodId,
+                header.PodName,
+                header.PodCode,
+                header.IncotermId,
+                header.IncotermName,
+                header.IncotermCode,
+                header.CurrencyId,
+                header.CurrencyName,
+                header.CurrencyCode,
+                header.FreeDays,
+                header.TransitTime,
+                header.ValidFrom,
+                header.ValidTo,
+                header.ChargeableQuantity,
+                header.TotalCostAmount,
+                header.TotalSaleAmount,
+                header.TotalUtilityAmount,
+                header.MarginPercentage,
+                header.Includes,
+                header.SubjectTo,
+                header.Excludes,
+                status = header.Status.ToString(),
+                lines,
+            };
         });
 
         return Results.Ok(new { items });
