@@ -365,7 +365,7 @@ public static class OwnLclDestinationAutomationEndpoints
                 && (!cost.ShipmentMode.HasValue || cost.ShipmentMode.Value == ShipmentMode.Lcl)
                 && cost.PolId == null
                 && cost.PodId == null
-                && cost.CurrencyCode == "USD"
+                && (cost.CurrencyName == "USD" || cost.CurrencyCode == "USD")
                 && cost.CostDetailType != CostDetailType.Freight
                 && cost.CostDetailType != CostDetailType.OriginCharge
                 && cost.CostDetailType != CostDetailType.Insurance)
