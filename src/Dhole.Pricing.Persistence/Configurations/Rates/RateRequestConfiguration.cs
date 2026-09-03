@@ -9,7 +9,12 @@ internal sealed class RateRequestConfiguration : IEntityTypeConfiguration<RateRe
 {
     public void Configure(EntityTypeBuilder<RateRequest> builder)
     {
-        builder.ToTable("RateRequests", "pricing");
+        // RateRequests is created by the explicit SQL migration
+        // 20260903203000_AddSellerRateRequests. Excluding this table from the
+        // convention-based migration differ prevents EF Core from treating this
+        // externally-described table as a pending model change before MigrateAsync
+        // has a chance to execute that migration.
+        builder.ToTable("RateRequests", "pricing", table => table.ExcludeFromMigrations());
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.Priority).HasColumnName("priority").HasConversion<string>().HasMaxLength(20).IsRequired();
