@@ -1,0 +1,34 @@
+name: Apply Sep 03 own LCL matrix fix
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - '.github/scripts/apply_sep03_own_lcl_matrix_fix.py'
+      - '.github/workflows/apply-sep03-own-lcl-matrix-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+      - name: Apply own LCL matrix fix
+        run: python .github/scripts/apply_sep03_own_lcl_matrix_fix.py
+      - name: Validate Pricing service
+        run: dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configuration Release --no-restore
+      - name: Commit Pricing changes to develop
+        run: |
+          if git diff --quiet; then
+            echo 'No changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Dhole.Pricing.Application/Services/RateFixedCostSynchronizer.cs
+          git commit -m 'fix(pricing): avoid duplicate matrix costs in own LCL'
+          git push origin develop
