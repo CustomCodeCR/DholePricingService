@@ -27,6 +27,9 @@ internal static class OwnLclPricingLineCatalog
         new("ORIGIN_DOC", "ORIGIN", "DOC FEE", "HBL", 15m, 65m),
         new("ORIGIN_VGM", "ORIGIN", "VGM", "HBL", 0m, 25m),
         new("ORIGIN_MANIFEST", "ORIGIN", "MANIFEST", "HBL", 15m, 25m),
+        // PICK UP figura como "POR CASO" en el Excel. Se inicializa en cero y se
+        // configura por consolidado; solo se aplica cuando la cotización es EXW.
+        new("ORIGIN_PICK_UP", "ORIGIN", "PICK UP", "Flat", 0m, 0m),
     ];
 
     public static OwnLclPricingLineDefinition? Find(string? lineKey) =>
