@@ -194,6 +194,7 @@ public static class OwnLclConsolidationEndpoints
     {
         var consolidation = await LoadAsync(id, db, ct);
         if (consolidation is null) return Results.NotFound();
+        var consolidationPricingLines = await LoadConsolidationPricingLinesAsync(id, db, ct);
         if (request.CargoLines.Count == 0) return Results.BadRequest(new { code = "Pricing.OwnLclCargoRequired", message = "Agregue al menos una línea de carga." });
 
         var destination = NormalizeDestination(request.DestinationCode);
@@ -232,7 +233,7 @@ public static class OwnLclConsolidationEndpoints
         var lines = new List<OwnLclQuoteLine>();
         AddLine(lines, "Flete Internacional Marítimo", "CBM", billableCbm, freightCostPerCbm, freightSalePerCbm);
         AddDestinationLines(lines, destination, billableCbm, destinationCostPerCbm);
-        AddOriginLines(lines, incoterm, billableCbm, Math.Max(1, request.Sets), Math.Max(1, request.Hbl), request.PickupCost, request.PickupSale);
+        AddOriginLines(lines, incoterm, billableCbm, Math.Max(1, request.Sets), Math.Max(1, request.Hbl), consolidationPricingLines);
 
         var subtotalCost = lines.Sum(x => x.CostTotal);
         var subtotalSale = lines.Sum(x => x.SaleTotal);
@@ -318,21 +319,73 @@ public static class OwnLclConsolidationEndpoints
         AddLine(lines, inland.Label, "CBM", cbm, inlandPerCbm, inlandPerCbm);
     }
 
-    private static void AddOriginLines(List<OwnLclQuoteLine> lines, string incoterm, decimal cbm, int sets, int hbl, decimal pickupCost, decimal pickupSale)
+    private static void AddOriginLines(
+        List<OwnLclQuoteLine> lines,
+        string incoterm,
+        decimal cbm,
+        int sets,
+        int hbl,
+        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)> pricingLines)
     {
         if (incoterm == "FOB") return;
-        AddLine(lines, "CFS", "CBM", cbm, 8m, 8m);
-        AddLine(lines, "CUSTOMS", "SET", sets, 15m, 25m);
-        AddLine(lines, "DOC FEE", "HBL", hbl, 15m, 65m);
-        AddLine(lines, "VGM", "HBL", hbl, 0m, 25m);
-        AddLine(lines, "MANIFEST", "HBL", hbl, 15m, 25m);
-        AddLine(lines, "WHSE FEE", "CBM", cbm, 12m, 12m);
-        if (incoterm == "EXW") AddLine(lines, "Recolecta", "Flat", 1, Math.Max(0m, pickupCost), Math.Max(0m, pickupSale));
+
+        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_CFS", "CFS", "CBM", cbm);
+        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_CUSTOMS", "CUSTOMS", "SET", sets);
+        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_DOC", "DOC FEE", "HBL", hbl);
+        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_VGM", "VGM", "HBL", hbl);
+        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_MANIFEST", "MANIFEST", "HBL", hbl);
+        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_WHSE", "WHSE FEE", "CBM", cbm);
+
+        if (incoterm == "EXW")
+            AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_PICK_UP", "PICK UP", "Flat", 1m);
+    }
+
+    private static void AddConfiguredOriginLine(
+        List<OwnLclQuoteLine> lines,
+        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)> pricingLines,
+        string lineKey,
+        string name,
+        string basis,
+        decimal quantity)
+    {
+        if (!pricingLines.TryGetValue(lineKey, out var values)) return;
+        AddLine(lines, name, basis, quantity, Math.Max(0m, values.CostUnit), Math.Max(0m, values.SaleUnit));
     }
 
     private static void AddLine(List<OwnLclQuoteLine> lines, string name, string basis, decimal quantity, decimal costUnit, decimal saleUnit)
     {
         lines.Add(new OwnLclQuoteLine(name, basis, quantity, costUnit, saleUnit, quantity * costUnit, quantity * saleUnit, quantity * (saleUnit - costUnit)));
+    }
+
+    private static async Task<IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)>> LoadConsolidationPricingLinesAsync(
+        Guid consolidationId,
+        ServiceDbContext db,
+        CancellationToken ct)
+    {
+        var values = OwnLclPricingLineCatalog.All.ToDictionary(
+            definition => definition.LineKey,
+            definition => (definition.DefaultCostUnit ?? 0m, definition.DefaultSaleUnit),
+            StringComparer.OrdinalIgnoreCase);
+
+        await using var connection = db.Database.GetDbConnection();
+        await EnsureOpenAsync(connection, ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT line_key, cost_unit, sale_unit
+            FROM pricing."OwnLclConsolidationPricingLines"
+            WHERE consolidation_id=@consolidation_id;
+            """;
+        Add(command, "consolidation_id", consolidationId);
+
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var key = reader.GetString(0);
+            if (!values.ContainsKey(key)) continue;
+            values[key] = (reader.GetDecimal(1), reader.GetDecimal(2));
+        }
+
+        return values;
     }
 
     private static async Task<decimal?> LoadHistoricalSaleAsync(int number, string destination, string polCode, ServiceDbContext db, CancellationToken ct)
