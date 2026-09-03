@@ -28,6 +28,24 @@ public sealed class RateFixedCostSynchronizer(
         CancellationToken cancellationToken = default
     )
     {
+        // LCL propio ya lleva la matriz del consolidado prorrateada dentro del flete/CBM.
+        // En la tarifa comercial solo deben persistir el flete y las líneas adicionales
+        // provenientes de las reglas/Excel, que no están ligadas a CostId.
+        if (IsOwnLclRate(rate))
+        {
+            var configuredDetailIds = rate.RateDetails
+                .Where(x => x.CostId.HasValue)
+                .Select(x => x.Id)
+                .ToArray();
+
+            foreach (var detailId in configuredDetailIds)
+            {
+                rate.RemoveRateDetail(detailId, updatedBy);
+            }
+
+            return;
+        }
+
         var existingAmounts = rate
             .RateDetails.Where(x => x.CostId.HasValue && x.CostType == CostType.Fixed)
             .GroupBy(x => x.CostId!.Value)
@@ -223,6 +241,27 @@ public sealed class RateFixedCostSynchronizer(
             rate.ContainerQuantity,
             updatedBy
         );
+    }
+
+    private static bool IsOwnLclRate(RateHeader rate)
+    {
+        if (rate.ShipmentMode != ShipmentMode.Lcl)
+            return false;
+
+        var headerMarker = NormalizeRouteText(rate.RateName);
+        if (headerMarker.Contains("LCL PROPIO", StringComparison.Ordinal)
+            || headerMarker.Contains("CONSOLIDADO PROPIO", StringComparison.Ordinal))
+            return true;
+
+        return rate.RateDetails.Any(detail =>
+        {
+            if (detail.CostDetailType != CostDetailType.Freight || detail.CostId.HasValue)
+                return false;
+
+            var marker = NormalizeRouteText($"{detail.Name} {detail.Notes}");
+            return marker.Contains("LCL PROPIO", StringComparison.Ordinal)
+                || marker.Contains("CONSOLIDADO PROPIO", StringComparison.Ordinal);
+        });
     }
 
     private static bool MatchesRate(Cost cost, RateHeader rate)
