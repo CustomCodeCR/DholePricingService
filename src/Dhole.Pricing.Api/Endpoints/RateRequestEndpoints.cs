@@ -98,10 +98,10 @@ public static class RateRequestEndpoints
             : (await db.RateHeaders
                 .AsNoTracking()
                 .Where(x => linkedRateIds.Contains(x.Id)
-                    && x.Status is RateStatus.Sent
-                        or RateStatus.AcceptedByClient
-                        or RateStatus.RejectedByClient
-                        or RateStatus.Closed)
+                    && (x.Status == RateStatus.Sent
+                        || x.Status == RateStatus.AcceptedByClient
+                        || x.Status == RateStatus.RejectedByClient
+                        || x.Status == RateStatus.Closed))
                 .Select(x => x.Id)
                 .ToListAsync(ct))
                 .ToHashSet();
