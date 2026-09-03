@@ -25,6 +25,10 @@ public sealed class UpdateRateCommandHandler(
     IUnitOfWork unitOfWork
 ) : ICommandHandler<UpdateRateCommand, Result>
 {
+    private static readonly Guid OwnLclInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c41");
+    private const string OwnLclInternalAgentName = "Grupo Castro Fallas";
+    private const string OwnLclInternalAgentCode = "GCF";
+
     public async Task<Result> HandleAsync(
         UpdateRateCommand command,
         CancellationToken cancellationToken = default
@@ -53,15 +57,38 @@ public sealed class UpdateRateCommandHandler(
         if (rate.SourceImportFclRateId.HasValue && command.ShipmentMode != ShipmentMode.Fcl)
             return Result.Failure(PricingErrors.RateImportedStructureLocked);
 
+        var ownLclWithoutAgent = command.ShipmentMode == ShipmentMode.Lcl && (
+            command.AgentId == OwnLclInternalAgentId
+            || rate.AgentId == OwnLclInternalAgentId
+            || (
+                command.AgentId == Guid.Empty
+                && (
+                    string.Equals(command.AgentCode, OwnLclInternalAgentCode, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(command.AgentName, OwnLclInternalAgentName, StringComparison.OrdinalIgnoreCase)
+                )
+            )
+        );
+
         // Rehidratamos todos los selectores desde Config. De esta manera cambiar naviera,
         // agente, ruta, contenedor, moneda o Incoterm nunca persiste Name/Code enviados por Web.
         try
         {
-            var agent = await configCatalog.GetActiveInGroupAsync(
-                command.AgentId, PricingConstants.CatalogSlugs.Agents, cancellationToken);
-            if (agent is null)
+            PricingConfigCatalogItem? agent = null;
+            var requestedCatalogAgent = command.AgentId != Guid.Empty
+                && command.AgentId != OwnLclInternalAgentId;
+            if (requestedCatalogAgent)
+            {
+                agent = await configCatalog.GetActiveInGroupAsync(
+                    command.AgentId, PricingConstants.CatalogSlugs.Agents, cancellationToken);
+                if (agent is null)
+                    return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                        "El agente", PricingConstants.CatalogSlugs.Agents));
+            }
+            else if (!ownLclWithoutAgent)
+            {
                 return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
                     "El agente", PricingConstants.CatalogSlugs.Agents));
+            }
 
             var carrier = await configCatalog.GetActiveInGroupAsync(
                 command.CarrierId, PricingConstants.CatalogSlugs.Carriers, cancellationToken);
@@ -156,9 +183,9 @@ public sealed class UpdateRateCommandHandler(
             var normalizedPrimaryContainer = normalizedContainers[0];
             command = command with
             {
-                AgentId = agent.Id,
-                AgentName = agent.SnapshotName(),
-                AgentCode = agent.Code,
+                AgentId = agent?.Id ?? OwnLclInternalAgentId,
+                AgentName = agent?.SnapshotName() ?? OwnLclInternalAgentName,
+                AgentCode = agent?.Code ?? OwnLclInternalAgentCode,
                 CarrierId = carrier.Id,
                 CarrierName = carrier.SnapshotName(),
                 CarrierCode = carrier.Code,

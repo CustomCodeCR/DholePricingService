@@ -691,9 +691,9 @@ public static class RateEndpoints
         var result = await dispatcher.DispatchAsync(
             new UpdateRateCommand(
                 rateId,
-                request.AgentId,
-                request.AgentName,
-                request.AgentCode,
+                request.AgentId ?? Guid.Empty,
+                request.AgentName ?? string.Empty,
+                request.AgentCode ?? string.Empty,
                 request.CarrierId,
                 request.CarrierName,
                 request.CarrierCode,

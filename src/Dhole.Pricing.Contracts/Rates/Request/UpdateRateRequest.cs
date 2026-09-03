@@ -1,9 +1,9 @@
 namespace Dhole.Pricing.Contracts.Rates.Request;
 
 public sealed record UpdateRateRequest(
-    Guid AgentId,
-    string AgentName,
-    string AgentCode,
+    Guid? AgentId,
+    string? AgentName,
+    string? AgentCode,
     Guid CarrierId,
     string CarrierName,
     string CarrierCode,
