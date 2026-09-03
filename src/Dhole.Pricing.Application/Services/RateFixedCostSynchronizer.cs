@@ -28,6 +28,24 @@ public sealed class RateFixedCostSynchronizer(
         CancellationToken cancellationToken = default
     )
     {
+        // En un LCL propio, BaseRatePerCbm ya contiene los costos de la matriz del consolidado.
+        // Las líneas adicionales válidas vienen de las reglas/Excel y no tienen CostId. Por eso
+        // eliminamos cualquier detalle respaldado por la matriz y evitamos resincronizarlo.
+        if (IsOwnLclRate(rate))
+        {
+            var configuredDetailIds = rate.RateDetails
+                .Where(x => x.CostId.HasValue)
+                .Select(x => x.Id)
+                .ToArray();
+
+            foreach (var detailId in configuredDetailIds)
+            {
+                rate.RemoveRateDetail(detailId, updatedBy);
+            }
+
+            return;
+        }
+
         var existingAmounts = rate
             .RateDetails.Where(x => x.CostId.HasValue && x.CostType == CostType.Fixed)
             .GroupBy(x => x.CostId!.Value)
@@ -222,6 +240,18 @@ public sealed class RateFixedCostSynchronizer(
             "Aplicado automáticamente para la ruta POE Panamá → POD GAM.",
             rate.ContainerQuantity,
             updatedBy
+        );
+    }
+
+    private static bool IsOwnLclRate(RateHeader rate)
+    {
+        if (rate.ShipmentMode != ShipmentMode.Lcl)
+            return false;
+
+        return rate.RateDetails.Any(detail =>
+            detail.CostDetailType == CostDetailType.Freight
+            && !detail.CostId.HasValue
+            && NormalizeRouteText(detail.Name).Contains("LCL PROPIO", StringComparison.Ordinal)
         );
     }
 
