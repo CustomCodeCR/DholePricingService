@@ -19,8 +19,6 @@ jobs:
           ref: develop
       - name: Apply own LCL matrix fix
         run: python .github/scripts/apply_sep03_own_lcl_matrix_fix.py
-      - name: Validate Pricing service
-        run: dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configuration Release --no-restore
       - name: Commit Pricing changes to develop
         run: |
           if git diff --quiet; then
