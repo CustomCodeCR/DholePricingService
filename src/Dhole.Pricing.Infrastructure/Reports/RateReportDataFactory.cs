@@ -68,7 +68,25 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             _ => equipmentSummary,
         };
 
+        // Un consolidado LCL propio toma sus líneas comerciales exclusivamente de la matriz
+        // Excel (EXW/FCA/FOB). Los CostId pertenecen al catálogo general "Costos y recargos"
+        // y no deben aparecer ni alterar el PDF, incluso en tarifas antiguas que los guardaron.
+        var ownLclExcelOnly = rate.ShipmentMode == ShipmentMode.Lcl
+            && (
+                string.Equals(rate.AgentCode, "GCF", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(rate.AgentName, "Grupo Castro Fallas", StringComparison.OrdinalIgnoreCase)
+                || rate.RateDetails.Any(detail =>
+                    !detail.CostId.HasValue
+                    && (
+                        (detail.Notes?.Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase) ?? false)
+                        || (detail.Notes?.Contains("Base del Excel", StringComparison.OrdinalIgnoreCase) ?? false)
+                        || detail.Name.Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase)
+                    )
+                )
+            );
+
         var reportDetails = rate.RateDetails
+            .Where(detail => !ownLclExcelOnly || !detail.CostId.HasValue)
             .Where(detail => detail.SaleAmount * detail.Quantity != 0m)
             .OrderBy(x => x.CostDetailType)
             .ThenBy(x => x.Name)
@@ -163,8 +181,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 transitDays = rate.TransitTime,
                 validFrom = rate.ValidFrom.ToString("dd/MM/yyyy"),
                 validTo = rate.ValidTo.ToString("dd/MM/yyyy"),
-                total = Money(rate.TotalSaleAmount),
-                totalAmount = rate.TotalSaleAmount,
+                total = Money(reportDetails.Sum(detail => detail.SaleAmount * detail.Quantity)),
+                totalAmount = reportDetails.Sum(detail => detail.SaleAmount * detail.Quantity),
                 includes = commercialTerms.Includes,
                 subjectTo = commercialTerms.SubjectTo,
                 excludes = commercialTerms.Excludes,
@@ -192,9 +210,6 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             : rate.PoeName.Trim();
         var routeKey = $"{polName} - {destinationName}";
 
-        // WHS selection must be driven by the exact public lookup context used by /origin:
-        // POL + shipment mode + route. Example:
-        // /origin?pol=Qingdao, China&shipmentMode=Fcl&route=Qingdao, China - Puerto Caldera, Costa Rica
         return $"{baseAddress}/origin"
             + $"?pol={Uri.EscapeDataString(polName)}"
             + $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
