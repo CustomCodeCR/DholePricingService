@@ -49,7 +49,7 @@ public static class OwnLclConsolidationEndpoints
 
         group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/{id:guid}", GetAsync).RequireScope(PricingConstants.Scopes.RateView);
-        group.MapPost("/", CreateAsync).RequireScope(PricingConstants.Scopes.RateCreate);
+        group.MapPost("/", CreateAsync).RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPut("/{id:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapPost("/{id:guid}/calculate", CalculateAsync).RequireScope(PricingConstants.Scopes.RateCreate);
 
@@ -222,7 +222,7 @@ public static class OwnLclConsolidationEndpoints
             ? oceanCostWithOrigin
             : oceanCostWithOrigin + destinationCostPerCbm + crTransferCostPerCbm;
 
-        var historicalDestination = destination == "PA" ? "PA" : "CR";
+        var historicalDestination = destination;
         var historicalSale = await LoadHistoricalSaleAsync(consolidation.ConsolidationNumber, historicalDestination, request.PolCode ?? consolidation.PolCode, db, ct);
         var minimumForRecommendation = destination == "PA" ? MinimumPanamaOceanProfitPerCbm : MinimumCentralAmericaProfitPerCbm;
         var calculatedRecommended = CeilingCent(freightCostPerCbm + minimumForRecommendation);

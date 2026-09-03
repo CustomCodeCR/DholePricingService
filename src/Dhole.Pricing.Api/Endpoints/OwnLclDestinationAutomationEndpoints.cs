@@ -26,7 +26,7 @@ public static class OwnLclDestinationAutomationEndpoints
         group.MapGet("/destination-preview", PreviewAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
         group.MapPost("/consolidations", CreateAsync)
-            .RequireScope(PricingConstants.Scopes.RateCreate);
+            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPut("/consolidations/{id:guid}", UpdateAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapGet("/consolidations/{id:guid}", GetAutomationAsync)
@@ -505,7 +505,7 @@ public static class OwnLclDestinationAutomationEndpoints
                 DefaultPanamaToCostaRicaCost,
                 bunkerCost ?? DefaultBunkerCost,
                 DefaultCostaRicaTransferBaseCbm),
-            false,
+            true,
             "Pricing: Matriz de costos (naviera + POE)");
     }
 
@@ -542,7 +542,7 @@ public static class OwnLclDestinationAutomationEndpoints
                 DefaultPanamaToCostaRicaCost,
                 bunkerCost ?? DefaultBunkerCost,
                 DefaultCostaRicaTransferBaseCbm),
-            false,
+            true,
             "Pricing: Matriz de costos (sin cargos LCL/Any aplicables)");
     }
 

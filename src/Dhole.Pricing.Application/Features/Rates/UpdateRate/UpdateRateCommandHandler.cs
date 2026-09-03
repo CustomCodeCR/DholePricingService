@@ -199,6 +199,12 @@ public sealed class UpdateRateCommandHandler(
             .Distinct()
             .ToHashSet();
 
+        // Automatic fixed details belong to the rate snapshot. The wizard is allowed to
+        // edit their amounts, but an omitted/re-keyed UI row must never turn into a hard
+        // delete error for the whole LCL rate. Preserve those rows instead.
+        removedIds.RemoveWhere(id =>
+            existingDetails.TryGetValue(id, out var existing) && IsAutomaticFixed(existing));
+
         var updatedIds = extraDetails.Where(x => x.Id.HasValue).Select(x => x.Id!.Value).ToArray();
 
         if (updatedIds.Distinct().Count() != updatedIds.Length)

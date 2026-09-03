@@ -2,6 +2,7 @@ using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -27,7 +28,7 @@ public sealed class ImportedRateChangeNotificationService(
         if (!configuration.GetValue("Pricing:ImportApprovalNotifications:Enabled", true))
             return;
 
-        if (currentRate.SourceType != ImportSourceType.Email || currentRate.Status != ImportStatus.Pending)
+        if (currentRate.SourceType != ImportSourceType.Email || currentRate.Status is not (ImportStatus.Pending or ImportStatus.PreAuthorized))
             return;
 
         // Notify once per imported email batch. Subsequent rows in the same batch see the
@@ -68,9 +69,9 @@ public sealed class ImportedRateChangeNotificationService(
             return;
         }
 
-        var subject = "Nuevas tarifas de correo pendientes de aprobación";
+        var subject = "Nuevas tarifas preautorizadas pendientes de preaprobación";
         var body =
-            $"Hay nuevas tarifas recibidas por correo pendientes de revisión. "
+            $"Hay nuevas tarifas recibidas por correo que ya pasaron la preautorización automática y están pendientes de preaprobación. "
             + $"Naviera: {currentRate.CarrierName}; ruta: {currentRate.PolName} → {currentRate.PoeName} → {currentRate.PodName}; "
             + $"equipo: {currentRate.ContainerTypeName}. Abra Pricing > Tarifas recibidas para revisarlas y aprobarlas o rechazarlas.";
 
@@ -131,63 +132,30 @@ public sealed class ImportedRateChangeNotificationService(
         if (!configuration.GetValue("Pricing:RateChangeNotifications:Enabled", true))
             return;
 
-        var amount = currentRate.OceanFreight ?? currentRate.Freight;
-        if (amount <= 0m) return;
+        var completeCost = ResolveCompleteImportedCost(currentRate);
+        if (completeCost <= 0m) return;
 
-        var previous = await dbContext.ImportFclRates
+        var comparable = dbContext.RateHeaders
             .AsNoTracking()
             .Where(x =>
                 !x.IsDeleted
-                && x.UsedAsRateCount > 0
-                && x.ImportBatchId != currentRate.ImportBatchId
-                && x.CreatedAtUtc < currentRate.CreatedAtUtc
-                && x.CarrierId == currentRate.CarrierId
                 && x.PolId == currentRate.PolId
                 && x.PoeId == currentRate.PoeId
                 && x.ContainerTypeId == currentRate.ContainerTypeId
-            )
-            .OrderByDescending(x => x.CreatedAtUtc)
+                && x.TotalCostAmount > 0m);
+
+        var sent = await comparable
+            .Where(x => x.Status == RateStatus.Sent)
+            .OrderBy(x => x.TotalCostAmount)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (previous is null) return;
-
-        var previousAmount = previous.OceanFreight ?? previous.Freight;
-        if (previousAmount <= 0m || previousAmount == amount) return;
-
-        var direction = amount < previousAmount ? "bajó" : "subió";
-        var delta = amount - previousAmount;
-        var percentage = previousAmount == 0m
-            ? 0m
-            : decimal.Round((delta / previousAmount) * 100m, 2);
-        var subject = $"Tarifa importada {direction}: {currentRate.CarrierName} {currentRate.PolName} → {currentRate.PoeName}";
-        var body =
-            $"La tarifa importada {direction} respecto a la última tarifa importada utilizada comparable. "
-            + $"Naviera: {currentRate.CarrierName}; POL: {currentRate.PolName}; POE: {currentRate.PoeName}; "
-            + $"contenedor: {currentRate.ContainerTypeName}; anterior: {previous.CurrencyCode} {previousAmount:N2}; "
-            + $"nueva: {currentRate.CurrencyCode} {amount:N2}; variación: {delta:+0.00;-0.00;0.00} ({percentage:+0.00;-0.00;0.00}%). "
-            + "Revise la importación para crear una nueva tarifa comercial si corresponde.";
-
-        var payload = new
-        {
-            type = "pricing.imported-rate.variation",
-            currentImportRateId = currentRate.Id,
-            previousImportRateId = previous.Id,
-            currentRate.ImportBatchId,
-            currentRate.CarrierName,
-            currentRate.PolName,
-            currentRate.PoeName,
-            currentRate.ContainerTypeName,
-            previousCurrencyCode = previous.CurrencyCode,
-            currentCurrencyCode = currentRate.CurrencyCode,
-            previousAmount,
-            previousUsedAsRateCount = previous.UsedAsRateCount,
-            previousCreatedAsRateHeaderId = previous.CreatedAsRateHeaderId,
-            currentAmount = amount,
-            delta,
-            percentage,
-            direction,
-            action = "create-rate-from-import",
-        };
+        var acceptedCutoff = DateTime.UtcNow.AddDays(-7);
+        var accepted = await comparable
+            .Where(x =>
+                x.Status == RateStatus.AcceptedByClient
+                && (x.UpdatedAtUtc ?? x.CreatedAtUtc) <= acceptedCutoff)
+            .OrderBy(x => x.TotalCostAmount)
+            .FirstOrDefaultAsync(cancellationToken);
 
         IReadOnlyCollection<PricingNotificationRecipient> recipients;
         try
@@ -198,11 +166,86 @@ public sealed class ImportedRateChangeNotificationService(
         {
             logger.LogError(
                 exception,
-                "No se pudieron resolver usuarios de Pricing para la variación de tarifa {ImportRateId}.",
+                "No se pudieron resolver usuarios de Pricing para comparar la tarifa completa {ImportRateId}.",
                 currentRate.Id
             );
             return;
         }
+
+        if (recipients.Count == 0) return;
+
+        if (sent is not null && completeCost < sent.TotalCostAmount)
+        {
+            await QueueLowerCompleteRateAsync(
+                currentRate,
+                completeCost,
+                sent.Id,
+                sent.RateCode,
+                sent.Status.ToString(),
+                sent.TotalCostAmount,
+                recipients,
+                "sent",
+                cancellationToken);
+        }
+
+        if (accepted is not null && completeCost < accepted.TotalCostAmount)
+        {
+            await QueueLowerCompleteRateAsync(
+                currentRate,
+                completeCost,
+                accepted.Id,
+                accepted.RateCode,
+                accepted.Status.ToString(),
+                accepted.TotalCostAmount,
+                recipients,
+                "accepted-7d",
+                cancellationToken);
+        }
+    }
+
+    private async Task QueueLowerCompleteRateAsync(
+        ImportFclRates currentRate,
+        decimal completeCost,
+        Guid comparedRateId,
+        string comparedRateCode,
+        string comparedStatus,
+        decimal comparedCost,
+        IReadOnlyCollection<PricingNotificationRecipient> recipients,
+        string comparisonKind,
+        CancellationToken cancellationToken)
+    {
+        var savings = comparedCost - completeCost;
+        var percentage = comparedCost <= 0m ? 0m : decimal.Round((savings / comparedCost) * 100m, 2);
+        var statusLabel = comparisonKind == "sent" ? "enviada" : "aceptada hace al menos 7 días";
+        var subject = $"Tarifa completa más baja: {currentRate.PolName} → {currentRate.PoeName} · {currentRate.ContainerTypeName}";
+        var body =
+            $"Se registró una tarifa cuyo costo completo es menor que una tarifa {statusLabel}. "
+            + $"Ruta: {currentRate.PolName} → {currentRate.PoeName} → {currentRate.PodName}; equipo: {currentRate.ContainerTypeName}. "
+            + $"Tarifa comparada {comparedRateCode}: {currentRate.CurrencyCode} {comparedCost:N2}; "
+            + $"nueva tarifa completa: {currentRate.CurrencyCode} {completeCost:N2}; ahorro: {savings:N2} ({percentage:N2}%). "
+            + "La comparación considera el costo completo (flete, origen, destino y recargos), no solamente el flete internacional.";
+
+        var payload = new
+        {
+            type = "pricing.imported-rate.lower-complete-rate",
+            comparisonKind,
+            currentImportRateId = currentRate.Id,
+            currentRate.ImportBatchId,
+            comparedRateId,
+            comparedRateCode,
+            comparedStatus,
+            currentRate.PolName,
+            currentRate.PoeName,
+            currentRate.PodName,
+            currentRate.ContainerTypeName,
+            currencyCode = currentRate.CurrencyCode,
+            comparedCompleteCost = comparedCost,
+            newCompleteCost = completeCost,
+            savings,
+            percentage,
+            action = "review-lower-complete-rate",
+            route = "/pricing/imports",
+        };
 
         foreach (var recipient in recipients)
         {
@@ -210,32 +253,40 @@ public sealed class ImportedRateChangeNotificationService(
             {
                 await QueueAsync(
                     "System",
-                    "pricing.imported-rate.variation",
+                    "pricing.imported-rate.lower-complete-rate",
                     recipient,
                     subject,
                     body,
                     payload,
                     currentRate.Id,
-                    $"pricing-rate-change:{currentRate.Id:N}:system:{recipient.UserId:N}",
-                    cancellationToken
-                );
+                    $"pricing-lower-complete:{currentRate.Id:N}:{comparisonKind}:system:{recipient.UserId:N}",
+                    cancellationToken);
             }
 
             if (!string.IsNullOrWhiteSpace(recipient.Email))
             {
                 await QueueAsync(
                     "Email",
-                    "pricing.imported-rate.variation",
+                    "pricing.imported-rate.lower-complete-rate",
                     recipient,
                     subject,
                     body,
                     payload,
                     currentRate.Id,
-                    $"pricing-rate-change:{currentRate.Id:N}:email:{recipient.Email}",
-                    cancellationToken
-                );
+                    $"pricing-lower-complete:{currentRate.Id:N}:{comparisonKind}:email:{recipient.Email}",
+                    cancellationToken);
             }
         }
+    }
+
+    private static decimal ResolveCompleteImportedCost(ImportFclRates rate)
+    {
+        if (rate.TotalCost is > 0m) return rate.TotalCost.Value;
+
+        return Math.Max(0m, rate.OceanFreight ?? rate.Freight)
+            + Math.Max(0m, rate.OriginCharges ?? 0m)
+            + Math.Max(0m, rate.DestinationCharges ?? 0m)
+            + Math.Max(0m, rate.Surcharges ?? 0m);
     }
 
     private Task QueueAsync(
