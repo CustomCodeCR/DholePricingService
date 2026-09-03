@@ -18,9 +18,16 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
 
     public string CreateDataJson(RateHeader rate)
     {
-        string Money(decimal amount) => $"{rate.CurrencyCode} {amount.ToString("N2", MoneyCulture)}";
         string Text(string? value, string fallback = "No especificado") =>
             string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+        string CurrencyValue(string? name, string? code) =>
+            Text(name, Text(code, "USD"));
+
+        var currencyValue = CurrencyValue(rate.CurrencyName, rate.CurrencyCode);
+        string Money(decimal amount) => $"{currencyValue} {amount.ToString("N2", MoneyCulture)}";
+        string DetailMoney(RateDetail detail, decimal amount) =>
+            $"{CurrencyValue(detail.CurrencyName, detail.CurrencyCode)} {amount.ToString("N2", MoneyCulture)}";
+
         var commercialTerms = ExclusiveCommercialTerms(rate.Includes, rate.SubjectTo, rate.Excludes);
         var originOfficePublicUrl = CreateOriginOfficePublicUrl(rate);
         var originOfficeQrDataUri = CreateQrDataUri(originOfficePublicUrl);
@@ -72,9 +79,11 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             {
                 description = detail.Name,
                 quantity = detail.Quantity,
-                unitSale = Money(detail.SaleAmount),
+                currency = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
+                currencyCode = detail.CurrencyCode,
+                unitSale = DetailMoney(detail, detail.SaleAmount),
                 unitSaleAmount = detail.SaleAmount,
-                lineTotal = Money(detail.SaleAmount * detail.Quantity),
+                lineTotal = DetailMoney(detail, detail.SaleAmount * detail.Quantity),
                 lineTotalAmount = detail.SaleAmount * detail.Quantity,
                 notes = detail.CostDetailType == CostDetailType.Insurance
                     ? string.Empty
@@ -87,7 +96,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             {
                 ["Concepto"] = detail.Name,
                 ["Cantidad"] = detail.Quantity,
-                ["Moneda"] = rate.CurrencyCode,
+                ["Moneda"] = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
                 ["Precio unitario"] = detail.SaleAmount,
                 ["Total"] = detail.SaleAmount * detail.Quantity,
                 ["Notas"] = detail.CostDetailType == CostDetailType.Insurance
@@ -147,7 +156,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 totalVolumeCbm = rate.TotalVolumeCbm,
                 kgPerCbm = rate.KgPerCbm,
                 chargeableQuantity = rate.ChargeableQuantity,
-                currency = rate.CurrencyCode,
+                currency = currencyValue,
+                currencyCode = rate.CurrencyCode,
                 freeDays = rate.FreeDays,
                 transitTime = string.IsNullOrWhiteSpace(rate.TransitTime) ? "Por confirmar" : rate.TransitTime,
                 transitDays = rate.TransitTime,
