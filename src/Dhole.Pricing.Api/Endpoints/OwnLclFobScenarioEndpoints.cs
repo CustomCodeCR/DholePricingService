@@ -54,6 +54,10 @@ public static class OwnLclFobScenarioEndpoints
             .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPut("/cost-overrides", SaveCostOverridesAsync)
             .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
+        group.MapGet("/pricing-lines", GetPricingLinesAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapPut("/pricing-lines", SavePricingLinesAsync)
+            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
 
         return app;
     }
@@ -113,6 +117,11 @@ public static class OwnLclFobScenarioEndpoints
 
         var baseOcean = oceanFreight / maximumCbm;
         var destinationPerCbm = destinationCost / maximumCbm;
+        var pricingLineOverrides = await LoadPricingLineOverridesAsync(connection, id, ct);
+        var paDestinationLine = ResolvePricingLine(
+            pricingLineOverrides,
+            "PA_DESTINATION_CHARGE",
+            destinationPerCbm);
         var crTransferPerCbm = (panamaToCr + bunker) / crBase;
         var warehousePerCbm = CostaRicaWarehouseOperation / CentralAmericaOperationBaseCbm;
 
@@ -121,7 +130,7 @@ public static class OwnLclFobScenarioEndpoints
             var code = destination.Key;
             var inlandPerCbm = destination.Value.Inland / CentralAmericaOperationBaseCbm;
             var routeDestinationCost = code == "PA"
-                ? destinationPerCbm
+                ? paDestinationLine.Cost
                 : destinationPerCbm + crTransferPerCbm + (code is "NI" or "HN" or "SV" or "GT" ? warehousePerCbm + inlandPerCbm : 0m);
 
             var ports = OriginSurcharges.Select(origin =>
@@ -248,6 +257,128 @@ public static class OwnLclFobScenarioEndpoints
         return await command.ExecuteNonQueryAsync(ct) == 0 ? Results.NotFound() : Results.NoContent();
     }
 
+    private static async Task<IResult> GetPricingLinesAsync(
+        Guid id,
+        ServiceDbContext db,
+        CancellationToken ct)
+    {
+        await using var connection = db.Database.GetDbConnection();
+        await EnsureOpenAsync(connection, ct);
+
+        decimal destinationCostPerCbm;
+        await using (var lookup = connection.CreateCommand())
+        {
+            lookup.CommandText = """
+                SELECT carrier_destination_cost_total, maximum_cbm
+                FROM pricing."OwnLclConsolidations"
+                WHERE id=@id AND is_active=TRUE
+                LIMIT 1;
+                """;
+            Add(lookup, "id", id);
+            await using var reader = await lookup.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct)) return Results.NotFound();
+            destinationCostPerCbm = reader.GetDecimal(0) / Math.Max(0.01m, reader.GetDecimal(1));
+        }
+
+        var overrides = await LoadPricingLineOverridesAsync(connection, id, ct);
+        var rows = OwnLclPricingLineCatalog.All.Select(definition =>
+        {
+            var fallbackCost = definition.DefaultCostUnit
+                ?? (definition.LineKey == "PA_DESTINATION_CHARGE" ? destinationCostPerCbm : 0m);
+            var value = ResolvePricingLine(overrides, definition.LineKey, fallbackCost);
+            return new OwnLclPricingLineDto(
+                definition.LineKey,
+                definition.Scope,
+                definition.Name,
+                definition.ChargeBasis,
+                value.Cost,
+                value.Sale);
+        }).ToArray();
+
+        return Results.Ok(rows);
+    }
+
+    private static async Task<IResult> SavePricingLinesAsync(
+        Guid id,
+        SaveOwnLclPricingLinesRequest request,
+        ServiceDbContext db,
+        CancellationToken ct)
+    {
+        if (request.Rows.Count == 0)
+            return Results.BadRequest(new { code = "Pricing.OwnLclPricingLinesRequired", message = "Agregue al menos una línea de costo/venta." });
+
+        var normalized = request.Rows
+            .Select(row => row with { LineKey = Normalize(row.LineKey) })
+            .ToArray();
+        if (normalized.Select(row => row.LineKey).Distinct(StringComparer.OrdinalIgnoreCase).Count() != normalized.Length
+            || normalized.Any(row => OwnLclPricingLineCatalog.Find(row.LineKey) is null || row.CostUnit < 0m || row.SaleUnit < 0m))
+        {
+            return Results.BadRequest(new { code = "Pricing.OwnLclPricingLineInvalid", message = "Las líneas del consolidado deben ser válidas y sus costos/ventas no pueden ser negativos." });
+        }
+
+        await using var connection = db.Database.GetDbConnection();
+        await EnsureOpenAsync(connection, ct);
+
+        await using (var lookup = connection.CreateCommand())
+        {
+            lookup.CommandText = "SELECT 1 FROM pricing."OwnLclConsolidations" WHERE id=@id AND is_active=TRUE LIMIT 1;";
+            Add(lookup, "id", id);
+            if (await lookup.ExecuteScalarAsync(ct) is null) return Results.NotFound();
+        }
+
+        await using var tx = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+        foreach (var row in normalized)
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = tx;
+            command.CommandText = """
+                INSERT INTO pricing."OwnLclConsolidationPricingLines"
+                    (id, consolidation_id, line_key, cost_unit, sale_unit, updated_at_utc)
+                VALUES
+                    (gen_random_uuid(), @id, @key, @cost, @sale, now())
+                ON CONFLICT (consolidation_id, line_key)
+                DO UPDATE SET cost_unit=EXCLUDED.cost_unit, sale_unit=EXCLUDED.sale_unit, updated_at_utc=now();
+                """;
+            Add(command, "id", id);
+            Add(command, "key", row.LineKey);
+            Add(command, "cost", row.CostUnit);
+            Add(command, "sale", row.SaleUnit);
+            await command.ExecuteNonQueryAsync(ct);
+        }
+        await tx.CommitAsync(ct);
+        return Results.NoContent();
+    }
+
+    private static async Task<Dictionary<string, (decimal Cost, decimal Sale)>> LoadPricingLineOverridesAsync(
+        DbConnection connection,
+        Guid id,
+        CancellationToken ct)
+    {
+        var result = new Dictionary<string, (decimal Cost, decimal Sale)>(StringComparer.OrdinalIgnoreCase);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT line_key, cost_unit, sale_unit
+            FROM pricing."OwnLclConsolidationPricingLines"
+            WHERE consolidation_id=@id;
+            """;
+        Add(command, "id", id);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            result[reader.GetString(0)] = (reader.GetDecimal(1), reader.GetDecimal(2));
+        return result;
+    }
+
+    private static (decimal Cost, decimal Sale) ResolvePricingLine(
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale)> overrides,
+        string lineKey,
+        decimal fallbackCost)
+    {
+        if (overrides.TryGetValue(lineKey, out var stored)) return stored;
+        var definition = OwnLclPricingLineCatalog.Find(lineKey)
+            ?? throw new InvalidOperationException($"Línea LCL propia desconocida: {lineKey}.");
+        return (definition.DefaultCostUnit ?? fallbackCost, definition.DefaultSaleUnit);
+    }
+
     private static string Normalize(string? value) => (value ?? string.Empty).Trim().ToUpperInvariant();
     private static decimal CeilingCent(decimal value) => Math.Ceiling(value * 100m) / 100m;
 
@@ -299,3 +430,14 @@ public sealed record SaveOwnLclCostOverridesRequest(
     decimal PanamaToCostaRicaCost,
     decimal BunkerCost,
     decimal CostaRicaTransferBaseCbm);
+
+public sealed record OwnLclPricingLineDto(
+    string LineKey,
+    string Scope,
+    string Name,
+    string ChargeBasis,
+    decimal CostUnit,
+    decimal SaleUnit);
+
+public sealed record SaveOwnLclPricingLineRequest(string LineKey, decimal CostUnit, decimal SaleUnit);
+public sealed record SaveOwnLclPricingLinesRequest(IReadOnlyCollection<SaveOwnLclPricingLineRequest> Rows);

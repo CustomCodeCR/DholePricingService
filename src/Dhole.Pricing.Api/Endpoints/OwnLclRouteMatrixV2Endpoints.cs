@@ -234,13 +234,15 @@ public static class OwnLclRouteMatrixV2Endpoints
             ? request.SalePerCbm.Value
             : recommendedSalePerCbm;
 
+        var pricingLineOverrides = await LoadPricingLineOverridesAsync(consolidation.Id, db, ct);
         var lines = new List<OwnLclQuoteLine>();
         AddLine(lines, "Flete Internacional Marítimo LCL", "CBM", billableCbm, freightCostPerCbm, freightSalePerCbm);
         AddDestinationLines(
             lines,
             destination,
             billableCbm,
-            routeDestinationCostPerCbm);
+            routeDestinationCostPerCbm,
+            pricingLineOverrides);
         AddOriginLines(
             lines,
             incoterm,
@@ -248,7 +250,8 @@ public static class OwnLclRouteMatrixV2Endpoints
             Math.Max(1, request.Sets),
             Math.Max(1, request.Hbl),
             request.PickupCost,
-            request.PickupSale);
+            request.PickupSale,
+            pricingLineOverrides);
 
         var totalCost = lines.Sum(line => line.CostTotal);
         var subtotalSale = lines.Sum(line => line.SaleTotal);
@@ -325,29 +328,28 @@ public static class OwnLclRouteMatrixV2Endpoints
         List<OwnLclQuoteLine> lines,
         string destination,
         decimal cbm,
-        decimal routeDestinationCostPerCbm)
+        decimal routeDestinationCostPerCbm,
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale)> pricingLines)
     {
         if (destination == "PA")
         {
-            AddLine(lines, "Destination Charge", "CBM", cbm, routeDestinationCostPerCbm, 20m);
-            AddLine(lines, "DMCE", "HBL", 1, 65m, 65m);
-            AddLine(lines, "Handling", "HBL", 1, 25m, 25m);
-            AddLine(lines, "Zone Charge", "HBL", 1, 30m, 30m);
+            AddConfiguredLine(lines, pricingLines, "PA_DESTINATION_CHARGE", cbm, routeDestinationCostPerCbm);
+            AddConfiguredLine(lines, pricingLines, "PA_DMCE", 1);
+            AddConfiguredLine(lines, pricingLines, "PA_HANDLING", 1);
+            AddConfiguredLine(lines, pricingLines, "PA_ZONE", 1);
             return;
         }
 
         if (destination == "CR")
         {
-            AddLine(lines, "Manejos", "HBL", 1, 65m, 65m);
-            AddLine(lines, "Zone Charge", "HBL", 1, 50m, 50m);
+            AddConfiguredLine(lines, pricingLines, "CR_HANDLING", 1);
+            AddConfiguredLine(lines, pricingLines, "CR_ZONE", 1);
             return;
         }
 
-        // The variable Centroamérica costs are already part of routeCostPerCbm.
-        // These are the flat FOB destination-sale lines shown in the supplied sheets.
-        AddLine(lines, "Documentación", "HBL", 1, 0m, 65m);
-        AddLine(lines, "Zone Charge", "HBL", 1, 0m, 65m);
-        AddLine(lines, "Manejos destino", "HBL", 1, 0m, 50m);
+        AddConfiguredLine(lines, pricingLines, "CA_DOCUMENTATION", 1);
+        AddConfiguredLine(lines, pricingLines, "CA_ZONE", 1);
+        AddConfiguredLine(lines, pricingLines, "CA_HANDLING", 1);
     }
 
     private static void AddOriginLines(
@@ -357,20 +359,35 @@ public static class OwnLclRouteMatrixV2Endpoints
         int sets,
         int hbl,
         decimal pickupCost,
-        decimal pickupSale)
+        decimal pickupSale,
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale)> pricingLines)
     {
         if (incoterm == "FOB") return;
 
-        // FCA/EXW origin handling from the CNCA sheets. EXW additionally gets pickup.
-        AddLine(lines, "CFS", "CBM", cbm, 8m, 8m);
-        AddLine(lines, "WHSE FEE", "CBM", cbm, 12m, 12m);
-        AddLine(lines, "CUSTOMS", "SET", sets, 15m, 25m);
-        AddLine(lines, "DOC FEE", "HBL", hbl, 15m, 65m);
-        AddLine(lines, "VGM", "HBL", hbl, 0m, 25m);
-        AddLine(lines, "MANIFEST", "HBL", hbl, 15m, 25m);
+        AddConfiguredLine(lines, pricingLines, "ORIGIN_CFS", cbm);
+        AddConfiguredLine(lines, pricingLines, "ORIGIN_WHSE", cbm);
+        AddConfiguredLine(lines, pricingLines, "ORIGIN_CUSTOMS", sets);
+        AddConfiguredLine(lines, pricingLines, "ORIGIN_DOC", hbl);
+        AddConfiguredLine(lines, pricingLines, "ORIGIN_VGM", hbl);
+        AddConfiguredLine(lines, pricingLines, "ORIGIN_MANIFEST", hbl);
 
         if (incoterm == "EXW")
             AddLine(lines, "Recolecta", "Flat", 1, Math.Max(0m, pickupCost), Math.Max(0m, pickupSale));
+    }
+
+    private static void AddConfiguredLine(
+        List<OwnLclQuoteLine> lines,
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale)> pricingLines,
+        string lineKey,
+        decimal quantity,
+        decimal? fallbackCost = null)
+    {
+        var definition = OwnLclPricingLineCatalog.Find(lineKey)
+            ?? throw new InvalidOperationException($"Línea LCL propia desconocida: {lineKey}.");
+        var hasStored = pricingLines.TryGetValue(lineKey, out var stored);
+        var cost = hasStored ? stored.Cost : definition.DefaultCostUnit ?? fallbackCost ?? 0m;
+        var sale = hasStored ? stored.Sale : definition.DefaultSaleUnit;
+        AddLine(lines, definition.Name, definition.ChargeBasis, quantity, cost, sale);
     }
 
     private static void AddLine(
@@ -390,6 +407,27 @@ public static class OwnLclRouteMatrixV2Endpoints
             quantity * costUnit,
             quantity * saleUnit,
             quantity * (saleUnit - costUnit)));
+    }
+
+    private static async Task<Dictionary<string, (decimal Cost, decimal Sale)>> LoadPricingLineOverridesAsync(
+        Guid consolidationId,
+        ServiceDbContext db,
+        CancellationToken ct)
+    {
+        var result = new Dictionary<string, (decimal Cost, decimal Sale)>(StringComparer.OrdinalIgnoreCase);
+        var connection = db.Database.GetDbConnection();
+        await EnsureOpenAsync(connection, ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT line_key, cost_unit, sale_unit
+            FROM pricing."OwnLclConsolidationPricingLines"
+            WHERE consolidation_id=@id;
+            """;
+        Add(command, "id", consolidationId);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            result[reader.GetString(0)] = (reader.GetDecimal(1), reader.GetDecimal(2));
+        return result;
     }
 
     private static async Task<decimal?> LoadHistoricalSaleAsync(

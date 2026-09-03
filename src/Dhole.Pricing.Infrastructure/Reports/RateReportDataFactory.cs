@@ -24,6 +24,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var commercialTerms = ExclusiveCommercialTerms(rate.Includes, rate.SubjectTo, rate.Excludes);
         var originOfficePublicUrl = CreateOriginOfficePublicUrl(rate);
         var originOfficeQrDataUri = CreateQrDataUri(originOfficePublicUrl);
+        var showCarrier = rate.ShipmentMode != ShipmentMode.Lcl;
 
         var containers = (rate.RateContainers.Count > 0
                 ? rate.RateContainers
@@ -129,7 +130,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 idtraNumber = Text(rate.IdtraNumber, string.Empty),
                 clientName = Text(rate.ClientName),
                 agent = Text(rate.AgentName, "No asignado"),
-                carrier = Text(rate.CarrierName, "No asignada"),
+                carrier = showCarrier ? Text(rate.CarrierName, "No asignada") : string.Empty,
+                showCarrier,
                 pol = rate.PolName,
                 poe = rate.PoeName,
                 pod = rate.PodName,
