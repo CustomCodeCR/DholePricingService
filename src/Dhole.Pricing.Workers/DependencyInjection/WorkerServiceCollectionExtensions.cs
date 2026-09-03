@@ -62,11 +62,8 @@ public static class WorkerServiceCollectionExtensions
     private static IServiceCollection AddPricingCacheServices(this IServiceCollection services)
     {
         services.AddScoped<ICostCacheService, CostCacheService>();
-
         services.AddScoped<IImportRateCacheService, ImportRateCacheService>();
-
         services.AddScoped<IRateHeaderCacheService, RateHeaderCacheService>();
-
         return services;
     }
 
@@ -75,13 +72,9 @@ public static class WorkerServiceCollectionExtensions
     )
     {
         services.AddScoped<ICostChangeSnapshotWriter, CostChangeSnapshotWriter>();
-
         services.AddScoped<IImportFclRateChangeSnapshotWriter, ImportFclRateChangeSnapshotWriter>();
-
         services.AddScoped<IRateDetailChangeSnapshotWriter, RateDetailChangeSnapshotWriter>();
-
         services.AddScoped<IRateHeaderChangeSnapshotWriter, RateHeaderChangeSnapshotWriter>();
-
         return services;
     }
 
@@ -92,14 +85,10 @@ public static class WorkerServiceCollectionExtensions
     {
         services.AddCustomCodeMessaging(configuration);
         services.AddCustomCodeMessagingOutbox(configuration);
-
         services.AddCustomCodeOutboxProcessor<OutboxProcessor>();
-
         services.AddCustomCodeInboxProcessor<InboxProcessor>();
-
         services.AddCustomCodeMessagingOutboxHostedServices();
         services.AddCustomCodeRedisStreamConsumerBackgroundService();
-
         return services;
     }
 
@@ -109,22 +98,16 @@ public static class WorkerServiceCollectionExtensions
         services.AddImportRateCacheStreamHandlers();
         services.AddRateHeaderCacheStreamHandlers();
         services.AddCustomCodeRedisStreamHandler<PricingImportFromExtractionRequestedStreamHandler>();
-
         return services;
     }
 
     private static IServiceCollection AddCostCacheStreamHandlers(this IServiceCollection services)
     {
         services.AddCustomCodeRedisStreamHandler<CostCreatedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<CostUpdatedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<CostDeletedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<CostActivatedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<CostInactivatedStreamHandler>();
-
         return services;
     }
 
@@ -133,15 +116,10 @@ public static class WorkerServiceCollectionExtensions
     )
     {
         services.AddCustomCodeRedisStreamHandler<ImportFclRateCreatedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<ImportFclRateApprovedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<ImportFclRateRejectedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<ImportFclRateCreatedAsRateStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<ImportFclRateDeletedStreamHandler>();
-
         return services;
     }
 
@@ -150,23 +128,14 @@ public static class WorkerServiceCollectionExtensions
     )
     {
         services.AddCustomCodeRedisStreamHandler<RateHeaderCreatedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<RateHeaderUpdatedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<RateHeaderDeletedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<RateHeaderAmountsChangedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<RateHeaderApprovedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<RateHeaderRejectedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<RateDetailAddedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<RateDetailUpdatedStreamHandler>();
-
         services.AddCustomCodeRedisStreamHandler<RateDetailRemovedStreamHandler>();
-
         return services;
     }
 
@@ -177,10 +146,6 @@ public static class WorkerServiceCollectionExtensions
     {
         services.AddCustomCodeWorkers(configuration);
 
-        // El warmup completo replica grandes colecciones de Pricing en memoria y Redis.
-        // Se deja opt-in porque los handlers ya cargan el cache de forma perezosa cuando
-        // existe un miss. En bases con historiales grandes ejecutar este worker al iniciar
-        // puede provocar un pico de memoria suficiente para activar el OOM killer.
         if (configuration.GetValue<bool>("Pricing:CacheWarmup:Enabled"))
         {
             services.AddCustomCodePeriodicWorker<PricingCacheWarmupWorker>();
@@ -188,6 +153,7 @@ public static class WorkerServiceCollectionExtensions
 
         services.AddCustomCodePeriodicWorker<PricingImportFromExtractionWorker>();
         services.AddCustomCodePeriodicWorker<PricingRateExpirationWorker>();
+        services.AddCustomCodePeriodicWorker<PricingRateRequestSlaWorker>();
 
         return services;
     }
