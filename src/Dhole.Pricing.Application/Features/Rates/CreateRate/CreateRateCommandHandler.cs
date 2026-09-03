@@ -592,8 +592,11 @@ public sealed class CreateRateCommandHandler(
             ];
         }
 
-        var primary = containers[0];
-        var totalQuantity = containers.Sum(x => x.Quantity);
+        var isLcl = command.ShipmentMode == ShipmentMode.Lcl;
+        var primary = isLcl
+            ? new RateContainerAllocationSpec(command.ContainerTypeId, "LCL", "LCL", 0)
+            : containers[0];
+        var totalQuantity = isLcl ? 0 : containers.Sum(x => x.Quantity);
 
         var rate = RateHeader.Create(
             rateCode,
@@ -637,7 +640,8 @@ public sealed class CreateRateCommandHandler(
             command.CreatedBy
         );
 
-        rate.ReplaceContainerAllocations(containers, command.CreatedBy);
+        if (!isLcl)
+            rate.ReplaceContainerAllocations(containers, command.CreatedBy);
         return rate;
     }
 
