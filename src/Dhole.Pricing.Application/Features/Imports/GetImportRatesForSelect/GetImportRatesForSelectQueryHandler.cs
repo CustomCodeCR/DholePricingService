@@ -15,11 +15,57 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         CancellationToken cancellationToken = default
     )
     {
-        var exactResult = await importRates.GetForSelectAsync(
+        var approvedExact = await GetExactAsync(query, ImportStatus.Approved, cancellationToken);
+        var preAuthorizedExact = await GetExactAsync(query, ImportStatus.PreAuthorized, cancellationToken);
+
+        var exact = approvedExact
+            .Concat(preAuthorizedExact)
+            .Where(IsSelectableStatus)
+            .GroupBy(x => x.Id)
+            .Select(group => group.First())
+            .OrderBy(x => StatusPriority(x.Status))
+            .ThenBy(x => x.Freight)
+            .ThenByDescending(x => x.ValidTo)
+            .ToArray();
+
+        if (exact.Length > 0)
+            return Result.Success<IReadOnlyCollection<ImportRateSelectDto>>(exact);
+
+        // Si no hay coincidencia estricta, el wizard todavía debe poder proponer
+        // tarifas aprobadas o preautorizadas vigentes. El fallback mantiene POL +
+        // POE, tolera POD sin asignar y normaliza equipos como 40HC/40 High Cube.
+        var approvedFallback = await GetFallbackAsync(query, ImportStatus.Approved, cancellationToken);
+        var preAuthorizedFallback = await GetFallbackAsync(query, ImportStatus.PreAuthorized, cancellationToken);
+        var requestedDate = query.QuoteDate?.Date;
+
+        var fallback = approvedFallback
+            .Concat(preAuthorizedFallback)
+            .Where(x => IsSelectableStatus(x.Status))
+            .Where(x => EquipmentMatches(query.ContainerType, x.ContainerType, x.ContainerTypeCode))
+            .Where(x => PodMatchesOrIsUnassigned(query.Pod, x.Pod, x.PodCode, x.PodId))
+            .Where(x => !requestedDate.HasValue || x.ValidTo.Date >= requestedDate.Value)
+            .GroupBy(x => x.Id)
+            .Select(group => group.First())
+            .OrderBy(x => StatusPriority(x.Status))
+            .ThenBy(x => x.ValidFrom)
+            .ThenBy(x => x.Freight)
+            .Take(100)
+            .Select(ToSelectDto)
+            .ToArray();
+
+        return Result.Success<IReadOnlyCollection<ImportRateSelectDto>>(fallback);
+    }
+
+    private async Task<IReadOnlyCollection<ImportRateSelectDto>> GetExactAsync(
+        GetImportRatesForSelectQuery query,
+        ImportStatus status,
+        CancellationToken cancellationToken)
+    {
+        return await importRates.GetForSelectAsync(
             query.Search,
             query.ImportBatchId,
             query.SourceType,
-            ImportStatus.Approved,
+            status,
             query.Agent,
             query.Carrier,
             query.Pol,
@@ -30,23 +76,19 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             query.QuoteDate,
             cancellationToken
         );
+    }
 
-        IReadOnlyCollection<ImportRateSelectDto> exactApproved = exactResult
-            .Where(x => string.Equals(x.Status, nameof(ImportStatus.Approved), StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-
-        if (exactApproved.Count > 0)
-            return Result.Success(exactApproved);
-
-        // Si no hay coincidencia estricta, el wizard todavía debe poder proponer una
-        // tarifa aprobada que ya fue recibida y no ha vencido. El fallback mantiene
-        // POL + POE, tolera POD sin asignar y normaliza equipos como 40HC/40 High Cube.
-        var fallbackPage = await importRates.GetPagedAsync(
+    private async Task<IReadOnlyCollection<ImportRateDto>> GetFallbackAsync(
+        GetImportRatesForSelectQuery query,
+        ImportStatus status,
+        CancellationToken cancellationToken)
+    {
+        var page = await importRates.GetPagedAsync(
             PageRequest.Create(1, 100),
             query.Search,
             query.ImportBatchId,
             query.SourceType,
-            ImportStatus.Approved,
+            status,
             query.Agent,
             query.Carrier,
             query.Pol,
@@ -60,20 +102,17 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             cancellationToken: cancellationToken
         );
 
-        var requestedDate = query.QuoteDate?.Date;
-        var fallbackApproved = fallbackPage.Items
-            .Where(x => string.Equals(x.Status, nameof(ImportStatus.Approved), StringComparison.OrdinalIgnoreCase))
-            .Where(x => EquipmentMatches(query.ContainerType, x.ContainerType, x.ContainerTypeCode))
-            .Where(x => PodMatchesOrIsUnassigned(query.Pod, x.Pod, x.PodCode, x.PodId))
-            .Where(x => !requestedDate.HasValue || x.ValidTo.Date >= requestedDate.Value)
-            .OrderBy(x => x.ValidFrom)
-            .ThenBy(x => x.Freight)
-            .Take(100)
-            .Select(ToSelectDto)
-            .ToArray();
-
-        return Result.Success<IReadOnlyCollection<ImportRateSelectDto>>(fallbackApproved);
+        return page.Items;
     }
+
+    private static bool IsSelectableStatus(ImportRateSelectDto rate) => IsSelectableStatus(rate.Status);
+
+    private static bool IsSelectableStatus(string? status) =>
+        string.Equals(status, nameof(ImportStatus.Approved), StringComparison.OrdinalIgnoreCase)
+        || string.Equals(status, nameof(ImportStatus.PreAuthorized), StringComparison.OrdinalIgnoreCase);
+
+    private static int StatusPriority(string? status) =>
+        string.Equals(status, nameof(ImportStatus.Approved), StringComparison.OrdinalIgnoreCase) ? 0 : 1;
 
     private static ImportRateSelectDto ToSelectDto(ImportRateDto rate) =>
         new(
