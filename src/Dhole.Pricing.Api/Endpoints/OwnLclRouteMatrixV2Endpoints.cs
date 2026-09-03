@@ -372,7 +372,7 @@ public static class OwnLclRouteMatrixV2Endpoints
         AddConfiguredLine(lines, pricingLines, "ORIGIN_MANIFEST", hbl);
 
         if (incoterm == "EXW")
-            AddLine(lines, "Recolecta", "Flat", 1, Math.Max(0m, pickupCost), Math.Max(0m, pickupSale));
+            AddConfiguredLine(lines, pricingLines, "ORIGIN_PICK_UP", 1);
     }
 
     private static void AddConfiguredLine(
