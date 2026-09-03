@@ -1,0 +1,39 @@
+name: Apply LCL route pickup matrix
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - .github/workflows/apply-lcl-route-pickup-matrix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+      - name: Use consolidation PICK UP row
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/Dhole.Pricing.Api/Endpoints/OwnLclRouteMatrixV2Endpoints.cs')
+          text = path.read_text()
+          old = '''        if (incoterm == "EXW")\n            AddLine(lines, "Recolecta", "Flat", 1, Math.Max(0m, pickupCost), Math.Max(0m, pickupSale));'''
+          new = '''        if (incoterm == "EXW")\n            AddConfiguredLine(lines, pricingLines, "ORIGIN_PICK_UP", 1);'''
+          if text.count(old) != 1:
+              raise SystemExit(f'PICK UP route anchor count={text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git diff --check
+      - name: Commit route matrix fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Dhole.Pricing.Api/Endpoints/OwnLclRouteMatrixV2Endpoints.cs
+          git commit -m "fix(pricing): use consolidation PICK UP in LCL route matrix"
+          git push origin HEAD:develop
