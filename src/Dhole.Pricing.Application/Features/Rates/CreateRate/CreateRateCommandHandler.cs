@@ -596,7 +596,9 @@ public sealed class CreateRateCommandHandler(
         var primary = isLcl
             ? new RateContainerAllocationSpec(command.ContainerTypeId, "LCL", "LCL", 0)
             : containers[0];
-        var totalQuantity = isLcl ? 0 : containers.Sum(x => x.Quantity);
+        // RateHeader mantiene una cantidad positiva como invariante histórica. Para LCL la
+        // unidad comercial real se recalcula inmediatamente en ConfigureShipment usando CBM.
+        var totalQuantity = isLcl ? 1 : containers.Sum(x => x.Quantity);
 
         var rate = RateHeader.Create(
             rateCode,
