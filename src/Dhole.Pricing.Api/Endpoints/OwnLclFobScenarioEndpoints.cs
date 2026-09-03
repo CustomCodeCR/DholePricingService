@@ -321,7 +321,7 @@ public static class OwnLclFobScenarioEndpoints
 
         await using (var lookup = connection.CreateCommand())
         {
-            lookup.CommandText = "SELECT 1 FROM pricing."OwnLclConsolidations" WHERE id=@id AND is_active=TRUE LIMIT 1;";
+            lookup.CommandText = """SELECT 1 FROM pricing."OwnLclConsolidations" WHERE id=@id AND is_active=TRUE LIMIT 1;""";
             Add(lookup, "id", id);
             if (await lookup.ExecuteScalarAsync(ct) is null) return Results.NotFound();
         }
