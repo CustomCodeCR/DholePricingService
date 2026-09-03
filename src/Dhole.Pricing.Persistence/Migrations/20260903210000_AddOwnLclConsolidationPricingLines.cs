@@ -36,6 +36,6 @@ public sealed class AddOwnLclConsolidationPricingLines : Migration
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.Sql("DROP TABLE IF EXISTS pricing."OwnLclConsolidationPricingLines";");
+        migrationBuilder.Sql("""DROP TABLE IF EXISTS pricing."OwnLclConsolidationPricingLines";""");
     }
 }
