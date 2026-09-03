@@ -48,6 +48,7 @@ public static class PricingConstants
         public const string ImportFclRateApprove = "pricing.import-fcl-rate.approve";
         public const string ImportFclRateReject = "pricing.import-fcl-rate.reject";
         public const string ImportFclRateCreateAsRate = "pricing.import-fcl-rate.create-as-rate";
+        public const string OwnLclConsolidationCreate = "pricing.own-lcl-consolidation.create";
         public const string RateCreate = "pricing.rate.create";
         public const string RateView = "pricing.rate.view";
         public const string RateUpdate = "pricing.rate.update";
