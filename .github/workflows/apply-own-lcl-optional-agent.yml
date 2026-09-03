@@ -26,88 +26,68 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
-          def replace_once(path: str, old: str, new: str, label: str):
-              file = Path(path)
-              text = file.read_text()
+          def rep(path, old, new, label):
+              p = Path(path)
+              text = p.read_text()
               count = text.count(old)
               if count != 1:
                   raise SystemExit(f"{path}: expected one {label} anchor, found {count}")
-              file.write_text(text.replace(old, new, 1))
+              p.write_text(text.replace(old, new, 1))
 
-          create_handler = 'src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs'
-          update_handler = 'src/Dhole.Pricing.Application/Features/Rates/UpdateRate/UpdateRateCommandHandler.cs'
-          update_request = 'src/Dhole.Pricing.Contracts/Rates/Request/UpdateRateRequest.cs'
-          rate_endpoints = 'src/Dhole.Pricing.Api/Endpoints/RateEndpoints.cs'
+          create = 'src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs'
+          update = 'src/Dhole.Pricing.Application/Features/Rates/UpdateRate/UpdateRateCommandHandler.cs'
+          request = 'src/Dhole.Pricing.Contracts/Rates/Request/UpdateRateRequest.cs'
+          endpoints = 'src/Dhole.Pricing.Api/Endpoints/RateEndpoints.cs'
 
-          replace_once(
-              create_handler,
+          rep(create,
               ') : ICommandHandler<CreateRateCommand, Result<Guid>>\n{\n    public async Task<Result<Guid>> HandleAsync(',
-              ') : ICommandHandler<CreateRateCommand, Result<Guid>>\n{\n    // LCL propio no utiliza un agente externo. Este identificador interno mantiene\n    // compatibilidad con el esquema legado de RateHeader sin obligar al usuario\n    // a seleccionar un agente que no existe en esta operación.\n    private static readonly Guid OwnLclInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c41");\n    private const string OwnLclInternalAgentName = "Grupo Castro Fallas";\n    private const string OwnLclInternalAgentCode = "GCF";\n\n    public async Task<Result<Guid>> HandleAsync(',
-              'create handler constants',
-          )
+              ') : ICommandHandler<CreateRateCommand, Result<Guid>>\n{\n    // LCL propio no utiliza un agente externo. El marcador interno mantiene\n    // compatibilidad con RateHeader sin obligar a seleccionar un agente.\n    private static readonly Guid OwnLclInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c41");\n    private const string OwnLclInternalAgentName = "Grupo Castro Fallas";\n    private const string OwnLclInternalAgentCode = "GCF";\n\n    public async Task<Result<Guid>> HandleAsync(',
+              'create constants')
 
-          replace_once(
-              create_handler,
+          rep(create,
               '    {\n        // Los Id de catálogo son la única entrada confiable. Todos los snapshots usados por\n',
               '    {\n        var ownLclWithoutAgent =\n            command.ShipmentMode == ShipmentMode.Lcl\n            && (!command.AgentId.HasValue || command.AgentId.Value == Guid.Empty)\n            && (\n                string.Equals(command.AgentCode, OwnLclInternalAgentCode, StringComparison.OrdinalIgnoreCase)\n                || string.Equals(command.AgentName, OwnLclInternalAgentName, StringComparison.OrdinalIgnoreCase)\n            );\n\n        // Los Id de catálogo son la única entrada confiable. Todos los snapshots usados por\n',
-              'create own LCL detection',
-          )
+              'create detection')
 
-          replace_once(
-              create_handler,
+          rep(create,
               '''            var agent = await configCatalog.GetActiveInGroupAsync(\n                command.AgentId,\n                PricingConstants.CatalogSlugs.Agents,\n                cancellationToken\n            );\n            if (command.AgentId.HasValue && command.AgentId.Value != Guid.Empty && agent is null)\n                return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(\n                    "El agente", PricingConstants.CatalogSlugs.Agents));\n''',
-              '''            PricingConfigCatalogItem? agent = null;\n            if (!ownLclWithoutAgent)\n            {\n                if (!command.AgentId.HasValue || command.AgentId.Value == Guid.Empty)\n                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(\n                        "El agente", PricingConstants.CatalogSlugs.Agents));\n\n                agent = await configCatalog.GetActiveInGroupAsync(\n                    command.AgentId,\n                    PricingConstants.CatalogSlugs.Agents,\n                    cancellationToken\n                );\n                if (agent is null)\n                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(\n                        "El agente", PricingConstants.CatalogSlugs.Agents));\n            }\n''',
-              'create agent resolution',
-          )
+              '''            PricingConfigCatalogItem? agent = null;\n            if (!ownLclWithoutAgent)\n            {\n                if (!command.AgentId.HasValue || command.AgentId.Value == Guid.Empty)\n                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(\n                        "El agente", PricingConstants.CatalogSlugs.Agents));\n\n                agent = await configCatalog.GetActiveInGroupAsync(\n                    command.AgentId, PricingConstants.CatalogSlugs.Agents, cancellationToken);\n                if (agent is null)\n                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(\n                        "El agente", PricingConstants.CatalogSlugs.Agents));\n            }\n''',
+              'create agent resolution')
 
-          replace_once(
-              create_handler,
+          rep(create,
               '''                AgentId = agent?.Id,\n                AgentName = agent?.SnapshotName(),\n                AgentCode = agent?.Code,\n''',
               '''                AgentId = ownLclWithoutAgent ? OwnLclInternalAgentId : agent?.Id,\n                AgentName = ownLclWithoutAgent ? OwnLclInternalAgentName : agent?.SnapshotName(),\n                AgentCode = ownLclWithoutAgent ? OwnLclInternalAgentCode : agent?.Code,\n''',
-              'create normalized agent',
-          )
+              'create normalization')
 
-          replace_once(
-              update_handler,
+          rep(update,
               ') : ICommandHandler<UpdateRateCommand, Result>\n{\n    public async Task<Result> HandleAsync(',
               ') : ICommandHandler<UpdateRateCommand, Result>\n{\n    private static readonly Guid OwnLclInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c41");\n    private const string OwnLclInternalAgentName = "Grupo Castro Fallas";\n    private const string OwnLclInternalAgentCode = "GCF";\n\n    public async Task<Result> HandleAsync(',
-              'update handler constants',
-          )
+              'update constants')
 
-          replace_once(
-              update_handler,
+          rep(update,
               '''        if (rate.SourceImportFclRateId.HasValue && command.ShipmentMode != ShipmentMode.Fcl)\n            return Result.Failure(PricingErrors.RateImportedStructureLocked);\n\n        // Rehidratamos todos los selectores desde Config. De esta manera cambiar naviera,\n''',
               '''        if (rate.SourceImportFclRateId.HasValue && command.ShipmentMode != ShipmentMode.Fcl)\n            return Result.Failure(PricingErrors.RateImportedStructureLocked);\n\n        var ownLclWithoutAgent = command.ShipmentMode == ShipmentMode.Lcl && (\n            command.AgentId == OwnLclInternalAgentId\n            || rate.AgentId == OwnLclInternalAgentId\n            || (\n                command.AgentId == Guid.Empty\n                && (\n                    string.Equals(command.AgentCode, OwnLclInternalAgentCode, StringComparison.OrdinalIgnoreCase)\n                    || string.Equals(command.AgentName, OwnLclInternalAgentName, StringComparison.OrdinalIgnoreCase)\n                )\n            )\n        );\n\n        // Rehidratamos todos los selectores desde Config. De esta manera cambiar naviera,\n''',
-              'update own LCL detection',
-          )
+              'update detection')
 
-          replace_once(
-              update_handler,
+          rep(update,
               '''            var agent = await configCatalog.GetActiveInGroupAsync(\n                command.AgentId, PricingConstants.CatalogSlugs.Agents, cancellationToken);\n            if (agent is null)\n                return Result.Failure(PricingErrors.InvalidConfigCatalogReference(\n                    "El agente", PricingConstants.CatalogSlugs.Agents));\n''',
-              '''            PricingConfigCatalogItem? agent = null;\n            var requestedCatalogAgent =\n                command.AgentId != Guid.Empty\n                && command.AgentId != OwnLclInternalAgentId;\n\n            if (requestedCatalogAgent)\n            {\n                agent = await configCatalog.GetActiveInGroupAsync(\n                    command.AgentId, PricingConstants.CatalogSlugs.Agents, cancellationToken);\n                if (agent is null)\n                    return Result.Failure(PricingErrors.InvalidConfigCatalogReference(\n                        "El agente", PricingConstants.CatalogSlugs.Agents));\n            }\n            else if (!ownLclWithoutAgent)\n            {\n                return Result.Failure(PricingErrors.InvalidConfigCatalogReference(\n                    "El agente", PricingConstants.CatalogSlugs.Agents));\n            }\n''',
-              'update agent resolution',
-          )
+              '''            PricingConfigCatalogItem? agent = null;\n            var requestedCatalogAgent = command.AgentId != Guid.Empty\n                && command.AgentId != OwnLclInternalAgentId;\n            if (requestedCatalogAgent)\n            {\n                agent = await configCatalog.GetActiveInGroupAsync(\n                    command.AgentId, PricingConstants.CatalogSlugs.Agents, cancellationToken);\n                if (agent is null)\n                    return Result.Failure(PricingErrors.InvalidConfigCatalogReference(\n                        "El agente", PricingConstants.CatalogSlugs.Agents));\n            }\n            else if (!ownLclWithoutAgent)\n            {\n                return Result.Failure(PricingErrors.InvalidConfigCatalogReference(\n                    "El agente", PricingConstants.CatalogSlugs.Agents));\n            }\n''',
+              'update agent resolution')
 
-          replace_once(
-              update_handler,
+          rep(update,
               '''                AgentId = agent.Id,\n                AgentName = agent.SnapshotName(),\n                AgentCode = agent.Code,\n''',
               '''                AgentId = agent?.Id ?? OwnLclInternalAgentId,\n                AgentName = agent?.SnapshotName() ?? OwnLclInternalAgentName,\n                AgentCode = agent?.Code ?? OwnLclInternalAgentCode,\n''',
-              'update normalized agent',
-          )
+              'update normalization')
 
-          replace_once(
-              update_request,
-              '''    Guid AgentId,\n    string AgentName,\n    string AgentCode,\n''',
-              '''    Guid? AgentId,\n    string? AgentName,\n    string? AgentCode,\n''',
-              'nullable update agent request',
-          )
+          rep(request,
+              '    Guid AgentId,\n    string AgentName,\n    string AgentCode,\n',
+              '    Guid? AgentId,\n    string? AgentName,\n    string? AgentCode,\n',
+              'nullable update request')
 
-          replace_once(
-              rate_endpoints,
-              '''                request.AgentId,\n                request.AgentName,\n                request.AgentCode,\n                request.CarrierId,\n''',
-              '''                request.AgentId ?? Guid.Empty,\n                request.AgentName ?? string.Empty,\n                request.AgentCode ?? string.Empty,\n                request.CarrierId,\n''',
-              'update endpoint nullable agent bridge',
-          )
+          rep(endpoints,
+              '''            new UpdateRateCommand(\n                rateId,\n                request.AgentId,\n                request.AgentName,\n                request.AgentCode,\n                request.CarrierId,\n''',
+              '''            new UpdateRateCommand(\n                rateId,\n                request.AgentId ?? Guid.Empty,\n                request.AgentName ?? string.Empty,\n                request.AgentCode ?? string.Empty,\n                request.CarrierId,\n''',
+              'update endpoint bridge')
           PY
 
           git diff --check
