@@ -255,12 +255,19 @@ public sealed class RateFixedCostSynchronizer(
 
         return rate.RateDetails.Any(detail =>
         {
-            if (detail.CostDetailType != CostDetailType.Freight || detail.CostId.HasValue)
+            if (detail.CostId.HasValue)
                 return false;
 
             var marker = NormalizeRouteText($"{detail.Name} {detail.Notes}");
-            return marker.Contains("LCL PROPIO", StringComparison.Ordinal)
-                || marker.Contains("CONSOLIDADO PROPIO", StringComparison.Ordinal);
+            if (marker.Contains("LCL PROPIO", StringComparison.Ordinal)
+                || marker.Contains("CONSOLIDADO PROPIO", StringComparison.Ordinal))
+                return true;
+
+            // Las líneas calculadas por OwnLclConsolidationEndpoints conservan esta nota
+            // para bases HBL/SET. Es la señal de que la tarifa viene exclusivamente de la
+            // matriz Excel del consolidado propio y no debe mezclarse con Costos y recargos.
+            return detail.CostType == CostType.Variable
+                && marker.Contains("BASE DEL EXCEL", StringComparison.Ordinal);
         });
     }
 
