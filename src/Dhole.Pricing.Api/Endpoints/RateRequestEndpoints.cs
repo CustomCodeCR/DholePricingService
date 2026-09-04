@@ -85,7 +85,7 @@ public static class RateRequestEndpoints
 
         // La solicitud ya quedó registrada. La notificación se encola después para que una
         // indisponibilidad temporal de Auth/Notifications no provoque duplicados por reintento
-        // del vendedor. El outbox la entrega a Notifications y de ahí a SignalR.
+        // del vendedor. El outbox la entrega a Notifications y de ahí a SignalR y correo.
         try
         {
             await QueuePricingRealtimeNotificationAsync(
@@ -100,7 +100,7 @@ public static class RateRequestEndpoints
         {
             loggerFactory.CreateLogger("RateRequestNotifications").LogError(
                 exception,
-                "La solicitud {RateRequestId} fue creada, pero no se pudo encolar la alerta en tiempo real para Pricing.",
+                "La solicitud {RateRequestId} fue creada, pero no se pudieron encolar las alertas para Pricing.",
                 entity.Id
             );
         }
@@ -211,7 +211,7 @@ public static class RateRequestEndpoints
 
         foreach (var recipient in recipients.Where(x => x.UserId != Guid.Empty))
         {
-            var notificationRequest = new
+            var systemNotificationRequest = new
             {
                 notificationType = RateRequestCreatedNotificationType,
                 templateCode = (string?)null,
@@ -236,8 +236,41 @@ public static class RateRequestEndpoints
             await outbox.WriteAsync(
                 NotificationEventName,
                 NotificationEventName,
-                notificationRequest,
+                systemNotificationRequest,
                 correlationId: $"pricing-rate-request:{request.Id:N}:system:{recipient.UserId:N}",
+                cancellationToken: cancellationToken
+            );
+
+            if (string.IsNullOrWhiteSpace(recipient.Email))
+                continue;
+
+            var emailNotificationRequest = new
+            {
+                notificationType = RateRequestCreatedNotificationType,
+                templateCode = (string?)null,
+                channel = "Email",
+                entityType = "RateRequest",
+                entityId = request.Id.ToString(),
+                subject,
+                body,
+                payload,
+                maxAttempts = 3,
+                recipients = new[]
+                {
+                    new
+                    {
+                        userId = recipient.UserId.ToString(),
+                        address = recipient.Email,
+                        displayName = recipient.DisplayName ?? recipient.UserName,
+                    },
+                },
+            };
+
+            await outbox.WriteAsync(
+                NotificationEventName,
+                NotificationEventName,
+                emailNotificationRequest,
+                correlationId: $"pricing-rate-request:{request.Id:N}:email:{recipient.UserId:N}",
                 cancellationToken: cancellationToken
             );
         }
