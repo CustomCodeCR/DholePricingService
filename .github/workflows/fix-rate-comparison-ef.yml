@@ -23,10 +23,11 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Restore and build Pricing
+      - name: Restore and build Pricing without manual comparison migration
         env:
           NuGetPackageSourceCredentials_github: Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
         run: |
+          rm -f src/Dhole.Pricing.Persistence/Migrations/20260904023000_AddRateComparisons.cs
           dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile NuGet.Config
           dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj -c Release --no-restore
 
@@ -35,7 +36,6 @@ jobs:
           NuGetPackageSourceCredentials_github: Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
         run: |
           dotnet tool install --global dotnet-ef --version 10.0.9
-          rm -f src/Dhole.Pricing.Persistence/Migrations/20260904023000_AddRateComparisons.cs
           dotnet ef migrations add AddRateComparisons \
             --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
             --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
