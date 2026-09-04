@@ -121,6 +121,7 @@ app.MapCommercialTermEndpoints();
 app.MapPricingConfigCatalogEndpoints();
 app.MapDataExtractionImportEndpoints();
 app.MapLogisticsNewsEndpoints();
+// El flujo LCL estándar de producción y los consolidados LCL propios conviven en Pricing.
 app.MapLclEndpoints();
 app.MapOwnLclConsolidationEndpoints();
 app.MapOwnLclRouteMatrixV2Endpoints();
