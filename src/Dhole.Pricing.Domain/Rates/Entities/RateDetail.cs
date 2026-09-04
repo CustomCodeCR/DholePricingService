@@ -1,6 +1,5 @@
 using CustomCodeFramework.Core.Domain.Entities;
 using Dhole.Pricing.Domain.Costs.Enums;
-using Dhole.Pricing.Domain.Rates.Enums;
 
 namespace Dhole.Pricing.Domain.Rates.Entities;
 
@@ -40,8 +39,6 @@ public sealed class RateDetail : Entity<Guid>
         Quantity = quantity;
         UtilityAmount = (saleAmount - costAmount) * quantity;
         Notes = notes;
-        SourceType = InferSourceType(costId, costType);
-        SourceReference = null;
     }
 
     public Guid RateHeaderId { get; private set; }
@@ -58,8 +55,6 @@ public sealed class RateDetail : Entity<Guid>
     public decimal UtilityAmount { get; private set; }
     public string? Notes { get; private set; }
     public decimal Quantity { get; private set; }
-    public RateDetailSourceType SourceType { get; private set; } = RateDetailSourceType.Manual;
-    public string? SourceReference { get; private set; }
     public bool ApplyDestinationTax { get; private set; }
     public decimal DestinationTaxRate { get; private set; }
 
@@ -77,12 +72,6 @@ public sealed class RateDetail : Entity<Guid>
 
         ApplyDestinationTax = applyDestinationTax && destinationTaxRate > 0m;
         DestinationTaxRate = ApplyDestinationTax ? destinationTaxRate : 0m;
-    }
-
-    public void ConfigureSource(RateDetailSourceType sourceType, string? sourceReference = null)
-    {
-        SourceType = sourceType;
-        SourceReference = string.IsNullOrWhiteSpace(sourceReference) ? null : sourceReference.Trim();
     }
 
     internal static RateDetail Create(
@@ -144,15 +133,5 @@ public sealed class RateDetail : Entity<Guid>
         Quantity = quantity;
         UtilityAmount = (saleAmount - costAmount) * quantity;
         Notes = notes;
-        SourceType = InferSourceType(costId, costType);
-        if (SourceType == RateDetailSourceType.CostCatalog) SourceReference = null;
-    }
-
-    private static RateDetailSourceType InferSourceType(Guid? costId, CostType costType)
-    {
-        if (costId.HasValue) return RateDetailSourceType.CostCatalog;
-        return costType == CostType.Fixed
-            ? RateDetailSourceType.ExternalSnapshot
-            : RateDetailSourceType.Manual;
     }
 }
