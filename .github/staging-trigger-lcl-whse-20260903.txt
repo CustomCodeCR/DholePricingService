@@ -1,0 +1,2 @@
+Deploy the own-LCL route-matrix WHSE correction to staging.
+Ningbo and other non-Shanghai China POLs must not add ORIGIN_WHSE.
