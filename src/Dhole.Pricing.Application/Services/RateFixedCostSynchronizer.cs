@@ -28,9 +28,9 @@ public sealed class RateFixedCostSynchronizer(
         CancellationToken cancellationToken = default
     )
     {
-        // En un LCL propio, BaseRatePerCbm ya contiene los costos de la matriz del consolidado.
-        // Las líneas adicionales válidas vienen de las reglas/Excel y no tienen CostId. Por eso
-        // eliminamos cualquier detalle respaldado por la matriz y evitamos resincronizarlo.
+        // LCL propio ya lleva la matriz del consolidado prorrateada dentro del flete/CBM.
+        // En la tarifa comercial solo deben persistir el flete y las líneas adicionales
+        // provenientes de las reglas/Excel, que no están ligadas a CostId.
         if (IsOwnLclRate(rate))
         {
             var configuredDetailIds = rate.RateDetails
@@ -248,11 +248,27 @@ public sealed class RateFixedCostSynchronizer(
         if (rate.ShipmentMode != ShipmentMode.Lcl)
             return false;
 
+        var headerMarker = NormalizeRouteText(rate.RateName);
+        if (headerMarker.Contains("LCL PROPIO", StringComparison.Ordinal)
+            || headerMarker.Contains("CONSOLIDADO PROPIO", StringComparison.Ordinal))
+            return true;
+
         return rate.RateDetails.Any(detail =>
-            detail.CostDetailType == CostDetailType.Freight
-            && !detail.CostId.HasValue
-            && NormalizeRouteText(detail.Name).Contains("LCL PROPIO", StringComparison.Ordinal)
-        );
+        {
+            if (detail.CostId.HasValue)
+                return false;
+
+            var marker = NormalizeRouteText($"{detail.Name} {detail.Notes}");
+            if (marker.Contains("LCL PROPIO", StringComparison.Ordinal)
+                || marker.Contains("CONSOLIDADO PROPIO", StringComparison.Ordinal))
+                return true;
+
+            // Las líneas calculadas por OwnLclConsolidationEndpoints conservan esta nota
+            // para bases HBL/SET. Es la señal de que la tarifa viene exclusivamente de la
+            // matriz Excel del consolidado propio y no debe mezclarse con Costos y recargos.
+            return detail.CostType == CostType.Variable
+                && marker.Contains("BASE DEL EXCEL", StringComparison.Ordinal);
+        });
     }
 
     private static bool MatchesRate(Cost cost, RateHeader rate)

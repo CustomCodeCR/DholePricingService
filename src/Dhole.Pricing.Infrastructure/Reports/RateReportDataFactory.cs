@@ -6,6 +6,7 @@ using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Microsoft.Extensions.Configuration;
+using QRCoder;
 
 namespace Dhole.Pricing.Infrastructure.Reports;
 
@@ -13,13 +14,24 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("en-US");
+    private const string OriginOfficeMessage = "Estos son los datos de Castro Fallas en origen.";
 
     public string CreateDataJson(RateHeader rate)
     {
-        string Money(decimal amount) => $"{rate.CurrencyCode} {amount.ToString("N2", MoneyCulture)}";
         string Text(string? value, string fallback = "No especificado") =>
             string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+        string CurrencyValue(string? name, string? code) =>
+            Text(name, Text(code, "USD"));
+
+        var currencyValue = CurrencyValue(rate.CurrencyName, rate.CurrencyCode);
+        string Money(decimal amount) => $"{currencyValue} {amount.ToString("N2", MoneyCulture)}";
+        string DetailMoney(RateDetail detail, decimal amount) =>
+            $"{CurrencyValue(detail.CurrencyName, detail.CurrencyCode)} {amount.ToString("N2", MoneyCulture)}";
+
         var commercialTerms = ExclusiveCommercialTerms(rate.Includes, rate.SubjectTo, rate.Excludes);
+        var originOfficePublicUrl = CreateOriginOfficePublicUrl(rate);
+        var originOfficeQrDataUri = CreateQrDataUri(originOfficePublicUrl);
+        var showCarrier = rate.ShipmentMode != ShipmentMode.Lcl;
 
         var containers = (rate.RateContainers.Count > 0
                 ? rate.RateContainers
@@ -56,7 +68,25 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             _ => equipmentSummary,
         };
 
+        // Un consolidado LCL propio toma sus líneas comerciales exclusivamente de la matriz
+        // Excel (EXW/FCA/FOB). Los CostId pertenecen al catálogo general "Costos y recargos"
+        // y no deben aparecer ni alterar el PDF, incluso en tarifas antiguas que los guardaron.
+        var ownLclExcelOnly = rate.ShipmentMode == ShipmentMode.Lcl
+            && (
+                string.Equals(rate.AgentCode, "GCF", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(rate.AgentName, "Grupo Castro Fallas", StringComparison.OrdinalIgnoreCase)
+                || rate.RateDetails.Any(detail =>
+                    !detail.CostId.HasValue
+                    && (
+                        (detail.Notes?.Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase) ?? false)
+                        || (detail.Notes?.Contains("Base del Excel", StringComparison.OrdinalIgnoreCase) ?? false)
+                        || detail.Name.Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase)
+                    )
+                )
+            );
+
         var reportDetails = rate.RateDetails
+            .Where(detail => !ownLclExcelOnly || !detail.CostId.HasValue)
             .Where(detail => detail.SaleAmount * detail.Quantity != 0m)
             .OrderBy(x => x.CostDetailType)
             .ThenBy(x => x.Name)
@@ -67,9 +97,11 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             {
                 description = detail.Name,
                 quantity = detail.Quantity,
-                unitSale = Money(detail.SaleAmount),
+                currency = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
+                currencyCode = detail.CurrencyCode,
+                unitSale = DetailMoney(detail, detail.SaleAmount),
                 unitSaleAmount = detail.SaleAmount,
-                lineTotal = Money(detail.SaleAmount * detail.Quantity),
+                lineTotal = DetailMoney(detail, detail.SaleAmount * detail.Quantity),
                 lineTotalAmount = detail.SaleAmount * detail.Quantity,
                 notes = detail.CostDetailType == CostDetailType.Insurance
                     ? string.Empty
@@ -82,7 +114,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             {
                 ["Concepto"] = detail.Name,
                 ["Cantidad"] = detail.Quantity,
-                ["Moneda"] = rate.CurrencyCode,
+                ["Moneda"] = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
                 ["Precio unitario"] = detail.SaleAmount,
                 ["Total"] = detail.SaleAmount * detail.Quantity,
                 ["Notas"] = detail.CostDetailType == CostDetailType.Insurance
@@ -107,6 +139,17 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 date = DateTime.UtcNow.ToString("dd/MM/yyyy"),
                 time = DateTime.UtcNow.ToString("HH:mm")
             },
+            originOffice = new
+            {
+                message = OriginOfficeMessage,
+                polId = rate.PolId,
+                polCode = rate.PolCode,
+                polName = rate.PolName,
+                qrContentType = "text/url",
+                opensInternalSystem = false,
+                publicPageUrl = originOfficePublicUrl,
+                qrDataUri = originOfficeQrDataUri
+            },
             rate = new
             {
                 rateCode = rate.RateCode,
@@ -114,7 +157,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 idtraNumber = Text(rate.IdtraNumber, string.Empty),
                 clientName = Text(rate.ClientName),
                 agent = Text(rate.AgentName, "No asignado"),
-                carrier = Text(rate.CarrierName, "No asignada"),
+                carrier = showCarrier ? Text(rate.CarrierName, "No asignada") : string.Empty,
+                showCarrier,
                 pol = rate.PolName,
                 poe = rate.PoeName,
                 pod = rate.PodName,
@@ -130,14 +174,15 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 totalVolumeCbm = rate.TotalVolumeCbm,
                 kgPerCbm = rate.KgPerCbm,
                 chargeableQuantity = rate.ChargeableQuantity,
-                currency = rate.CurrencyCode,
+                currency = currencyValue,
+                currencyCode = rate.CurrencyCode,
                 freeDays = rate.FreeDays,
                 transitTime = string.IsNullOrWhiteSpace(rate.TransitTime) ? "Por confirmar" : rate.TransitTime,
                 transitDays = rate.TransitTime,
                 validFrom = rate.ValidFrom.ToString("dd/MM/yyyy"),
                 validTo = rate.ValidTo.ToString("dd/MM/yyyy"),
-                total = Money(rate.TotalSaleAmount),
-                totalAmount = rate.TotalSaleAmount,
+                total = Money(reportDetails.Sum(detail => detail.SaleAmount * detail.Quantity)),
+                totalAmount = reportDetails.Sum(detail => detail.SaleAmount * detail.Quantity),
                 includes = commercialTerms.Includes,
                 subjectTo = commercialTerms.SubjectTo,
                 excludes = commercialTerms.Excludes,
@@ -152,6 +197,32 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         };
 
         return JsonSerializer.Serialize(data, JsonOptions);
+    }
+
+    private string CreateOriginOfficePublicUrl(RateHeader rate)
+    {
+        var baseAddress = (configuration["Reports:PublicWebBaseAddress"] ?? "https://dhole.customcodecr.com")
+            .Trim()
+            .TrimEnd('/');
+        var polName = rate.PolName.Trim();
+        var destinationName = !string.IsNullOrWhiteSpace(rate.PodName)
+            ? rate.PodName.Trim()
+            : rate.PoeName.Trim();
+        var routeKey = $"{polName} - {destinationName}";
+
+        return $"{baseAddress}/origin"
+            + $"?pol={Uri.EscapeDataString(polName)}"
+            + $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
+            + $"&route={Uri.EscapeDataString(routeKey)}";
+    }
+
+    private static string CreateQrDataUri(string value)
+    {
+        using var generator = new QRCodeGenerator();
+        using var data = generator.CreateQrCode(value, QRCodeGenerator.ECCLevel.M);
+        var png = new PngByteQRCode(data);
+        var bytes = png.GetGraphic(14);
+        return $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
     }
 
     private static (string Includes, string SubjectTo, string Excludes) ExclusiveCommercialTerms(
@@ -184,6 +255,6 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        return (string.Join('\n', included), string.Join('\n', subject), string.Join('\n', excluded));
+        return (string.Join(", ", included), string.Join(", ", subject), string.Join(", ", excluded));
     }
 }

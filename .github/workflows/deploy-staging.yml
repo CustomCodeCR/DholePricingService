@@ -48,12 +48,31 @@ jobs:
           set -euo pipefail
           CONTAINER_ID="$(docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -f "$COMPOSE_OVERRIDE" -p "$COMPOSE_PROJECT" ps -q pricing-api)"
           test -n "$CONTAINER_ID"
-          for attempt in $(seq 1 18); do
+
+          # Docker health metadata can remain in "starting" for a while after the
+          # API is already serving traffic. Validate the real endpoint as the
+          # source of truth and keep Docker state only for hard failures.
+          for attempt in $(seq 1 24); do
             STATUS="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$CONTAINER_ID")"
-            if [ "$STATUS" = "healthy" ]; then exit 0; fi
-            if [ "$STATUS" = "exited" ] || [ "$STATUS" = "dead" ] || [ "$STATUS" = "unhealthy" ]; then docker logs --tail 200 "$CONTAINER_ID" || true; exit 1; fi
+
+            if [ "$STATUS" = "healthy" ]; then
+              echo "Pricing API is healthy according to Docker."
+              exit 0
+            fi
+
+            if docker exec "$CONTAINER_ID" sh -ec 'curl --fail --silent --show-error --max-time 3 http://127.0.0.1:8080/health >/dev/null'; then
+              echo "Pricing API /health is responding successfully (Docker status: $STATUS)."
+              exit 0
+            fi
+
+            if [ "$STATUS" = "exited" ] || [ "$STATUS" = "dead" ] || [ "$STATUS" = "unhealthy" ]; then
+              docker logs --tail 200 "$CONTAINER_ID" || true
+              exit 1
+            fi
+
             sleep 5
           done
+
           docker logs --tail 200 "$CONTAINER_ID" || true
           exit 1
       - name: Verify pricing client quote report

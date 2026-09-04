@@ -1,0 +1,114 @@
+name: Apply LCL dashboard equipment fix
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - '.github/workflows/apply-lcl-dashboard-equipment-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Patch LCL equipment semantics
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          repo = Path('.')
+
+          # 1) Dashboard: ShipmentMode is the source of truth, never stale FCL metadata.
+          p = repo / 'src/Dhole.Pricing.Persistence/Repositories/RateHeaderRepository.cs'
+          s = p.read_text()
+          old = '''                x.PodName,\n                x.ContainerTypeName,\n                x.CurrencyCode,'''
+          new = '''                x.PodName,\n                x.ContainerTypeName,\n                x.ShipmentMode,\n                x.CurrencyCode,'''
+          if old not in s and 'x.ShipmentMode,\n                x.CurrencyCode' not in s:
+              raise SystemExit('dashboard projection anchor not found')
+          s = s.replace(old, new, 1)
+          old2 = '''                x.PodName,\n                x.ContainerTypeName,\n                x.CurrencyCode,\n                x.TotalUtilityAmount,'''
+          new2 = '''                x.PodName,\n                x.ShipmentMode == ShipmentMode.Lcl ? "LCL" : x.ContainerTypeName,\n                x.CurrencyCode,\n                x.TotalUtilityAmount,'''
+          if old2 not in s and 'x.ShipmentMode == ShipmentMode.Lcl ? "LCL" : x.ContainerTypeName' not in s:
+              raise SystemExit('dashboard dto anchor not found')
+          s = s.replace(old2, new2, 1)
+          p.write_text(s)
+
+          # 2) New manual LCL rates: keep required catalog id internally, but never model LCL as a FCL allocation.
+          p = repo / 'src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs'
+          s = p.read_text()
+          old = '''        var primary = containers[0];\n        var totalQuantity = containers.Sum(x => x.Quantity);\n\n        var rate = RateHeader.Create('''
+          new = '''        var isLcl = command.ShipmentMode == ShipmentMode.Lcl;\n        var primary = isLcl\n            ? new RateContainerAllocationSpec(command.ContainerTypeId, "LCL", "LCL", 0)\n            : containers[0];\n        var totalQuantity = isLcl ? 0 : containers.Sum(x => x.Quantity);\n\n        var rate = RateHeader.Create('''
+          if old not in s and 'var isLcl = command.ShipmentMode == ShipmentMode.Lcl;' not in s:
+              raise SystemExit('CreateManualRate primary anchor not found')
+          s = s.replace(old, new, 1)
+          old2 = '''        rate.ReplaceContainerAllocations(containers, command.CreatedBy);\n        return rate;'''
+          new2 = '''        if (!isLcl)\n            rate.ReplaceContainerAllocations(containers, command.CreatedBy);\n        return rate;'''
+          if old2 not in s and 'if (!isLcl)\n            rate.ReplaceContainerAllocations' not in s:
+              raise SystemExit('CreateManualRate allocation anchor not found')
+          s = s.replace(old2, new2, 1)
+          p.write_text(s)
+
+          # 3) Existing data repair: normalize all LCLs, including QUO 20 and 22.
+          migration = repo / 'src/Dhole.Pricing.Persistence/Migrations/20260903235900_NormalizeLclEquipmentMetadata.cs'
+          if not migration.exists():
+              migration.write_text(r'''using Dhole.Pricing.Persistence.DbContexts;
+          using Microsoft.EntityFrameworkCore.Infrastructure;
+          using Microsoft.EntityFrameworkCore.Migrations;
+
+          #nullable disable
+
+          namespace Dhole.Pricing.Persistence.Migrations;
+
+          [DbContext(typeof(ServiceDbContext))]
+          [Migration("20260903235900_NormalizeLclEquipmentMetadata")]
+          public sealed class NormalizeLclEquipmentMetadata : Migration
+          {
+              protected override void Up(MigrationBuilder migrationBuilder)
+              {
+                  migrationBuilder.Sql(
+                      """
+                      UPDATE pricing."RateHeaders"
+                      SET container_type_name = 'LCL',
+                          container_type_code = 'LCL',
+                          container_quantity = 0,
+                          free_days = 0
+                      WHERE LOWER(shipment_mode) = 'lcl';
+
+                      DELETE FROM pricing."RateContainerAllocations" allocations
+                      USING pricing."RateHeaders" headers
+                      WHERE allocations.rate_header_id = headers.id
+                        AND LOWER(headers.shipment_mode) = 'lcl';
+                      """
+                  );
+              }
+
+              protected override void Down(MigrationBuilder migrationBuilder)
+              {
+                  // Data normalization is intentionally non-reversible.
+              }
+          }
+          ''')
+          PY
+
+      - name: Commit fix
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Dhole.Pricing.Persistence/Repositories/RateHeaderRepository.cs \
+                  src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs \
+                  src/Dhole.Pricing.Persistence/Migrations/20260903235900_NormalizeLclEquipmentMetadata.cs
+          git commit -m 'fix(pricing): represent LCL rates without FCL equipment'
+          git push origin HEAD:develop

@@ -50,7 +50,7 @@ public sealed class ApproveImportRateCommandHandler(
                 return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
             }
 
-            if (importRate.Status is not (ImportStatus.Pending or ImportStatus.Approved))
+            if (importRate.Status is not (ImportStatus.Pending or ImportStatus.PreAuthorized or ImportStatus.Approved))
             {
                 return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
             }
@@ -74,7 +74,7 @@ public sealed class ApproveImportRateCommandHandler(
         }
 
         var pendingEntities = entities
-            .Where(importRate => importRate.Status == ImportStatus.Pending)
+            .Where(importRate => importRate.Status is ImportStatus.Pending or ImportStatus.PreAuthorized)
             .ToArray();
 
         foreach (var importRate in pendingEntities)

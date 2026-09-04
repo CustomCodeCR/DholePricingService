@@ -29,6 +29,12 @@ internal static class PricingScopeNames
     public const string ImportFclRateReject = "pricing.import-fcl-rate.reject";
     public const string ImportFclRateCreateAsRate = "pricing.import-fcl-rate.create-as-rate";
 
+    // Own LCL consolidations
+    public const string OwnLclConsolidationCreate = "pricing.own-lcl-consolidation.create";
+
+    // Seller rate requests
+    public const string RateRequestCreate = "pricing.rate-request.create";
+
     // Rates
     public const string RateCreate = "pricing.rate.create";
     public const string RateView = "pricing.rate.view";

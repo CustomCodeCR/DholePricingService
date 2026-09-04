@@ -13,7 +13,8 @@ public sealed class GenerateRateDocumentCommandHandler(
     IPricingReportsClient reportsClient)
     : ICommandHandler<GenerateRateDocumentCommand, Result<GeneratedRateDocumentDto>>
 {
-    private const string PricingClientQuoteTemplateCode = "pricing-fcl-client-quote";
+    private const string PricingFclClientQuoteTemplateCode = "pricing-fcl-client-quote";
+    private const string PricingLclClientQuoteTemplateCode = "pricing-lcl-client-quote";
 
     public async Task<Result<GeneratedRateDocumentDto>> HandleAsync(
         GenerateRateDocumentCommand command,
@@ -30,9 +31,11 @@ public sealed class GenerateRateDocumentCommandHandler(
         if (format is not ("pdf" or "xlsx" or "csv"))
             return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.UnsupportedReportFormat);
 
-        // La impresión de Pricing usa una única plantilla cliente administrada desde Reports.
-        // No aceptamos que la UI sustituya el código por otra plantilla accidentalmente.
-        var templateCode = PricingClientQuoteTemplateCode;
+        // FCL y LCL tienen contratos visuales distintos. LCL no expone naviera ni
+        // un contenedor interno de compatibilidad; FCL conserva su plantilla propia.
+        var templateCode = rate.ShipmentMode == Dhole.Pricing.Domain.Rates.Enums.ShipmentMode.Lcl
+            ? PricingLclClientQuoteTemplateCode
+            : PricingFclClientQuoteTemplateCode;
 
         var fileName = rate.QuoNumber ?? rate.RateCode;
         var dataJson = dataFactory.CreateDataJson(rate);

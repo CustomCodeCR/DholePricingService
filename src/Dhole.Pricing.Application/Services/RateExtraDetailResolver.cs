@@ -29,9 +29,6 @@ public sealed class RateExtraDetailResolver(
             );
         }
 
-        // Quantity = 0 puede venir de clientes anteriores para cargos únicos.
-        // El agregado normaliza esos casos a 1 (o a la cantidad derivada por base de cobro).
-        // Solo una cantidad negativa es realmente inválida.
         if (input.Quantity is < 0)
         {
             return RateExtraDetailResolution.Failure(PricingErrors.RateInvalidDetailQuantity);
@@ -44,8 +41,6 @@ public sealed class RateExtraDetailResolver(
             );
         }
 
-        // Config es la fuente de verdad para la moneda. El frontend únicamente aporta el Id;
-        // Name/Code son snapshots y se reemplazan por los valores vigentes de Config.
         PricingConfigCatalogItem? currency;
         try
         {
@@ -70,18 +65,12 @@ public sealed class RateExtraDetailResolver(
             );
         }
 
-        /*
-         * CostId null representa un costo manual.
-         * Los costos manuales no pueden declararse como Fixed,
-         * porque Fixed está reservado para costos automáticos.
-         */
+        // CostId puede ser null por dos motivos válidos: un cargo manual o un cargo/recargo
+        // externo que viene de una matriz LCL/coloader y no existe en el maestro Costs.
+        // Esos snapshots externos pueden ser Fixed (Manejos, HBL, etc.) y deben persistirse
+        // tal como fueron calculados para que la tarifa guardada coincida con el PDF.
         if (!input.CostId.HasValue)
         {
-            if (input.CostType == CostType.Fixed)
-            {
-                return RateExtraDetailResolution.Failure(PricingErrors.RateCostDetailFixedLocked);
-            }
-
             var (costAmount, saleAmount) = ResolveGeneratedInsuranceAmounts(input);
 
             return RateExtraDetailResolution.Success(
@@ -115,8 +104,6 @@ public sealed class RateExtraDetailResolver(
 
         if (cost.CostType == CostType.Fixed)
         {
-            // En creación se permite enviar el costo fijo para personalizar únicamente su venta.
-            // El costo contable siempre se toma del maestro; así el cliente no puede alterarlo.
             if (!input.Id.HasValue && (cost.IsDeleted || !cost.IsActive))
             {
                 return RateExtraDetailResolution.Failure(
@@ -124,10 +111,6 @@ public sealed class RateExtraDetailResolver(
                 );
             }
 
-            // La moneda es una decisión de la línea de tarifa. Config valida el CurrencyId,
-            // pero no debe volver a imponer la moneda original del maestro de costos.
-            // Para un fijo nuevo en su moneda original el costo contable sigue viniendo del maestro;
-            // si la línea fue convertida a otra moneda, el synchronizer recalcula el fijo desde el maestro.
             var selectedCurrencyDiffers = currency.Id != cost.CurrencyId;
             var costAmount = input.Id.HasValue || selectedCurrencyDiffers
                 ? input.CostAmount

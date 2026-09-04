@@ -102,6 +102,10 @@ app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<AuditEndpointMiddleware>();
 
+// Own-LCL supports automatic defaults from naviera + POE and explicit per-consolidation
+// overrides. This keeps the master matrix intact while allowing a specific consolidation
+// to change costs/sales without forcing the same change into every quotation.
+
 //app.MapGrpcService<ConfigCatalogGrpcService>();
 
 app.MapCostEndpoints();
@@ -109,13 +113,21 @@ app.MapImportRateEndpoints();
 app.MapImportRateReviewQueueEndpoints();
 app.MapCabysEndpoints();
 app.MapRateEndpoints();
+app.MapRateComparisonEndpoints();
+app.MapRateRequestEndpoints();
 app.MapRateTermItemEndpoints();
 app.MapPricingRuleConfigurationEndpoints();
 app.MapCommercialTermEndpoints();
 app.MapPricingConfigCatalogEndpoints();
 app.MapDataExtractionImportEndpoints();
 app.MapLogisticsNewsEndpoints();
+// El flujo LCL estándar de producción y los consolidados LCL propios conviven en Pricing.
 app.MapLclEndpoints();
+app.MapOwnLclConsolidationEndpoints();
+app.MapOwnLclRouteMatrixV2Endpoints();
+app.MapOwnLclDestinationAutomationEndpoints();
+app.MapOwnLclFobScenarioEndpoints();
+app.MapLclRateSourceEndpoints();
 
 using (var scope = app.Services.CreateScope())
 {

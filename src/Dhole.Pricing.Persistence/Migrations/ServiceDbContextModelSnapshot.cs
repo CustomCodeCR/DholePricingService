@@ -1133,6 +1133,230 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.ToTable("LogisticsNewsRateImpacts", "pricing");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateComparison", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("BaselineComparedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("baseline_compared_amount");
+
+                    b.Property<decimal>("BaselineCostAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("baseline_cost_amount");
+
+                    b.Property<decimal>("BaselineSaleAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("baseline_sale_amount");
+
+                    b.Property<decimal>("CandidateComparedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("candidate_compared_amount");
+
+                    b.Property<decimal>("CandidateCostAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("candidate_cost_amount");
+
+                    b.Property<string>("CandidatePayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("candidate_payload_json");
+
+                    b.Property<decimal>("CandidateSaleAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("candidate_sale_amount");
+
+                    b.Property<string>("ComparedRateCode")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("compared_rate_code");
+
+                    b.Property<Guid>("ComparedRateHeaderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("compared_rate_header_id");
+
+                    b.Property<string>("ComparisonType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("comparison_type");
+
+                    b.Property<Guid>("ContainerTypeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("container_type_id");
+
+                    b.Property<string>("ContainerTypeName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("container_type_name");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid?>("CreatedRateHeaderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_rate_header_id");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("currency_code");
+
+                    b.Property<Guid>("PoeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("poe_id");
+
+                    b.Property<string>("PoeName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("poe_name");
+
+                    b.Property<Guid>("PolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pol_id");
+
+                    b.Property<string>("PolName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("pol_name");
+
+                    b.Property<DateTime?>("ResolvedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("resolved_at_utc");
+
+                    b.Property<Guid?>("ResolvedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resolved_by");
+
+                    b.Property<decimal>("SavingsAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("savings_amount");
+
+                    b.Property<decimal>("SavingsPercent")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("savings_percent");
+
+                    b.Property<Guid>("SourceImportFclRateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_import_fcl_rate_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_rate_comparisons");
+
+                    b.HasIndex("Status", "CreatedAtUtc");
+
+                    b.HasIndex("PolId", "PoeId", "ContainerTypeId");
+
+                    b.HasIndex("SourceImportFclRateId", "ComparedRateHeaderId", "ComparisonType")
+                        .IsUnique();
+
+                    b.ToTable("RateComparisons", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateComparisonDetail", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("BaselineCostAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("baseline_cost_amount");
+
+                    b.Property<decimal>("BaselineSaleAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("baseline_sale_amount");
+
+                    b.Property<decimal>("CandidateCostAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("candidate_cost_amount");
+
+                    b.Property<decimal>("CandidateSaleAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("candidate_sale_amount");
+
+                    b.Property<string>("ChargeBasis")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("charge_basis");
+
+                    b.Property<string>("CostDetailType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("cost_detail_type");
+
+                    b.Property<Guid?>("CostId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cost_id");
+
+                    b.Property<string>("CostType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("cost_type");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("currency_code");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<decimal>("Quantity")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("RateComparisonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rate_comparison_id");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_rate_comparison_details");
+
+                    b.HasIndex("RateComparisonId")
+                        .HasDatabaseName("i_x_rate_comparison_details_rate_comparison_id");
+
+                    b.ToTable("RateComparisonDetails", "pricing");
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateContainerAllocation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1771,6 +1995,101 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.ToTable("RateHeaders", "pricing");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ClientName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("client_name");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<string>("DestinationName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("destination_name");
+
+                    b.Property<DateTime>("DueAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_at_utc");
+
+                    b.Property<string>("ExecutiveName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("executive_name");
+
+                    b.Property<string>("OriginName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("origin_name");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload_json");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("priority");
+
+                    b.Property<Guid?>("RateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rate_id");
+
+                    b.Property<DateTime>("RequestedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at_utc");
+
+                    b.Property<string>("SellerEmail")
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)")
+                        .HasColumnName("seller_email");
+
+                    b.Property<string>("SellerName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("seller_name");
+
+                    b.Property<Guid?>("SellerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("seller_user_id");
+
+                    b.Property<string>("ShipmentMode")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("shipment_mode");
+
+                    b.Property<DateTime?>("SlaReminderSentAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sla_reminder_sent_at_utc");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_rate_requests");
+
+                    b.HasIndex("RateId");
+
+                    b.HasIndex("Status", "Priority", "DueAtUtc", "RequestedAtUtc");
+
+                    b.ToTable("RateRequests", "pricing", t =>
+                        {
+                            t.ExcludeFromMigrations();
+                        });
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateRevision", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1920,6 +2239,16 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasConstraintName("f_k_cost_service_costs_cost_id");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateComparisonDetail", b =>
+                {
+                    b.HasOne("Dhole.Pricing.Domain.Rates.Entities.RateComparison", null)
+                        .WithMany("Details")
+                        .HasForeignKey("RateComparisonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_rate_comparison_details_rate_comparisons_rate_comparison_id");
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateContainerAllocation", b =>
                 {
                     b.HasOne("Dhole.Pricing.Domain.Rates.Entities.RateHeader", null)
@@ -1964,6 +2293,11 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.Navigation("Incoterms");
 
                     b.Navigation("Services");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateComparison", b =>
+                {
+                    b.Navigation("Details");
                 });
 
             modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateHeader", b =>

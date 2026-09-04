@@ -34,6 +34,12 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
 
     public DbSet<RateTermItem> RateTermItems => Set<RateTermItem>();
 
+    public DbSet<RateRequest> RateRequests => Set<RateRequest>();
+
+    public DbSet<RateComparison> RateComparisons => Set<RateComparison>();
+
+    public DbSet<RateComparisonDetail> RateComparisonDetails => Set<RateComparisonDetail>();
+
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
@@ -88,7 +94,6 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
                 var eventName = DomainEventOutboxMapper.GetEventName(domainEvent);
 
                 var payloadJson = JsonSerializer.Serialize(domainEvent, domainEvent.GetType());
-
                 var correlationId =
                     AuditExecutionContextAccessor.Current?.CorrelationId ?? Guid.NewGuid();
 

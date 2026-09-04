@@ -25,5 +25,6 @@ public sealed record PricingConfigCatalogItem(
     string Code,
     string Slug,
     string Name,
-    string? Value
+    string? Value,
+    string? MetadataJson
 );

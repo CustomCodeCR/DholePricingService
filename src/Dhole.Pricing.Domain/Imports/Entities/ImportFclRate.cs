@@ -84,7 +84,9 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         ValidFrom = validFrom;
         ValidTo = validTo;
         RawDataJson = Normalize(rawDataJson);
-        Status = ImportStatus.Pending;
+        // Imported rows enter a machine pre-authorized state. An authorized
+        // reviewer can still perform the manual pre-approval through Approve().
+        Status = ImportStatus.PreAuthorized;
 
         MarkAsCreated(DateTime.UtcNow, createdBy?.ToString());
     }
@@ -266,7 +268,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
 
     public void AssignPoe(CatalogSnapshot poe, Guid? updatedBy = null)
     {
-        if (Status != ImportStatus.Pending)
+        if (Status is not (ImportStatus.Pending or ImportStatus.PreAuthorized))
         {
             throw new InvalidOperationException(
                 "Solo se puede asignar el POE de importaciones pendientes."
@@ -289,7 +291,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         Guid? updatedBy = null
     )
     {
-        if (Status != ImportStatus.Pending)
+        if (Status is not (ImportStatus.Pending or ImportStatus.PreAuthorized))
         {
             throw new InvalidOperationException(
                 "Solo se pueden corregir catálogos de importaciones pendientes."
@@ -331,7 +333,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         Guid? updatedBy = null
     )
     {
-        if (Status != ImportStatus.Pending)
+        if (Status is not (ImportStatus.Pending or ImportStatus.PreAuthorized))
         {
             throw new InvalidOperationException(
                 "Solo se pueden revisar importaciones pendientes."

@@ -30,23 +30,42 @@ public sealed class CreateRateCommandHandler(
     IUnitOfWork unitOfWork
 ) : ICommandHandler<CreateRateCommand, Result<Guid>>
 {
+    // LCL propio no utiliza un agente externo. El marcador interno mantiene
+    // compatibilidad con RateHeader sin obligar a seleccionar un agente.
+    private static readonly Guid OwnLclInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c41");
+    private const string OwnLclInternalAgentName = "Grupo Castro Fallas";
+    private const string OwnLclInternalAgentCode = "GCF";
+
     public async Task<Result<Guid>> HandleAsync(
         CreateRateCommand command,
         CancellationToken cancellationToken = default
     )
     {
+        var ownLclWithoutAgent =
+            command.ShipmentMode == ShipmentMode.Lcl
+            && (!command.AgentId.HasValue || command.AgentId.Value == Guid.Empty)
+            && (
+                string.Equals(command.AgentCode, OwnLclInternalAgentCode, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(command.AgentName, OwnLclInternalAgentName, StringComparison.OrdinalIgnoreCase)
+            );
+
         // Los Id de catálogo son la única entrada confiable. Todos los snapshots usados por
         // Pricing se reconstruyen desde Dhole.Config antes de crear la tarifa.
         try
         {
-            var agent = await configCatalog.GetActiveInGroupAsync(
-                command.AgentId,
-                PricingConstants.CatalogSlugs.Agents,
-                cancellationToken
-            );
-            if (command.AgentId.HasValue && command.AgentId.Value != Guid.Empty && agent is null)
-                return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
-                    "El agente", PricingConstants.CatalogSlugs.Agents));
+            PricingConfigCatalogItem? agent = null;
+            if (!ownLclWithoutAgent)
+            {
+                if (!command.AgentId.HasValue || command.AgentId.Value == Guid.Empty)
+                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
+                        "El agente", PricingConstants.CatalogSlugs.Agents));
+
+                agent = await configCatalog.GetActiveInGroupAsync(
+                    command.AgentId, PricingConstants.CatalogSlugs.Agents, cancellationToken);
+                if (agent is null)
+                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
+                        "El agente", PricingConstants.CatalogSlugs.Agents));
+            }
 
             var carrier = await configCatalog.GetActiveInGroupAsync(
                 command.CarrierId,
@@ -144,9 +163,9 @@ public sealed class CreateRateCommandHandler(
             var primaryContainer = normalizedContainers[0];
             command = command with
             {
-                AgentId = agent?.Id,
-                AgentName = agent?.SnapshotName(),
-                AgentCode = agent?.Code,
+                AgentId = ownLclWithoutAgent ? OwnLclInternalAgentId : agent?.Id,
+                AgentName = ownLclWithoutAgent ? OwnLclInternalAgentName : agent?.SnapshotName(),
+                AgentCode = ownLclWithoutAgent ? OwnLclInternalAgentCode : agent?.Code,
                 CarrierId = carrier?.Id,
                 CarrierName = carrier?.SnapshotName(),
                 CarrierCode = carrier?.Code,
@@ -573,8 +592,13 @@ public sealed class CreateRateCommandHandler(
             ];
         }
 
-        var primary = containers[0];
-        var totalQuantity = containers.Sum(x => x.Quantity);
+        var isLcl = command.ShipmentMode == ShipmentMode.Lcl;
+        var primary = isLcl
+            ? new RateContainerAllocationSpec(command.ContainerTypeId, "LCL", "LCL", 0)
+            : containers[0];
+        // RateHeader mantiene una cantidad positiva como invariante histórica. Para LCL la
+        // unidad comercial real se recalcula inmediatamente en ConfigureShipment usando CBM.
+        var totalQuantity = isLcl ? 1 : containers.Sum(x => x.Quantity);
 
         var rate = RateHeader.Create(
             rateCode,
@@ -618,7 +642,8 @@ public sealed class CreateRateCommandHandler(
             command.CreatedBy
         );
 
-        rate.ReplaceContainerAllocations(containers, command.CreatedBy);
+        if (!isLcl)
+            rate.ReplaceContainerAllocations(containers, command.CreatedBy);
         return rate;
     }
 

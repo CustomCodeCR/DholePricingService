@@ -32,7 +32,12 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.Excludes).HasColumnType("text").IsRequired(false);
 
         builder.Property(x => x.TransitTime).HasMaxLength(160).IsRequired(false);
-        builder.Property(x => x.RateType).HasConversion<string>().HasMaxLength(20).IsRequired().HasDefaultValue(Dhole.Pricing.Domain.Rates.Enums.RateType.Tariff);
+        builder.Property(x => x.RateType)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .IsRequired()
+            .HasDefaultValue(Dhole.Pricing.Domain.Rates.Enums.RateType.Tariff)
+            .HasSentinel((Dhole.Pricing.Domain.Rates.Enums.RateType)0);
 
         builder.Property(x => x.AgentId).IsRequired();
 
@@ -105,8 +110,18 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.ContainerQuantity).IsRequired().HasDefaultValue(1);
 
-        builder.Property(x => x.ShipmentMode).HasConversion<string>().HasMaxLength(20).IsRequired().HasDefaultValue(Dhole.Pricing.Domain.Rates.Enums.ShipmentMode.Fcl);
-        builder.Property(x => x.OperationType).HasConversion<string>().HasMaxLength(30).IsRequired().HasDefaultValue(Dhole.Pricing.Domain.Rates.Enums.RateOperationType.TransitDomestic);
+        builder.Property(x => x.ShipmentMode)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .IsRequired()
+            .HasDefaultValue(Dhole.Pricing.Domain.Rates.Enums.ShipmentMode.Fcl)
+            .HasSentinel((Dhole.Pricing.Domain.Rates.Enums.ShipmentMode)0);
+        builder.Property(x => x.OperationType)
+            .HasConversion<string>()
+            .HasMaxLength(30)
+            .IsRequired()
+            .HasDefaultValue(Dhole.Pricing.Domain.Rates.Enums.RateOperationType.TransitDomestic)
+            .HasSentinel((Dhole.Pricing.Domain.Rates.Enums.RateOperationType)0);
         builder.Property(x => x.TotalPackages).IsRequired().HasDefaultValue(0);
         builder.Property(x => x.TotalPallets).IsRequired().HasDefaultValue(0);
         builder.Property(x => x.TotalWeightKg).HasPrecision(18, 4).IsRequired().HasDefaultValue(0m);

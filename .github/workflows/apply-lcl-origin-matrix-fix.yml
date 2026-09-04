@@ -1,0 +1,62 @@
+name: Apply own LCL origin matrix fix
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - .github/workflows/apply-lcl-origin-matrix-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Apply calculator patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/Dhole.Pricing.Api/Endpoints/OwnLclConsolidationEndpoints.cs')
+          text = path.read_text()
+
+          old = '''        var consolidation = await LoadAsync(id, db, ct);\n        if (consolidation is null) return Results.NotFound();\n        if (request.CargoLines.Count == 0)'''
+          new = '''        var consolidation = await LoadAsync(id, db, ct);\n        if (consolidation is null) return Results.NotFound();\n        var consolidationPricingLines = await LoadConsolidationPricingLinesAsync(id, db, ct);\n        if (request.CargoLines.Count == 0)'''
+          if text.count(old) != 1:
+              raise SystemExit(f'Calculate anchor count={text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = '''        AddOriginLines(lines, incoterm, billableCbm, Math.Max(1, request.Sets), Math.Max(1, request.Hbl), request.PickupCost, request.PickupSale);'''
+          new = '''        AddOriginLines(lines, incoterm, billableCbm, Math.Max(1, request.Sets), Math.Max(1, request.Hbl), consolidationPricingLines);'''
+          if text.count(old) != 1:
+              raise SystemExit(f'AddOrigin call count={text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          old = '''    private static void AddOriginLines(List<OwnLclQuoteLine> lines, string incoterm, decimal cbm, int sets, int hbl, decimal pickupCost, decimal pickupSale)\n    {\n        if (incoterm == "FOB") return;\n        AddLine(lines, "CFS", "CBM", cbm, 8m, 8m);\n        AddLine(lines, "CUSTOMS", "SET", sets, 15m, 25m);\n        AddLine(lines, "DOC FEE", "HBL", hbl, 15m, 65m);\n        AddLine(lines, "VGM", "HBL", hbl, 0m, 25m);\n        AddLine(lines, "MANIFEST", "HBL", hbl, 15m, 25m);\n        AddLine(lines, "WHSE FEE", "CBM", cbm, 12m, 12m);\n        if (incoterm == "EXW") AddLine(lines, "Recolecta", "Flat", 1, Math.Max(0m, pickupCost), Math.Max(0m, pickupSale));\n    }\n'''
+          new = '''    private static void AddOriginLines(\n        List<OwnLclQuoteLine> lines,\n        string incoterm,\n        decimal cbm,\n        int sets,\n        int hbl,\n        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)> pricingLines)\n    {\n        if (incoterm == "FOB") return;\n\n        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_CFS", "CFS", "CBM", cbm);\n        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_CUSTOMS", "CUSTOMS", "SET", sets);\n        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_DOC", "DOC FEE", "HBL", hbl);\n        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_VGM", "VGM", "HBL", hbl);\n        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_MANIFEST", "MANIFEST", "HBL", hbl);\n        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_WHSE", "WHSE FEE", "CBM", cbm);\n\n        if (incoterm == "EXW")\n            AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_PICK_UP", "PICK UP", "Flat", 1m);\n    }\n\n    private static void AddConfiguredOriginLine(\n        List<OwnLclQuoteLine> lines,\n        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)> pricingLines,\n        string lineKey,\n        string name,\n        string basis,\n        decimal quantity)\n    {\n        if (!pricingLines.TryGetValue(lineKey, out var values)) return;\n        AddLine(lines, name, basis, quantity, Math.Max(0m, values.CostUnit), Math.Max(0m, values.SaleUnit));\n    }\n'''
+          if text.count(old) != 1:
+              raise SystemExit(f'AddOrigin method count={text.count(old)}')
+          text = text.replace(old, new, 1)
+
+          anchor = '''    private static async Task<decimal?> LoadHistoricalSaleAsync(int number, string destination, string polCode, ServiceDbContext db, CancellationToken ct)\n'''
+          helper = '''    private static async Task<IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)>> LoadConsolidationPricingLinesAsync(\n        Guid consolidationId,\n        ServiceDbContext db,\n        CancellationToken ct)\n    {\n        var values = OwnLclPricingLineCatalog.All.ToDictionary(\n            definition => definition.LineKey,\n            definition => (definition.DefaultCostUnit ?? 0m, definition.DefaultSaleUnit),\n            StringComparer.OrdinalIgnoreCase);\n\n        await using var connection = db.Database.GetDbConnection();\n        await EnsureOpenAsync(connection, ct);\n        await using var command = connection.CreateCommand();\n        command.CommandText = """\n            SELECT line_key, cost_unit, sale_unit\n            FROM pricing."OwnLclConsolidationPricingLines"\n            WHERE consolidation_id=@consolidation_id;\n            """;\n        Add(command, "consolidation_id", consolidationId);\n\n        await using var reader = await command.ExecuteReaderAsync(ct);\n        while (await reader.ReadAsync(ct))\n        {\n            var key = reader.GetString(0);\n            if (!values.ContainsKey(key)) continue;\n            values[key] = (reader.GetDecimal(1), reader.GetDecimal(2));\n        }\n\n        return values;\n    }\n\n'''
+          if text.count(anchor) != 1:
+              raise SystemExit(f'Helper anchor count={text.count(anchor)}')
+          text = text.replace(anchor, helper + anchor, 1)
+          path.write_text(text)
+          PY
+          git diff --check
+
+      - name: Commit calculator fix
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Dhole.Pricing.Api/Endpoints/OwnLclConsolidationEndpoints.cs
+          git commit -m "fix(pricing): calculate LCL origin charges from consolidation matrix"
+          git push origin HEAD:develop

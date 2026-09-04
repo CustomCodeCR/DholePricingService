@@ -1,3 +1,6 @@
+using System.Text.Json.Serialization;
+using Dhole.Pricing.Contracts.Costs;
+
 namespace Dhole.Pricing.Contracts.Costs.Response;
 
 public sealed record CostSelectDto(
@@ -33,7 +36,7 @@ public sealed record CostSelectDto(
     Guid? PodId = null,
     string? PodName = null,
     string? PodCode = null,
-    string? ShipmentMode = null,
+    [property: JsonConverter(typeof(ShipmentModeJsonConverter))] string? ShipmentMode = null,
     string ChargeBasis = "PerShipment",
     decimal? MinimumCostAmount = null,
     decimal? MinimumSaleAmount = null,
