@@ -1,4 +1,5 @@
 using CustomCodeFramework.Core.Abstractions;
+using Dhole.Pricing.Application.DependencyInjection;
 using Dhole.Pricing.Infrastructure.Time;
 using Dhole.Pricing.Persistence.DbContexts;
 using Dhole.Pricing.Persistence.DependencyInjection;
@@ -26,6 +27,7 @@ builder
 builder.Services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
 builder.Services.AddScoped<ICurrentUser, WorkerCurrentUser>();
 
+builder.Services.AddApplication();
 builder.Services.AddPersistence(builder.Configuration);
 
 builder.Services.AddPricingWorker(builder.Configuration);
