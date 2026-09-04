@@ -36,6 +36,10 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
 
     public DbSet<RateRequest> RateRequests => Set<RateRequest>();
 
+    public DbSet<RateComparison> RateComparisons => Set<RateComparison>();
+
+    public DbSet<RateComparisonDetail> RateComparisonDetails => Set<RateComparisonDetail>();
+
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
