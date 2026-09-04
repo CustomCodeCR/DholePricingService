@@ -294,7 +294,15 @@ public sealed class CreateRateCommandHandler(
                 return Result.Failure<Guid>(PricingErrors.ImportFclRateOutsideValidity);
             }
 
-            if (importedRate.Status == ImportStatus.Pending)
+            // PreAuthorized is a machine-approved state created specifically so an active
+            // imported rate can be selected by Pricing without requiring the manual
+            // approve-import scope. Promote it to Approved when it is actually used.
+            if (importedRate.Status == ImportStatus.PreAuthorized)
+            {
+                importedRate.Approve(command.CreatedBy);
+                automaticallyApprovedImport = true;
+            }
+            else if (importedRate.Status == ImportStatus.Pending)
             {
                 if (!command.CanApproveImportedRate)
                 {
