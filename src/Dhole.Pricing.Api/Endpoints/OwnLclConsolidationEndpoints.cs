@@ -212,7 +212,8 @@ public static class OwnLclConsolidationEndpoints
 
         var maximumCbm = consolidation.MaximumCbm > 0 ? consolidation.MaximumCbm : DefaultMaximumCbm;
         var baseOceanCost = consolidation.OceanFreight / maximumCbm;
-        var originSurcharge = OriginSurcharges.GetValueOrDefault(NormalizeCode(request.PolCode ?? consolidation.PolCode));
+        var originPort = NormalizeOriginPort(request.PolCode ?? consolidation.PolCode);
+        var originSurcharge = OriginSurcharges.GetValueOrDefault(originPort);
         var oceanCostWithOrigin = baseOceanCost + originSurcharge;
         var destinationCostPerCbm = consolidation.CarrierDestinationCostTotal / maximumCbm;
         var crTransferCostPerCbm = (consolidation.PanamaToCostaRicaCost + consolidation.BunkerCost) / Math.Max(1m, consolidation.CostaRicaTransferBaseCbm);
@@ -224,7 +225,7 @@ public static class OwnLclConsolidationEndpoints
             : oceanCostWithOrigin + destinationCostPerCbm + crTransferCostPerCbm;
 
         var historicalDestination = destination;
-        var historicalSale = await LoadHistoricalSaleAsync(consolidation.ConsolidationNumber, historicalDestination, request.PolCode ?? consolidation.PolCode, db, ct);
+        var historicalSale = await LoadHistoricalSaleAsync(consolidation.ConsolidationNumber, historicalDestination, originPort, db, ct);
         var minimumForRecommendation = destination == "PA" ? MinimumPanamaOceanProfitPerCbm : MinimumCentralAmericaProfitPerCbm;
         var calculatedRecommended = CeilingCent(freightCostPerCbm + minimumForRecommendation);
         var recommendedSalePerCbm = historicalSale ?? calculatedRecommended;
@@ -233,7 +234,7 @@ public static class OwnLclConsolidationEndpoints
         var lines = new List<OwnLclQuoteLine>();
         AddLine(lines, "Flete Internacional Marítimo", "CBM", billableCbm, freightCostPerCbm, freightSalePerCbm);
         AddDestinationLines(lines, destination, billableCbm, destinationCostPerCbm);
-        AddOriginLines(lines, incoterm, billableCbm, Math.Max(1, request.Sets), Math.Max(1, request.Hbl), consolidationPricingLines);
+        AddOriginLines(lines, incoterm, originPort, billableCbm, Math.Max(1, request.Sets), Math.Max(1, request.Hbl), consolidationPricingLines);
 
         var subtotalCost = lines.Sum(x => x.CostTotal);
         var subtotalSale = lines.Sum(x => x.SaleTotal);
@@ -254,7 +255,7 @@ public static class OwnLclConsolidationEndpoints
             consolidation.ConsolidationNumber,
             consolidation.Name,
             consolidation.MatrixVersion,
-            NormalizeCode(request.PolCode ?? consolidation.PolCode),
+            originPort,
             destination,
             incoterm,
             cargo,
@@ -322,6 +323,7 @@ public static class OwnLclConsolidationEndpoints
     private static void AddOriginLines(
         List<OwnLclQuoteLine> lines,
         string incoterm,
+        string originPort,
         decimal cbm,
         int sets,
         int hbl,
@@ -334,7 +336,12 @@ public static class OwnLclConsolidationEndpoints
         AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_DOC", "DOC FEE", "HBL", hbl);
         AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_VGM", "VGM", "HBL", hbl);
         AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_MANIFEST", "MANIFEST", "HBL", hbl);
-        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_WHSE", "WHSE FEE", "CBM", cbm);
+
+        // WHSE FEE solo aplica a Shanghai. En Ningbo, Qingdao y los demás puertos
+        // de la matriz China -> Shanghai, el componente de warehouse ya está incluido
+        // dentro del diferencial de origen para evitar cobrarlo dos veces.
+        if (string.Equals(originPort, "SHANGHAI", StringComparison.OrdinalIgnoreCase))
+            AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_WHSE", "WHSE FEE", "CBM", cbm);
 
         if (incoterm == "EXW")
             AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_PICK_UP", "PICK UP", "Flat", 1m);
@@ -456,6 +463,24 @@ public static class OwnLclConsolidationEndpoints
         if (normalized.Contains("GUATEMALA") || normalized is "GT") return "GT";
         if (normalized.Contains("EL SALVADOR") || normalized.Contains("SAN SALVADOR") || normalized is "SV") return "SV";
         return null;
+    }
+
+    private static string NormalizeOriginPort(string? value)
+    {
+        var normalized = NormalizeCode(value);
+        if (string.IsNullOrWhiteSpace(normalized)) return string.Empty;
+
+        foreach (var port in OriginSurcharges.Keys)
+        {
+            if (normalized.Equals(port, StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith($"{port},", StringComparison.OrdinalIgnoreCase)
+                || normalized.StartsWith($"{port} ", StringComparison.OrdinalIgnoreCase))
+            {
+                return port;
+            }
+        }
+
+        return normalized;
     }
 
     private static decimal CeilingCent(decimal value) => Math.Ceiling(value * 100m) / 100m;
