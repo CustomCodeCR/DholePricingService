@@ -28,6 +28,8 @@ internal sealed class RateComparisonConfiguration : EntityTypeConfigurationBase<
         builder.Property(x => x.SavingsAmount).HasPrecision(18, 2);
         builder.Property(x => x.SavingsPercent).HasPrecision(9, 4);
         builder.Property(x => x.CandidatePayloadJson).HasColumnType("jsonb").IsRequired();
+
+        // The generated migration and model snapshot intentionally track these comparison snapshots.
         builder.HasMany(x => x.Details).WithOne().HasForeignKey(x => x.RateComparisonId).OnDelete(DeleteBehavior.Cascade);
         builder.HasIndex(x => new { x.SourceImportFclRateId, x.ComparedRateHeaderId, x.ComparisonType }).IsUnique();
         builder.HasIndex(x => new { x.Status, x.CreatedAtUtc });
