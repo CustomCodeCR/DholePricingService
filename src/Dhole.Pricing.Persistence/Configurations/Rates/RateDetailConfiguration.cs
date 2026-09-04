@@ -1,6 +1,5 @@
 using CustomCodeFramework.Postgres.EntityFramework.Configurations;
 using Dhole.Pricing.Domain.Rates.Entities;
-using Dhole.Pricing.Domain.Rates.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -48,18 +47,6 @@ internal sealed class RateDetailConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.Quantity).HasPrecision(18, 6).IsRequired().HasDefaultValue(1m);
 
-        builder.Property(x => x.SourceType)
-            .HasColumnName("source_type")
-            .HasConversion<string>()
-            .HasMaxLength(40)
-            .IsRequired()
-            .HasDefaultValue(RateDetailSourceType.Manual);
-
-        builder.Property(x => x.SourceReference)
-            .HasColumnName("source_reference")
-            .HasMaxLength(300)
-            .IsRequired(false);
-
         builder.Property(x => x.ApplyDestinationTax)
             .HasColumnName("apply_destination_tax")
             .HasDefaultValue(false);
@@ -75,7 +62,6 @@ internal sealed class RateDetailConfiguration : EntityTypeConfigurationBase<Rate
         builder.HasIndex(x => x.CostType);
         builder.HasIndex(x => x.ChargeBasis);
         builder.HasIndex(x => x.CurrencyId);
-        builder.HasIndex(x => new { x.RateHeaderId, x.SourceType }).HasDatabaseName("ix_rate_details_source");
 
         builder
             .HasIndex(x => new
