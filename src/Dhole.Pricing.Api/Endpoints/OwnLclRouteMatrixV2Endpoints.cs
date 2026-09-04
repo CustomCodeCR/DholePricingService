@@ -246,6 +246,7 @@ public static class OwnLclRouteMatrixV2Endpoints
         AddOriginLines(
             lines,
             incoterm,
+            requestedPol,
             billableCbm,
             Math.Max(1, request.Sets),
             Math.Max(1, request.Hbl),
@@ -355,6 +356,7 @@ public static class OwnLclRouteMatrixV2Endpoints
     private static void AddOriginLines(
         List<OwnLclQuoteLine> lines,
         string incoterm,
+        string originPol,
         decimal cbm,
         int sets,
         int hbl,
@@ -365,7 +367,11 @@ public static class OwnLclRouteMatrixV2Endpoints
         if (incoterm == "FOB") return;
 
         AddConfiguredLine(lines, pricingLines, "ORIGIN_CFS", cbm);
-        AddConfiguredLine(lines, pricingLines, "ORIGIN_WHSE", cbm);
+        // WHSE FEE applies only when the commercial POL is Shanghai. For Ningbo,
+// Qingdao and the other China origins, warehouse is already included in
+// the negotiated origin differential and must not be charged again.
+if (string.Equals(originPol, "SHANGHAI", StringComparison.OrdinalIgnoreCase))
+    AddConfiguredLine(lines, pricingLines, "ORIGIN_WHSE", cbm);
         AddConfiguredLine(lines, pricingLines, "ORIGIN_CUSTOMS", sets);
         AddConfiguredLine(lines, pricingLines, "ORIGIN_DOC", hbl);
         AddConfiguredLine(lines, pricingLines, "ORIGIN_VGM", hbl);
