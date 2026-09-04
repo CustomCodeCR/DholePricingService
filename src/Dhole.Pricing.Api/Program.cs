@@ -121,6 +121,7 @@ app.MapCommercialTermEndpoints();
 app.MapPricingConfigCatalogEndpoints();
 app.MapDataExtractionImportEndpoints();
 app.MapLogisticsNewsEndpoints();
+app.MapLclEndpoints();
 app.MapOwnLclConsolidationEndpoints();
 app.MapOwnLclRouteMatrixV2Endpoints();
 app.MapOwnLclDestinationAutomationEndpoints();
