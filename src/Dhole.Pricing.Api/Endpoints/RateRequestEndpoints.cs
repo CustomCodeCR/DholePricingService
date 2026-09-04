@@ -2,6 +2,8 @@ using System.Security.Claims;
 using System.Text.Json;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Application.Abstractions.Messaging;
+using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
@@ -12,6 +14,9 @@ namespace Dhole.Pricing.Api.Endpoints;
 
 public static class RateRequestEndpoints
 {
+    private const string NotificationEventName = "notifications.notification.requested";
+    private const string RateRequestCreatedNotificationType = "pricing.rate-request.created";
+
     public static IEndpointRouteBuilder MapRateRequestEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/pricing/rate-requests")
@@ -33,6 +38,9 @@ public static class RateRequestEndpoints
     private static async Task<IResult> CreateAsync(
         CreateRateRequestRequest request,
         ServiceDbContext db,
+        IPricingNotificationRecipientProvider recipientProvider,
+        IIntegrationEventOutboxWriter outbox,
+        ILoggerFactory loggerFactory,
         HttpContext httpContext,
         CancellationToken ct
     )
@@ -74,6 +82,29 @@ public static class RateRequestEndpoints
 
         db.RateRequests.Add(entity);
         await db.SaveChangesAsync(ct);
+
+        // La solicitud ya quedó registrada. La notificación se encola después para que una
+        // indisponibilidad temporal de Auth/Notifications no provoque duplicados por reintento
+        // del vendedor. El outbox la entrega a Notifications y de ahí a SignalR.
+        try
+        {
+            await QueuePricingRealtimeNotificationAsync(
+                entity,
+                recipientProvider,
+                outbox,
+                ct
+            );
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception exception)
+        {
+            loggerFactory.CreateLogger("RateRequestNotifications").LogError(
+                exception,
+                "La solicitud {RateRequestId} fue creada, pero no se pudo encolar la alerta en tiempo real para Pricing.",
+                entity.Id
+            );
+        }
+
         return Results.Ok(entity.Id);
     }
 
@@ -141,6 +172,141 @@ public static class RateRequestEndpoints
         return Results.NoContent();
     }
 
+    private static async Task QueuePricingRealtimeNotificationAsync(
+        RateRequest request,
+        IPricingNotificationRecipientProvider recipientProvider,
+        IIntegrationEventOutboxWriter outbox,
+        CancellationToken cancellationToken
+    )
+    {
+        var recipients = await recipientProvider.GetPricingRecipientsAsync(cancellationToken);
+        if (recipients.Count == 0)
+            return;
+
+        var equipmentType = ExtractEquipmentType(request.PayloadJson, request.ShipmentMode);
+        var route = $"{request.OriginName ?? "Origen"} → {request.DestinationName ?? "Destino"}";
+        var seller = request.SellerName ?? request.ExecutiveName ?? "Ventas";
+        var client = request.ClientName ?? "Cliente sin definir";
+        var equipmentText = equipmentType ?? request.ShipmentMode ?? "Equipo sin definir";
+        var subject = "Nueva solicitud de tarifa de Ventas";
+        var body = $"{seller} envió una solicitud para {client}. Ruta: {route}. Contenedor/equipo: {equipmentText}.";
+
+        var payload = new
+        {
+            type = RateRequestCreatedNotificationType,
+            rateRequestId = request.Id,
+            priority = request.Priority.ToString(),
+            request.ShipmentMode,
+            equipmentType,
+            request.ClientName,
+            request.SellerName,
+            request.ExecutiveName,
+            request.OriginName,
+            request.DestinationName,
+            request.RequestedAtUtc,
+            request.DueAtUtc,
+            action = "continue-rate-request",
+            route = $"/pricing/rate-requests/{request.Id}",
+        };
+
+        foreach (var recipient in recipients.Where(x => x.UserId != Guid.Empty))
+        {
+            var notificationRequest = new
+            {
+                notificationType = RateRequestCreatedNotificationType,
+                templateCode = (string?)null,
+                channel = "System",
+                entityType = "RateRequest",
+                entityId = request.Id.ToString(),
+                subject,
+                body,
+                payload,
+                maxAttempts = 3,
+                recipients = new[]
+                {
+                    new
+                    {
+                        userId = recipient.UserId.ToString(),
+                        address = recipient.UserId.ToString(),
+                        displayName = recipient.DisplayName ?? recipient.UserName,
+                    },
+                },
+            };
+
+            await outbox.WriteAsync(
+                NotificationEventName,
+                NotificationEventName,
+                notificationRequest,
+                correlationId: $"pricing-rate-request:{request.Id:N}:system:{recipient.UserId:N}",
+                cancellationToken: cancellationToken
+            );
+        }
+    }
+
+    private static string? ExtractEquipmentType(string payloadJson, string? shipmentMode)
+    {
+        if (string.Equals(shipmentMode, "LCL", StringComparison.OrdinalIgnoreCase))
+            return "LCL";
+
+        if (string.IsNullOrWhiteSpace(payloadJson))
+            return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(payloadJson);
+            if (!TryGetPropertyIgnoreCase(document.RootElement, "form", out var form)
+                || form.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            var equipmentType = GetString(form, "equipmentType");
+            var equipmentSize = GetString(form, "equipmentSize");
+
+            if (string.IsNullOrWhiteSpace(equipmentType))
+                return string.IsNullOrWhiteSpace(equipmentSize) ? null : equipmentSize;
+            if (string.IsNullOrWhiteSpace(equipmentSize)
+                || equipmentType.Contains(equipmentSize, StringComparison.OrdinalIgnoreCase))
+            {
+                return equipmentType;
+            }
+
+            return $"{equipmentSize} {equipmentType}".Trim();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? GetString(JsonElement element, string name)
+    {
+        if (!TryGetPropertyIgnoreCase(element, name, out var value))
+            return null;
+
+        return value.ValueKind == JsonValueKind.String
+            ? value.GetString()?.Trim()
+            : null;
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement element, string name, out JsonElement value)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    value = property.Value;
+                    return true;
+                }
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
     private static object ToDto(RateRequest request)
     {
         using var document = JsonDocument.Parse(request.PayloadJson);
@@ -160,6 +326,7 @@ public static class RateRequestEndpoints
             request.ClientName,
             request.ExecutiveName,
             request.ShipmentMode,
+            equipmentType = ExtractEquipmentType(request.PayloadJson, request.ShipmentMode),
             request.OriginName,
             request.DestinationName,
             payload = document.RootElement.Clone(),
