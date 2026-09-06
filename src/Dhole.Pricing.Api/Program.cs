@@ -98,6 +98,7 @@ app.MapGet(
     .AllowAnonymous();
 
 app.UseAuthentication();
+app.UseMiddleware<SellerRateVisibilityMiddleware>();
 app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<AuditEndpointMiddleware>();
@@ -113,8 +114,10 @@ app.MapImportRateEndpoints();
 app.MapImportRateReviewQueueEndpoints();
 app.MapCabysEndpoints();
 app.MapRateEndpoints();
+app.MapSellerRateEndpoints();
 app.MapRateComparisonEndpoints();
 app.MapRateRequestEndpoints();
+app.MapSellerRateRequestEndpoints();
 app.MapRateTermItemEndpoints();
 app.MapPricingRuleConfigurationEndpoints();
 app.MapCommercialTermEndpoints();
