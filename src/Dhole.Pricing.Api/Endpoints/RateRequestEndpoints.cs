@@ -79,6 +79,7 @@ public static class RateRequestEndpoints
             request.DestinationName,
             payloadJson
         );
+        entity.SetRoute(request.PoeId, request.PoeName, request.PodId, request.PodName);
 
         db.RateRequests.Add(entity);
         await db.SaveChangesAsync(ct);
@@ -184,7 +185,7 @@ public static class RateRequestEndpoints
             return;
 
         var equipmentType = ExtractEquipmentType(request.PayloadJson, request.ShipmentMode);
-        var route = $"{request.OriginName ?? "Origen"} → {request.DestinationName ?? "Destino"}";
+        var route = BuildRoute(request);
         var seller = request.SellerName ?? request.ExecutiveName ?? "Ventas";
         var client = request.ClientName ?? "Cliente sin definir";
         var equipmentText = equipmentType ?? request.ShipmentMode ?? "Equipo sin definir";
@@ -203,6 +204,10 @@ public static class RateRequestEndpoints
             request.ExecutiveName,
             request.OriginName,
             request.DestinationName,
+            request.PoeId,
+            request.PoeName,
+            request.PodId,
+            request.PodName,
             request.RequestedAtUtc,
             request.DueAtUtc,
             action = "continue-rate-request",
@@ -274,6 +279,27 @@ public static class RateRequestEndpoints
                 cancellationToken: cancellationToken
             );
         }
+    }
+
+    private static string BuildRoute(RateRequest request)
+    {
+        var parts = new[]
+        {
+            request.OriginName,
+            request.PoeName,
+            request.PodName,
+        }
+        .Where(value => !string.IsNullOrWhiteSpace(value))
+        .Select(value => value!.Trim())
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
+
+        if (parts.Length > 0)
+            return string.Join(" → ", parts);
+
+        return request.DestinationName is { Length: > 0 }
+            ? $"{request.OriginName ?? "Origen"} → {request.DestinationName}"
+            : request.OriginName ?? "Ruta sin definir";
     }
 
     private static string? ExtractEquipmentType(string payloadJson, string? shipmentMode)
@@ -362,6 +388,10 @@ public static class RateRequestEndpoints
             equipmentType = ExtractEquipmentType(request.PayloadJson, request.ShipmentMode),
             request.OriginName,
             request.DestinationName,
+            request.PoeId,
+            request.PoeName,
+            request.PodId,
+            request.PodName,
             payload = document.RootElement.Clone(),
         };
     }
@@ -373,6 +403,10 @@ public static class RateRequestEndpoints
         string? ShipmentMode,
         string? OriginName,
         string? DestinationName,
+        Guid? PoeId,
+        string? PoeName,
+        Guid? PodId,
+        string? PodName,
         JsonElement Payload
     );
 
