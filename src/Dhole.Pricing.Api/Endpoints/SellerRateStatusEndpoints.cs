@@ -60,6 +60,8 @@ public static class SellerRateStatusEndpoints
             return Results.Forbid();
 
         var currentRate = await db.RateHeaders
+            .Include(x => x.RateContainers)
+            .Include(x => x.RateDetails)
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
 
         if (currentRate is null)
