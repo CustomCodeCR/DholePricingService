@@ -72,15 +72,6 @@ public static class SellerRateStatusEndpoints
             });
         }
 
-        if (status == RateStatus.AcceptedByClient && string.IsNullOrWhiteSpace(request.IdtraNumber))
-        {
-            return Results.BadRequest(new
-            {
-                code = "Pricing.SellerIdtraRequired",
-                message = "Para marcar la tarifa como aceptada debe registrar el IDTRA del cliente.",
-            });
-        }
-
         if (status == RateStatus.RejectedByClient && string.IsNullOrWhiteSpace(request.Reason))
         {
             return Results.BadRequest(new
@@ -95,7 +86,7 @@ public static class SellerRateStatusEndpoints
                 rateId,
                 status,
                 request.Reason,
-                request.IdtraNumber,
+                null,
                 currentUserId
             ),
             cancellationToken
