@@ -2,8 +2,8 @@ using CustomCodeFramework.Api.DependencyInjection;
 using CustomCodeFramework.Api.Swagger;
 using CustomCodeFramework.Core.Abstractions;
 using Dhole.Pricing.Api.Endpoints;
-//using Dhole.Pricing.Api.Grpc;
 using Dhole.Pricing.Api.Middleware;
+using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.DependencyInjection;
 using Dhole.Pricing.Infrastructure.DependencyInjection;
 using Dhole.Pricing.Infrastructure.Time;
@@ -53,6 +53,7 @@ builder.Services.AddGrpc();
 builder.Services.AddApplication();
 builder.Services.AddPersistence(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSingleton<PricingEmailService>();
 builder.Services.AddHttpClient("DholeAI", client =>
 {
     var baseAddress = builder.Configuration["AI:Client:BaseAddress"] ?? "http://ai-api:5206/";
@@ -73,7 +74,6 @@ builder.Services.AddHttpClient("DholeAI", client =>
 var app = builder.Build();
 
 app.UseCustomCodeApi();
-
 app.UseCors(CorsPolicyName);
 
 if (app.Environment.IsDevelopment())
@@ -83,17 +83,12 @@ if (app.Environment.IsDevelopment())
 
 app.MapGet(
         "/health",
-        () =>
+        () => Results.Ok(new
         {
-            return Results.Ok(
-                new
-                {
-                    service = "DholePricingService",
-                    status = "Healthy",
-                    timestamp = DateTimeOffset.UtcNow,
-                }
-            );
-        }
+            service = "DholePricingService",
+            status = "Healthy",
+            timestamp = DateTimeOffset.UtcNow,
+        })
     )
     .AllowAnonymous();
 
@@ -102,12 +97,6 @@ app.UseMiddleware<SellerRateVisibilityMiddleware>();
 app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<AuditEndpointMiddleware>();
-
-// Own-LCL supports automatic defaults from naviera + POE and explicit per-consolidation
-// overrides. This keeps the master matrix intact while allowing a specific consolidation
-// to change costs/sales without forcing the same change into every quotation.
-
-//app.MapGrpcService<ConfigCatalogGrpcService>();
 
 app.MapCostEndpoints();
 app.MapImportRateEndpoints();
@@ -126,7 +115,6 @@ app.MapCommercialTermEndpoints();
 app.MapPricingConfigCatalogEndpoints();
 app.MapDataExtractionImportEndpoints();
 app.MapLogisticsNewsEndpoints();
-// El flujo LCL estándar de producción y los consolidados LCL propios conviven en Pricing.
 app.MapLclEndpoints();
 app.MapOwnLclConsolidationEndpoints();
 app.MapOwnLclRouteMatrixV2Endpoints();
@@ -137,7 +125,6 @@ app.MapLclRateSourceEndpoints();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
-
     await dbContext.Database.MigrateAsync();
 }
 
