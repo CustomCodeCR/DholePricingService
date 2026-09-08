@@ -96,6 +96,7 @@ app.UseAuthentication();
 app.UseMiddleware<SellerRateVisibilityMiddleware>();
 app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
+app.UseMiddleware<RateRequestSubmissionGuardMiddleware>();
 app.UseMiddleware<RequestedRateUpdateGuardMiddleware>();
 app.UseMiddleware<AuditEndpointMiddleware>();
 
@@ -110,6 +111,7 @@ app.MapRateComparisonEndpoints();
 app.MapRateRequestEndpoints();
 app.MapSellerRateRequestEndpoints();
 app.MapRateRequestCompletionEndpoints();
+app.MapRateRequestReportingEndpoints();
 app.MapRateTermItemEndpoints();
 app.MapPricingRuleConfigurationEndpoints();
 app.MapCommercialTermEndpoints();
