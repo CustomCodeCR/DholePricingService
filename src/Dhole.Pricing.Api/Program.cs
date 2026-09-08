@@ -115,6 +115,7 @@ app.MapImportRateReviewQueueEndpoints();
 app.MapCabysEndpoints();
 app.MapRateEndpoints();
 app.MapSellerRateEndpoints();
+app.MapSellerRateStatusEndpoints();
 app.MapRateComparisonEndpoints();
 app.MapRateRequestEndpoints();
 app.MapSellerRateRequestEndpoints();
