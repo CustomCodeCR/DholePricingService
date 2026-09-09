@@ -54,6 +54,7 @@ builder.Services.AddGrpc();
 builder.Services.AddApplication();
 builder.Services.AddPersistence(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSingleton<PricingEmailService>();
 builder.Services.AddScoped<SellerVisibilityService>();
 builder.Services.AddScoped<AuthSellerDirectoryService>();
 builder.Services.AddHttpClient("DholeAI", client =>
@@ -104,6 +105,7 @@ app.UseAuthentication();
 app.UseMiddleware<SellerRateVisibilityMiddleware>();
 app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
+app.UseMiddleware<RequestedRateUpdateGuardMiddleware>();
 app.UseMiddleware<AuditEndpointMiddleware>();
 
 // Own-LCL supports automatic defaults from naviera + POE and explicit per-consolidation
@@ -125,6 +127,8 @@ app.MapSellerVisibilityEndpoints();
 app.MapRateComparisonEndpoints();
 app.MapRateRequestEndpoints();
 app.MapSellerRateRequestEndpoints();
+app.MapRateRequestCompletionEndpoints();
+app.MapRateRequestReportingEndpoints();
 app.MapRateTermItemEndpoints();
 app.MapPricingRuleConfigurationEndpoints();
 app.MapCommercialTermEndpoints();
