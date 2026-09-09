@@ -4,6 +4,7 @@ using CustomCodeFramework.Core.Abstractions;
 using Dhole.Pricing.Api.Endpoints;
 //using Dhole.Pricing.Api.Grpc;
 using Dhole.Pricing.Api.Middleware;
+using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.DependencyInjection;
 using Dhole.Pricing.Infrastructure.DependencyInjection;
 using Dhole.Pricing.Infrastructure.Time;
@@ -139,6 +140,7 @@ using (var scope = app.Services.CreateScope())
     var dbContext = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
 
     await dbContext.Database.MigrateAsync();
+    await TigsaFtlCostSeeder.SeedAsync(scope.ServiceProvider);
 }
 
 app.Run();
