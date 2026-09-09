@@ -6,8 +6,11 @@ using Dhole.Pricing.Contracts.Costs.Response;
 
 namespace Dhole.Pricing.Application.Features.Costs.GetCostsForSelect;
 
-public sealed class GetCostsForSelectQueryHandler(ICostRepository costs, ICostCacheService cache)
-    : IQueryHandler<GetCostsForSelectQuery, Result<IReadOnlyCollection<CostSelectDto>>>
+public sealed class GetCostsForSelectQueryHandler(
+    ICostRepository costs,
+    ICostCacheService cache,
+    ICostRoutePortSelectionStore routePorts
+) : IQueryHandler<GetCostsForSelectQuery, Result<IReadOnlyCollection<CostSelectDto>>>
 {
     public async Task<Result<IReadOnlyCollection<CostSelectDto>>> HandleAsync(
         GetCostsForSelectQuery query,
@@ -44,8 +47,17 @@ public sealed class GetCostsForSelectQueryHandler(ICostRepository costs, ICostCa
 
         if (query.ApplicableToContext)
         {
+            var selections = await routePorts.GetManyAsync(
+                items.Select(item => item.Id).ToArray(),
+                cancellationToken
+            );
+
             items = items
-                .Where(item => IsApplicableToContext(item, query))
+                .Where(item =>
+                {
+                    selections.TryGetValue(item.Id, out var selection);
+                    return IsApplicableToContext(item, query, selection);
+                })
                 .OrderByDescending(CostSpecificity)
                 .ThenBy(item => item.CostType)
                 .ThenBy(item => item.CostDetailType)
@@ -61,7 +73,11 @@ public sealed class GetCostsForSelectQueryHandler(ICostRepository costs, ICostCa
         return Result.Success(items);
     }
 
-    private static bool IsApplicableToContext(CostSelectDto cost, GetCostsForSelectQuery query)
+    private static bool IsApplicableToContext(
+        CostSelectDto cost,
+        GetCostsForSelectQuery query,
+        CostRoutePortSelectionSet? selection
+    )
     {
         if (query.CarrierId.HasValue && cost.CarrierId.HasValue && cost.CarrierId != query.CarrierId)
             return false;
@@ -69,13 +85,13 @@ public sealed class GetCostsForSelectQueryHandler(ICostRepository costs, ICostCa
         if (query.AgentId.HasValue && cost.AgentId.HasValue && cost.AgentId != query.AgentId)
             return false;
 
-        if (query.PolId.HasValue && cost.PolId.HasValue && cost.PolId != query.PolId)
+        if (!RouteRoleMatches(selection?.PolIds, cost.PolId, query.PolId))
             return false;
 
-        if (query.PoeId.HasValue && cost.PoeId.HasValue && cost.PoeId != query.PoeId)
+        if (!RouteRoleMatches(selection?.PoeIds, cost.PoeId, query.PoeId))
             return false;
 
-        if (query.PodId.HasValue && cost.PodId.HasValue && cost.PodId != query.PodId)
+        if (!RouteRoleMatches(selection?.PodIds, cost.PodId, query.PodId))
             return false;
 
         if (
@@ -112,6 +128,22 @@ public sealed class GetCostsForSelectQueryHandler(ICostRepository costs, ICostCa
             return false;
 
         return true;
+    }
+
+    private static bool RouteRoleMatches(
+        IReadOnlyCollection<Guid>? selectedPortIds,
+        Guid? legacyPortId,
+        Guid? contextPortId
+    )
+    {
+        // Preserve the old behavior when the current quote does not provide this route role.
+        if (!contextPortId.HasValue)
+            return true;
+
+        if (selectedPortIds is { Count: > 0 })
+            return selectedPortIds.Contains(contextPortId.Value);
+
+        return !legacyPortId.HasValue || legacyPortId.Value == contextPortId.Value;
     }
 
     private static bool LegacyPortMatches(CostSelectDto cost, GetCostsForSelectQuery query)
