@@ -183,7 +183,7 @@ public sealed class UpdateRateCommandHandler(
 
             foreach (var requested in requestedContainers)
             {
-                var containerType = await configCatalog.GetActiveInGroupSlugAsync(
+                var containerType = await configCatalog.GetActiveInGroupAsync(
                     requested.ContainerTypeId,
                     equipmentCatalogSlug,
                     cancellationToken
