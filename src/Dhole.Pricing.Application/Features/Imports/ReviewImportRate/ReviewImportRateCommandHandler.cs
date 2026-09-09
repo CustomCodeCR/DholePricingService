@@ -31,7 +31,7 @@ public sealed class ReviewImportRateCommandHandler(
             return Result.Failure(PricingErrors.ImportFclRateNotFound);
         }
 
-        if (importRate.Status != ImportStatus.Pending)
+        if (importRate.Status is not (ImportStatus.Pending or ImportStatus.PreAuthorized))
         {
             return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
         }
