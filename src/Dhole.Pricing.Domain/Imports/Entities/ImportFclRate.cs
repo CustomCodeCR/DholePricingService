@@ -164,6 +164,12 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
     public int UsedAsRateCount { get; private set; }
     public Guid? CreatedAsRateHeaderId { get; private set; }
 
+    public bool HasBeenUsedAsRate => CreatedAsRateHeaderId.HasValue || UsedAsRateCount > 0;
+    public bool CanBeManuallyReviewed =>
+        Status is ImportStatus.Pending or ImportStatus.PreAuthorized
+        || (Status == ImportStatus.Approved && !HasBeenUsedAsRate);
+    public bool CanBeRejected => CanBeManuallyReviewed;
+
     public static ImportFclRates Create(
         Guid importBatchId,
         Guid extractionRecordId,
@@ -333,10 +339,10 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         Guid? updatedBy = null
     )
     {
-        if (Status is not (ImportStatus.Pending or ImportStatus.PreAuthorized))
+        if (!CanBeManuallyReviewed)
         {
             throw new InvalidOperationException(
-                "Solo se pueden revisar importaciones pendientes."
+                "Solo se pueden revisar importaciones pendientes, preautorizadas o preaprobadas que todavía no hayan sido utilizadas."
             );
         }
 
