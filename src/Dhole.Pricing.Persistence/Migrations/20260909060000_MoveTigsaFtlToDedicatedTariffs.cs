@@ -77,8 +77,8 @@ public sealed class MoveTigsaFtlToDedicatedTariffs : Migration
                 c.poe_id,
                 COALESCE(c.poe_name, 'Destino'),
                 c.poe_code,
-                substring(c.notes from '\[FTL_EQUIPMENT_CLASS=([^\]]+)\]'),
-                CASE substring(c.notes from '\[FTL_EQUIPMENT_CLASS=([^\]]+)\]')
+                substring(c.notes from '\[FTL_EQUIPMENT_CLASS=([^]]+)\]'),
+                CASE substring(c.notes from '\[FTL_EQUIPMENT_CLASS=([^]]+)\]')
                     WHEN '48_53' THEN 'Equipo 48/53 pies'
                     WHEN '5_7_TON' THEN 'Equipo 5 a 7 toneladas'
                     ELSE 'Equipo FTL'
