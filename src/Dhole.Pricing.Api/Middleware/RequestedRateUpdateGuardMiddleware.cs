@@ -10,9 +10,9 @@ namespace Dhole.Pricing.Api.Middleware;
 
 /// <summary>
 /// Protege las modificaciones de tarifas originadas por una solicitud de Ventas.
-/// Una tarifa solicitada solo puede actualizarse mientras la solicitud sigue abierta
-/// o después de ser enviada y antes de que Ventas la acepte/rechace. Toda actualización
-/// requiere un motivo y el motivo queda registrado en AuditLogs.
+/// Una tarifa solicitada solo puede actualizarse dentro de la misma solicitud antes
+/// de que Pricing la envíe, o después de enviada mientras Ventas aún no haya tomado
+/// una decisión. Toda actualización requiere un motivo y queda registrada en AuditLogs.
 /// </summary>
 public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
 {
@@ -38,6 +38,48 @@ public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
         if (linkedRequests.Count == 0)
         {
             await next(context);
+            return;
+        }
+
+        var rateStatus = await db.RateHeaders
+            .AsNoTracking()
+            .Where(x => x.Id == rateId && !x.IsDeleted)
+            .Select(x => (RateStatus?)x.Status)
+            .FirstOrDefaultAsync(context.RequestAborted);
+
+        if (!rateStatus.HasValue)
+        {
+            await next(context);
+            return;
+        }
+
+        // Una decisión comercial final siempre cierra la ventana, aunque por una
+        // inconsistencia histórica la solicitud todavía figure como Open.
+        var finalCommercialStatus = rateStatus.Value is
+            RateStatus.AcceptedByClient or
+            RateStatus.RejectedByClient or
+            RateStatus.Closed or
+            RateStatus.Expired;
+
+        var requestStillOpen = linkedRequests.Any(x => x.Status == RateRequestStatus.Open);
+        var beforePricingSends = requestStillOpen && rateStatus.Value is
+            RateStatus.PendingApproval or
+            RateStatus.ApprovedByManagement or
+            RateStatus.RejectedByManagement or
+            RateStatus.Open;
+        var waitingSellerDecision = rateStatus.Value is RateStatus.Sent or RateStatus.RequestedByClient;
+
+        if (finalCommercialStatus || (!beforePricingSends && !waitingSellerDecision))
+        {
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            await context.Response.WriteAsJsonAsync(new
+            {
+                code = "Pricing.RequestedRateUpdateWindowClosed",
+                message = finalCommercialStatus
+                    ? "La tarifa ya no puede actualizarse porque el vendedor ya tomó una decisión o la tarifa está cerrada/vencida."
+                    : "La tarifa solo puede actualizarse antes de que Pricing la envíe o mientras está enviada y pendiente de aceptación/rechazo del vendedor.",
+                rateStatus = rateStatus.Value.ToString(),
+            }, context.RequestAborted);
             return;
         }
 
@@ -69,32 +111,6 @@ public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
             return;
         }
 
-        var rateStatus = await db.RateHeaders
-            .AsNoTracking()
-            .Where(x => x.Id == rateId && !x.IsDeleted)
-            .Select(x => (RateStatus?)x.Status)
-            .FirstOrDefaultAsync(context.RequestAborted);
-
-        if (!rateStatus.HasValue)
-        {
-            await next(context);
-            return;
-        }
-
-        var requestStillOpen = linkedRequests.Any(x => x.Status == RateRequestStatus.Open);
-        var waitingSellerDecision = rateStatus.Value is RateStatus.Sent or RateStatus.RequestedByClient;
-
-        if (!requestStillOpen && !waitingSellerDecision)
-        {
-            context.Response.StatusCode = StatusCodes.Status409Conflict;
-            await context.Response.WriteAsJsonAsync(new
-            {
-                code = "Pricing.RequestedRateUpdateWindowClosed",
-                message = "La tarifa ya no puede actualizarse porque el vendedor ya la aceptó/rechazó o el flujo de actualización terminó.",
-            }, context.RequestAborted);
-            return;
-        }
-
         await next(context);
 
         if (context.Response.StatusCode >= 400)
@@ -112,6 +128,7 @@ public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
                     UpdateReason = updateReason.Trim(),
                     RequestIds = linkedRequests.Select(x => x.Id).ToArray(),
                     PreviousStatus = rateStatus.Value.ToString(),
+                    UpdateWindow = beforePricingSends ? "BeforePricingSend" : "WaitingSellerDecision",
                     Source = "RequestedRateUpdateGuard",
                 }
             ),
