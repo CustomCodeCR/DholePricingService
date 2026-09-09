@@ -55,6 +55,7 @@ builder.Services.AddPersistence(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<PricingEmailService>();
 builder.Services.AddScoped<SellerVisibilityService>();
+builder.Services.AddScoped<AuthSellerDirectoryService>();
 builder.Services.AddHttpClient("DholeAI", client =>
 {
     var baseAddress = builder.Configuration["AI:Client:BaseAddress"] ?? "http://ai-api:5206/";
