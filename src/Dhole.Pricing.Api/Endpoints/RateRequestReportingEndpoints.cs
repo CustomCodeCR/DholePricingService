@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Xml;
 using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,8 +18,6 @@ public static class RateRequestReportingEndpoints
             .WithTags("Rate requests")
             .RequireAuthorization();
 
-        // Estos endpoints conservan las URLs históricas, pero "all" ahora significa
-        // todo lo visible para el usuario: vendedores asignados o todos según su scope.
         group.MapGet("/all", GetAllAsync);
         group.MapGet("/export.xlsx", ExportExcelAsync);
         return app;
@@ -30,9 +29,9 @@ public static class RateRequestReportingEndpoints
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
-        var visibility = await visibilityService.ResolveAsync(
+        var visibility = await ResolveReportVisibilityAsync(
+            visibilityService,
             httpContext,
-            requireElevated: true,
             cancellationToken
         );
 
@@ -99,9 +98,9 @@ public static class RateRequestReportingEndpoints
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
-        var visibility = await visibilityService.ResolveAsync(
+        var visibility = await ResolveReportVisibilityAsync(
+            visibilityService,
             httpContext,
-            requireElevated: true,
             cancellationToken
         );
 
@@ -120,6 +119,29 @@ public static class RateRequestReportingEndpoints
             content,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             fileName);
+    }
+
+    private static async Task<SellerVisibilityContext?> ResolveReportVisibilityAsync(
+        SellerVisibilityService visibilityService,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        if (visibilityService.HasScope(
+            httpContext.User,
+            PricingConstants.Scopes.RateRequestReportViewAll))
+        {
+            return new SellerVisibilityContext(
+                Guid.Empty,
+                SellerVisibilityMode.All,
+                new HashSet<Guid>()
+            );
+        }
+
+        return await visibilityService.ResolveAsync(
+            httpContext,
+            requireElevated: true,
+            cancellationToken
+        );
     }
 
     private static IQueryable<RateRequest> ApplyVisibility(
