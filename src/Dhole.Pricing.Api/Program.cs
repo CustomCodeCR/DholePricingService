@@ -101,6 +101,7 @@ app.UseMiddleware<RequestedRateUpdateGuardMiddleware>();
 app.UseMiddleware<AuditEndpointMiddleware>();
 
 app.MapCostEndpoints();
+app.MapCostRoutePortEndpoints();
 app.MapImportRateEndpoints();
 app.MapImportRateReviewQueueEndpoints();
 app.MapCabysEndpoints();
