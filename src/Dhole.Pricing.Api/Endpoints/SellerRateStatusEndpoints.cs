@@ -7,6 +7,7 @@ using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
+using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
@@ -67,6 +68,7 @@ public static class SellerRateStatusEndpoints
         var currentRate = await db.RateHeaders
             .Include(x => x.RateContainers)
             .Include(x => x.RateDetails)
+            .Include(x => x.RateServices)
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
 
         if (currentRate is null)
@@ -123,7 +125,7 @@ public static class SellerRateStatusEndpoints
 
             await db.SaveChangesAsync(cancellationToken);
             await cache.RemoveRateHeaderCacheAsync(currentRate.Id, cancellationToken);
-            await NotifyOpeningsAsync(emailService, loggerFactory, rateRequest, currentRate.QuoNumber ?? currentRate.RateCode, cancellationToken);
+            await NotifyOpeningsAsync(emailService, loggerFactory, rateRequest, currentRate, cancellationToken);
             return Results.NoContent();
         }
 
@@ -140,7 +142,7 @@ public static class SellerRateStatusEndpoints
 
         if (result.IsSuccess && status == RateStatus.AcceptedByClient)
         {
-            await NotifyOpeningsAsync(emailService, loggerFactory, rateRequest, currentRate.QuoNumber ?? currentRate.RateCode, cancellationToken);
+            await NotifyOpeningsAsync(emailService, loggerFactory, rateRequest, currentRate, cancellationToken);
         }
 
         return EndpointResults.FromResult(result, httpContext);
@@ -149,29 +151,52 @@ public static class SellerRateStatusEndpoints
     private static async Task NotifyOpeningsAsync(
         PricingEmailService emailService,
         ILoggerFactory loggerFactory,
-        Dhole.Pricing.Domain.Rates.Entities.RateRequest request,
-        string quoteNumber,
+        RateRequest request,
+        RateHeader rate,
         CancellationToken cancellationToken)
     {
-        var seller = WebUtility.HtmlEncode(request.SellerName ?? request.ExecutiveName ?? "Ventas");
-        var client = WebUtility.HtmlEncode(request.ClientName ?? "Cliente");
-        var quote = WebUtility.HtmlEncode(quoteNumber);
-        var route = WebUtility.HtmlEncode(string.Join(" → ", new[] { request.OriginName, request.PoeName, request.PodName, request.DestinationName }
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Select(x => x!.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)));
+        var seller = Html(request.SellerName ?? request.ExecutiveName ?? rate.ExecutiveName ?? "Ventas");
+        var client = Html(rate.ClientName ?? request.ClientName ?? "Cliente");
+        var quoteNumber = rate.QuoNumber ?? rate.RateCode;
+        var quote = Html(quoteNumber);
+        var pol = Html(rate.PolName);
+        var poe = Html(rate.PoeName);
+        var pod = Html(rate.PodName ?? "—");
+        var route = $"{pol} → {poe} → {pod}";
+        var incoterm = Html(rate.IncotermName ?? rate.IncotermCode ?? "—");
+        var operationType = Html(OperationTypeLabel(rate.OperationType));
+
+        var containers = rate.RateContainers.Count == 0
+            ? Html($"{rate.ContainerTypeName} ({rate.ContainerTypeCode}) · Cantidad: {rate.ContainerQuantity}")
+            : string.Join("<br />", rate.RateContainers
+                .OrderBy(x => x.ContainerTypeName)
+                .Select(x => Html($"{x.ContainerTypeName} ({x.ContainerTypeCode}) · Cantidad: {x.Quantity}")));
+
+        var services = rate.RateServices.Count == 0
+            ? "—"
+            : string.Join("<br />", rate.RateServices
+                .OrderBy(x => x.ServiceName)
+                .Select(x => Html(string.IsNullOrWhiteSpace(x.ServiceCode)
+                    ? x.ServiceName
+                    : $"{x.ServiceName} ({x.ServiceCode})")));
 
         try
         {
             await emailService.SendAsync(
                 OpeningsEmail,
-                $"Tarifa aprobada por cliente - {request.ClientName ?? quoteNumber}",
+                $"Tarifa aprobada por cliente - {rate.ClientName ?? request.ClientName ?? quoteNumber}",
                 $"""
                 <p>Se confirmó una tarifa aprobada por el cliente.</p>
-                <p><strong>Cliente:</strong> {client}<br />
-                <strong>Tarifa:</strong> {quote}<br />
-                <strong>Vendedor:</strong> {seller}<br />
-                <strong>Ruta:</strong> {route}</p>
+                <table style="border-collapse:collapse; width:100%; max-width:760px">
+                  <tr><td style="padding:5px 10px"><strong>Cliente</strong></td><td style="padding:5px 10px">{client}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Ruta (POL → POE → POD)</strong></td><td style="padding:5px 10px">{route}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Contenedor / Equipo</strong></td><td style="padding:5px 10px">{containers}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Incoterm</strong></td><td style="padding:5px 10px">{incoterm}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Vendedor</strong></td><td style="padding:5px 10px">{seller}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>QUO</strong></td><td style="padding:5px 10px">{quote}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Servicios</strong></td><td style="padding:5px 10px">{services}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Tipo de operación</strong></td><td style="padding:5px 10px">{operationType}</td></tr>
+                </table>
                 <p>Favor continuar con el proceso de apertura correspondiente.</p>
                 """,
                 null,
@@ -184,10 +209,20 @@ public static class SellerRateStatusEndpoints
             loggerFactory.CreateLogger("SellerRateOpeningsEmail").LogError(
                 exception,
                 "No se pudo notificar a Aperturas la aceptación de la tarifa {RateId}.",
-                request.RateId
+                rate.Id
             );
         }
     }
+
+    private static string OperationTypeLabel(RateOperationType operationType) => operationType switch
+    {
+        RateOperationType.Import => "Importación",
+        RateOperationType.Export => "Exportación",
+        RateOperationType.TransitDomestic => "Tránsito / doméstico",
+        _ => operationType.ToString(),
+    };
+
+    private static string Html(string value) => WebUtility.HtmlEncode(value);
 
     private sealed record SellerRateStatusRequest(
         string Status,
