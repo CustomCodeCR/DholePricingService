@@ -14,6 +14,8 @@ public static class SellerVisibilityEndpoints
             .RequireAuthorization();
 
         group.MapGet("/me", GetMineAsync);
+        group.MapGet("/me/options", GetMyOptionsAsync)
+            .RequireScope(PricingConstants.Scopes.RateRequestCreate);
 
         group.MapGet("/{viewerUserId:guid}", GetAsync)
             .RequireScope(PricingConstants.Scopes.RateRequestVisibilityManage);
@@ -45,6 +47,49 @@ public static class SellerVisibilityEndpoints
             viewerUserId = visibility.ViewerUserId,
             mode = visibility.Mode.ToString(),
             sellerUserIds = visibility.SellerUserIds.OrderBy(x => x).ToArray(),
+        });
+    }
+
+    private static async Task<IResult> GetMyOptionsAsync(
+        SellerVisibilityService visibilityService,
+        AuthSellerDirectoryService sellerDirectory,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var visibility = await visibilityService.ResolveAsync(
+            httpContext,
+            requireElevated: false,
+            cancellationToken
+        );
+
+        if (visibility is null)
+        {
+            return Results.Forbid();
+        }
+
+        var sellers = await sellerDirectory.GetSellersAsync(cancellationToken);
+        var visibleSellers = visibility.Mode == SellerVisibilityMode.All
+            ? sellers
+            : sellers.Where(x => visibility.SellerUserIds.Contains(x.UserId)).ToArray();
+
+        var options = visibleSellers
+            .OrderByDescending(x => x.UserId == visibility.ViewerUserId)
+            .ThenBy(x => x.DisplayName ?? x.UserName ?? x.Email)
+            .Select(x => new
+            {
+                x.UserId,
+                x.DisplayName,
+                x.Email,
+                x.UserName,
+                isCurrent = x.UserId == visibility.ViewerUserId,
+            })
+            .ToArray();
+
+        return Results.Ok(new
+        {
+            viewerUserId = visibility.ViewerUserId,
+            mode = visibility.Mode.ToString(),
+            sellers = options,
         });
     }
 
