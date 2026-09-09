@@ -28,6 +28,12 @@ public sealed class UpdateRateCommandHandler(
     private static readonly Guid OwnLclInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c41");
     private const string OwnLclInternalAgentName = "Grupo Castro Fallas";
     private const string OwnLclInternalAgentCode = "GCF";
+    private static readonly Guid LandInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c42");
+    private const string LandInternalAgentName = "No aplica (terrestre)";
+    private const string LandInternalAgentCode = "LAND";
+    private static readonly Guid LandInternalCarrierId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c43");
+    private const string LandInternalCarrierName = "No aplica (terrestre)";
+    private const string LandInternalCarrierCode = "LAND";
 
     public async Task<Result> HandleAsync(
         UpdateRateCommand command,
@@ -68,13 +74,15 @@ public sealed class UpdateRateCommandHandler(
                 )
             )
         );
+        var landWithoutProvider = command.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
 
         // Rehidratamos todos los selectores desde Config. De esta manera cambiar naviera,
         // agente, ruta, contenedor, moneda o Incoterm nunca persiste Name/Code enviados por Web.
         try
         {
             PricingConfigCatalogItem? agent = null;
-            var requestedCatalogAgent = command.AgentId != Guid.Empty
+            var requestedCatalogAgent = !landWithoutProvider
+                && command.AgentId != Guid.Empty
                 && command.AgentId != OwnLclInternalAgentId;
             if (requestedCatalogAgent)
             {
@@ -84,17 +92,25 @@ public sealed class UpdateRateCommandHandler(
                     return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
                         "El agente", PricingConstants.CatalogSlugs.Agents));
             }
-            else if (!ownLclWithoutAgent)
+            else if (!ownLclWithoutAgent && !landWithoutProvider)
             {
                 return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
                     "El agente", PricingConstants.CatalogSlugs.Agents));
             }
 
-            var carrier = await configCatalog.GetActiveInGroupAsync(
-                command.CarrierId, PricingConstants.CatalogSlugs.Carriers, cancellationToken);
-            if (carrier is null)
-                return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
-                    "La naviera", PricingConstants.CatalogSlugs.Carriers));
+            PricingConfigCatalogItem? carrier = null;
+            if (!landWithoutProvider)
+            {
+                if (command.CarrierId == Guid.Empty)
+                    return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                        "La naviera", PricingConstants.CatalogSlugs.Carriers));
+
+                carrier = await configCatalog.GetActiveInGroupAsync(
+                    command.CarrierId, PricingConstants.CatalogSlugs.Carriers, cancellationToken);
+                if (carrier is null)
+                    return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                        "La naviera", PricingConstants.CatalogSlugs.Carriers));
+            }
 
             var pol = await configCatalog.GetActiveInGroupAsync(
                 command.PolId, PricingConstants.CatalogSlugs.Pol, cancellationToken);
@@ -183,12 +199,18 @@ public sealed class UpdateRateCommandHandler(
             var normalizedPrimaryContainer = normalizedContainers[0];
             command = command with
             {
-                AgentId = agent?.Id ?? OwnLclInternalAgentId,
-                AgentName = agent?.SnapshotName() ?? OwnLclInternalAgentName,
-                AgentCode = agent?.Code ?? OwnLclInternalAgentCode,
-                CarrierId = carrier.Id,
-                CarrierName = carrier.SnapshotName(),
-                CarrierCode = carrier.Code,
+                AgentId = landWithoutProvider
+                    ? LandInternalAgentId
+                    : agent?.Id ?? OwnLclInternalAgentId,
+                AgentName = landWithoutProvider
+                    ? LandInternalAgentName
+                    : agent?.SnapshotName() ?? OwnLclInternalAgentName,
+                AgentCode = landWithoutProvider
+                    ? LandInternalAgentCode
+                    : agent?.Code ?? OwnLclInternalAgentCode,
+                CarrierId = landWithoutProvider ? LandInternalCarrierId : carrier!.Id,
+                CarrierName = landWithoutProvider ? LandInternalCarrierName : carrier!.SnapshotName(),
+                CarrierCode = landWithoutProvider ? LandInternalCarrierCode : carrier!.Code,
                 PolId = pol.Id,
                 PolName = pol.SnapshotName(),
                 PolCode = pol.Code,

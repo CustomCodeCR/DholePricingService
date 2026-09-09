@@ -36,6 +36,16 @@ public sealed class CreateRateCommandHandler(
     private const string OwnLclInternalAgentName = "Grupo Castro Fallas";
     private const string OwnLclInternalAgentCode = "GCF";
 
+    // FTL/LTL no requieren agente ni naviera elegidos por el usuario. RateHeader mantiene
+    // históricamente ambos snapshots obligatorios, por lo que usamos marcadores internos
+    // que nunca se consultan contra Config ni se exponen como selectores del flujo terrestre.
+    private static readonly Guid LandInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c42");
+    private const string LandInternalAgentName = "No aplica (terrestre)";
+    private const string LandInternalAgentCode = "LAND";
+    private static readonly Guid LandInternalCarrierId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c43");
+    private const string LandInternalCarrierName = "No aplica (terrestre)";
+    private const string LandInternalCarrierCode = "LAND";
+
     public async Task<Result<Guid>> HandleAsync(
         CreateRateCommand command,
         CancellationToken cancellationToken = default
@@ -48,13 +58,14 @@ public sealed class CreateRateCommandHandler(
                 string.Equals(command.AgentCode, OwnLclInternalAgentCode, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(command.AgentName, OwnLclInternalAgentName, StringComparison.OrdinalIgnoreCase)
             );
+        var landWithoutProvider = command.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
 
         // Los Id de catálogo son la única entrada confiable. Todos los snapshots usados por
         // Pricing se reconstruyen desde Dhole.Config antes de crear la tarifa.
         try
         {
             PricingConfigCatalogItem? agent = null;
-            if (!ownLclWithoutAgent)
+            if (!ownLclWithoutAgent && !landWithoutProvider)
             {
                 if (!command.AgentId.HasValue || command.AgentId.Value == Guid.Empty)
                     return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
@@ -67,14 +78,22 @@ public sealed class CreateRateCommandHandler(
                         "El agente", PricingConstants.CatalogSlugs.Agents));
             }
 
-            var carrier = await configCatalog.GetActiveInGroupAsync(
-                command.CarrierId,
-                PricingConstants.CatalogSlugs.Carriers,
-                cancellationToken
-            );
-            if (command.CarrierId.HasValue && command.CarrierId.Value != Guid.Empty && carrier is null)
-                return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
-                    "La naviera", PricingConstants.CatalogSlugs.Carriers));
+            PricingConfigCatalogItem? carrier = null;
+            if (!landWithoutProvider)
+            {
+                if (!command.CarrierId.HasValue || command.CarrierId.Value == Guid.Empty)
+                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
+                        "La naviera", PricingConstants.CatalogSlugs.Carriers));
+
+                carrier = await configCatalog.GetActiveInGroupAsync(
+                    command.CarrierId,
+                    PricingConstants.CatalogSlugs.Carriers,
+                    cancellationToken
+                );
+                if (carrier is null)
+                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
+                        "La naviera", PricingConstants.CatalogSlugs.Carriers));
+            }
 
             var pol = await configCatalog.GetActiveInGroupAsync(
                 command.PolId, PricingConstants.CatalogSlugs.Pol, cancellationToken);
@@ -163,12 +182,18 @@ public sealed class CreateRateCommandHandler(
             var primaryContainer = normalizedContainers[0];
             command = command with
             {
-                AgentId = ownLclWithoutAgent ? OwnLclInternalAgentId : agent?.Id,
-                AgentName = ownLclWithoutAgent ? OwnLclInternalAgentName : agent?.SnapshotName(),
-                AgentCode = ownLclWithoutAgent ? OwnLclInternalAgentCode : agent?.Code,
-                CarrierId = carrier?.Id,
-                CarrierName = carrier?.SnapshotName(),
-                CarrierCode = carrier?.Code,
+                AgentId = landWithoutProvider
+                    ? LandInternalAgentId
+                    : ownLclWithoutAgent ? OwnLclInternalAgentId : agent?.Id,
+                AgentName = landWithoutProvider
+                    ? LandInternalAgentName
+                    : ownLclWithoutAgent ? OwnLclInternalAgentName : agent?.SnapshotName(),
+                AgentCode = landWithoutProvider
+                    ? LandInternalAgentCode
+                    : ownLclWithoutAgent ? OwnLclInternalAgentCode : agent?.Code,
+                CarrierId = landWithoutProvider ? LandInternalCarrierId : carrier?.Id,
+                CarrierName = landWithoutProvider ? LandInternalCarrierName : carrier?.SnapshotName(),
+                CarrierCode = landWithoutProvider ? LandInternalCarrierCode : carrier?.Code,
                 PolId = pol.Id,
                 PolName = pol.SnapshotName(),
                 PolCode = pol.Code,
