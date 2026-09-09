@@ -7,6 +7,8 @@ namespace Dhole.Pricing.Api.Endpoints;
 
 public static class SellerVisibilityEndpoints
 {
+    private const string SellerAssignmentManageScope = "pricing.seller.assignment.manage";
+
     public static IEndpointRouteBuilder MapSellerVisibilityEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/pricing/seller-visibility")
@@ -18,10 +20,10 @@ public static class SellerVisibilityEndpoints
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
 
         group.MapGet("/{viewerUserId:guid}", GetAsync)
-            .RequireScope(PricingConstants.Scopes.RateRequestVisibilityManage);
+            .RequireScope(SellerAssignmentManageScope);
 
         group.MapPut("/{viewerUserId:guid}", ReplaceAsync)
-            .RequireScope(PricingConstants.Scopes.RateRequestVisibilityManage);
+            .RequireScope(SellerAssignmentManageScope);
 
         return app;
     }
