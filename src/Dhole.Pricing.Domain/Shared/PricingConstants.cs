@@ -50,6 +50,7 @@ public static class PricingConstants
         public const string ImportFclRateCreateAsRate = "pricing.import-fcl-rate.create-as-rate";
         public const string OwnLclConsolidationCreate = "pricing.own-lcl-consolidation.create";
         public const string RateRequestCreate = "pricing.rate-request.create";
+        public const string RateRequestViewAll = "pricing.rate-request.view-all";
         public const string RateCreate = "pricing.rate.create";
         public const string RateView = "pricing.rate.view";
         public const string RateUpdate = "pricing.rate.update";
