@@ -2,7 +2,6 @@ using System.Net;
 using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
-using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Application.Features.Rates.GenerateRateDocument;
 using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
@@ -33,8 +32,6 @@ public static class RateRequestCompletionEndpoints
         ServiceDbContext db,
         ICommandDispatcher dispatcher,
         IIntegrationEventOutboxWriter outbox,
-        PricingEmailService emailService,
-        ILoggerFactory loggerFactory,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -80,8 +77,6 @@ public static class RateRequestCompletionEndpoints
         if (!documentResult.IsSuccess)
             return EndpointResults.FromResult(documentResult, httpContext);
 
-        // Un reintento de correo puede encontrar la tarifa ya en Sent aunque la solicitud siga
-        // abierta. No repetimos la transición; únicamente reintentamos documento/correo.
         if (rate.Status != RateStatus.Sent)
         {
             var actor = httpContext.GetCurrentUserId();
@@ -107,46 +102,65 @@ public static class RateRequestCompletionEndpoints
         var route = WebUtility.HtmlEncode(routeText);
         var quoteNumberText = rate.QuoNumber ?? rate.RateCode;
         var quoteNumber = WebUtility.HtmlEncode(quoteNumberText);
-
-        try
-        {
-            await emailService.SendAsync(
-                entity.SellerEmail.Trim(),
-                $"Tarifa lista - {entity.ClientName ?? rate.QuoNumber ?? rate.RateCode}",
-                $"""
-                <p>Hola {sellerName},</p>
-                <p>Pricing terminó la tarifa solicitada para <strong>{clientName}</strong>.</p>
-                <p><strong>Tarifa:</strong> {quoteNumber}<br />
-                <strong>Ruta:</strong> {route}</p>
-                <p>Se adjunta la cotización completa en PDF para que pueda enviarla al cliente.</p>
-                <p>Grupo Castro Fallas - Pricing</p>
-                """,
-                new PricingEmailAttachment(document.FileName, document.ContentType, document.Content),
-                cancellationToken
-            );
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            loggerFactory.CreateLogger("RateRequestCompletionEmail").LogError(
-                exception,
-                "No se pudo enviar al vendedor {SellerEmail} la tarifa {RateId} de la solicitud {RateRequestId}.",
-                entity.SellerEmail,
-                request.RateId,
-                requestId
-            );
-
-            return Results.Problem(
-                title: "No se pudo enviar la tarifa al vendedor",
-                detail: "La tarifa quedó preparada, pero el correo con el PDF no pudo enviarse. La solicitud permanece abierta para reintentar.",
-                statusCode: StatusCodes.Status502BadGateway
-            );
-        }
+        var sellerEmail = entity.SellerEmail.Trim();
+        var sellerDisplayName = entity.SellerName ?? entity.ExecutiveName;
+        var emailBody = $"""
+            <p>Hola {sellerName},</p>
+            <p>Pricing terminó la tarifa solicitada para <strong>{clientName}</strong>.</p>
+            <p><strong>Tarifa:</strong> {quoteNumber}<br />
+            <strong>Ruta:</strong> {route}</p>
+            <p>Se adjunta la cotización completa en PDF para que pueda enviarla al cliente.</p>
+            <p>Grupo Castro Fallas - Pricing</p>
+            """;
 
         entity.AttachRate(request.RateId);
         entity.MarkCompleted(DateTime.UtcNow);
 
-        // Notifications persiste el mensaje de sistema y lo retransmite por SignalR al grupo
-        // del usuario vendedor. Se encola junto con la finalización para no perder la alerta.
+        // El envío de correo queda en Notifications para que una caída de SMTP no convierta
+        // la creación de tarifa en un 502. Notifications maneja reintentos y adjunta el PDF.
+        await outbox.WriteAsync(
+            NotificationEventName,
+            NotificationEventName,
+            new
+            {
+                notificationType = "pricing.requested-rate.completed.email",
+                channel = "Email",
+                entityType = "RateRequest",
+                entityId = requestId.ToString(),
+                subject = $"Tarifa lista - {entity.ClientName ?? rate.QuoNumber ?? rate.RateCode}",
+                body = emailBody,
+                payload = new
+                {
+                    rateRequestId = requestId,
+                    rateId = request.RateId,
+                    quo = quoteNumberText,
+                    client = entity.ClientName,
+                    route = routeText,
+                    attachments = new[]
+                    {
+                        new
+                        {
+                            fileName = document.FileName,
+                            contentType = document.ContentType,
+                            contentBase64 = Convert.ToBase64String(document.Content),
+                        },
+                    },
+                },
+                recipients = new[]
+                {
+                    new
+                    {
+                        userId = entity.SellerUserId?.ToString(),
+                        address = sellerEmail,
+                        displayName = sellerDisplayName,
+                    },
+                },
+            },
+            $"{requestId}:seller-email",
+            cancellationToken
+        );
+
+        // Mantener además la notificación interna/SignalR para el vendedor.
         await outbox.WriteAsync(
             NotificationEventName,
             NotificationEventName,
@@ -171,13 +185,13 @@ public static class RateRequestCompletionEndpoints
                 {
                     new
                     {
-                        userId = entity.SellerUserId.ToString(),
-                        address = entity.SellerEmail.Trim(),
-                        displayName = entity.SellerName ?? entity.ExecutiveName,
+                        userId = entity.SellerUserId?.ToString(),
+                        address = sellerEmail,
+                        displayName = sellerDisplayName,
                     },
                 },
             },
-            requestId.ToString(),
+            $"{requestId}:system",
             cancellationToken
         );
 
