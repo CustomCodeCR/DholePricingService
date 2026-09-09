@@ -2,7 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using System.Xml;
-using Dhole.Pricing.Api.Authorization;
+using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
@@ -11,23 +11,37 @@ namespace Dhole.Pricing.Api.Endpoints;
 
 public static class RateRequestReportingEndpoints
 {
-    private const string ViewAllScope = "pricing.rate-request.view-all";
-
     public static IEndpointRouteBuilder MapRateRequestReportingEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/pricing/rate-requests")
             .WithTags("Rate requests")
             .RequireAuthorization();
 
-        group.MapGet("/all", GetAllAsync).RequireScope(ViewAllScope);
-        group.MapGet("/export.xlsx", ExportExcelAsync).RequireScope(ViewAllScope);
+        // Estos endpoints conservan las URLs históricas, pero "all" ahora significa
+        // todo lo visible para el usuario: vendedores asignados o todos según su scope.
+        group.MapGet("/all", GetAllAsync);
+        group.MapGet("/export.xlsx", ExportExcelAsync);
         return app;
     }
 
-    private static async Task<IResult> GetAllAsync(ServiceDbContext db, CancellationToken cancellationToken)
+    private static async Task<IResult> GetAllAsync(
+        ServiceDbContext db,
+        SellerVisibilityService visibilityService,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
     {
-        var rows = await db.RateRequests
-            .AsNoTracking()
+        var visibility = await visibilityService.ResolveAsync(
+            httpContext,
+            requireElevated: true,
+            cancellationToken
+        );
+
+        if (visibility is null)
+        {
+            return Results.Forbid();
+        }
+
+        var rows = await ApplyVisibility(db.RateRequests.AsNoTracking(), visibility)
             .OrderByDescending(x => x.RequestedAtUtc)
             .Select(x => new
             {
@@ -79,10 +93,24 @@ public static class RateRequestReportingEndpoints
         }));
     }
 
-    private static async Task<IResult> ExportExcelAsync(ServiceDbContext db, CancellationToken cancellationToken)
+    private static async Task<IResult> ExportExcelAsync(
+        ServiceDbContext db,
+        SellerVisibilityService visibilityService,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
     {
-        var requests = await db.RateRequests
-            .AsNoTracking()
+        var visibility = await visibilityService.ResolveAsync(
+            httpContext,
+            requireElevated: true,
+            cancellationToken
+        );
+
+        if (visibility is null)
+        {
+            return Results.Forbid();
+        }
+
+        var requests = await ApplyVisibility(db.RateRequests.AsNoTracking(), visibility)
             .OrderByDescending(x => x.RequestedAtUtc)
             .ToListAsync(cancellationToken);
 
@@ -92,6 +120,19 @@ public static class RateRequestReportingEndpoints
             content,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             fileName);
+    }
+
+    private static IQueryable<RateRequest> ApplyVisibility(
+        IQueryable<RateRequest> query,
+        SellerVisibilityContext visibility)
+    {
+        if (visibility.Mode == SellerVisibilityMode.All)
+        {
+            return query;
+        }
+
+        var sellerUserIds = visibility.SellerUserIds.ToArray();
+        return query.Where(request => sellerUserIds.Contains(request.SellerUserId));
     }
 
     private static byte[] BuildWorkbook(IReadOnlyList<RateRequest> requests)
