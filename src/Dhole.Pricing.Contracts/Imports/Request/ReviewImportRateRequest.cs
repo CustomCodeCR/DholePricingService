@@ -4,7 +4,7 @@ public sealed record ReviewImportRateRequest(
     Guid ImportProfileId,
     Guid PolId,
     Guid PoeId,
-    Guid PodId,
+    Guid? PodId,
     Guid CarrierId,
     Guid AgentId,
     Guid ContainerTypeId,
