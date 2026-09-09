@@ -132,7 +132,8 @@ public static class RateRequestReportingEndpoints
         }
 
         var sellerUserIds = visibility.SellerUserIds.ToArray();
-        return query.Where(request => sellerUserIds.Contains(request.SellerUserId));
+        return query.Where(request =>
+            request.SellerUserId.HasValue && sellerUserIds.Contains(request.SellerUserId.Value));
     }
 
     private static byte[] BuildWorkbook(IReadOnlyList<RateRequest> requests)
