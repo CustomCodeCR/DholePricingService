@@ -3,6 +3,7 @@ using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
 using Dhole.Pricing.Api.Services;
+using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Application.Features.Rates.GenerateRateDocument;
 using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -14,6 +15,8 @@ namespace Dhole.Pricing.Api.Endpoints;
 
 public static class RateRequestCompletionEndpoints
 {
+    private const string NotificationEventName = "notifications.notification.requested";
+
     public static IEndpointRouteBuilder MapRateRequestCompletionEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/pricing/rate-requests/{requestId:guid}/complete-rate", CompleteAsync)
@@ -29,6 +32,7 @@ public static class RateRequestCompletionEndpoints
         CompleteRateRequest request,
         ServiceDbContext db,
         ICommandDispatcher dispatcher,
+        IIntegrationEventOutboxWriter outbox,
         PricingEmailService emailService,
         ILoggerFactory loggerFactory,
         HttpContext httpContext,
@@ -99,8 +103,10 @@ public static class RateRequestCompletionEndpoints
         var document = documentResult.Value;
         var sellerName = WebUtility.HtmlEncode(entity.SellerName ?? entity.ExecutiveName ?? "Vendedor");
         var clientName = WebUtility.HtmlEncode(entity.ClientName ?? "Cliente");
-        var route = WebUtility.HtmlEncode(BuildRoute(entity));
-        var quoteNumber = WebUtility.HtmlEncode(rate.QuoNumber ?? rate.RateCode);
+        var routeText = BuildRoute(entity);
+        var route = WebUtility.HtmlEncode(routeText);
+        var quoteNumberText = rate.QuoNumber ?? rate.RateCode;
+        var quoteNumber = WebUtility.HtmlEncode(quoteNumberText);
 
         try
         {
@@ -138,6 +144,43 @@ public static class RateRequestCompletionEndpoints
 
         entity.AttachRate(request.RateId);
         entity.MarkCompleted(DateTime.UtcNow);
+
+        // Notifications persiste el mensaje de sistema y lo retransmite por SignalR al grupo
+        // del usuario vendedor. Se encola junto con la finalización para no perder la alerta.
+        await outbox.WriteAsync(
+            NotificationEventName,
+            NotificationEventName,
+            new
+            {
+                notificationType = "pricing.requested-rate.completed",
+                channel = "System",
+                entityType = "RateRequest",
+                entityId = requestId.ToString(),
+                subject = "Tarifa solicitada lista",
+                body = $"Pricing terminó la tarifa {quoteNumberText} para {entity.ClientName ?? "el cliente"}.",
+                payload = new
+                {
+                    rateRequestId = requestId,
+                    rateId = request.RateId,
+                    quo = quoteNumberText,
+                    client = entity.ClientName,
+                    route = routeText,
+                    pdfFileName = document.FileName,
+                },
+                recipients = new[]
+                {
+                    new
+                    {
+                        userId = entity.SellerUserId.ToString(),
+                        address = entity.SellerEmail.Trim(),
+                        displayName = entity.SellerName ?? entity.ExecutiveName,
+                    },
+                },
+            },
+            requestId.ToString(),
+            cancellationToken
+        );
+
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.NoContent();
