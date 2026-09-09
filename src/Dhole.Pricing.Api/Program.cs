@@ -110,6 +110,7 @@ app.UseMiddleware<AuditEndpointMiddleware>();
 //app.MapGrpcService<ConfigCatalogGrpcService>();
 
 app.MapCostEndpoints();
+app.MapCostRoutePortEndpoints();
 app.MapImportRateEndpoints();
 app.MapImportRateReviewQueueEndpoints();
 app.MapCabysEndpoints();
