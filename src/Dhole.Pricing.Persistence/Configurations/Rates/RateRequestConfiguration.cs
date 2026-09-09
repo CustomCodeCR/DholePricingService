@@ -9,11 +9,8 @@ internal sealed class RateRequestConfiguration : IEntityTypeConfiguration<RateRe
 {
     public void Configure(EntityTypeBuilder<RateRequest> builder)
     {
-        // RateRequests is created by the explicit SQL migration
-        // 20260903203000_AddSellerRateRequests. Excluding this table from the
-        // convention-based migration differ prevents EF Core from treating this
-        // externally-described table as a pending model change before MigrateAsync
-        // has a chance to execute that migration.
+        // RateRequests is created by explicit SQL migrations. Excluding this table from
+        // the convention-based differ keeps the manual schema additions authoritative.
         builder.ToTable("RateRequests", "pricing", table => table.ExcludeFromMigrations());
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
@@ -32,9 +29,15 @@ internal sealed class RateRequestConfiguration : IEntityTypeConfiguration<RateRe
         builder.Property(x => x.ShipmentMode).HasColumnName("shipment_mode").HasMaxLength(32);
         builder.Property(x => x.OriginName).HasColumnName("origin_name").HasMaxLength(250);
         builder.Property(x => x.DestinationName).HasColumnName("destination_name").HasMaxLength(250);
+        builder.Property(x => x.PoeId).HasColumnName("poe_id");
+        builder.Property(x => x.PoeName).HasColumnName("poe_name").HasMaxLength(250);
+        builder.Property(x => x.PodId).HasColumnName("pod_id");
+        builder.Property(x => x.PodName).HasColumnName("pod_name").HasMaxLength(250);
         builder.Property(x => x.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb").IsRequired();
 
         builder.HasIndex(x => new { x.Status, x.Priority, x.DueAtUtc, x.RequestedAtUtc });
         builder.HasIndex(x => x.RateId);
+        builder.HasIndex(x => x.PoeId);
+        builder.HasIndex(x => x.PodId);
     }
 }

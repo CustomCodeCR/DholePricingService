@@ -57,6 +57,10 @@ public sealed class RateRequest : Entity<Guid>
     public string? ShipmentMode { get; private set; }
     public string? OriginName { get; private set; }
     public string? DestinationName { get; private set; }
+    public Guid? PoeId { get; private set; }
+    public string? PoeName { get; private set; }
+    public Guid? PodId { get; private set; }
+    public string? PodName { get; private set; }
     public string PayloadJson { get; private set; } = "{}";
 
     public static RateRequest Create(
@@ -83,6 +87,14 @@ public sealed class RateRequest : Entity<Guid>
         destinationName,
         payloadJson
     );
+
+    public void SetRoute(Guid? poeId, string? poeName, Guid? podId, string? podName)
+    {
+        PoeId = poeId;
+        PoeName = Normalize(poeName);
+        PodId = podId;
+        PodName = Normalize(podName);
+    }
 
     public void AttachRate(Guid rateId)
     {
