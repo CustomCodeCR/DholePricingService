@@ -22,16 +22,19 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         string CurrencyValue(string? name, string? code) =>
             Text(name, Text(code, "USD"));
-
-        var currencyValue = CurrencyValue(rate.CurrencyName, rate.CurrencyCode);
-        string Money(decimal amount) => $"{currencyValue} {amount.ToString("N2", MoneyCulture)}";
         string DetailMoney(RateDetail detail, decimal amount) =>
             $"{CurrencyValue(detail.CurrencyName, detail.CurrencyCode)} {amount.ToString("N2", MoneyCulture)}";
 
+        var currencyValue = CurrencyValue(rate.CurrencyName, rate.CurrencyCode);
         var commercialTerms = ExclusiveCommercialTerms(rate.Includes, rate.SubjectTo, rate.Excludes);
         var originOfficePublicUrl = CreateOriginOfficePublicUrl(rate);
         var originOfficeQrDataUri = CreateQrDataUri(originOfficePublicUrl);
-        var showCarrier = rate.ShipmentMode != ShipmentMode.Lcl;
+        var isLand = rate.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
+        var showAgent = !isLand;
+        var showCarrier = rate.ShipmentMode == ShipmentMode.Fcl;
+        var route = !string.IsNullOrWhiteSpace(rate.PodName)
+            ? $"{rate.PolName} → {rate.PodName} vía {rate.PoeName}"
+            : $"{rate.PolName} → {rate.PoeName}";
 
         var containers = (rate.RateContainers.Count > 0
                 ? rate.RateContainers
@@ -109,6 +112,42 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             })
             .ToArray();
 
+        // Los importes comerciales pueden pertenecer a monedas distintas. Nunca se deben
+        // sumar valores nominales de USD, CRC, EUR, etc. en un único total. El PDF recibe
+        // un total independiente por moneda y decide cómo presentarlo visualmente.
+        var currencyTotals = reportDetails
+            .GroupBy(
+                detail => string.IsNullOrWhiteSpace(detail.CurrencyCode)
+                    ? CurrencyValue(detail.CurrencyName, detail.CurrencyCode).ToUpperInvariant()
+                    : detail.CurrencyCode.Trim().ToUpperInvariant(),
+                StringComparer.OrdinalIgnoreCase
+            )
+            .Select(group =>
+            {
+                var first = group.First();
+                var displayCurrency = CurrencyValue(first.CurrencyName, first.CurrencyCode);
+                var amount = group.Sum(detail => detail.SaleAmount * detail.Quantity);
+
+                return new
+                {
+                    currency = displayCurrency,
+                    currencyCode = Text(first.CurrencyCode, string.Empty),
+                    amount,
+                    total = $"{displayCurrency} {amount.ToString("N2", MoneyCulture)}"
+                };
+            })
+            .OrderBy(x => x.currencyCode)
+            .ThenBy(x => x.currency)
+            .ToArray();
+        var hasSingleCurrency = currencyTotals.Length == 1;
+        var hasMultipleCurrencies = currencyTotals.Length > 1;
+        var reportTotal = hasSingleCurrency
+            ? currencyTotals[0].total
+            : hasMultipleCurrencies
+                ? "Totales por moneda"
+                : $"{currencyValue} 0.00";
+        var reportTotalAmount = hasSingleCurrency ? currencyTotals[0].amount : 0m;
+
         var rows = reportDetails
             .Select(detail => new Dictionary<string, object?>
             {
@@ -156,13 +195,15 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 quoteNumber = Text(rate.QuoNumber, rate.RateCode),
                 idtraNumber = Text(rate.IdtraNumber, string.Empty),
                 clientName = Text(rate.ClientName),
-                agent = Text(rate.AgentName, "No asignado"),
+                agent = showAgent ? Text(rate.AgentName, "No asignado") : string.Empty,
+                showAgent,
                 carrier = showCarrier ? Text(rate.CarrierName, "No asignada") : string.Empty,
                 showCarrier,
                 pol = rate.PolName,
                 poe = rate.PoeName,
                 pod = rate.PodName,
-                route = $"{rate.PolName} → {rate.PodName} vía {rate.PoeName}",
+                route,
+                incoterm = Text(rate.IncotermName, Text(rate.IncotermCode, string.Empty)),
                 rateType = rate.RateType == Dhole.Pricing.Domain.Rates.Enums.RateType.Spot ? "SPOT" : "TARIFARIO",
                 shipmentMode = rate.ShipmentMode.ToString(),
                 containerType = shipmentSummary,
@@ -176,13 +217,15 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 chargeableQuantity = rate.ChargeableQuantity,
                 currency = currencyValue,
                 currencyCode = rate.CurrencyCode,
+                hasSingleCurrency,
+                hasMultipleCurrencies,
                 freeDays = rate.FreeDays,
                 transitTime = string.IsNullOrWhiteSpace(rate.TransitTime) ? "Por confirmar" : rate.TransitTime,
                 transitDays = rate.TransitTime,
                 validFrom = rate.ValidFrom.ToString("dd/MM/yyyy"),
                 validTo = rate.ValidTo.ToString("dd/MM/yyyy"),
-                total = Money(reportDetails.Sum(detail => detail.SaleAmount * detail.Quantity)),
-                totalAmount = reportDetails.Sum(detail => detail.SaleAmount * detail.Quantity),
+                total = reportTotal,
+                totalAmount = reportTotalAmount,
                 includes = commercialTerms.Includes,
                 subjectTo = commercialTerms.SubjectTo,
                 excludes = commercialTerms.Excludes,
@@ -193,6 +236,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             },
             containers,
             items,
+            currencyTotals,
             rows
         };
 
