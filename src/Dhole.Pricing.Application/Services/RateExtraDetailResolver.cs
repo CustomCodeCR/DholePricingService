@@ -71,7 +71,11 @@ public sealed class RateExtraDetailResolver(
         // tal como fueron calculados para que la tarifa guardada coincida con el PDF.
         if (!input.CostId.HasValue)
         {
-            var (costAmount, saleAmount) = ResolveGeneratedInsuranceAmounts(input);
+            // El wizard puede convertir el seguro de USD a CRC antes de persistirlo. Las notas
+            // conservan la base de cálculo en USD, por lo que volver a ejecutar la fórmula aquí
+            // sobreescribía los montos ya convertidos (por ejemplo CRC 73 404,50 -> 162,50).
+            // Solo recalculamos automáticamente cuando la moneda real del detalle sigue siendo USD.
+            var (costAmount, saleAmount) = ResolveGeneratedInsuranceAmounts(input, currency.Code);
 
             return RateExtraDetailResolution.Success(
                 new ResolvedRateExtraDetail(
@@ -164,7 +168,7 @@ public sealed class RateExtraDetailResolver(
                 Normalize(input.Notes) ?? cost.Notes,
                 cost.IsAccountant,
                 input.Quantity,
-                cost.ChargeBasis,
+                input.ChargeBasis,
                 input.ApplyDestinationTax,
                 input.DestinationTaxRate
             )
@@ -172,9 +176,15 @@ public sealed class RateExtraDetailResolver(
     }
 
     private static (decimal CostAmount, decimal SaleAmount) ResolveGeneratedInsuranceAmounts(
-        RateExtraDetailInput input
+        RateExtraDetailInput input,
+        string? resolvedCurrencyCode
     )
     {
+        if (!string.Equals(resolvedCurrencyCode?.Trim(), "USD", StringComparison.OrdinalIgnoreCase))
+        {
+            return (input.CostAmount, input.SaleAmount);
+        }
+
         if (
             input.CostDetailType != CostDetailType.Insurance
             || string.IsNullOrWhiteSpace(input.Notes)
