@@ -53,6 +53,8 @@ public static class FtlTariffEndpoints
         string? equipmentClass,
         string? originName,
         string? destinationName,
+        string? originCode,
+        string? destinationCode,
         ServiceDbContext db,
         CancellationToken cancellationToken
     )
@@ -79,6 +81,13 @@ public static class FtlTariffEndpoints
                   (origin_id = @origin_id AND destination_id = @destination_id)
                   OR
                   (
+                      @origin_code <> ''
+                      AND @destination_code <> ''
+                      AND lower(trim(COALESCE(origin_code, ''))) = lower(trim(@origin_code))
+                      AND lower(trim(COALESCE(destination_code, ''))) = lower(trim(@destination_code))
+                  )
+                  OR
+                  (
                       lower(trim(origin_name)) = lower(trim(@origin_name))
                       AND lower(trim(destination_name)) = lower(trim(@destination_name))
                   )
@@ -86,7 +95,13 @@ public static class FtlTariffEndpoints
             ORDER BY
                 CASE
                     WHEN origin_id = @origin_id AND destination_id = @destination_id THEN 0
-                    ELSE 1
+                    WHEN
+                        @origin_code <> ''
+                        AND @destination_code <> ''
+                        AND lower(trim(COALESCE(origin_code, ''))) = lower(trim(@origin_code))
+                        AND lower(trim(COALESCE(destination_code, ''))) = lower(trim(@destination_code))
+                    THEN 1
+                    ELSE 2
                 END,
                 COALESCE(updated_at_utc, created_at_utc) DESC
             LIMIT 1;
@@ -97,6 +112,8 @@ public static class FtlTariffEndpoints
         Add(command, "destination_id", destinationId ?? Guid.Empty);
         Add(command, "origin_name", originName?.Trim() ?? string.Empty);
         Add(command, "destination_name", destinationName?.Trim() ?? string.Empty);
+        Add(command, "origin_code", originCode?.Trim() ?? string.Empty);
+        Add(command, "destination_code", destinationCode?.Trim() ?? string.Empty);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
