@@ -25,6 +25,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddCustomCodePostgresEntityFramework<ServiceDbContext>();
 
         services.AddScoped<ICostRepository, CostRepository>();
+        services.AddScoped<ICostRoutePortSelectionStore, CostRoutePortSelectionStore>();
         services.AddScoped<IImportFclRateRepository, ImportFclRateRepository>();
         services.AddScoped<IRateHeaderRepository, RateHeaderRepository>();
         services.AddScoped<IRateRevisionRepository, RateRevisionRepository>();
