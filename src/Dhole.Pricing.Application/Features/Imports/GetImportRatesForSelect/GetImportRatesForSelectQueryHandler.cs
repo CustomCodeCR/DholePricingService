@@ -28,15 +28,18 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             .ThenByDescending(x => x.ValidTo)
             .ToArray();
 
-        if (exact.Length > 0)
+        var requestedDate = query.QuoteDate?.Date;
+
+        // Sin fecha de carga conservamos el comportamiento histórico del selector.
+        if (!requestedDate.HasValue && exact.Length > 0)
             return Result.Success<IReadOnlyCollection<ImportRateSelectDto>>(exact);
 
-        // Si no hay coincidencia estricta, el wizard todavía debe poder proponer
-        // tarifas aprobadas o preautorizadas vigentes. El fallback mantiene POL +
-        // POE, tolera POD sin asignar y normaliza equipos como 40HC/40 High Cube.
+        // Con fecha de carga debemos mostrar TODAS las tarifas cuya fecha de vencimiento
+        // sea igual o posterior a la carga, incluso si su vigencia inicia después de esa fecha.
+        // El fallback mantiene POL + POE, tolera POD sin asignar y normaliza equipos como
+        // 40HC/40 High Cube, por lo que también recupera esas tarifas futuras compatibles.
         var approvedFallback = await GetFallbackAsync(query, ImportStatus.Approved, cancellationToken);
         var preAuthorizedFallback = await GetFallbackAsync(query, ImportStatus.PreAuthorized, cancellationToken);
-        var requestedDate = query.QuoteDate?.Date;
 
         var fallback = approvedFallback
             .Concat(preAuthorizedFallback)
@@ -44,16 +47,21 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             .Where(x => EquipmentMatches(query.ContainerType, x.ContainerType, x.ContainerTypeCode))
             .Where(x => PodMatchesOrIsUnassigned(query.Pod, x.Pod, x.PodCode, x.PodId))
             .Where(x => !requestedDate.HasValue || x.ValidTo.Date >= requestedDate.Value)
+            .Select(ToSelectDto);
+
+        var combined = exact
+            .Concat(fallback)
+            .Where(x => !requestedDate.HasValue || x.ValidTo.Date >= requestedDate.Value)
             .GroupBy(x => x.Id)
             .Select(group => group.First())
             .OrderBy(x => StatusPriority(x.Status))
             .ThenBy(x => x.ValidFrom)
             .ThenBy(x => x.Freight)
+            .ThenByDescending(x => x.ValidTo)
             .Take(100)
-            .Select(ToSelectDto)
             .ToArray();
 
-        return Result.Success<IReadOnlyCollection<ImportRateSelectDto>>(fallback);
+        return Result.Success<IReadOnlyCollection<ImportRateSelectDto>>(combined);
     }
 
     private async Task<IReadOnlyCollection<ImportRateSelectDto>> GetExactAsync(
