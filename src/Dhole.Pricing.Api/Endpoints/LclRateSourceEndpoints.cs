@@ -37,19 +37,18 @@ public static class LclRateSourceEndpoints
     {
         var effectiveDate = (quoteDate ?? DateTime.UtcNow).Date;
 
-        // Keep the same selection philosophy used by the approved FCL picker:
-        // approved/open tariffs + requested loading date first, then resolve the
-        // route with catalog ids OR the stored textual snapshots. This matters
-        // when a coloader tariff was approved with an older catalog snapshot.
+        // La fecha de carga funciona como límite inferior de vencimiento: se muestran
+        // tarifas que venzan ese día o después, incluso si su vigencia inicia después.
+        // Luego se resuelve la ruta con ids de catálogo o snapshots textuales.
         var candidates = await db.RateHeaders
             .AsNoTracking()
             .Where(rate =>
                 rate.ShipmentMode == ShipmentMode.Lcl
                 && rate.RateType == RateType.Tariff
-                && rate.ValidFrom <= effectiveDate
                 && rate.ValidTo >= effectiveDate
                 && (rate.Status == RateStatus.Open || rate.Status == RateStatus.ApprovedByManagement))
-            .OrderBy(rate => rate.ValidTo)
+            .OrderBy(rate => rate.ValidFrom)
+            .ThenBy(rate => rate.ValidTo)
             .ThenBy(rate => rate.TotalSaleAmount)
             .Take(250)
             .Select(rate => new
