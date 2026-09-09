@@ -54,6 +54,7 @@ builder.Services.AddApplication();
 builder.Services.AddPersistence(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<PricingEmailService>();
+builder.Services.AddScoped<SellerVisibilityService>();
 builder.Services.AddHttpClient("DholeAI", client =>
 {
     var baseAddress = builder.Configuration["AI:Client:BaseAddress"] ?? "http://ai-api:5206/";
@@ -108,6 +109,7 @@ app.MapCabysEndpoints();
 app.MapRateEndpoints();
 app.MapSellerRateEndpoints();
 app.MapSellerRateStatusEndpoints();
+app.MapSellerVisibilityEndpoints();
 app.MapRateComparisonEndpoints();
 app.MapRateRequestEndpoints();
 app.MapSellerRateRequestEndpoints();
