@@ -64,20 +64,30 @@ public sealed class SellerVisibilityService(ServiceDbContext db)
             );
         }
 
-        if (HasScope(context.User, PricingConstants.Scopes.RateRequestViewSelected))
-        {
-            var visibleSellerIds = (await GetAssignedSellerIdsAsync(viewerUserId.Value, cancellationToken))
-                .ToHashSet();
-            visibleSellerIds.Add(viewerUserId.Value);
+        var canCreateRateRequest = HasScope(context.User, PricingConstants.Scopes.RateRequestCreate);
+        var canViewSelected = HasScope(context.User, PricingConstants.Scopes.RateRequestViewSelected);
 
-            return new SellerVisibilityContext(
-                viewerUserId.Value,
-                SellerVisibilityMode.Selected,
-                visibleSellerIds
-            );
+        if (canViewSelected || (!requireElevated && canCreateRateRequest))
+        {
+            var assignedSellerIds = await GetAssignedSellerIdsAsync(viewerUserId.Value, cancellationToken);
+
+            // An explicit assignment also enables delegated request creation for assistants or
+            // sellers that only have pricing.rate-request.create. Supervisors still use the
+            // view-selected scope for their normal commercial visibility, while Chiefs remain All.
+            if (canViewSelected || assignedSellerIds.Count > 0)
+            {
+                var visibleSellerIds = assignedSellerIds.ToHashSet();
+                visibleSellerIds.Add(viewerUserId.Value);
+
+                return new SellerVisibilityContext(
+                    viewerUserId.Value,
+                    SellerVisibilityMode.Selected,
+                    visibleSellerIds
+                );
+            }
         }
 
-        if (!requireElevated && HasScope(context.User, PricingConstants.Scopes.RateRequestCreate))
+        if (!requireElevated && canCreateRateRequest)
         {
             return new SellerVisibilityContext(
                 viewerUserId.Value,
