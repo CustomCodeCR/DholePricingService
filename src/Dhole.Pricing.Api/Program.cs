@@ -103,6 +103,7 @@ app.UseMiddleware<RequestedRateUpdateGuardMiddleware>();
 app.UseMiddleware<AuditEndpointMiddleware>();
 
 app.MapCostEndpoints();
+app.MapFtlTariffEndpoints();
 app.MapCostRoutePortEndpoints();
 app.MapImportRateEndpoints();
 app.MapImportRateReviewQueueEndpoints();
@@ -133,7 +134,7 @@ using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
     await dbContext.Database.MigrateAsync();
-    await TigsaFtlCostSeeder.SeedAsync(scope.ServiceProvider);
+    await TigsaFtlTariffSeeder.SeedAsync(scope.ServiceProvider);
 }
 
 app.Run();
