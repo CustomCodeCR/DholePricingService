@@ -53,7 +53,11 @@ public sealed class ReviewImportRateCommandHandler(
         var profile = await ResolveAsync(command.ImportProfileId, ["pricing-imports-profiles"], cancellationToken);
         var pol = await ResolveAsync(command.PolId, ["pol", "ports"], cancellationToken);
         var poe = await ResolveAsync(command.PoeId, ["poe", "ports"], cancellationToken);
-        var pod = await ResolveAsync(command.PodId, ["pod", "ports"], cancellationToken);
+        PricingConfigCatalogItem? pod = null;
+        if (command.PodId.HasValue)
+        {
+            pod = await ResolveAsync(command.PodId.Value, ["pod", "ports"], cancellationToken);
+        }
         var carrier = await ResolveAsync(command.CarrierId, ["carriers"], cancellationToken);
         var agent = await ResolveAsync(command.AgentId, ["agents"], cancellationToken);
         var containerType = await ResolveAsync(command.ContainerTypeId, ["container-types", "containers-types"], cancellationToken);
@@ -63,7 +67,7 @@ public sealed class ReviewImportRateCommandHandler(
             profile is null
             || pol is null
             || poe is null
-            || pod is null
+            || (command.PodId.HasValue && pod is null)
             || carrier is null
             || agent is null
             || containerType is null
@@ -74,6 +78,9 @@ public sealed class ReviewImportRateCommandHandler(
         }
 
         var before = PricingAuditSnapshots.From(importRate);
+        var podSnapshot = pod is null
+            ? new CatalogSnapshot(importRate.PodId, importRate.PodName, importRate.PodCode, importRate.PodSlug)
+            : Snapshot(pod);
 
         try
         {
@@ -81,7 +88,7 @@ public sealed class ReviewImportRateCommandHandler(
                 Snapshot(profile),
                 Snapshot(pol),
                 Snapshot(poe),
-                Snapshot(pod),
+                podSnapshot,
                 Snapshot(carrier),
                 Snapshot(agent),
                 Snapshot(containerType),
