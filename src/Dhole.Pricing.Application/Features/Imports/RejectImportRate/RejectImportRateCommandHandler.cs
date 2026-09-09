@@ -54,7 +54,15 @@ public sealed class RejectImportRateCommandHandler(
                 return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
             }
 
-            if (importRate.Status is not (ImportStatus.Pending or ImportStatus.Rejected))
+            // Las tarifas preautorizadas siguen pendientes de una decisión humana y,
+            // por lo tanto, deben poder rechazarse desde la bandeja de revisión igual
+            // que una tarifa Pending. Rejected se conserva para que el endpoint sea
+            // idempotente cuando una selección ya fue rechazada previamente.
+            if (importRate.Status is not (
+                ImportStatus.Pending
+                or ImportStatus.PreAuthorized
+                or ImportStatus.Rejected
+            ))
             {
                 return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
             }
@@ -62,11 +70,11 @@ public sealed class RejectImportRateCommandHandler(
             entities.Add(importRate);
         }
 
-        var pendingEntities = entities
-            .Where(importRate => importRate.Status == ImportStatus.Pending)
+        var rejectableEntities = entities
+            .Where(importRate => importRate.Status is ImportStatus.Pending or ImportStatus.PreAuthorized)
             .ToArray();
 
-        foreach (var importRate in pendingEntities)
+        foreach (var importRate in rejectableEntities)
         {
             var before = PricingAuditSnapshots.From(importRate);
 
@@ -93,14 +101,14 @@ public sealed class RejectImportRateCommandHandler(
             );
         }
 
-        if (pendingEntities.Length == 0)
+        if (rejectableEntities.Length == 0)
         {
             return Result.Success();
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        foreach (var importRate in pendingEntities)
+        foreach (var importRate in rejectableEntities)
         {
             await cache.RemoveImportRateCacheAsync(
                 importRate.Id,
