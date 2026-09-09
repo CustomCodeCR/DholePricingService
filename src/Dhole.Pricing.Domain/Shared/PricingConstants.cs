@@ -52,6 +52,7 @@ public static class PricingConstants
         public const string RateRequestCreate = "pricing.rate-request.create";
         public const string RateRequestViewSelected = "pricing.rate-request.view-selected";
         public const string RateRequestViewAll = "pricing.rate-request.view-all";
+        public const string RateRequestReportViewAll = "pricing.rate-request.report.view-all";
         public const string RateRequestVisibilityManage = "pricing.rate-request.visibility.manage";
         public const string RateCreate = "pricing.rate.create";
         public const string RateView = "pricing.rate.view";
