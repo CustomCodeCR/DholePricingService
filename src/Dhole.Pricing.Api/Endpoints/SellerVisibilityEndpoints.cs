@@ -19,6 +19,9 @@ public static class SellerVisibilityEndpoints
         group.MapGet("/me/options", GetMyOptionsAsync)
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
 
+        group.MapGet("/options", GetAssignmentOptionsAsync)
+            .RequireScope(SellerAssignmentManageScope);
+
         group.MapGet("/{viewerUserId:guid}", GetAsync)
             .RequireScope(SellerAssignmentManageScope);
 
@@ -95,6 +98,25 @@ public static class SellerVisibilityEndpoints
         });
     }
 
+    private static async Task<IResult> GetAssignmentOptionsAsync(
+        AuthSellerDirectoryService sellerDirectory,
+        CancellationToken cancellationToken)
+    {
+        var sellers = await sellerDirectory.GetSellersAsync(cancellationToken);
+        var options = sellers
+            .OrderBy(x => x.DisplayName ?? x.UserName ?? x.Email)
+            .Select(x => new
+            {
+                x.UserId,
+                x.DisplayName,
+                x.Email,
+                x.UserName,
+            })
+            .ToArray();
+
+        return Results.Ok(new { sellers = options });
+    }
+
     private static async Task<IResult> GetAsync(
         Guid viewerUserId,
         SellerVisibilityService visibilityService,
@@ -122,6 +144,7 @@ public static class SellerVisibilityEndpoints
         Guid viewerUserId,
         ReplaceSellerVisibilityRequest request,
         SellerVisibilityService visibilityService,
+        AuthSellerDirectoryService sellerDirectory,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
@@ -142,6 +165,26 @@ public static class SellerVisibilityEndpoints
                 code = "Pricing.SellerVisibilityTooManyAssignments",
                 message = "No se pueden asignar más de 500 vendedores a un solo usuario.",
             });
+        }
+
+        if (sellerUserIds.Length > 0)
+        {
+            var availableSellerIds = (await sellerDirectory.GetSellersAsync(cancellationToken))
+                .Select(x => x.UserId)
+                .ToHashSet();
+            var invalidSellerIds = sellerUserIds
+                .Where(id => !availableSellerIds.Contains(id))
+                .ToArray();
+
+            if (invalidSellerIds.Length > 0)
+            {
+                return Results.BadRequest(new
+                {
+                    code = "Pricing.SellerVisibilityInvalidSeller",
+                    message = "Una o más asignaciones no corresponden a vendedores habilitados para solicitar tarifas.",
+                    sellerUserIds = invalidSellerIds,
+                });
+            }
         }
 
         await visibilityService.ReplaceAssignedSellerIdsAsync(
