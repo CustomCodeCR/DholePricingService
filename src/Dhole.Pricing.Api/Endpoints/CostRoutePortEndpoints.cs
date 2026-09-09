@@ -15,10 +15,10 @@ public static class CostRoutePortEndpoints
             .RequireAuthorization();
 
         group.MapGet("/{costId:guid}/route-ports", GetAsync)
-            .RequireScope(PricingScopeName.CostView);
+            .RequireScope(PricingScopeNames.CostView);
 
         group.MapPut("/{costId:guid}/route-ports", ReplaceAsync)
-            .RequireScope(PricingScopeName.CostUpdate);
+            .RequireScope(PricingScopeNames.CostUpdate);
 
         return app;
     }
