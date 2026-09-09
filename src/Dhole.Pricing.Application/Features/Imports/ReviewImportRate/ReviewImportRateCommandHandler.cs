@@ -7,7 +7,6 @@ using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Imports.Entities;
-using Dhole.Pricing.Domain.Imports.Enums;
 using Dhole.Pricing.Domain.Shared;
 
 namespace Dhole.Pricing.Application.Features.Imports.ReviewImportRate;
@@ -31,7 +30,7 @@ public sealed class ReviewImportRateCommandHandler(
             return Result.Failure(PricingErrors.ImportFclRateNotFound);
         }
 
-        if (importRate.Status is not (ImportStatus.Pending or ImportStatus.PreAuthorized))
+        if (!importRate.CanBeManuallyReviewed)
         {
             return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
         }

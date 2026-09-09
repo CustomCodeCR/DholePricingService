@@ -54,15 +54,16 @@ public sealed class RejectImportRateCommandHandler(
                 return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
             }
 
-            // Las tarifas preautorizadas siguen pendientes de una decisión humana y,
-            // por lo tanto, deben poder rechazarse desde la bandeja de revisión igual
-            // que una tarifa Pending. Rejected se conserva para que el endpoint sea
-            // idempotente cuando una selección ya fue rechazada previamente.
-            if (importRate.Status is not (
-                ImportStatus.Pending
-                or ImportStatus.PreAuthorized
-                or ImportStatus.Rejected
-            ))
+            // Rejected se conserva para que el endpoint sea idempotente. Además de
+            // Pending y PreAuthorized, una tarifa Approved que todavía no haya sido
+            // utilizada como tarifa oficial puede revertirse a Rejected.
+            if (importRate.Status == ImportStatus.Rejected)
+            {
+                entities.Add(importRate);
+                continue;
+            }
+
+            if (!importRate.CanBeRejected)
             {
                 return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
             }
@@ -71,7 +72,7 @@ public sealed class RejectImportRateCommandHandler(
         }
 
         var rejectableEntities = entities
-            .Where(importRate => importRate.Status is ImportStatus.Pending or ImportStatus.PreAuthorized)
+            .Where(importRate => importRate.CanBeRejected)
             .ToArray();
 
         foreach (var importRate in rejectableEntities)

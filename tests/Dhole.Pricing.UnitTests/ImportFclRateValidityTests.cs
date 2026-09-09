@@ -48,11 +48,79 @@ public sealed class ImportFclRateValidityTests
         Assert.AreEqual(rateHeaderId, rate.CreatedAsRateHeaderId);
     }
 
+    [TestMethod]
+    public void ApprovedUnusedRate_CanBeReviewedAndRejected()
+    {
+        var rate = CreateRate(new DateTime(2026, 9, 15), new DateTime(2026, 9, 21));
+        rate.Approve();
+
+        Assert.IsFalse(rate.HasBeenUsedAsRate);
+        Assert.IsTrue(rate.CanBeManuallyReviewed);
+        Assert.IsTrue(rate.CanBeRejected);
+    }
+
+    [TestMethod]
+    public void ApprovedUsedRate_CannotBeReviewedOrRejected()
+    {
+        var rate = CreateRate(new DateTime(2026, 9, 15), new DateTime(2026, 9, 21));
+        rate.CreatedAsRate(Guid.NewGuid());
+
+        Assert.IsTrue(rate.HasBeenUsedAsRate);
+        Assert.IsFalse(rate.CanBeManuallyReviewed);
+        Assert.IsFalse(rate.CanBeRejected);
+    }
+
+    [TestMethod]
+    public void ApplyManualReview_WhenApprovedAndUnused_UpdatesRateAndPreservesApproval()
+    {
+        var rate = CreateRate(new DateTime(2026, 9, 15), new DateTime(2026, 9, 21));
+        rate.Approve();
+
+        ApplyReview(rate, 7300m, 65m);
+
+        Assert.AreEqual(ImportStatus.Approved, rate.Status);
+        Assert.AreEqual((decimal?)7300m, rate.OceanFreight);
+        Assert.AreEqual((decimal?)65m, rate.Surcharges);
+        Assert.AreEqual((decimal?)7365m, rate.TotalCost);
+    }
+
+    [TestMethod]
+    public void ApplyManualReview_WhenApprovedAndUsed_Throws()
+    {
+        var rate = CreateRate(new DateTime(2026, 9, 15), new DateTime(2026, 9, 21));
+        rate.CreatedAsRate(Guid.NewGuid());
+
+        Assert.ThrowsException<InvalidOperationException>(() => ApplyReview(rate, 7300m, 65m));
+    }
+
+    private static void ApplyReview(ImportFclRates rate, decimal oceanFreight, decimal surcharges)
+    {
+        rate.ApplyManualReview(
+            Snapshot("Profile"),
+            Snapshot("POL"),
+            Snapshot("POE"),
+            Snapshot("POD"),
+            Snapshot("Carrier"),
+            Snapshot("Agent"),
+            Snapshot("40HC"),
+            Snapshot("USD"),
+            commodity: "Solar Panels/Solar Modules/LED Lights",
+            spaceComment: "Solar Panels/Solar Modules/LED Lights",
+            oceanFreight: oceanFreight,
+            originCharges: 0m,
+            destinationCharges: 0m,
+            surcharges: surcharges,
+            totalSale: null,
+            freeDays: 21,
+            transitDays: 0,
+            validFrom: new DateTime(2026, 9, 15),
+            validTo: new DateTime(2026, 9, 21),
+            updatedBy: null
+        );
+    }
+
     private static ImportFclRates CreateRate(DateTime validFrom, DateTime validTo)
     {
-        static CatalogSnapshot Snapshot(string prefix) =>
-            new(Guid.NewGuid(), prefix, $"{prefix}-001", prefix.ToLowerInvariant());
-
         return ImportFclRates.Create(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -83,4 +151,7 @@ public sealed class ImportFclRateValidityTests
             createdBy: null
         );
     }
+
+    private static CatalogSnapshot Snapshot(string prefix) =>
+        new(Guid.NewGuid(), prefix, $"{prefix}-001", prefix.ToLowerInvariant());
 }
