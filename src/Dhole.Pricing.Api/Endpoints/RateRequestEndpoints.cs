@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Domain.Rates.Entities;
@@ -38,6 +39,8 @@ public static class RateRequestEndpoints
     private static async Task<IResult> CreateAsync(
         CreateRateRequestRequest request,
         ServiceDbContext db,
+        SellerVisibilityService visibilityService,
+        AuthSellerDirectoryService sellerDirectory,
         IPricingNotificationRecipientProvider recipientProvider,
         IIntegrationEventOutboxWriter outbox,
         ILoggerFactory loggerFactory,
@@ -55,10 +58,22 @@ public static class RateRequestEndpoints
             });
         }
 
-        var payloadJson = request.Payload.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null
-            ? "{}"
-            : request.Payload.GetRawText();
+        if (request.SellerUserId == Guid.Empty)
+        {
+            return Results.BadRequest(new
+            {
+                code = "Pricing.RateRequestInvalidSeller",
+                message = "El vendedor seleccionado no es válido.",
+            });
+        }
 
+        var currentUserId = httpContext.GetCurrentUserId();
+        if (!currentUserId.HasValue || currentUserId.Value == Guid.Empty)
+        {
+            return Results.Unauthorized();
+        }
+
+        var sellerUserId = request.SellerUserId ?? currentUserId.Value;
         var sellerName =
             httpContext.User.FindFirst(ClaimTypes.Name)?.Value
             ?? httpContext.User.FindFirst("name")?.Value
@@ -67,9 +82,44 @@ public static class RateRequestEndpoints
             httpContext.User.FindFirst(ClaimTypes.Email)?.Value
             ?? httpContext.User.FindFirst("email")?.Value;
 
+        if (sellerUserId != currentUserId.Value)
+        {
+            var visibility = await visibilityService.ResolveAsync(
+                httpContext,
+                requireElevated: false,
+                ct
+            );
+
+            var canCreateForSeller = visibility is not null
+                && (visibility.Mode == SellerVisibilityMode.All
+                    || visibility.SellerUserIds.Contains(sellerUserId));
+
+            if (!canCreateForSeller)
+            {
+                return Results.Forbid();
+            }
+
+            var delegatedSeller = await sellerDirectory.GetSellerAsync(sellerUserId, ct);
+            if (delegatedSeller is null)
+            {
+                return Results.BadRequest(new
+                {
+                    code = "Pricing.RateRequestSellerNotAvailable",
+                    message = "El vendedor seleccionado no está activo o no puede solicitar tarifas.",
+                });
+            }
+
+            sellerName = delegatedSeller.DisplayName ?? delegatedSeller.UserName;
+            sellerEmail = delegatedSeller.Email;
+        }
+
+        var payloadJson = request.Payload.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null
+            ? "{}"
+            : request.Payload.GetRawText();
+
         var entity = RateRequest.Create(
             priority,
-            httpContext.GetCurrentUserId(),
+            sellerUserId,
             sellerName,
             sellerEmail,
             request.ClientName,
@@ -200,6 +250,7 @@ public static class RateRequestEndpoints
             request.ShipmentMode,
             equipmentType,
             request.ClientName,
+            request.SellerUserId,
             request.SellerName,
             request.ExecutiveName,
             request.OriginName,
@@ -407,6 +458,7 @@ public static class RateRequestEndpoints
         string? PoeName,
         Guid? PodId,
         string? PodName,
+        Guid? SellerUserId,
         JsonElement Payload
     );
 
