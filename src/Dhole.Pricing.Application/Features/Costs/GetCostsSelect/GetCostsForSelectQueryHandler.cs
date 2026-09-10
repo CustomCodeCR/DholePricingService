@@ -79,10 +79,10 @@ public sealed class GetCostsForSelectQueryHandler(
         CostRoutePortSelectionSet? selection
     )
     {
-        if (query.CarrierId.HasValue && cost.CarrierId.HasValue && cost.CarrierId != query.CarrierId)
+        if (!PartyMatches(selection?.CarrierIds, cost.CarrierId, query.CarrierId))
             return false;
 
-        if (query.AgentId.HasValue && cost.AgentId.HasValue && cost.AgentId != query.AgentId)
+        if (!PartyMatches(selection?.AgentIds, cost.AgentId, query.AgentId))
             return false;
 
         if (!RouteRoleMatches(selection?.PolIds, cost.PolId, query.PolId))
@@ -128,6 +128,22 @@ public sealed class GetCostsForSelectQueryHandler(
             return false;
 
         return true;
+    }
+
+    private static bool PartyMatches(
+        IReadOnlyCollection<Guid>? selectedPartyIds,
+        Guid? legacyPartyId,
+        Guid? contextPartyId
+    )
+    {
+        // Preserve wildcard behavior when the current quote does not define this party.
+        if (!contextPartyId.HasValue)
+            return true;
+
+        if (selectedPartyIds is { Count: > 0 })
+            return selectedPartyIds.Contains(contextPartyId.Value);
+
+        return !legacyPartyId.HasValue || legacyPartyId.Value == contextPartyId.Value;
     }
 
     private static bool RouteRoleMatches(
