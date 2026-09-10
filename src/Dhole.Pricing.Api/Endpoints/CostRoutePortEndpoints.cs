@@ -6,7 +6,7 @@ namespace Dhole.Pricing.Api.Endpoints;
 
 public static class CostRoutePortEndpoints
 {
-    private const int MaximumPortsPerRole = 100;
+    private const int MaximumSelectionsPerRole = 100;
 
     public static IEndpointRouteBuilder MapCostRoutePortEndpoints(this IEndpointRouteBuilder app)
     {
@@ -53,21 +53,42 @@ public static class CostRoutePortEndpoints
         var polIds = Normalize(request.PolIds);
         var poeIds = Normalize(request.PoeIds);
         var podIds = Normalize(request.PodIds);
+        var carrierIds = Normalize(request.CarrierIds);
+        var agentIds = Normalize(request.AgentIds);
 
         if (
-            polIds.Length > MaximumPortsPerRole
-            || poeIds.Length > MaximumPortsPerRole
-            || podIds.Length > MaximumPortsPerRole
+            polIds.Length > MaximumSelectionsPerRole
+            || poeIds.Length > MaximumSelectionsPerRole
+            || podIds.Length > MaximumSelectionsPerRole
+            || carrierIds.Length > MaximumSelectionsPerRole
+            || agentIds.Length > MaximumSelectionsPerRole
         )
         {
             return Results.BadRequest(new
             {
-                code = "Pricing.CostRoutePortsLimitExceeded",
-                message = $"Cada rol permite un máximo de {MaximumPortsPerRole} puertos.",
+                code = "Pricing.CostSelectionsLimitExceeded",
+                message = $"Cada relación permite un máximo de {MaximumSelectionsPerRole} opciones.",
             });
         }
 
-        await routePorts.ReplaceAsync(costId, polIds, poeIds, podIds, cancellationToken);
+        if (carrierIds.Length > 0 && agentIds.Length > 0)
+        {
+            return Results.BadRequest(new
+            {
+                code = "Pricing.CostPartySelectionConflict",
+                message = "Un costo no puede asociarse simultáneamente a navieras y agentes.",
+            });
+        }
+
+        await routePorts.ReplaceAsync(
+            costId,
+            polIds,
+            poeIds,
+            podIds,
+            carrierIds,
+            agentIds,
+            cancellationToken
+        );
         await cache.RemoveCostCacheAsync(costId, cancellationToken);
         await cache.RemoveCostsSelectAsync(cancellationToken);
 
@@ -83,5 +104,7 @@ public static class CostRoutePortEndpoints
 public sealed record CostRoutePortSelectionRequest(
     IReadOnlyCollection<Guid>? PolIds,
     IReadOnlyCollection<Guid>? PoeIds,
-    IReadOnlyCollection<Guid>? PodIds
+    IReadOnlyCollection<Guid>? PodIds,
+    IReadOnlyCollection<Guid>? CarrierIds = null,
+    IReadOnlyCollection<Guid>? AgentIds = null
 );
