@@ -19,6 +19,9 @@ public static class SellerVisibilityEndpoints
         group.MapGet("/me/options", GetMyOptionsAsync)
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
 
+        group.MapGet("/rate-options", GetRateOptionsAsync)
+            .RequireScope(PricingConstants.Scopes.RateCreate);
+
         group.MapGet("/options", GetAssignmentOptionsAsync)
             .RequireScope(SellerAssignmentManageScope);
 
@@ -96,6 +99,25 @@ public static class SellerVisibilityEndpoints
             mode = visibility.Mode.ToString(),
             sellers = options,
         });
+    }
+
+    private static async Task<IResult> GetRateOptionsAsync(
+        AuthSellerDirectoryService sellerDirectory,
+        CancellationToken cancellationToken)
+    {
+        var executives = await sellerDirectory.GetSalesExecutivesAsync(cancellationToken);
+        var options = executives
+            .OrderBy(x => x.DisplayName ?? x.UserName ?? x.Email)
+            .Select(x => new
+            {
+                x.UserId,
+                x.DisplayName,
+                x.Email,
+                x.UserName,
+            })
+            .ToArray();
+
+        return Results.Ok(new { sellers = options });
     }
 
     private static async Task<IResult> GetAssignmentOptionsAsync(
