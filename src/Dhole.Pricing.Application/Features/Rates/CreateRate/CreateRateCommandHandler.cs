@@ -355,6 +355,7 @@ public sealed class CreateRateCommandHandler(
                 command.PickupLongitude
             );
             rate.ConfigureExecutive(command.ExecutiveName);
+            rate.ConfigureCommercialPresentation(command.UseAllInPresentation, command.CreatedBy);
             rate.SetOperationType(command.OperationType, command.CreatedBy);
             rate.ConfigureServices(command.Services, command.CreatedBy);
             rate.ConfigureExchangeRateSnapshot(

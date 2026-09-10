@@ -87,6 +87,7 @@ public sealed record CreateRateCommand(
     bool CanApproveImportedRate,
     RateOperationType OperationType,
     IReadOnlyCollection<RateServiceSelection> Services,
+    bool UseAllInPresentation,
     bool CanApproveLowMargin,
     Guid? CreatedBy
 ) : ICommand<Result<Guid>>;

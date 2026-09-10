@@ -1660,6 +1660,12 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("exchange_rate_manual_override");
 
+                    b.Property<bool>("UseAllInPresentation")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("use_all_in_presentation");
+
                     b.Property<decimal?>("ExchangeRatePurchase")
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)")

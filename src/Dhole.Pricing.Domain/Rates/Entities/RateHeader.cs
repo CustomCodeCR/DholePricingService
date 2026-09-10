@@ -226,6 +226,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string? SubjectTo { get; private set; }
     public string? Excludes { get; private set; }
     public string? TransitTime { get; private set; }
+    public bool UseAllInPresentation { get; private set; }
     public RateType RateType { get; private set; } = RateType.Tariff;
 
     public decimal TotalCostAmount { get; private set; }
@@ -529,6 +530,14 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         ExchangeRateCapturedAtUtc = capturedAtUtc;
         ExchangeRateSource = Normalize(source) ?? "Manual";
         ExchangeRateManualOverride = manualOverride;
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
+    public void ConfigureCommercialPresentation(bool useAllInPresentation, Guid? updatedBy = null)
+    {
+        if (UseAllInPresentation == useAllInPresentation) return;
+
+        UseAllInPresentation = useAllInPresentation;
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
     }
 

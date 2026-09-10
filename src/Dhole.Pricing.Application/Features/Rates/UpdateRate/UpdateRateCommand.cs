@@ -89,5 +89,6 @@ public sealed record UpdateRateCommand(
     decimal? ExchangeRatePurchase,
     decimal? ExchangeRateSale,
     decimal? ExchangeRateApplied,
+    bool UseAllInPresentation,
     Guid? UpdatedBy
 ) : ICommand<Result>;

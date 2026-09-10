@@ -52,6 +52,7 @@ public sealed record RateDto(
     string? SubjectTo,
     string? Excludes,
     string? TransitTime,
+    bool UseAllInPresentation,
     string RateType,
     string ShipmentMode,
     string OperationType,

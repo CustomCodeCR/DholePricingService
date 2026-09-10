@@ -96,6 +96,7 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.ExchangeRateCapturedAtUtc).IsRequired(false);
         builder.Property(x => x.ExchangeRateSource).HasMaxLength(160).IsRequired(false);
         builder.Property(x => x.ExchangeRateManualOverride).IsRequired().HasDefaultValue(false);
+        builder.Property(x => x.UseAllInPresentation).IsRequired().HasDefaultValue(false);
 
         builder.Property(x => x.FreeDays).IsRequired();
 

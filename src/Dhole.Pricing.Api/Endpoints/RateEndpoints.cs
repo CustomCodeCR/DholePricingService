@@ -551,6 +551,7 @@ public static class RateEndpoints
                 (request.Services ?? [])
                     .Select(x => new RateServiceSelection(x.Id, x.Name, x.Code))
                     .ToArray(),
+                request.UseAllInPresentation,
                 canApproveLowMargin,
                 httpContext.GetCurrentUserId()
             ),
@@ -749,6 +750,7 @@ public static class RateEndpoints
                 request.ExchangeRatePurchase,
                 request.ExchangeRateSale,
                 request.ExchangeRateApplied,
+                request.UseAllInPresentation,
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken
