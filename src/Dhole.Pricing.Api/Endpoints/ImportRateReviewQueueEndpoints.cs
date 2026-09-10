@@ -1,4 +1,7 @@
+using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
+using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Application.Features.Imports.InactivateImportRate;
 using Dhole.Pricing.Domain.Imports.Enums;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
@@ -15,7 +18,26 @@ public static class ImportRateReviewQueueEndpoints
             .RequireAuthorization()
             .RequireScope(PricingConstants.Scopes.ImportFclRateReview);
 
+        app.MapPost("/api/pricing/import-rates/{importRateId:guid}/inactivate", InactivateImportRateAsync)
+            .WithTags("Imported FCL Rates")
+            .RequireAuthorization()
+            .RequireScope(PricingConstants.Scopes.ImportFclRateReview);
+
         return app;
+    }
+
+    private static async Task<IResult> InactivateImportRateAsync(
+        Guid importRateId,
+        ICommandDispatcher dispatcher,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var result = await dispatcher.DispatchAsync(
+            new InactivateImportRateCommand(importRateId, httpContext.GetCurrentUserId()),
+            cancellationToken
+        );
+
+        return EndpointResults.FromResult(result, httpContext);
     }
 
     private static async Task<IResult> GetReviewQueueAsync(
