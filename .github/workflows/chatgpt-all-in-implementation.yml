@@ -1,0 +1,209 @@
+name: Apply ALL IN pricing presentation
+
+on:
+  push:
+    paths:
+      - .github/workflows/chatgpt-all-in-implementation.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [develop, master]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+          fetch-depth: 0
+
+      - name: Apply backend changes
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text()
+              if new in text:
+                  return
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one anchor in {path}, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          # Domain: persist only the commercial presentation choice; rate details remain untouched.
+          path = 'src/Dhole.Pricing.Domain/Rates/Entities/RateHeader.cs'
+          replace_once(
+              path,
+              '    public string? TransitTime { get; private set; }\n    public RateType RateType { get; private set; } = RateType.Tariff;',
+              '    public string? TransitTime { get; private set; }\n    public bool UseAllInPresentation { get; private set; }\n    public RateType RateType { get; private set; } = RateType.Tariff;',
+              'RateHeader property',
+          )
+          replace_once(
+              path,
+              '    public void ConfigureExecutive(string? executiveName)\n',
+              '''    public void ConfigureCommercialPresentation(bool useAllInPresentation, Guid? updatedBy = null)\n    {\n        if (UseAllInPresentation == useAllInPresentation) return;\n\n        UseAllInPresentation = useAllInPresentation;\n        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());\n    }\n\n    public void ConfigureExecutive(string? executiveName)\n''',
+              'RateHeader presentation method',
+          )
+
+          # EF mapping.
+          path = 'src/Dhole.Pricing.Persistence/Configurations/Rates/RateHeaderConfiguration.cs'
+          replace_once(
+              path,
+              '        builder.Property(x => x.ExchangeRateManualOverride).IsRequired().HasDefaultValue(false);\n',
+              '        builder.Property(x => x.ExchangeRateManualOverride).IsRequired().HasDefaultValue(false);\n        builder.Property(x => x.UseAllInPresentation).IsRequired().HasDefaultValue(false);\n',
+              'RateHeader EF mapping',
+          )
+
+          # API contracts.
+          path = 'src/Dhole.Pricing.Contracts/Rates/Request/CreateRateRequest.cs'
+          replace_once(
+              path,
+              '    string OperationType = "TransitDomestic",\n    IReadOnlyCollection<RateServiceRequest>? Services = null\n);',
+              '    string OperationType = "TransitDomestic",\n    IReadOnlyCollection<RateServiceRequest>? Services = null,\n    bool UseAllInPresentation = false\n);',
+              'CreateRateRequest flag',
+          )
+
+          path = 'src/Dhole.Pricing.Contracts/Rates/Request/UpdateRateRequest.cs'
+          replace_once(
+              path,
+              '    decimal? ExchangeRateApplied = null,\n    string? UpdateReason = null\n);',
+              '    decimal? ExchangeRateApplied = null,\n    bool UseAllInPresentation = false,\n    string? UpdateReason = null\n);',
+              'UpdateRateRequest flag',
+          )
+
+          # Application commands.
+          path = 'src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommand.cs'
+          replace_once(
+              path,
+              '    IReadOnlyCollection<RateServiceSelection> Services,\n    bool CanApproveLowMargin,\n    Guid? CreatedBy',
+              '    IReadOnlyCollection<RateServiceSelection> Services,\n    bool UseAllInPresentation,\n    bool CanApproveLowMargin,\n    Guid? CreatedBy',
+              'CreateRateCommand flag',
+          )
+
+          path = 'src/Dhole.Pricing.Application/Features/Rates/UpdateRate/UpdateRateCommand.cs'
+          replace_once(
+              path,
+              '    decimal? ExchangeRateApplied,\n    Guid? UpdatedBy',
+              '    decimal? ExchangeRateApplied,\n    bool UseAllInPresentation,\n    Guid? UpdatedBy',
+              'UpdateRateCommand flag',
+          )
+
+          # Command handlers apply presentation without modifying financial lines.
+          path = 'src/Dhole.Pricing.Application/Features/Rates/CreateRate/CreateRateCommandHandler.cs'
+          replace_once(
+              path,
+              '            rate.ConfigureExecutive(command.ExecutiveName);\n            rate.SetOperationType(command.OperationType, command.CreatedBy);',
+              '            rate.ConfigureExecutive(command.ExecutiveName);\n            rate.ConfigureCommercialPresentation(command.UseAllInPresentation, command.CreatedBy);\n            rate.SetOperationType(command.OperationType, command.CreatedBy);',
+              'Create handler presentation',
+          )
+
+          path = 'src/Dhole.Pricing.Application/Features/Rates/UpdateRate/UpdateRateCommandHandler.cs'
+          replace_once(
+              path,
+              '            rate.ConfigureExecutive(command.ExecutiveName);\n            rate.SetOperationType(command.OperationType, command.UpdatedBy);',
+              '            rate.ConfigureExecutive(command.ExecutiveName);\n            rate.ConfigureCommercialPresentation(command.UseAllInPresentation, command.UpdatedBy);\n            rate.SetOperationType(command.OperationType, command.UpdatedBy);',
+              'Update handler presentation',
+          )
+
+          # Endpoint mappings.
+          path = 'src/Dhole.Pricing.Api/Endpoints/RateEndpoints.cs'
+          replace_once(
+              path,
+              '                canApproveLowMargin,\n                httpContext.GetCurrentUserId()\n            ),',
+              '                request.UseAllInPresentation,\n                canApproveLowMargin,\n                httpContext.GetCurrentUserId()\n            ),',
+              'Create endpoint flag',
+          )
+          replace_once(
+              path,
+              '                request.ExchangeRateApplied,\n                httpContext.GetCurrentUserId()\n            ),',
+              '                request.ExchangeRateApplied,\n                request.UseAllInPresentation,\n                httpContext.GetCurrentUserId()\n            ),',
+              'Update endpoint flag',
+          )
+
+          # Response DTO + mapping so Web can restore the choice when reopening the tariff.
+          path = 'src/Dhole.Pricing.Contracts/Rates/Response/RateDto.cs'
+          replace_once(
+              path,
+              '    string? TransitTime,\n    string RateType,',
+              '    string? TransitTime,\n    bool UseAllInPresentation,\n    string RateType,',
+              'RateDto flag',
+          )
+
+          path = 'src/Dhole.Pricing.Application/Features/Rates/RateMappings.cs'
+          replace_once(
+              path,
+              '            rate.TransitTime,\n            rate.RateType.ToString(),',
+              '            rate.TransitTime,\n            rate.UseAllInPresentation,\n            rate.RateType.ToString(),',
+              'Rate mapping flag',
+          )
+
+          # PDF/report data: when ALL IN is enabled, collapse the sale presentation to one line.
+          path = 'src/Dhole.Pricing.Infrastructure/Reports/RateReportDataFactory.cs'
+          replace_once(
+              path,
+              '''        var items = reportDetails\n            .Select(detail => new\n            {\n                description = detail.Name,\n                quantity = detail.Quantity,\n                currency = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),\n                currencyCode = detail.CurrencyCode,\n                unitSale = DetailMoney(detail, detail.SaleAmount),\n                unitSaleAmount = detail.SaleAmount,\n                lineTotal = DetailMoney(detail, detail.SaleAmount * detail.Quantity),\n                lineTotalAmount = detail.SaleAmount * detail.Quantity,\n                notes = detail.CostDetailType == CostDetailType.Insurance\n                    ? string.Empty\n                    : Text(detail.Notes, string.Empty)\n            })\n            .ToArray();\n''',
+              '''        var useAllInPresentation = rate.UseAllInPresentation && reportDetails.Length > 0;\n        var allInAmount = useAllInPresentation\n            ? CalculateAllInAmount(rate, reportDetails)\n            : 0m;\n\n        var items = useAllInPresentation\n            ? new[]\n            {\n                new\n                {\n                    description = "ALL IN",\n                    quantity = 1m,\n                    currency = currencyValue,\n                    currencyCode = rate.CurrencyCode,\n                    unitSale = $"{currencyValue} {allInAmount.ToString("N2", MoneyCulture)}",\n                    unitSaleAmount = allInAmount,\n                    lineTotal = $"{currencyValue} {allInAmount.ToString("N2", MoneyCulture)}",\n                    lineTotalAmount = allInAmount,\n                    notes = string.Empty\n                }\n            }\n            : reportDetails\n                .Select(detail => new\n                {\n                    description = detail.Name,\n                    quantity = detail.Quantity,\n                    currency = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),\n                    currencyCode = detail.CurrencyCode,\n                    unitSale = DetailMoney(detail, detail.SaleAmount),\n                    unitSaleAmount = detail.SaleAmount,\n                    lineTotal = DetailMoney(detail, detail.SaleAmount * detail.Quantity),\n                    lineTotalAmount = detail.SaleAmount * detail.Quantity,\n                    notes = detail.CostDetailType == CostDetailType.Insurance\n                        ? string.Empty\n                        : Text(detail.Notes, string.Empty)\n                })\n                .ToArray();\n''',
+              'Report items ALL IN',
+          )
+
+          replace_once(
+              path,
+              '''        var currencyTotals = reportDetails\n            .GroupBy(CurrencyGroupKey, StringComparer.OrdinalIgnoreCase)\n            .Select(group =>\n            {\n                var first = group.First();\n                var displayCurrency = CurrencyValue(first.CurrencyName, first.CurrencyCode);\n                var amount = group.Sum(detail => detail.SaleAmount * detail.Quantity);\n                var canonicalCode = Regex.IsMatch(group.Key, "^[A-Z]{3}$")\n                    ? group.Key\n                    : Text(first.CurrencyCode, string.Empty);\n\n                return new\n                {\n                    currency = displayCurrency,\n                    currencyCode = canonicalCode,\n                    amount,\n                    total = $"{displayCurrency} {amount.ToString("N2", MoneyCulture)}"\n                };\n            })\n            .OrderBy(x => x.currencyCode)\n            .ThenBy(x => x.currency)\n            .ToArray();\n''',
+              '''        var currencyTotals = useAllInPresentation\n            ? new[]\n            {\n                new\n                {\n                    currency = currencyValue,\n                    currencyCode = Text(rate.CurrencyCode, string.Empty),\n                    amount = allInAmount,\n                    total = $"{currencyValue} {allInAmount.ToString("N2", MoneyCulture)}"\n                }\n            }\n            : reportDetails\n                .GroupBy(CurrencyGroupKey, StringComparer.OrdinalIgnoreCase)\n                .Select(group =>\n                {\n                    var first = group.First();\n                    var displayCurrency = CurrencyValue(first.CurrencyName, first.CurrencyCode);\n                    var amount = group.Sum(detail => detail.SaleAmount * detail.Quantity);\n                    var canonicalCode = Regex.IsMatch(group.Key, "^[A-Z]{3}$")\n                        ? group.Key\n                        : Text(first.CurrencyCode, string.Empty);\n\n                    return new\n                    {\n                        currency = displayCurrency,\n                        currencyCode = canonicalCode,\n                        amount,\n                        total = $"{displayCurrency} {amount.ToString("N2", MoneyCulture)}"\n                    };\n                })\n                .OrderBy(x => x.currencyCode)\n                .ThenBy(x => x.currency)\n                .ToArray();\n''',
+              'Report totals ALL IN',
+          )
+
+          replace_once(
+              path,
+              '''        var rows = reportDetails\n            .Select(detail => new Dictionary<string, object?>\n            {\n                ["Concepto"] = detail.Name,\n                ["Cantidad"] = detail.Quantity,\n                ["Moneda"] = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),\n                ["Precio unitario"] = detail.SaleAmount,\n                ["Total"] = detail.SaleAmount * detail.Quantity,\n                ["Notas"] = detail.CostDetailType == CostDetailType.Insurance\n                    ? string.Empty\n                    : detail.Notes\n            })\n            .ToArray();\n''',
+              '''        var rows = useAllInPresentation\n            ? new[]\n            {\n                new Dictionary<string, object?>\n                {\n                    ["Concepto"] = "ALL IN",\n                    ["Cantidad"] = 1m,\n                    ["Moneda"] = currencyValue,\n                    ["Precio unitario"] = allInAmount,\n                    ["Total"] = allInAmount,\n                    ["Notas"] = string.Empty\n                }\n            }\n            : reportDetails\n                .Select(detail => new Dictionary<string, object?>\n                {\n                    ["Concepto"] = detail.Name,\n                    ["Cantidad"] = detail.Quantity,\n                    ["Moneda"] = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),\n                    ["Precio unitario"] = detail.SaleAmount,\n                    ["Total"] = detail.SaleAmount * detail.Quantity,\n                    ["Notas"] = detail.CostDetailType == CostDetailType.Insurance\n                        ? string.Empty\n                        : detail.Notes\n                })\n                .ToArray();\n''',
+              'Report rows ALL IN',
+          )
+
+          replace_once(
+              path,
+              '                totalAmount = reportTotalAmount,\n                includes = commercialTerms.Includes,',
+              '                totalAmount = reportTotalAmount,\n                useAllInPresentation = rate.UseAllInPresentation,\n                includes = commercialTerms.Includes,',
+              'Report data flag',
+          )
+
+          replace_once(
+              path,
+              '    private string CreateOriginOfficePublicUrl(RateHeader rate)\n',
+              '''    private static decimal CalculateAllInAmount(RateHeader rate, IReadOnlyCollection<RateDetail> details)\n    {\n        var targetCurrency = rate.CurrencyCode.Trim().ToUpperInvariant();\n        var exchangeRate = rate.ExchangeRateApplied is > 0m\n            ? rate.ExchangeRateApplied.Value\n            : rate.ExchangeRateSale;\n        decimal total = 0m;\n\n        foreach (var detail in details)\n        {\n            var amount = detail.SaleAmount * detail.Quantity;\n            var sourceCurrency = detail.CurrencyCode.Trim().ToUpperInvariant();\n\n            if (string.Equals(sourceCurrency, targetCurrency, StringComparison.OrdinalIgnoreCase))\n            {\n                total += amount;\n                continue;\n            }\n\n            if (exchangeRate is > 0m && sourceCurrency == "USD" && targetCurrency == "CRC")\n            {\n                total += amount * exchangeRate.Value;\n                continue;\n            }\n\n            if (exchangeRate is > 0m && sourceCurrency == "CRC" && targetCurrency == "USD")\n            {\n                total += amount / exchangeRate.Value;\n                continue;\n            }\n\n            throw new InvalidOperationException(\n                $"No se puede consolidar ALL IN entre {sourceCurrency} y {targetCurrency} sin una conversión compatible."\n            );\n        }\n\n        return decimal.Round(total, 2, MidpointRounding.AwayFromZero);\n    }\n\n    private string CreateOriginOfficePublicUrl(RateHeader rate)\n''',
+              'Report ALL IN conversion helper',
+          )
+
+          # EF migration + model snapshot.
+          migration = Path('src/Dhole.Pricing.Persistence/Migrations/20260910190000_AddRateAllInPresentation.cs')
+          if not migration.exists():
+              migration.write_text('''using Dhole.Pricing.Persistence.DbContexts;\nusing Microsoft.EntityFrameworkCore.Infrastructure;\nusing Microsoft.EntityFrameworkCore.Migrations;\n\n#nullable disable\n\nnamespace Dhole.Pricing.Persistence.Migrations;\n\n[DbContext(typeof(ServiceDbContext))]\n[Migration("20260910190000_AddRateAllInPresentation")]\npublic sealed class AddRateAllInPresentation : Migration\n{\n    protected override void Up(MigrationBuilder migrationBuilder)\n    {\n        migrationBuilder.AddColumn<bool>(\n            name: "use_all_in_presentation",\n            schema: "pricing",\n            table: "RateHeaders",\n            type: "boolean",\n            nullable: false,\n            defaultValue: false\n        );\n    }\n\n    protected override void Down(MigrationBuilder migrationBuilder)\n    {\n        migrationBuilder.DropColumn(\n            name: "use_all_in_presentation",\n            schema: "pricing",\n            table: "RateHeaders"\n        );\n    }\n}\n''')
+
+          path = 'src/Dhole.Pricing.Persistence/Migrations/ServiceDbContextModelSnapshot.cs'
+          replace_once(
+              path,
+              '''                    b.Property<decimal?>("ExchangeRatePurchase")\n                        .HasPrecision(18, 6)\n''',
+              '''                    b.Property<bool>("UseAllInPresentation")\n                        .ValueGeneratedOnAdd()\n                        .HasColumnType("boolean")\n                        .HasDefaultValue(false)\n                        .HasColumnName("use_all_in_presentation");\n\n                    b.Property<decimal?>("ExchangeRatePurchase")\n                        .HasPrecision(18, 6)\n''',
+              'Model snapshot ALL IN',
+          )
+          PY
+
+      - name: Commit changes
+        shell: bash
+        run: |
+          git config user.name "OpenAI Codex"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src
+          if git diff --cached --quiet; then
+            echo "No source changes required on ${{ matrix.branch }}"
+            exit 0
+          fi
+          git commit -m "feat(pricing): add ALL IN commercial presentation"
+          git push origin HEAD:${{ matrix.branch }}
