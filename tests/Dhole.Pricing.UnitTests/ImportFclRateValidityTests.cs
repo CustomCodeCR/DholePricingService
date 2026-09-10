@@ -71,6 +71,43 @@ public sealed class ImportFclRateValidityTests
     }
 
     [TestMethod]
+    public void ApprovedUnusedRate_CanBeInactivatedAndIsNoLongerEffective()
+    {
+        var rate = CreateRate(new DateTime(2026, 9, 15), new DateTime(2026, 9, 21));
+        rate.Approve();
+
+        rate.Inactivate();
+
+        Assert.AreEqual(ImportStatus.Inactive, rate.Status);
+        Assert.IsFalse(rate.IsEffectiveOn(new DateTime(2026, 9, 18)));
+    }
+
+    [TestMethod]
+    public void ApprovedUsedRate_CanBeInactivatedWithoutLosingUsageHistory()
+    {
+        var rate = CreateRate(new DateTime(2026, 9, 15), new DateTime(2026, 9, 21));
+        var rateHeaderId = Guid.NewGuid();
+        rate.CreatedAsRate(rateHeaderId);
+
+        rate.Inactivate();
+
+        Assert.AreEqual(ImportStatus.Inactive, rate.Status);
+        Assert.AreEqual(1, rate.UsedAsRateCount);
+        Assert.AreEqual(rateHeaderId, rate.CreatedAsRateHeaderId);
+        Assert.IsTrue(rate.HasBeenUsedAsRate);
+    }
+
+    [TestMethod]
+    public void CreatedAsRate_WhenImportRateIsInactive_Throws()
+    {
+        var rate = CreateRate(new DateTime(2026, 9, 15), new DateTime(2026, 9, 21));
+        rate.Approve();
+        rate.Inactivate();
+
+        Assert.ThrowsException<InvalidOperationException>(() => rate.CreatedAsRate(Guid.NewGuid()));
+    }
+
+    [TestMethod]
     public void ApplyManualReview_WhenApprovedAndUnused_UpdatesRateAndPreservesApproval()
     {
         var rate = CreateRate(new DateTime(2026, 9, 15), new DateTime(2026, 9, 21));
