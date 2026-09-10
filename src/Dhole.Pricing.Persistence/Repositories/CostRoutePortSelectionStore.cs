@@ -52,10 +52,17 @@ public sealed class CostRoutePortSelectionStore(ServiceDbContext dbContext)
                 command.Parameters.Add(parameter);
             }
 
+            var inClause = string.Join(", ", parameterNames);
             command.CommandText = $"""
-                SELECT cost_id, role, port_id
+                SELECT cost_id, role, port_id AS selection_id
                 FROM pricing."CostRoutePortSelections"
-                WHERE cost_id IN ({string.Join(", ", parameterNames)})
+                WHERE cost_id IN ({inClause})
+
+                UNION ALL
+
+                SELECT cost_id, party_type AS role, party_id AS selection_id
+                FROM pricing."CostPartySelections"
+                WHERE cost_id IN ({inClause})
                 """;
 
             var accumulators = new Dictionary<Guid, SelectionAccumulator>();
@@ -64,7 +71,7 @@ public sealed class CostRoutePortSelectionStore(ServiceDbContext dbContext)
             {
                 var costId = reader.GetGuid(0);
                 var role = reader.GetString(1);
-                var portId = reader.GetGuid(2);
+                var selectionId = reader.GetGuid(2);
 
                 if (!accumulators.TryGetValue(costId, out var accumulator))
                 {
@@ -75,13 +82,19 @@ public sealed class CostRoutePortSelectionStore(ServiceDbContext dbContext)
                 switch (role.ToLowerInvariant())
                 {
                     case "pol":
-                        accumulator.PolIds.Add(portId);
+                        accumulator.PolIds.Add(selectionId);
                         break;
                     case "poe":
-                        accumulator.PoeIds.Add(portId);
+                        accumulator.PoeIds.Add(selectionId);
                         break;
                     case "pod":
-                        accumulator.PodIds.Add(portId);
+                        accumulator.PodIds.Add(selectionId);
+                        break;
+                    case "carrier":
+                        accumulator.CarrierIds.Add(selectionId);
+                        break;
+                    case "agent":
+                        accumulator.AgentIds.Add(selectionId);
                         break;
                 }
             }
@@ -91,7 +104,9 @@ public sealed class CostRoutePortSelectionStore(ServiceDbContext dbContext)
                 pair => new CostRoutePortSelectionSet(
                     pair.Value.PolIds.ToArray(),
                     pair.Value.PoeIds.ToArray(),
-                    pair.Value.PodIds.ToArray()
+                    pair.Value.PodIds.ToArray(),
+                    pair.Value.CarrierIds.ToArray(),
+                    pair.Value.AgentIds.ToArray()
                 )
             );
         }
@@ -109,12 +124,16 @@ public sealed class CostRoutePortSelectionStore(ServiceDbContext dbContext)
         IReadOnlyCollection<Guid> polIds,
         IReadOnlyCollection<Guid> poeIds,
         IReadOnlyCollection<Guid> podIds,
+        IReadOnlyCollection<Guid> carrierIds,
+        IReadOnlyCollection<Guid> agentIds,
         CancellationToken cancellationToken = default
     )
     {
         var normalizedPolIds = Normalize(polIds);
         var normalizedPoeIds = Normalize(poeIds);
         var normalizedPodIds = Normalize(podIds);
+        var normalizedCarrierIds = Normalize(carrierIds);
+        var normalizedAgentIds = Normalize(agentIds);
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
 
@@ -122,15 +141,21 @@ public sealed class CostRoutePortSelectionStore(ServiceDbContext dbContext)
             $"DELETE FROM pricing.\"CostRoutePortSelections\" WHERE cost_id = {costId}",
             cancellationToken
         );
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM pricing.\"CostPartySelections\" WHERE cost_id = {costId}",
+            cancellationToken
+        );
 
-        await InsertAsync(costId, "Pol", normalizedPolIds, cancellationToken);
-        await InsertAsync(costId, "Poe", normalizedPoeIds, cancellationToken);
-        await InsertAsync(costId, "Pod", normalizedPodIds, cancellationToken);
+        await InsertPortAsync(costId, "Pol", normalizedPolIds, cancellationToken);
+        await InsertPortAsync(costId, "Poe", normalizedPoeIds, cancellationToken);
+        await InsertPortAsync(costId, "Pod", normalizedPodIds, cancellationToken);
+        await InsertPartyAsync(costId, "Carrier", normalizedCarrierIds, cancellationToken);
+        await InsertPartyAsync(costId, "Agent", normalizedAgentIds, cancellationToken);
 
         await transaction.CommitAsync(cancellationToken);
     }
 
-    private async Task InsertAsync(
+    private async Task InsertPortAsync(
         Guid costId,
         string role,
         IReadOnlyCollection<Guid> portIds,
@@ -150,6 +175,26 @@ public sealed class CostRoutePortSelectionStore(ServiceDbContext dbContext)
         }
     }
 
+    private async Task InsertPartyAsync(
+        Guid costId,
+        string partyType,
+        IReadOnlyCollection<Guid> partyIds,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var partyId in partyIds)
+        {
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO pricing."CostPartySelections" (cost_id, party_type, party_id)
+                VALUES ({costId}, {partyType}, {partyId})
+                ON CONFLICT DO NOTHING
+                """,
+                cancellationToken
+            );
+        }
+    }
+
     private static Guid[] Normalize(IReadOnlyCollection<Guid> ids) =>
         ids.Where(id => id != Guid.Empty).Distinct().ToArray();
 
@@ -158,5 +203,7 @@ public sealed class CostRoutePortSelectionStore(ServiceDbContext dbContext)
         public HashSet<Guid> PolIds { get; } = [];
         public HashSet<Guid> PoeIds { get; } = [];
         public HashSet<Guid> PodIds { get; } = [];
+        public HashSet<Guid> CarrierIds { get; } = [];
+        public HashSet<Guid> AgentIds { get; } = [];
     }
 }
