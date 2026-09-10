@@ -50,6 +50,7 @@ app.UseAuthentication();
 app.UseMiddleware<SellerRateVisibilityMiddleware>();
 app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
+app.UseMiddleware<RateCommercialIdentityGuardMiddleware>();
 app.UseMiddleware<RateRequestSubmissionGuardMiddleware>();
 app.UseMiddleware<RequestedRateUpdateGuardMiddleware>();
 app.UseMiddleware<AuditEndpointMiddleware>();
