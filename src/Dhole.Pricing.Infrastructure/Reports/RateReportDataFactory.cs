@@ -22,6 +22,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         string CurrencyValue(string? name, string? code) =>
             Text(name, Text(code, "USD"));
+        string CurrencyGroupKey(RateDetail detail) =>
+            CurrencyValue(detail.CurrencyName, detail.CurrencyCode).Trim().ToUpperInvariant();
         string DetailMoney(RateDetail detail, decimal amount) =>
             $"{CurrencyValue(detail.CurrencyName, detail.CurrencyCode)} {amount.ToString("N2", MoneyCulture)}";
 
@@ -112,26 +114,24 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             })
             .ToArray();
 
-        // Los importes comerciales pueden pertenecer a monedas distintas. Nunca se deben
-        // sumar valores nominales de USD, CRC, EUR, etc. en un único total. El PDF recibe
-        // un total independiente por moneda y decide cómo presentarlo visualmente.
+        // Agrupar por la moneda que realmente se muestra al cliente. Algunos registros
+        // históricos tienen CurrencyCode distintos/legacy aunque CurrencyName sea el mismo
+        // (por ejemplo USD), lo que antes generaba dos tarjetas USD en el mismo PDF.
         var currencyTotals = reportDetails
-            .GroupBy(
-                detail => string.IsNullOrWhiteSpace(detail.CurrencyCode)
-                    ? CurrencyValue(detail.CurrencyName, detail.CurrencyCode).ToUpperInvariant()
-                    : detail.CurrencyCode.Trim().ToUpperInvariant(),
-                StringComparer.OrdinalIgnoreCase
-            )
+            .GroupBy(CurrencyGroupKey, StringComparer.OrdinalIgnoreCase)
             .Select(group =>
             {
                 var first = group.First();
                 var displayCurrency = CurrencyValue(first.CurrencyName, first.CurrencyCode);
                 var amount = group.Sum(detail => detail.SaleAmount * detail.Quantity);
+                var canonicalCode = Regex.IsMatch(group.Key, "^[A-Z]{3}$")
+                    ? group.Key
+                    : Text(first.CurrencyCode, string.Empty);
 
                 return new
                 {
                     currency = displayCurrency,
-                    currencyCode = Text(first.CurrencyCode, string.Empty),
+                    currencyCode = canonicalCode,
                     amount,
                     total = $"{displayCurrency} {amount.ToString("N2", MoneyCulture)}"
                 };
@@ -254,10 +254,17 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             : rate.PoeName.Trim();
         var routeKey = $"{polName} - {destinationName}";
 
-        return $"{baseAddress}/origin"
+        var publicUrl = $"{baseAddress}/origin"
             + $"?pol={Uri.EscapeDataString(polName)}"
             + $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
             + $"&route={Uri.EscapeDataString(routeKey)}";
+
+        if (!string.IsNullOrWhiteSpace(rate.AgentCode))
+            publicUrl += $"&agentCode={Uri.EscapeDataString(rate.AgentCode.Trim())}";
+        if (!string.IsNullOrWhiteSpace(rate.AgentName))
+            publicUrl += $"&agent={Uri.EscapeDataString(rate.AgentName.Trim())}";
+
+        return publicUrl;
     }
 
     private static string CreateQrDataUri(string value)
