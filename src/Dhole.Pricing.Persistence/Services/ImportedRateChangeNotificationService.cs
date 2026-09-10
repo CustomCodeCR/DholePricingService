@@ -376,6 +376,7 @@ public sealed class ImportedRateChangeNotificationService(
             CanApproveImportedRate: true,
             OperationType: baseline.OperationType,
             Services: services,
+            UseAllInPresentation: baseline.UseAllInPresentation,
             CanApproveLowMargin: true,
             CreatedBy: null
         );
