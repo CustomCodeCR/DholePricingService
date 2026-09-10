@@ -19,8 +19,10 @@ public static class SellerVisibilityEndpoints
         group.MapGet("/me/options", GetMyOptionsAsync)
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
 
-        group.MapGet("/rate-options", GetRateOptionsAsync)
-            .RequireScope(PricingConstants.Scopes.RateCreate);
+        // Los formularios de creación, edición y continuación de solicitudes usan el
+        // mismo directorio comercial. El grupo ya exige autenticación; no se ata este
+        // select a un único scope para que también funcione al editar/completar tarifas.
+        group.MapGet("/rate-options", GetRateOptionsAsync);
 
         group.MapGet("/options", GetAssignmentOptionsAsync)
             .RequireScope(SellerAssignmentManageScope);
