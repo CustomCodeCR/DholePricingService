@@ -3,10 +3,14 @@ namespace Dhole.Pricing.Application.Abstractions.Repositories;
 public sealed record CostRoutePortSelectionSet(
     IReadOnlyCollection<Guid> PolIds,
     IReadOnlyCollection<Guid> PoeIds,
-    IReadOnlyCollection<Guid> PodIds
+    IReadOnlyCollection<Guid> PodIds,
+    IReadOnlyCollection<Guid> CarrierIds,
+    IReadOnlyCollection<Guid> AgentIds
 )
 {
     public static CostRoutePortSelectionSet Empty { get; } = new(
+        Array.Empty<Guid>(),
+        Array.Empty<Guid>(),
         Array.Empty<Guid>(),
         Array.Empty<Guid>(),
         Array.Empty<Guid>()
@@ -30,6 +34,8 @@ public interface ICostRoutePortSelectionStore
         IReadOnlyCollection<Guid> polIds,
         IReadOnlyCollection<Guid> poeIds,
         IReadOnlyCollection<Guid> podIds,
+        IReadOnlyCollection<Guid> carrierIds,
+        IReadOnlyCollection<Guid> agentIds,
         CancellationToken cancellationToken = default
     );
 }
