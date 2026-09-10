@@ -230,6 +230,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.SubjectTo,
                 x.Excludes,
                 x.TransitTime,
+                x.UseAllInPresentation,
                 x.RateType.ToString(),
                 x.ShipmentMode.ToString(),
                 x.OperationType.ToString(),
