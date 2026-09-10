@@ -97,48 +97,80 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             .ThenBy(x => x.Name)
             .ToArray();
 
-        var items = reportDetails
-            .Select(detail => new
+        var useAllInPresentation = rate.UseAllInPresentation && reportDetails.Length > 0;
+        var allInAmount = useAllInPresentation
+            ? CalculateAllInAmount(rate, reportDetails)
+            : 0m;
+
+        var items = useAllInPresentation
+            ? new[]
             {
-                description = detail.Name,
-                quantity = detail.Quantity,
-                currency = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
-                currencyCode = detail.CurrencyCode,
-                unitSale = DetailMoney(detail, detail.SaleAmount),
-                unitSaleAmount = detail.SaleAmount,
-                lineTotal = DetailMoney(detail, detail.SaleAmount * detail.Quantity),
-                lineTotalAmount = detail.SaleAmount * detail.Quantity,
-                notes = detail.CostDetailType == CostDetailType.Insurance
-                    ? string.Empty
-                    : Text(detail.Notes, string.Empty)
-            })
-            .ToArray();
+                new
+                {
+                    description = "ALL IN",
+                    quantity = 1m,
+                    currency = currencyValue,
+                    currencyCode = rate.CurrencyCode,
+                    unitSale = $"{currencyValue} {allInAmount.ToString("N2", MoneyCulture)}",
+                    unitSaleAmount = allInAmount,
+                    lineTotal = $"{currencyValue} {allInAmount.ToString("N2", MoneyCulture)}",
+                    lineTotalAmount = allInAmount,
+                    notes = string.Empty
+                }
+            }
+            : reportDetails
+                .Select(detail => new
+                {
+                    description = detail.Name,
+                    quantity = detail.Quantity,
+                    currency = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
+                    currencyCode = detail.CurrencyCode,
+                    unitSale = DetailMoney(detail, detail.SaleAmount),
+                    unitSaleAmount = detail.SaleAmount,
+                    lineTotal = DetailMoney(detail, detail.SaleAmount * detail.Quantity),
+                    lineTotalAmount = detail.SaleAmount * detail.Quantity,
+                    notes = detail.CostDetailType == CostDetailType.Insurance
+                        ? string.Empty
+                        : Text(detail.Notes, string.Empty)
+                })
+                .ToArray();
 
         // Agrupar por la moneda que realmente se muestra al cliente. Algunos registros
         // históricos tienen CurrencyCode distintos/legacy aunque CurrencyName sea el mismo
         // (por ejemplo USD), lo que antes generaba dos tarjetas USD en el mismo PDF.
-        var currencyTotals = reportDetails
-            .GroupBy(CurrencyGroupKey, StringComparer.OrdinalIgnoreCase)
-            .Select(group =>
+        var currencyTotals = useAllInPresentation
+            ? new[]
             {
-                var first = group.First();
-                var displayCurrency = CurrencyValue(first.CurrencyName, first.CurrencyCode);
-                var amount = group.Sum(detail => detail.SaleAmount * detail.Quantity);
-                var canonicalCode = Regex.IsMatch(group.Key, "^[A-Z]{3}$")
-                    ? group.Key
-                    : Text(first.CurrencyCode, string.Empty);
-
-                return new
+                new
                 {
-                    currency = displayCurrency,
-                    currencyCode = canonicalCode,
-                    amount,
-                    total = $"{displayCurrency} {amount.ToString("N2", MoneyCulture)}"
-                };
-            })
-            .OrderBy(x => x.currencyCode)
-            .ThenBy(x => x.currency)
-            .ToArray();
+                    currency = currencyValue,
+                    currencyCode = Text(rate.CurrencyCode, string.Empty),
+                    amount = allInAmount,
+                    total = $"{currencyValue} {allInAmount.ToString("N2", MoneyCulture)}"
+                }
+            }
+            : reportDetails
+                .GroupBy(CurrencyGroupKey, StringComparer.OrdinalIgnoreCase)
+                .Select(group =>
+                {
+                    var first = group.First();
+                    var displayCurrency = CurrencyValue(first.CurrencyName, first.CurrencyCode);
+                    var amount = group.Sum(detail => detail.SaleAmount * detail.Quantity);
+                    var canonicalCode = Regex.IsMatch(group.Key, "^[A-Z]{3}$")
+                        ? group.Key
+                        : Text(first.CurrencyCode, string.Empty);
+
+                    return new
+                    {
+                        currency = displayCurrency,
+                        currencyCode = canonicalCode,
+                        amount,
+                        total = $"{displayCurrency} {amount.ToString("N2", MoneyCulture)}"
+                    };
+                })
+                .OrderBy(x => x.currencyCode)
+                .ThenBy(x => x.currency)
+                .ToArray();
         var hasSingleCurrency = currencyTotals.Length == 1;
         var hasMultipleCurrencies = currencyTotals.Length > 1;
         var reportTotal = hasSingleCurrency
@@ -148,19 +180,32 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 : $"{currencyValue} 0.00";
         var reportTotalAmount = hasSingleCurrency ? currencyTotals[0].amount : 0m;
 
-        var rows = reportDetails
-            .Select(detail => new Dictionary<string, object?>
+        var rows = useAllInPresentation
+            ? new[]
             {
-                ["Concepto"] = detail.Name,
-                ["Cantidad"] = detail.Quantity,
-                ["Moneda"] = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
-                ["Precio unitario"] = detail.SaleAmount,
-                ["Total"] = detail.SaleAmount * detail.Quantity,
-                ["Notas"] = detail.CostDetailType == CostDetailType.Insurance
-                    ? string.Empty
-                    : detail.Notes
-            })
-            .ToArray();
+                new Dictionary<string, object?>
+                {
+                    ["Concepto"] = "ALL IN",
+                    ["Cantidad"] = 1m,
+                    ["Moneda"] = currencyValue,
+                    ["Precio unitario"] = allInAmount,
+                    ["Total"] = allInAmount,
+                    ["Notas"] = string.Empty
+                }
+            }
+            : reportDetails
+                .Select(detail => new Dictionary<string, object?>
+                {
+                    ["Concepto"] = detail.Name,
+                    ["Cantidad"] = detail.Quantity,
+                    ["Moneda"] = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
+                    ["Precio unitario"] = detail.SaleAmount,
+                    ["Total"] = detail.SaleAmount * detail.Quantity,
+                    ["Notas"] = detail.CostDetailType == CostDetailType.Insurance
+                        ? string.Empty
+                        : detail.Notes
+                })
+                .ToArray();
 
         var data = new
         {
@@ -226,6 +271,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 validTo = rate.ValidTo.ToString("dd/MM/yyyy"),
                 total = reportTotal,
                 totalAmount = reportTotalAmount,
+                useAllInPresentation = rate.UseAllInPresentation,
                 includes = commercialTerms.Includes,
                 subjectTo = commercialTerms.SubjectTo,
                 excludes = commercialTerms.Excludes,
@@ -241,6 +287,45 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         };
 
         return JsonSerializer.Serialize(data, JsonOptions);
+    }
+
+    private static decimal CalculateAllInAmount(RateHeader rate, IReadOnlyCollection<RateDetail> details)
+    {
+        var targetCurrency = rate.CurrencyCode.Trim().ToUpperInvariant();
+        var exchangeRate = rate.ExchangeRateApplied is > 0m
+            ? rate.ExchangeRateApplied.Value
+            : rate.ExchangeRateSale;
+        decimal total = 0m;
+
+        foreach (var detail in details)
+        {
+            var amount = detail.SaleAmount * detail.Quantity;
+            var sourceCurrency = detail.CurrencyCode.Trim().ToUpperInvariant();
+
+            if (string.Equals(sourceCurrency, targetCurrency, StringComparison.OrdinalIgnoreCase))
+            {
+                total += amount;
+                continue;
+            }
+
+            if (exchangeRate is > 0m && sourceCurrency == "USD" && targetCurrency == "CRC")
+            {
+                total += amount * exchangeRate.Value;
+                continue;
+            }
+
+            if (exchangeRate is > 0m && sourceCurrency == "CRC" && targetCurrency == "USD")
+            {
+                total += amount / exchangeRate.Value;
+                continue;
+            }
+
+            throw new InvalidOperationException(
+                $"No se puede consolidar ALL IN entre {sourceCurrency} y {targetCurrency} sin una conversión compatible."
+            );
+        }
+
+        return decimal.Round(total, 2, MidpointRounding.AwayFromZero);
     }
 
     private string CreateOriginOfficePublicUrl(RateHeader rate)

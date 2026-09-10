@@ -57,5 +57,6 @@ public sealed record UpdateRateRequest(
     decimal? ExchangeRatePurchase = null,
     decimal? ExchangeRateSale = null,
     decimal? ExchangeRateApplied = null,
+    bool UseAllInPresentation = false,
     string? UpdateReason = null
 );
