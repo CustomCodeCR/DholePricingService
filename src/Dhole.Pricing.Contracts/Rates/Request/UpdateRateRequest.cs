@@ -55,5 +55,6 @@ public sealed record UpdateRateRequest(
     IReadOnlyCollection<RateServiceRequest>? Services = null,
     decimal? ExchangeRatePurchase = null,
     decimal? ExchangeRateSale = null,
-    decimal? ExchangeRateApplied = null
+    decimal? ExchangeRateApplied = null,
+    string? UpdateReason = null
 );

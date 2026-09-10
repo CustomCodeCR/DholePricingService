@@ -14,42 +14,18 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 const string CorsPolicyName = "DholeWebCors";
-
 builder.Services.AddSingleton<IDateTimeProvider, SystemDateTimeProvider>();
-
 builder.Services.AddCustomCodeApiWithSwagger(title: "Dhole Pricing Service", version: "v1");
 
-var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"]
-    ?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-    ?? [];
+var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"]?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? [];
 var allowedOrigins = new[]
 {
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://192.168.1.193:5173",
-    "https://sistema.logisticacastrofallas.com",
-    "https://dhole.customcodecr.com",
-}
-.Concat(configuredOrigins)
-.Distinct(StringComparer.OrdinalIgnoreCase)
-.ToArray();
+    "http://localhost:5173", "http://127.0.0.1:5173", "http://192.168.1.193:5173",
+    "https://sistema.logisticacastrofallas.com", "https://dhole.customcodecr.com",
+}.Concat(configuredOrigins).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy(
-        CorsPolicyName,
-        policy =>
-        {
-            policy
-                .WithOrigins(allowedOrigins)
-                .AllowAnyHeader()
-                .AllowAnyMethod();
-        }
-    );
-});
-
+builder.Services.AddCors(options => options.AddPolicy(CorsPolicyName, policy => policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddGrpc();
-
 builder.Services.AddApplication();
 builder.Services.AddPersistence(builder.Configuration);
 builder.Services.AddInfrastructure(builder.Configuration);
@@ -59,40 +35,16 @@ builder.Services.AddScoped<AuthSellerDirectoryService>();
 builder.Services.AddHttpClient("DholeAI", client =>
 {
     var baseAddress = builder.Configuration["AI:Client:BaseAddress"] ?? "http://ai-api:5206/";
-    if (!baseAddress.EndsWith('/'))
-    {
-        baseAddress += "/";
-    }
-
+    if (!baseAddress.EndsWith('/')) baseAddress += "/";
     client.BaseAddress = new Uri(baseAddress);
-    client.Timeout = TimeSpan.FromSeconds(
-        int.TryParse(builder.Configuration["AI:Client:TimeoutSeconds"], out var timeoutSeconds)
-        && timeoutSeconds > 0
-            ? timeoutSeconds
-            : 180
-    );
+    client.Timeout = TimeSpan.FromSeconds(int.TryParse(builder.Configuration["AI:Client:TimeoutSeconds"], out var timeoutSeconds) && timeoutSeconds > 0 ? timeoutSeconds : 180);
 });
 
 var app = builder.Build();
-
 app.UseCustomCodeApi();
 app.UseCors(CorsPolicyName);
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseCustomCodeSwagger();
-}
-
-app.MapGet(
-        "/health",
-        () => Results.Ok(new
-        {
-            service = "DholePricingService",
-            status = "Healthy",
-            timestamp = DateTimeOffset.UtcNow,
-        })
-    )
-    .AllowAnonymous();
+if (app.Environment.IsDevelopment()) app.UseCustomCodeSwagger();
+app.MapGet("/health", () => Results.Ok(new { service = "DholePricingService", status = "Healthy", timestamp = DateTimeOffset.UtcNow })).AllowAnonymous();
 
 app.UseAuthentication();
 app.UseMiddleware<SellerRateVisibilityMiddleware>();
@@ -109,6 +61,7 @@ app.MapImportRateEndpoints();
 app.MapImportRateReviewQueueEndpoints();
 app.MapCabysEndpoints();
 app.MapRateEndpoints();
+app.MapRateUpdateEligibilityEndpoints();
 app.MapSellerRateEndpoints();
 app.MapSellerRateStatusEndpoints();
 app.MapSellerVisibilityEndpoints();
