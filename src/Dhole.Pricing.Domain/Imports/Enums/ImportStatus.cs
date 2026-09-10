@@ -8,4 +8,5 @@ public enum ImportStatus
     Created = 3,
     Expired = 4,
     PreAuthorized = 5,
+    Inactive = 6,
 }
