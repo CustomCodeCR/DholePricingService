@@ -12,7 +12,8 @@ namespace Dhole.Pricing.Application.Services;
 
 public sealed class RateFixedCostSynchronizer(
     ICostRepository costs,
-    IPricingConfigCatalogClient configCatalog
+    IPricingConfigCatalogClient configCatalog,
+    ICostRoutePortSelectionStore costSelections
 ) : IRateFixedCostSynchronizer
 {
     private const decimal PanamaGamInternationalLandFreight = 2140m;
@@ -73,6 +74,10 @@ public sealed class RateFixedCostSynchronizer(
             costType: CostType.Fixed,
             cancellationToken: cancellationToken
         );
+        var activeFixedCostSelections = await costSelections.GetManyAsync(
+            activeFixedCosts.Select(x => x.Id).ToArray(),
+            cancellationToken
+        );
 
         var hasExplicitFreight = rate.RateDetails.Any(x =>
             x.CostDetailType == CostDetailType.Freight && !x.CostId.HasValue
@@ -85,10 +90,14 @@ public sealed class RateFixedCostSynchronizer(
         PricingConfigCatalogItem? crcCurrency = null;
 
         foreach (var cost in activeFixedCosts.Where(cost =>
-            MatchesRate(cost, rate)
-            && !(hasExplicitFreight && cost.CostDetailType == CostDetailType.Freight)
-        ))
         {
+            activeFixedCostSelections.TryGetValue(cost.Id, out var selection);
+            return MatchesRate(cost, rate, selection)
+                && !(hasExplicitFreight && cost.CostDetailType == CostDetailType.Freight);
+        }))
+        {
+            activeFixedCostSelections.TryGetValue(cost.Id, out var costSelection);
+            var isAgentAssociated = cost.AgentId.HasValue || costSelection?.AgentIds.Count > 0;
             var hasExistingAmount = existingAmounts.TryGetValue(cost.Id, out var existingAmount);
             var hasMinimumRule = cost.MinimumCostAmount.HasValue || cost.MinimumSaleAmount.HasValue;
             var forceCrc = CostaRicaServiceCurrencyRules.RequiresCrc(cost, rate);
@@ -131,7 +140,7 @@ public sealed class RateFixedCostSynchronizer(
             // de la línea. La venta puede conservar el override de Pricing, convirtiéndolo si hace falta.
             var costAmount = CostaRicaServiceCurrencyRules.ConvertUsdCrc(
                 cost.CostAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
-            var saleAmount = cost.AgentId.HasValue
+            var saleAmount = isAgentAssociated
                 ? 0m
                 : hasExistingAmount && !hasMinimumRule
                     ? CostaRicaServiceCurrencyRules.ConvertUsdCrc(
@@ -153,7 +162,7 @@ public sealed class RateFixedCostSynchronizer(
 
             var quantity = rate.ResolveChargeQuantity(cost.ChargeBasis, kgPerCbmOverride: cost.KgPerCbm);
             var effectiveCostTotal = Math.Max(costAmount * quantity, minimumCostAmount);
-            var effectiveSaleTotal = cost.AgentId.HasValue
+            var effectiveSaleTotal = isAgentAssociated
                 ? 0m
                 : Math.Max(saleAmount * quantity, minimumSaleAmount);
             var effectiveCostAmount = quantity > 0m ? effectiveCostTotal / quantity : effectiveCostTotal;
@@ -271,10 +280,14 @@ public sealed class RateFixedCostSynchronizer(
         });
     }
 
-    private static bool MatchesRate(Cost cost, RateHeader rate)
+    private static bool MatchesRate(
+        Cost cost,
+        RateHeader rate,
+        CostRoutePortSelectionSet? selection
+    )
     {
-        var matchesAgent = !cost.AgentId.HasValue || cost.AgentId == rate.AgentId;
-        var matchesCarrier = !cost.CarrierId.HasValue || cost.CarrierId == rate.CarrierId;
+        var matchesAgent = SelectionMatches(selection?.AgentIds, cost.AgentId, rate.AgentId);
+        var matchesCarrier = SelectionMatches(selection?.CarrierIds, cost.CarrierId, rate.CarrierId);
         var matchesMode = !cost.ShipmentMode.HasValue || cost.ShipmentMode.Value == rate.ShipmentMode;
         var matchesIncoterm =
             cost.Incoterms.Count == 0
@@ -290,18 +303,22 @@ public sealed class RateFixedCostSynchronizer(
         if (!matchesAgent || !matchesCarrier || !matchesMode || !matchesIncoterm || !matchesServices)
             return false;
 
-        var hasStructuredRoute = cost.PolId.HasValue || cost.PoeId.HasValue || cost.PodId.HasValue;
-        if (hasStructuredRoute)
-        {
-            if (cost.PolId.HasValue && cost.PolId != rate.PolId)
-                return false;
-            if (cost.PoeId.HasValue && cost.PoeId != rate.PoeId)
-                return false;
-            if (cost.PodId.HasValue && cost.PodId != rate.PodId)
-                return false;
+        if (!SelectionMatches(selection?.PolIds, cost.PolId, rate.PolId))
+            return false;
+        if (!SelectionMatches(selection?.PoeIds, cost.PoeId, rate.PoeId))
+            return false;
+        if (!SelectionMatches(selection?.PodIds, cost.PodId, rate.PodId))
+            return false;
 
+        var hasStructuredRoute =
+            selection?.PolIds.Count > 0
+            || selection?.PoeIds.Count > 0
+            || selection?.PodIds.Count > 0
+            || cost.PolId.HasValue
+            || cost.PoeId.HasValue
+            || cost.PodId.HasValue;
+        if (hasStructuredRoute)
             return true;
-        }
 
         if (!cost.PortId.HasValue)
             return true;
@@ -316,6 +333,18 @@ public sealed class RateFixedCostSynchronizer(
             null => cost.PortId == rate.PolId || cost.PortId == rate.PoeId || cost.PortId == rate.PodId,
             _ => false,
         };
+    }
+
+    private static bool SelectionMatches(
+        IReadOnlyCollection<Guid>? selectedIds,
+        Guid? legacyId,
+        Guid? actualId
+    )
+    {
+        if (selectedIds is { Count: > 0 })
+            return actualId.HasValue && selectedIds.Contains(actualId.Value);
+
+        return !legacyId.HasValue || legacyId == actualId;
     }
 
     private static bool IsPanamaToGam(RateHeader rate)
