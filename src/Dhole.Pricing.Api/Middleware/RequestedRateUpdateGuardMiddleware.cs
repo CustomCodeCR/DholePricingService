@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -9,10 +10,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Dhole.Pricing.Api.Middleware;
 
 /// <summary>
-/// Protege las modificaciones de tarifas originadas por una solicitud de Ventas.
-/// Una tarifa solicitada solo puede actualizarse dentro de la misma solicitud antes
-/// de que Pricing la envíe, o después de enviada mientras Ventas aún no haya tomado
-/// una decisión. Toda actualización requiere un motivo y queda registrada en AuditLogs.
+/// Protege toda modificación de tarifas. Solo se permite actualizar la misma solicitud
+/// antes de que Pricing la envíe, o una tarifa ya enviada mientras el vendedor aún no
+/// la haya aceptado/rechazado. Toda actualización exige un motivo y queda auditada.
 /// </summary>
 public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
 {
@@ -23,19 +23,6 @@ public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
     {
         if (!HttpMethods.IsPut(context.Request.Method)
             || !TryGetRateId(context.Request.Path, out var rateId))
-        {
-            await next(context);
-            return;
-        }
-
-        var linkedRequests = await db.RateRequests
-            .AsNoTracking()
-            .Where(x => x.RateId == rateId)
-            .Select(x => new { x.Id, x.Status })
-            .ToListAsync(context.RequestAborted);
-
-        // Las tarifas que no nacieron de una solicitud mantienen el flujo de edición existente.
-        if (linkedRequests.Count == 0)
         {
             await next(context);
             return;
@@ -53,31 +40,26 @@ public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
             return;
         }
 
-        // Una decisión comercial final siempre cierra la ventana, aunque por una
-        // inconsistencia histórica la solicitud todavía figure como Open.
-        var finalCommercialStatus = rateStatus.Value is
-            RateStatus.AcceptedByClient or
-            RateStatus.RejectedByClient or
-            RateStatus.Closed or
-            RateStatus.Expired;
+        var linkedRequests = await db.RateRequests
+            .AsNoTracking()
+            .Where(x => x.RateId == rateId)
+            .Select(x => new { x.Id, x.Status })
+            .ToListAsync(context.RequestAborted);
 
         var requestStillOpen = linkedRequests.Any(x => x.Status == RateRequestStatus.Open);
-        var beforePricingSends = requestStillOpen && rateStatus.Value is
-            RateStatus.PendingApproval or
-            RateStatus.ApprovedByManagement or
-            RateStatus.RejectedByManagement or
-            RateStatus.Open;
-        var waitingSellerDecision = rateStatus.Value is RateStatus.Sent or RateStatus.RequestedByClient;
+        var decision = RateUpdateWindowPolicy.Evaluate(
+            rateStatus.Value,
+            linkedRequests.Count > 0,
+            requestStillOpen
+        );
 
-        if (finalCommercialStatus || (!beforePricingSends && !waitingSellerDecision))
+        if (!decision.CanUpdate)
         {
             context.Response.StatusCode = StatusCodes.Status409Conflict;
             await context.Response.WriteAsJsonAsync(new
             {
-                code = "Pricing.RequestedRateUpdateWindowClosed",
-                message = finalCommercialStatus
-                    ? "La tarifa ya no puede actualizarse porque el vendedor ya tomó una decisión o la tarifa está cerrada/vencida."
-                    : "La tarifa solo puede actualizarse antes de que Pricing la envíe o mientras está enviada y pendiente de aceptación/rechazo del vendedor.",
+                code = "Pricing.RateUpdateWindowClosed",
+                message = decision.Message,
                 rateStatus = rateStatus.Value.ToString(),
             }, context.RequestAborted);
             return;
@@ -87,7 +69,10 @@ public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
         string? updateReason = null;
         try
         {
-            using var document = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
+            using var document = await JsonDocument.ParseAsync(
+                context.Request.Body,
+                cancellationToken: context.RequestAborted
+            );
             updateReason = GetStringIgnoreCase(document.RootElement, "updateReason")
                 ?? GetStringIgnoreCase(document.RootElement, "reason");
         }
@@ -100,13 +85,13 @@ public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
             context.Request.Body.Position = 0;
         }
 
-        if (string.IsNullOrWhiteSpace(updateReason))
+        if (string.IsNullOrWhiteSpace(updateReason) || updateReason.Trim().Length < 5)
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsJsonAsync(new
             {
-                code = "Pricing.RequestedRateUpdateReasonRequired",
-                message = "Indique el motivo por el que se va a actualizar la tarifa.",
+                code = "Pricing.RateUpdateReasonRequired",
+                message = "Indique un motivo de al menos 5 caracteres para actualizar la tarifa.",
             }, context.RequestAborted);
             return;
         }
@@ -118,7 +103,7 @@ public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
 
         await audit.PublishAsync(
             new PricingAuditEvent(
-                EventType: "pricing.requested-rate.update-reason",
+                EventType: "pricing.rate.update-reason",
                 Action: PricingAuditActions.Updated,
                 EntityType: PricingAuditEntityTypes.RateHeader,
                 EntityId: rateId,
@@ -128,8 +113,8 @@ public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
                     UpdateReason = updateReason.Trim(),
                     RequestIds = linkedRequests.Select(x => x.Id).ToArray(),
                     PreviousStatus = rateStatus.Value.ToString(),
-                    UpdateWindow = beforePricingSends ? "BeforePricingSend" : "WaitingSellerDecision",
-                    Source = "RequestedRateUpdateGuard",
+                    UpdateWindow = decision.UpdateWindow,
+                    Source = "RateUpdateGuard",
                 }
             ),
             context.RequestAborted);
