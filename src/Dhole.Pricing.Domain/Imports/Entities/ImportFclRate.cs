@@ -169,6 +169,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         Status is ImportStatus.Pending or ImportStatus.PreAuthorized
         || (Status == ImportStatus.Approved && !HasBeenUsedAsRate);
     public bool CanBeRejected => CanBeManuallyReviewed;
+    public bool CanBeInactivated => Status == ImportStatus.Approved;
 
     public static ImportFclRates Create(
         Guid importBatchId,
@@ -238,7 +239,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
     {
         var effectiveDate = date.Date;
 
-        return Status != ImportStatus.Expired
+        return Status is not (ImportStatus.Expired or ImportStatus.Inactive)
             && ValidFrom.Date <= effectiveDate
             && ValidTo.Date >= effectiveDate;
     }
@@ -257,10 +258,29 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         AddDomainEvent(new ImportFclRateRejectDomainEvent(Id, Status, updatedBy));
     }
 
+    public void Inactivate(Guid? updatedBy = null)
+    {
+        if (Status == ImportStatus.Inactive)
+            return;
+
+        if (!CanBeInactivated)
+        {
+            throw new InvalidOperationException(
+                "Solo se pueden inactivar tarifas importadas preaprobadas."
+            );
+        }
+
+        Status = ImportStatus.Inactive;
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
     public void CreatedAsRate(Guid rateHeaderId, Guid? updatedBy = null)
     {
         if (rateHeaderId == Guid.Empty)
             throw new InvalidOperationException("La tarifa oficial creada es requerida.");
+
+        if (Status == ImportStatus.Inactive)
+            throw new InvalidOperationException("Una tarifa importada inactiva no puede utilizarse en nuevas tarifas.");
 
         Status = ImportStatus.Approved;
         CreatedAsRateHeaderId = rateHeaderId;
@@ -270,7 +290,6 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
             new ImportFclRateCreatedAsRateDomainEvent(Id, rateHeaderId, Status, updatedBy)
         );
     }
-
 
     public void AssignPoe(CatalogSnapshot poe, Guid? updatedBy = null)
     {
@@ -392,7 +411,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
 
     public void ExpireIfNeeded(DateTime today, Guid? updatedBy = null)
     {
-        if (Status == ImportStatus.Expired || ValidTo.Date >= today.Date)
+        if (Status is ImportStatus.Expired or ImportStatus.Inactive || ValidTo.Date >= today.Date)
             return;
 
         Status = ImportStatus.Expired;
