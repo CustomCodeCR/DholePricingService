@@ -119,6 +119,7 @@ app.MapCostEndpoints();
 app.MapFtlTariffEndpoints();
 app.MapCostRoutePortEndpoints();
 app.MapImportRateEndpoints();
+app.MapImportRateInactivationEndpoints();
 app.MapImportRateReviewQueueEndpoints();
 app.MapCabysEndpoints();
 app.MapRateEndpoints();

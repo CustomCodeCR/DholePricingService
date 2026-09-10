@@ -169,7 +169,11 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         Status is ImportStatus.Pending or ImportStatus.PreAuthorized
         || (Status == ImportStatus.Approved && !HasBeenUsedAsRate);
     public bool CanBeRejected => CanBeManuallyReviewed;
-    public bool CanBeInactivated => Status == ImportStatus.Approved;
+    public bool CanBeInactivated =>
+        Status is ImportStatus.Pending
+            or ImportStatus.PreAuthorized
+            or ImportStatus.Approved
+            or ImportStatus.Expired;
 
     public static ImportFclRates Create(
         Guid importBatchId,
@@ -266,7 +270,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         if (!CanBeInactivated)
         {
             throw new InvalidOperationException(
-                "Solo se pueden inactivar tarifas importadas preaprobadas."
+                "Solo se pueden inactivar tarifas importadas pendientes, preautorizadas, preaprobadas o vencidas."
             );
         }
 
