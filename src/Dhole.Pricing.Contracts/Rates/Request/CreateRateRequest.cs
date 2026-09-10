@@ -30,6 +30,7 @@ public sealed record CreateRateRequest(
     int ContainerQuantity = 1,
     string? ClientName = null,
     string? ExecutiveName = null,
+    Guid? ExecutiveUserId = null,
     string? IdtraNumber = null,
     string? QuoNumber = null,
     string? Includes = null,
