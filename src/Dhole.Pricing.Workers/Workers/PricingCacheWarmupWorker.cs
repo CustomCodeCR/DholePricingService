@@ -715,6 +715,7 @@ internal sealed class PricingCacheWarmupWorker(
             rate.SubjectTo,
             rate.Excludes,
             rate.TransitTime,
+            rate.UseAllInPresentation,
             rate.RateType.ToString(),
             rate.ShipmentMode.ToString(),
             rate.OperationType.ToString(),
