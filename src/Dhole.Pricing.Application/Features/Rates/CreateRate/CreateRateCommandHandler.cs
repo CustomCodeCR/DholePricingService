@@ -277,7 +277,8 @@ public sealed class CreateRateCommandHandler(
                     detail.Quantity,
                     detail.ChargeBasis,
                     detail.ApplyDestinationTax,
-                    detail.DestinationTaxRate
+                    detail.DestinationTaxRate,
+                    detail.BillToClient
                 ),
                 cancellationToken
             );
@@ -442,6 +443,7 @@ public sealed class CreateRateCommandHandler(
                     detail.ApplyDestinationTax,
                     detail.DestinationTaxRate
                 );
+                addedDetail.ConfigureBillToClient(detail.BillToClient);
             }
 
             await fixedCostSynchronizer.SynchronizeAsync(
@@ -786,7 +788,7 @@ public sealed class CreateRateCommandHandler(
             ?? importedRate.OceanFreight
             ?? importedRate.Freight;
 
-        rate.AddRateDetail(
+        var detail = rate.AddRateDetail(
             rate.Id,
             costId: null,
             name: "Flete internacional",
@@ -802,5 +804,6 @@ public sealed class CreateRateCommandHandler(
             quantity: rate.ContainerQuantity,
             updatedBy: createdBy
         );
+        detail.ConfigureBillToClient(saleOverride?.BillToClient);
     }
 }
