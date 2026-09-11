@@ -6,6 +6,7 @@ namespace Dhole.Pricing.Api.Middleware;
 public sealed class RateCommercialIdentityGuardMiddleware(RequestDelegate next)
 {
     private const string RatesPath = "/api/pricing/rates";
+    private const string DefaultSalesExecutiveName = "Castro Fallas";
 
     public async Task InvokeAsync(
         HttpContext context,
@@ -49,9 +50,8 @@ public sealed class RateCommercialIdentityGuardMiddleware(RequestDelegate next)
                 return;
             }
 
-            var executiveUserIdText = GetString(root, "executiveUserId");
-            if (!Guid.TryParse(executiveUserIdText, out var executiveUserId)
-                || executiveUserId == Guid.Empty)
+            var executiveName = GetString(root, "executiveName")?.Trim();
+            if (string.IsNullOrWhiteSpace(executiveName))
             {
                 await WriteBadRequestAsync(
                     context,
@@ -61,57 +61,71 @@ public sealed class RateCommercialIdentityGuardMiddleware(RequestDelegate next)
                 return;
             }
 
-            SellerDirectoryUser? executive;
-            try
+            if (!IsDefaultSalesExecutive(executiveName))
             {
-                executive = await sellerDirectory.GetSalesExecutiveAsync(
-                    executiveUserId,
-                    context.RequestAborted
-                );
-            }
-            catch (Exception exception) when (
-                exception is HttpRequestException
-                or InvalidOperationException
-                or TaskCanceledException)
-            {
-                if (context.RequestAborted.IsCancellationRequested)
-                    throw;
+                var executiveUserIdText = GetString(root, "executiveUserId");
+                if (!Guid.TryParse(executiveUserIdText, out var executiveUserId)
+                    || executiveUserId == Guid.Empty)
+                {
+                    await WriteBadRequestAsync(
+                        context,
+                        "Pricing.RateExecutiveRequired",
+                        "Debe seleccionar un ejecutivo comercial."
+                    );
+                    return;
+                }
 
-                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
-                await context.Response.WriteAsJsonAsync(
-                    new
-                    {
-                        code = "Pricing.SalesExecutiveDirectoryUnavailable",
-                        message = "No fue posible validar el ejecutivo comercial con Auth en este momento."
-                    },
-                    cancellationToken: context.RequestAborted
-                );
-                return;
-            }
+                SellerDirectoryUser? executive;
+                try
+                {
+                    executive = await sellerDirectory.GetSalesExecutiveAsync(
+                        executiveUserId,
+                        context.RequestAborted
+                    );
+                }
+                catch (Exception exception) when (
+                    exception is HttpRequestException
+                    or InvalidOperationException
+                    or TaskCanceledException)
+                {
+                    if (context.RequestAborted.IsCancellationRequested)
+                        throw;
 
-            if (executive is null)
-            {
-                await WriteBadRequestAsync(
-                    context,
-                    "Pricing.RateExecutiveInvalid",
-                    "El ejecutivo comercial debe ser un usuario activo con el rol Vendedor."
-                );
-                return;
-            }
+                    context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                    await context.Response.WriteAsJsonAsync(
+                        new
+                        {
+                            code = "Pricing.SalesExecutiveDirectoryUnavailable",
+                            message = "No fue posible validar el ejecutivo comercial con Auth en este momento."
+                        },
+                        cancellationToken: context.RequestAborted
+                    );
+                    return;
+                }
 
-            var canonicalExecutiveName = GetExecutiveLabel(executive);
-            var executiveName = GetString(root, "executiveName")?.Trim();
-            if (!string.Equals(
-                    executiveName,
-                    canonicalExecutiveName,
-                    StringComparison.Ordinal))
-            {
-                await WriteBadRequestAsync(
-                    context,
-                    "Pricing.RateExecutiveNameMismatch",
-                    "El nombre del ejecutivo comercial no coincide con el usuario Vendedor seleccionado."
-                );
-                return;
+                if (executive is null)
+                {
+                    await WriteBadRequestAsync(
+                        context,
+                        "Pricing.RateExecutiveInvalid",
+                        "El ejecutivo comercial debe ser un usuario activo con el rol Vendedor."
+                    );
+                    return;
+                }
+
+                var canonicalExecutiveName = GetExecutiveLabel(executive);
+                if (!string.Equals(
+                        executiveName,
+                        canonicalExecutiveName,
+                        StringComparison.Ordinal))
+                {
+                    await WriteBadRequestAsync(
+                        context,
+                        "Pricing.RateExecutiveNameMismatch",
+                        "El nombre del ejecutivo comercial no coincide con el usuario Vendedor seleccionado."
+                    );
+                    return;
+                }
             }
         }
 
@@ -133,6 +147,13 @@ public sealed class RateCommercialIdentityGuardMiddleware(RequestDelegate next)
         var rateId = path[(RatesPath.Length + 1)..];
         return !rateId.Contains('/') && Guid.TryParse(rateId, out _);
     }
+
+    private static bool IsDefaultSalesExecutive(string executiveName)
+        => string.Equals(
+            executiveName.Trim(),
+            DefaultSalesExecutiveName,
+            StringComparison.OrdinalIgnoreCase
+        );
 
     private static string? GetString(JsonElement root, string propertyName)
     {
