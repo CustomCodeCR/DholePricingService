@@ -34,6 +34,18 @@ def update_model_snapshot() -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def update_paged_rate_projection() -> None:
+    path = Path("src/Dhole.Pricing.Persistence/Repositories/RateHeaderRepository.cs")
+    text = path.read_text(encoding="utf-8")
+    old = '''                        d.ApplyDestinationTax,\n                        d.DestinationTaxRate,\n                        d.DestinationTaxAmount\n                    ))'''
+    new = '''                        d.ApplyDestinationTax,\n                        d.DestinationTaxRate,\n                        d.DestinationTaxAmount,\n                        d.BillToClient\n                    ))'''
+    if old in text:
+        text = text.replace(old, new, 1)
+    elif new not in text:
+        raise RuntimeError("No se encontró la proyección RateDetailDto del listado de tarifas.")
+    path.write_text(text, encoding="utf-8")
+
+
 def validate_feature_shape() -> None:
     checks = {
         "src/Dhole.Pricing.Domain/Rates/Entities/RateDetail.cs": ["BillToClient", "ConfigureBillToClient"],
@@ -44,6 +56,7 @@ def validate_feature_shape() -> None:
         "src/Dhole.Pricing.Application/Features/Rates/UpdateRate/UpdateRateCommandHandler.cs": ["ConfigureBillToClient"],
         "src/Dhole.Pricing.Application/Services/RateFixedCostSynchronizer.cs": ["BillToClient"],
         "src/Dhole.Pricing.Api/Endpoints/RateEndpoints.cs": ["detail.BillToClient"],
+        "src/Dhole.Pricing.Persistence/Repositories/RateHeaderRepository.cs": ["d.BillToClient"],
         "src/Dhole.Pricing.Persistence/Migrations/20260911033000_AddRateDetailBillToClient.cs": ["bill_to_client"],
     }
     for filename, needles in checks.items():
@@ -55,5 +68,6 @@ def validate_feature_shape() -> None:
 
 replace_dashboard_result()
 update_model_snapshot()
+update_paged_rate_projection()
 validate_feature_shape()
 print("Billing client patch validated.")
