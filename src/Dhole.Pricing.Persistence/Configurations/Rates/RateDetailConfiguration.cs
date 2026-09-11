@@ -45,6 +45,8 @@ internal sealed class RateDetailConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.Notes).HasColumnType("text").IsRequired(false);
 
+        builder.Property(x => x.BillToClient).HasMaxLength(200).IsRequired(false);
+
         builder.Property(x => x.Quantity).HasPrecision(18, 6).IsRequired().HasDefaultValue(1m);
 
         builder.Property(x => x.ApplyDestinationTax)
