@@ -100,6 +100,7 @@ public sealed class ExtractAndPersistFclPricingImportService(
             extraction,
             requestedBy
         );
+        var autoPreApprove = ApprovedPricingTemplateDetector.IsMatch(extraction);
 
         if (mapped.Rates.Count == 0)
         {
@@ -132,6 +133,14 @@ public sealed class ExtractAndPersistFclPricingImportService(
             .Rates.Where(x => !existingExtractionRecordIds.Contains(x.ExtractionRecordId))
             .ToArray();
 
+        if (autoPreApprove)
+        {
+            foreach (var rate in newRates)
+            {
+                rate.Approve(requestedBy);
+            }
+        }
+
         foreach (var rate in newRates)
         {
             await importFclRateRepository.AddAsync(rate, cancellationToken);
@@ -140,11 +149,14 @@ public sealed class ExtractAndPersistFclPricingImportService(
 
         if (newRates.Length > 0)
         {
-            // One approval notification per email batch, even when the extraction contains many rows.
-            await rateChangeNotifications.QueueApprovalRequiredNotificationsAsync(
-                newRates[0],
-                cancellationToken
-            );
+            if (!autoPreApprove)
+            {
+                // One approval notification per batch, even when the extraction contains many rows.
+                await rateChangeNotifications.QueueApprovalRequiredNotificationsAsync(
+                    newRates[0],
+                    cancellationToken
+                );
+            }
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
         }
