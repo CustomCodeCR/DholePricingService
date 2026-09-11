@@ -84,7 +84,18 @@ internal static class ImportRateMappings
             importRate.ValidTo,
             importRate.RawDataJson ?? string.Empty,
             importRate.Status.ToString(),
-            importRate.UsedAsRateCount
+            importRate.UsedAsRateCount,
+            PolId: importRate.PolId,
+            PoeId: importRate.PoeId,
+            Poe: importRate.PoeName,
+            PodId: importRate.PodId,
+            CarrierId: importRate.CarrierId,
+            ContainerTypeId: importRate.ContainerTypeId,
+            ContainerTypeCode: importRate.ContainerTypeCode,
+            CurrencyId: importRate.CurrencyId,
+            TotalSale: importRate.TotalSale,
+            TransitDays: importRate.TransitDays,
+            SpaceComment: importRate.SpaceComment
         );
     }
 }
