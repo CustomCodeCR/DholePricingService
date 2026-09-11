@@ -217,7 +217,7 @@ public sealed class DuplicateRateCommandHandler(
                     detailCurrencies[detail.CurrencyId] = detailCurrency;
                 }
 
-                duplicate.AddRateDetail(
+                var copiedDetail = duplicate.AddRateDetail(
                     duplicate.Id,
                     detail.CostId,
                     detail.Name,
@@ -233,6 +233,7 @@ public sealed class DuplicateRateCommandHandler(
                     detail.Quantity > 0 ? detail.Quantity : 1,
                     command.CreatedBy
                 );
+                copiedDetail.ConfigureBillToClient(detail.BillToClient);
             }
 
             await fixedCostSynchronizer.SynchronizeAsync(
