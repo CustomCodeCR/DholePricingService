@@ -54,6 +54,7 @@ public sealed class RateDetail : Entity<Guid>
     public decimal SaleAmount { get; private set; }
     public decimal UtilityAmount { get; private set; }
     public string? Notes { get; private set; }
+    public string? BillToClient { get; private set; }
     public decimal Quantity { get; private set; }
     public bool ApplyDestinationTax { get; private set; }
     public decimal DestinationTaxRate { get; private set; }
@@ -72,6 +73,19 @@ public sealed class RateDetail : Entity<Guid>
 
         ApplyDestinationTax = applyDestinationTax && destinationTaxRate > 0m;
         DestinationTaxRate = ApplyDestinationTax ? destinationTaxRate : 0m;
+    }
+
+    public void ConfigureBillToClient(string? billToClient)
+    {
+        var normalized = string.IsNullOrWhiteSpace(billToClient) ? null : billToClient.Trim();
+        if (normalized is { Length: > 200 })
+        {
+            throw new InvalidOperationException(
+                "El cliente de facturación/cobro no puede exceder 200 caracteres."
+            );
+        }
+
+        BillToClient = normalized;
     }
 
     internal static RateDetail Create(
