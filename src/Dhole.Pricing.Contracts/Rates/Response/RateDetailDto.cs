@@ -18,5 +18,6 @@ public sealed record RateDetailDto(
     string? Notes,
     bool ApplyDestinationTax,
     decimal DestinationTaxRate,
-    decimal DestinationTaxAmount
+    decimal DestinationTaxAmount,
+    string? BillToClient
 );
