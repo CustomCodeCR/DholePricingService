@@ -274,7 +274,7 @@ public static class RateEndpoints
             cancellationToken
         );
 
-        return EndpointResults.FromResult(result, httpContext);
+        return EndpointResults.FromPaged(result, httpContext);
     }
 
     private static async Task<IResult> GetRatesAsync(
@@ -419,7 +419,8 @@ public static class RateEndpoints
                     detail.Quantity,
                     chargeBasis,
                     detail.ApplyDestinationTax,
-                    detail.DestinationTaxRate
+                    detail.DestinationTaxRate,
+                    detail.BillToClient
                 )
             );
         }
@@ -625,7 +626,8 @@ public static class RateEndpoints
                     detail.Quantity,
                     chargeBasis,
                     detail.ApplyDestinationTax,
-                    detail.DestinationTaxRate
+                    detail.DestinationTaxRate,
+                    detail.BillToClient
                 )
             );
         }
