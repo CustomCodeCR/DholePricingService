@@ -11,6 +11,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
     : IQueryHandler<GetImportRatesForSelectQuery, Result<IReadOnlyCollection<ImportRateSelectDto>>>
 {
     private const string PoeContainsPrefix = "contains:";
+    private const string PoeCountryPrefix = "country:";
 
     public async Task<Result<IReadOnlyCollection<ImportRateSelectDto>>> HandleAsync(
         GetImportRatesForSelectQuery query,
@@ -204,8 +205,16 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
     {
         if (string.IsNullOrWhiteSpace(poe)) return null;
         var value = poe.Trim();
-        return value.StartsWith(PoeContainsPrefix, StringComparison.OrdinalIgnoreCase)
-            ? value[PoeContainsPrefix.Length..].Trim()
+
+        if (value.StartsWith(PoeContainsPrefix, StringComparison.OrdinalIgnoreCase))
+            return value[PoeContainsPrefix.Length..].Trim();
+
+        if (!value.StartsWith(PoeCountryPrefix, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var countryCode = value[PoeCountryPrefix.Length..].Trim();
+        return string.Equals(countryCode, "PA", StringComparison.OrdinalIgnoreCase)
+            ? "Panama|Panamá"
             : null;
     }
 
@@ -225,7 +234,16 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .ToArray();
 
-        return needles.Any(needle => values.Any(value => value.Contains(needle, StringComparison.Ordinal)));
+        if (needles.Any(needle => values.Any(value => value.Contains(needle, StringComparison.Ordinal))))
+            return true;
+
+        // Los POE de Panamá pueden venir importados únicamente con UN/LOCODE (PABLB,
+        // PAMIT, PACOL, etc.). country:PA y contains:Panama deben incluirlos también.
+        if (!needles.Contains("panama", StringComparer.Ordinal))
+            return false;
+
+        var poeCode = CanonicalText(rate.PoeCode ?? string.Empty);
+        return poeCode.Length == 5 && poeCode.StartsWith("pa", StringComparison.Ordinal);
     }
 
     private static bool IsSelectableStatus(ImportRateSelectDto rate) => IsSelectableStatus(rate.Status);
