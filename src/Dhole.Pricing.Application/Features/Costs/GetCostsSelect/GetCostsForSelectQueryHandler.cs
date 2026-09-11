@@ -9,7 +9,8 @@ namespace Dhole.Pricing.Application.Features.Costs.GetCostsForSelect;
 public sealed class GetCostsForSelectQueryHandler(
     ICostRepository costs,
     ICostCacheService cache,
-    ICostRoutePortSelectionStore routePorts
+    ICostRoutePortSelectionStore routePorts,
+    IImportFclRateRepository importRates
 ) : IQueryHandler<GetCostsForSelectQuery, Result<IReadOnlyCollection<CostSelectDto>>>
 {
     public async Task<Result<IReadOnlyCollection<CostSelectDto>>> HandleAsync(
@@ -17,6 +18,24 @@ public sealed class GetCostsForSelectQueryHandler(
         CancellationToken cancellationToken = default
     )
     {
+        // "Multimodal Via Panamá" is a synthetic POE used by the wizard. When the
+        // selected imported tariff is supplied, its real POE (and parties when missing
+        // from the request) is the authoritative context for cost/surcharge matching.
+        if (query.ApplicableToContext && query.ImportRateId.HasValue)
+        {
+            var importRate = await importRates.GetByIdAsync(query.ImportRateId.Value, cancellationToken);
+
+            if (importRate is not null && !importRate.IsDeleted)
+            {
+                query = query with
+                {
+                    PoeId = importRate.PoeId != Guid.Empty ? importRate.PoeId : query.PoeId,
+                    CarrierId = query.CarrierId ?? importRate.CarrierId,
+                    AgentId = query.AgentId ?? importRate.AgentId,
+                };
+            }
+        }
+
         var canUseGeneralCache = CanUseGeneralCache(query);
 
         if (canUseGeneralCache)
@@ -213,6 +232,7 @@ public sealed class GetCostsForSelectQueryHandler(
             && !query.PodId.HasValue
             && !query.IncotermId.HasValue
             && !query.ShipmentMode.HasValue
+            && !query.ImportRateId.HasValue
             && (query.ServiceIds is null || query.ServiceIds.Count == 0)
             && query.IsActive == true;
     }
