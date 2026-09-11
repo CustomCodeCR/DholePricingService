@@ -95,7 +95,7 @@ internal static class ImportRateMappings
             CurrencyId: importRate.CurrencyId,
             TotalSale: importRate.TotalSale,
             TransitDays: importRate.TransitDays,
-            SpaceComment: importRate.SpaceComment
+            RawSpaceComment: importRate.SpaceComment
         );
     }
 }
