@@ -274,7 +274,7 @@ public static class RateEndpoints
             cancellationToken
         );
 
-        return EndpointResults.FromPaged(result, httpContext);
+        return EndpointResults.FromResult(result, httpContext);
     }
 
     private static async Task<IResult> GetRatesAsync(
