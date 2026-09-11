@@ -1415,6 +1415,11 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("apply_destination_tax");
 
+                    b.Property<string>("BillToClient")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("bill_to_client");
+
                     b.Property<string>("ChargeBasis")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

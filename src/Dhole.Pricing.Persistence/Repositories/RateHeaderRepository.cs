@@ -288,7 +288,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                         d.Notes,
                         d.ApplyDestinationTax,
                         d.DestinationTaxRate,
-                        d.DestinationTaxAmount
+                        d.DestinationTaxAmount,
+                        d.BillToClient
                     ))
                     .ToList(),
                 x.RateServices
