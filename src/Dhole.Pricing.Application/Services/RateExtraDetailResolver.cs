@@ -120,7 +120,12 @@ public sealed class RateExtraDetailResolver(
             var costAmount = input.Id.HasValue || selectedCurrencyDiffers
                 ? input.CostAmount
                 : cost.CostAmount;
-            var saleAmount = cost.AgentId.HasValue ? 0m : input.SaleAmount;
+
+            // Un costo puede pertenecer a un agente y aun así ser un OriginCharge vendible.
+            // Solo los AgentCharge son costos internos del agente y conservan venta en cero.
+            var saleAmount = cost.CostDetailType == CostDetailType.AgentCharge
+                ? 0m
+                : input.SaleAmount;
 
             return RateExtraDetailResolution.Success(
                 new ResolvedRateExtraDetail(
