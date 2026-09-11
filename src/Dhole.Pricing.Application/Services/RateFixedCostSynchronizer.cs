@@ -69,7 +69,18 @@ public sealed class RateFixedCostSynchronizer(
                 }
             );
 
-        rate.RemoveAutomaticFixedDetails(updatedBy);
+        // Al crear/editar una tarifa desde una importación, el wizard ya resolvió y envió
+        // explícitamente los rubros que el usuario está cotizando. En rutas sintéticas como
+        // "Multimodal Via Panamá" esos rubros pueden estar asociados al POE real de la tarifa
+        // importada y no al POE sintético del header. Eliminarlos y volverlos a filtrar aquí
+        // hacía desaparecer BL, cargos de destino, origen, recolecta, etc. Los snapshots que
+        // llegaron explícitamente tienen prioridad; solo completamos costos automáticos que no
+        // hayan sido enviados.
+        var preserveExplicitFixedDetails = rate.SourceImportFclRateId.HasValue;
+        if (!preserveExplicitFixedDetails)
+        {
+            rate.RemoveAutomaticFixedDetails(updatedBy);
+        }
 
         var activeFixedCosts = await costs.GetActiveCostsAsync(
             costType: CostType.Fixed,
@@ -94,7 +105,8 @@ public sealed class RateFixedCostSynchronizer(
         {
             activeFixedCostSelections.TryGetValue(cost.Id, out var selection);
             return MatchesRate(cost, rate, selection)
-                && !(hasExplicitFreight && cost.CostDetailType == CostDetailType.Freight);
+                && !(hasExplicitFreight && cost.CostDetailType == CostDetailType.Freight)
+                && (!preserveExplicitFixedDetails || !existingAmounts.ContainsKey(cost.Id));
         }))
         {
             activeFixedCostSelections.TryGetValue(cost.Id, out var costSelection);
@@ -236,6 +248,9 @@ public sealed class RateFixedCostSynchronizer(
     )
     {
         if (rate.ShipmentMode != ShipmentMode.Fcl || !IsPanamaToGam(rate))
+            return;
+
+        if (rate.RateDetails.Any(x => x.CostId == PanamaGamLandFreightRuleId))
             return;
 
         Guid currencyId;
