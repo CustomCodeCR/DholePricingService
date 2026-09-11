@@ -63,7 +63,8 @@ public sealed class RateFixedCostSynchronizer(
                         detail.CurrencyName,
                         detail.CurrencyCode,
                         detail.ApplyDestinationTax,
-                        detail.DestinationTaxRate
+                        detail.DestinationTaxRate,
+                        detail.BillToClient
                     );
                 }
             );
@@ -191,6 +192,7 @@ public sealed class RateFixedCostSynchronizer(
                     existingAmount.ApplyDestinationTax,
                     existingAmount.DestinationTaxRate
                 );
+                synchronizedDetail.ConfigureBillToClient(existingAmount.BillToClient);
             }
         }
 
