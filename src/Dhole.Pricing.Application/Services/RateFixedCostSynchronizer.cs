@@ -99,6 +99,7 @@ public sealed class RateFixedCostSynchronizer(
         {
             activeFixedCostSelections.TryGetValue(cost.Id, out var costSelection);
             var isAgentAssociated = cost.AgentId.HasValue || costSelection?.AgentIds.Count > 0;
+            var suppressAgentSale = isAgentAssociated && cost.CostDetailType != CostDetailType.OriginCharge;
             var hasExistingAmount = existingAmounts.TryGetValue(cost.Id, out var existingAmount);
             var hasMinimumRule = cost.MinimumCostAmount.HasValue || cost.MinimumSaleAmount.HasValue;
             var forceCrc = CostaRicaServiceCurrencyRules.RequiresCrc(cost, rate);
@@ -149,7 +150,7 @@ public sealed class RateFixedCostSynchronizer(
                 cost.CurrencyName,
                 targetCurrencyName
             );
-            var saleAmount = isAgentAssociated
+            var saleAmount = suppressAgentSale
                 ? 0m
                 : hasExistingAmount && !hasMinimumRule
                     ? CostaRicaServiceCurrencyRules.ConvertUsdCrc(
@@ -192,7 +193,7 @@ public sealed class RateFixedCostSynchronizer(
 
             var quantity = rate.ResolveChargeQuantity(cost.ChargeBasis, kgPerCbmOverride: cost.KgPerCbm);
             var effectiveCostTotal = Math.Max(costAmount * quantity, minimumCostAmount);
-            var effectiveSaleTotal = isAgentAssociated
+            var effectiveSaleTotal = suppressAgentSale
                 ? 0m
                 : Math.Max(saleAmount * quantity, minimumSaleAmount);
             var effectiveCostAmount = quantity > 0m ? effectiveCostTotal / quantity : effectiveCostTotal;
