@@ -1,0 +1,136 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.19kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 0.7s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
+#3 resolve docker.io/docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32 0.0s done
+#3 CACHED
+
+#4 [internal] load metadata for mcr.microsoft.com/dotnet/aspnet:10.0
+#4 ...
+
+#5 [internal] load metadata for mcr.microsoft.com/dotnet/sdk:10.0
+#5 DONE 0.3s
+
+#4 [internal] load metadata for mcr.microsoft.com/dotnet/aspnet:10.0
+#4 DONE 0.4s
+
+#6 [internal] load .dockerignore
+#6 transferring context: 416B done
+#6 DONE 0.1s
+
+#7 [internal] load build context
+#7 DONE 0.0s
+
+#8 [base 1/3] FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:1fe86375600b62e6566b465da9553eef0621f13c67f40fe764cd8dbb1dee1497
+#8 resolve mcr.microsoft.com/dotnet/aspnet:10.0@sha256:1fe86375600b62e6566b465da9553eef0621f13c67f40fe764cd8dbb1dee1497 0.0s done
+#8 DONE 0.0s
+
+#9 [build  1/13] FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:4ea6fe75dd36706bb6d8c3c293d4c4315840f5d76ea28ac97def77e3ec487fa5
+#9 resolve mcr.microsoft.com/dotnet/sdk:10.0@sha256:4ea6fe75dd36706bb6d8c3c293d4c4315840f5d76ea28ac97def77e3ec487fa5 0.0s done
+#9 DONE 0.0s
+
+#10 [base 2/3] RUN apt-get update &&   apt-get install -y tzdata apt-utils libgdiplus libc6-dev curl &&   ln -s /usr/lib/libgdiplus.so /usr/lib/gdiplus.dll &&   rm -rf /var/lib/apt/lists/*
+#10 CACHED
+
+#11 [base 3/3] WORKDIR /app
+#11 CACHED
+
+#12 [final 1/3] WORKDIR /app
+#12 CACHED
+
+#7 [internal] load build context
+#7 transferring context: 210.54kB 0.1s done
+#7 DONE 0.1s
+
+#13 [build  8/13] COPY [src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj, src/Dhole.Pricing.Infrastructure/]
+#13 CACHED
+
+#14 [build  3/13] COPY [NuGet.Config, ./NuGet.Config]
+#14 CACHED
+
+#15 [build  7/13] COPY [src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj, src/Dhole.Pricing.Persistence/]
+#15 CACHED
+
+#16 [build  9/13] COPY [src/Dhole.Pricing.Contracts/Dhole.Pricing.Contracts.csproj, src/Dhole.Pricing.Contracts/]
+#16 CACHED
+
+#17 [build  2/13] WORKDIR /src
+#17 CACHED
+
+#18 [build  6/13] COPY [src/Dhole.Pricing.Domain/Dhole.Pricing.Domain.csproj, src/Dhole.Pricing.Domain/]
+#18 CACHED
+
+#19 [build  4/13] COPY [src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj, src/Dhole.Pricing.Api/]
+#19 CACHED
+
+#20 [build  5/13] COPY [src/Dhole.Pricing.Application/Dhole.Pricing.Application.csproj, src/Dhole.Pricing.Application/]
+#20 CACHED
+
+#21 [build 10/13] RUN --mount=type=secret,id=github_token,required=true   export NuGetPackageSourceCredentials_github="Username=MauLang18;Password=$(cat /run/secrets/github_token);ValidAuthenticationTypes=Basic" &&   dotnet restore "src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj" --configfile /src/NuGet.Config
+#21 CACHED
+
+#22 [build 11/13] COPY . .
+#22 DONE 0.3s
+
+#23 [build 12/13] WORKDIR /src/src/Dhole.Pricing.Api
+#23 DONE 0.0s
+
+#24 [build 13/13] RUN dotnet build "Dhole.Pricing.Api.csproj" -c Release -o /app/build --no-restore
+#24 3.909 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-23rf-6693-g89p
+#24 3.910 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-37gx-xxp4-5rgx
+#24 3.910 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-6588-8gv4-xfgh
+#24 3.910 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-8q5v-6pqq-x66h
+#24 3.910 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-cvvh-rhrc-wg4q
+#24 3.910 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-g8r8-53c2-pm3f
+#24 3.910 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-mmjf-rqrv-855v
+#24 3.910 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-w3x6-4m5h-cxqf
+#24 9.623   Dhole.Pricing.Domain -> /app/build/Dhole.Pricing.Domain.dll
+#24 9.677   Dhole.Pricing.Contracts -> /app/build/Dhole.Pricing.Contracts.dll
+#24 13.12   Dhole.Pricing.Application -> /app/build/Dhole.Pricing.Application.dll
+#24 15.75   Dhole.Pricing.Infrastructure -> /app/build/Dhole.Pricing.Infrastructure.dll
+#24 16.73 /src/src/Dhole.Pricing.Persistence/Repositories/RateHeaderRepository.cs(273,38): error CS7036: There is no argument given that corresponds to the required parameter 'BillToClient' of 'RateDetailDto.RateDetailDto(Guid, Guid, Guid?, string, string, string, string, Guid, string, string, decimal, decimal, decimal, decimal, string?, bool, decimal, decimal, string?)' [/src/src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj]
+#24 16.79 
+#24 16.79 Build FAILED.
+#24 16.79 
+#24 16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-23rf-6693-g89p
+#24 16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-37gx-xxp4-5rgx
+#24 16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-6588-8gv4-xfgh
+#24 16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-8q5v-6pqq-x66h
+#24 16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-cvvh-rhrc-wg4q
+#24 16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-g8r8-53c2-pm3f
+#24 16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-mmjf-rqrv-855v
+#24 16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-w3x6-4m5h-cxqf
+#24 16.79 /src/src/Dhole.Pricing.Persistence/Repositories/RateHeaderRepository.cs(273,38): error CS7036: There is no argument given that corresponds to the required parameter 'BillToClient' of 'RateDetailDto.RateDetailDto(Guid, Guid, Guid?, string, string, string, string, Guid, string, string, decimal, decimal, decimal, decimal, string?, bool, decimal, decimal, string?)' [/src/src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj]
+#24 16.79     8 Warning(s)
+#24 16.79     1 Error(s)
+#24 16.79 
+#24 16.79 Time Elapsed 00:00:15.93
+#24 ERROR: process "/bin/sh -c dotnet build \"Dhole.Pricing.Api.csproj\" -c $BUILD_CONFIGURATION -o /app/build --no-restore" did not complete successfully: exit code: 1
+------
+ > [build 13/13] RUN dotnet build "Dhole.Pricing.Api.csproj" -c Release -o /app/build --no-restore:
+16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-8q5v-6pqq-x66h
+16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-cvvh-rhrc-wg4q
+16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-g8r8-53c2-pm3f
+16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-mmjf-rqrv-855v
+16.79 /src/src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj : warning NU1903: Package 'System.Security.Cryptography.Xml' 8.0.2 has a known high severity vulnerability, https://github.com/advisories/GHSA-w3x6-4m5h-cxqf
+16.79 /src/src/Dhole.Pricing.Persistence/Repositories/RateHeaderRepository.cs(273,38): error CS7036: There is no argument given that corresponds to the required parameter 'BillToClient' of 'RateDetailDto.RateDetailDto(Guid, Guid, Guid?, string, string, string, string, Guid, string, string, decimal, decimal, decimal, decimal, string?, bool, decimal, decimal, string?)' [/src/src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj]
+16.79     8 Warning(s)
+16.79     1 Error(s)
+16.79 
+16.79 Time Elapsed 00:00:15.93
+------
+Dockerfile:36
+--------------------
+  34 |     
+  35 |     WORKDIR "/src/src/Dhole.Pricing.Api"
+  36 | >>> RUN dotnet build "Dhole.Pricing.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build --no-restore
+  37 |     
+  38 |     # Publish image
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c dotnet build \"Dhole.Pricing.Api.csproj\" -c $BUILD_CONFIGURATION -o /app/build --no-restore" did not complete successfully: exit code: 1
