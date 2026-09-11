@@ -103,6 +103,7 @@ public static class CostEndpoints
         ShipmentMode? shipmentMode,
         bool? applicableToContext,
         string? serviceIds,
+        Guid? importRateId,
         IQueryDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -125,7 +126,8 @@ public static class CostEndpoints
                 incotermId,
                 shipmentMode,
                 applicableToContext ?? false,
-                ParseGuidList(serviceIds)
+                ParseGuidList(serviceIds),
+                importRateId
             ),
             cancellationToken
         );
