@@ -14,5 +14,6 @@ public sealed record CreateRateDetailRequest(
     decimal? Quantity = null,
     string? ChargeBasis = null,
     bool ApplyDestinationTax = false,
-    decimal DestinationTaxRate = 0m
+    decimal DestinationTaxRate = 0m,
+    string? BillToClient = null
 );
