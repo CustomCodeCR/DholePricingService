@@ -22,33 +22,11 @@ jobs:
         run: python .github/scripts/patch_bill_to_client_20260910.py
 
       - name: Validate API build
-        id: validate
-        continue-on-error: true
-        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set +e
-          docker build --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-bill-to-client-validation . 2>&1 | tee /tmp/bill-to-client-build.log
-          status=${PIPESTATUS[0]}
-          echo "status=$status" >> "$GITHUB_OUTPUT"
-          tail -n 300 /tmp/bill-to-client-build.log > .bill-to-client-build.log
-          exit 0
-
-      - name: Commit diagnostics on failure
-        if: steps.validate.outputs.status != '0'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .bill-to-client-build.log
-          git commit -m 'chore: capture billing client build failure'
-          git push origin codex/bill-to-item
-          exit 1
+        run: docker build --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-bill-to-client-validation .
 
       - name: Commit validated changes
-        if: steps.validate.outputs.status == '0'
         shell: bash
         run: |
           set -euo pipefail
