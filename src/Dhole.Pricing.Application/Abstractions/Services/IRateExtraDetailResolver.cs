@@ -18,7 +18,8 @@ public sealed record RateExtraDetailInput(
     decimal? Quantity,
     ChargeBasis? ChargeBasis,
     bool ApplyDestinationTax = false,
-    decimal DestinationTaxRate = 0m
+    decimal DestinationTaxRate = 0m,
+    string? BillToClient = null
 );
 
 public sealed record ResolvedRateExtraDetail(
@@ -37,7 +38,8 @@ public sealed record ResolvedRateExtraDetail(
     decimal? Quantity,
     ChargeBasis? ChargeBasis,
     bool ApplyDestinationTax = false,
-    decimal DestinationTaxRate = 0m
+    decimal DestinationTaxRate = 0m,
+    string? BillToClient = null
 );
 
 public sealed record RateExtraDetailResolution(ResolvedRateExtraDetail? Detail, Error? Error)
