@@ -1,0 +1,62 @@
+name: Fix billing client worker develop
+
+on:
+  push:
+    branches: [codex/bill-to-client-worker-develop-20260910]
+    paths:
+      - '.github/workflows/fix-bill-to-client-worker-develop-20260910.yml'
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  patch-and-validate:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch PricingCacheWarmupWorker
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/Dhole.Pricing.Workers/Workers/PricingCacheWarmupWorker.cs')
+          text = path.read_text(encoding='utf-8')
+          old = '''            detail.ApplyDestinationTax,\n            detail.DestinationTaxRate,\n            detail.DestinationTaxAmount\n        );'''
+          new = '''            detail.ApplyDestinationTax,\n            detail.DestinationTaxRate,\n            detail.DestinationTaxAmount,\n            detail.BillToClient\n        );'''
+          if old not in text:
+              if new in text:
+                  print('Worker mapping already patched.')
+              else:
+                  raise RuntimeError('RateDetailDto worker projection anchor not found.')
+          else:
+              text = text.replace(old, new, 1)
+              path.write_text(text, encoding='utf-8')
+          if 'detail.BillToClient' not in path.read_text(encoding='utf-8'):
+              raise RuntimeError('BillToClient was not added to worker projection.')
+          print('Pricing worker BillToClient mapping validated.')
+          PY
+
+      - name: Validate API image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: docker build --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-bill-to-client-api-develop-validation .
+
+      - name: Validate Workers image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: docker build --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Workers/Dockerfile -t dhole/pricing-bill-to-client-workers-develop-validation .
+
+      - name: Commit validated worker fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/fix-bill-to-client-worker-develop-20260910.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(pricing): preserve billing client in worker cache mapping'
+          git push origin codex/bill-to-client-worker-develop-20260910
