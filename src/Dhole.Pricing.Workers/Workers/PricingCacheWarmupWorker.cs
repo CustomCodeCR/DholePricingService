@@ -797,7 +797,8 @@ internal sealed class PricingCacheWarmupWorker(
             detail.Notes,
             detail.ApplyDestinationTax,
             detail.DestinationTaxRate,
-            detail.DestinationTaxAmount
+            detail.DestinationTaxAmount,
+            detail.BillToClient
         );
     }
 
