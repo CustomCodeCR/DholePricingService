@@ -22,5 +22,6 @@ public sealed record GetCostsForSelectQuery(
     Guid? IncotermId = null,
     ShipmentMode? ShipmentMode = null,
     bool ApplicableToContext = false,
-    IReadOnlyCollection<Guid>? ServiceIds = null
+    IReadOnlyCollection<Guid>? ServiceIds = null,
+    Guid? ImportRateId = null
 ) : IQuery<Result<IReadOnlyCollection<CostSelectDto>>>;
