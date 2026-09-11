@@ -292,7 +292,8 @@ public sealed class UpdateRateCommandHandler(
                     detail.Quantity,
                     detail.ChargeBasis,
                     detail.ApplyDestinationTax,
-                    detail.DestinationTaxRate
+                    detail.DestinationTaxRate,
+                    detail.BillToClient
                 ),
                 cancellationToken
             );
@@ -553,6 +554,7 @@ public sealed class UpdateRateCommandHandler(
                         detail.ApplyDestinationTax,
                         detail.DestinationTaxRate
                     );
+                    modified.ConfigureBillToClient(detail.BillToClient);
                     modifiedDetails.Add(modified);
                 }
                 else
@@ -579,6 +581,7 @@ public sealed class UpdateRateCommandHandler(
                         detail.ApplyDestinationTax,
                         detail.DestinationTaxRate
                     );
+                    added.ConfigureBillToClient(detail.BillToClient);
                     addedDetails.Add(added);
                 }
             }
