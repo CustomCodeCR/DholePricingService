@@ -10,11 +10,19 @@ namespace Dhole.Pricing.Application.Features.Imports.GetImportRatesForSelect;
 public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository importRates)
     : IQueryHandler<GetImportRatesForSelectQuery, Result<IReadOnlyCollection<ImportRateSelectDto>>>
 {
+    private const string PoeContainsPrefix = "contains:";
+
     public async Task<Result<IReadOnlyCollection<ImportRateSelectDto>>> HandleAsync(
         GetImportRatesForSelectQuery query,
         CancellationToken cancellationToken = default
     )
     {
+        var poeContains = ParsePoeContainsFilter(query.Poe);
+        if (!string.IsNullOrWhiteSpace(poeContains))
+        {
+            return await GetPoeContainsRatesAsync(query, poeContains, cancellationToken);
+        }
+
         var approvedExact = await GetExactAsync(query, ImportStatus.Approved, cancellationToken);
         var preAuthorizedExact = await GetExactAsync(query, ImportStatus.PreAuthorized, cancellationToken);
 
@@ -64,6 +72,85 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         return Result.Success<IReadOnlyCollection<ImportRateSelectDto>>(combined);
     }
 
+    private async Task<Result<IReadOnlyCollection<ImportRateSelectDto>>> GetPoeContainsRatesAsync(
+        GetImportRatesForSelectQuery query,
+        string poeContains,
+        CancellationToken cancellationToken)
+    {
+        var approved = await GetAllForPoeContainsAsync(
+            query,
+            ImportStatus.Approved,
+            poeContains,
+            cancellationToken
+        );
+        var preAuthorized = await GetAllForPoeContainsAsync(
+            query,
+            ImportStatus.PreAuthorized,
+            poeContains,
+            cancellationToken
+        );
+        var requestedDate = query.QuoteDate?.Date;
+
+        var rates = approved
+            .Concat(preAuthorized)
+            .Where(x => IsSelectableStatus(x.Status))
+            .Where(x => EquipmentMatches(query.ContainerType, x.ContainerType, x.ContainerTypeCode))
+            .Where(x => PodMatchesOrIsUnassigned(query.Pod, x.Pod, x.PodCode, x.PodId))
+            .Where(x => !requestedDate.HasValue || x.ValidTo.Date >= requestedDate.Value)
+            .Select(ToSelectDto)
+            .GroupBy(x => x.Id)
+            .Select(group => group.First())
+            .OrderBy(x => StatusPriority(x.Status))
+            .ThenBy(x => x.ValidFrom)
+            .ThenBy(x => x.Freight)
+            .ThenByDescending(x => x.ValidTo)
+            .ToArray();
+
+        return Result.Success<IReadOnlyCollection<ImportRateSelectDto>>(rates);
+    }
+
+    private async Task<IReadOnlyCollection<ImportRateDto>> GetAllForPoeContainsAsync(
+        GetImportRatesForSelectQuery query,
+        ImportStatus status,
+        string poeContains,
+        CancellationToken cancellationToken)
+    {
+        const int pageSize = 100;
+        var pageNumber = 1;
+        var matches = new List<ImportRateDto>();
+
+        while (true)
+        {
+            var page = await importRates.GetPagedAsync(
+                PageRequest.Create(pageNumber, pageSize),
+                query.Search,
+                query.ImportBatchId,
+                query.SourceType,
+                status,
+                query.Agent,
+                query.Carrier,
+                query.Pol,
+                poe: null,
+                pod: null,
+                containerType: null,
+                currency: query.Currency,
+                quoteDate: null,
+                validFrom: null,
+                validTo: null,
+                cancellationToken: cancellationToken
+            );
+
+            matches.AddRange(page.Items.Where(rate => PoeContains(rate, poeContains)));
+
+            if (page.Items.Count < pageSize)
+                break;
+
+            pageNumber++;
+        }
+
+        return matches;
+    }
+
     private async Task<IReadOnlyCollection<ImportRateSelectDto>> GetExactAsync(
         GetImportRatesForSelectQuery query,
         ImportStatus status,
@@ -111,6 +198,34 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         );
 
         return page.Items;
+    }
+
+    private static string? ParsePoeContainsFilter(string? poe)
+    {
+        if (string.IsNullOrWhiteSpace(poe)) return null;
+        var value = poe.Trim();
+        return value.StartsWith(PoeContainsPrefix, StringComparison.OrdinalIgnoreCase)
+            ? value[PoeContainsPrefix.Length..].Trim()
+            : null;
+    }
+
+    private static bool PoeContains(ImportRateDto rate, string requested)
+    {
+        var needles = requested
+            .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(CanonicalText)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (needles.Length == 0) return true;
+
+        var values = new[] { rate.Poe, rate.PoeCode, rate.PoeSlug }
+            .Select(value => CanonicalText(value ?? string.Empty))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToArray();
+
+        return needles.Any(needle => values.Any(value => value.Contains(needle, StringComparison.Ordinal)));
     }
 
     private static bool IsSelectableStatus(ImportRateSelectDto rate) => IsSelectableStatus(rate.Status);
