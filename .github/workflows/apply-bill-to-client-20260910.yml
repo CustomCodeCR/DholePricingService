@@ -1,0 +1,39 @@
+name: Apply billing client support
+
+on:
+  push:
+    branches: [codex/bill-to-item]
+    paths:
+      - '.github/workflows/apply-bill-to-client-20260910.yml'
+
+permissions:
+  contents: write
+  packages: read
+
+jobs:
+  patch-and-validate:
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply consistency patch
+        run: python .github/scripts/patch_bill_to_client_20260910.py
+
+      - name: Validate API build
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: docker build --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-bill-to-client-validation .
+
+      - name: Commit validated changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/apply-bill-to-client-20260910.yml
+          rm -f .github/scripts/patch_bill_to_client_20260910.py
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat(pricing): finalize billing client support'
+          git push origin codex/bill-to-item
