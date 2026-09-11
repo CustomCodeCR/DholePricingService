@@ -101,6 +101,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var allInAmount = useAllInPresentation
             ? CalculateAllInAmount(rate, reportDetails)
             : 0m;
+        var allInIncludesDestinationTax = reportDetails.Any(detail =>
+            detail.ApplyDestinationTax && detail.DestinationTaxRate > 0m);
 
         var items = useAllInPresentation
             ? new[]
@@ -115,6 +117,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     unitSaleAmount = allInAmount,
                     lineTotal = $"{currencyValue} {allInAmount.ToString("N2", MoneyCulture)}",
                     lineTotalAmount = allInAmount,
+                    destinationTaxLabel = allInIncludesDestinationTax ? "IVA incluido" : string.Empty,
                     notes = string.Empty
                 }
             }
@@ -129,6 +132,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     unitSaleAmount = detail.SaleAmount,
                     lineTotal = DetailMoney(detail, detail.SaleAmount * detail.Quantity),
                     lineTotalAmount = detail.SaleAmount * detail.Quantity,
+                    destinationTaxLabel = detail.ApplyDestinationTax && detail.DestinationTaxRate > 0m
+                        ? "IVA incluido"
+                        : string.Empty,
                     notes = detail.CostDetailType == CostDetailType.Insurance
                         ? string.Empty
                         : Text(detail.Notes, string.Empty)
