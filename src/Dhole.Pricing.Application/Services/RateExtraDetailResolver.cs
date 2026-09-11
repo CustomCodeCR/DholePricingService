@@ -94,7 +94,8 @@ public sealed class RateExtraDetailResolver(
                     input.Quantity,
                     input.ChargeBasis,
                     input.ApplyDestinationTax,
-                    input.DestinationTaxRate
+                    input.DestinationTaxRate,
+                    Normalize(input.BillToClient)
                 )
             );
         }
@@ -138,7 +139,8 @@ public sealed class RateExtraDetailResolver(
                     input.Quantity,
                     cost.ChargeBasis,
                     input.ApplyDestinationTax,
-                    input.DestinationTaxRate
+                    input.DestinationTaxRate,
+                    Normalize(input.BillToClient)
                 )
             );
         }
@@ -170,7 +172,8 @@ public sealed class RateExtraDetailResolver(
                 input.Quantity,
                 input.ChargeBasis,
                 input.ApplyDestinationTax,
-                input.DestinationTaxRate
+                input.DestinationTaxRate,
+                Normalize(input.BillToClient)
             )
         );
     }
