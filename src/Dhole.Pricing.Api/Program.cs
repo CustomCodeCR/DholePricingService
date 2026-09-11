@@ -59,6 +59,7 @@ app.MapCostEndpoints();
 app.MapFtlTariffEndpoints();
 app.MapCostRoutePortEndpoints();
 app.MapImportRateEndpoints();
+app.MapManualOceanFreightEndpoints();
 app.MapImportRateInactivationEndpoints();
 app.MapImportRateReviewQueueEndpoints();
 app.MapCabysEndpoints();
