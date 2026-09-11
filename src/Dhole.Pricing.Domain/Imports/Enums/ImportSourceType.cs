@@ -7,4 +7,5 @@ public enum ImportSourceType
     Excel = 3,
     Csv = 4,
     Image = 5,
+    Manual = 6,
 }
