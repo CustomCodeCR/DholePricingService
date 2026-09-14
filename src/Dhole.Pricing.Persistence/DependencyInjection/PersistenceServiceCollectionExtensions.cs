@@ -28,6 +28,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<ICostRoutePortSelectionStore, CostRoutePortSelectionStore>();
         services.AddScoped<IImportFclRateRepository, ImportFclRateRepository>();
         services.AddScoped<IRateHeaderRepository, RateHeaderRepository>();
+        services.AddScoped<IRateCommentStore, RateCommentStore>();
         services.AddScoped<IRateRevisionRepository, RateRevisionRepository>();
         services.AddScoped<IRateCodeGenerator, RateCodeGenerator>();
         services.AddScoped<IImportedRateChangeNotificationService, ImportedRateChangeNotificationService>();
