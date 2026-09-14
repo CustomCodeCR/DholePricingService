@@ -24,7 +24,7 @@ public sealed class RateCommentStore(ServiceDbContext dbContext) : IRateCommentS
             await using var command = connection.CreateCommand();
             command.CommandText =
                 "SELECT \"Comments\" FROM pricing.\"RateComments\" WHERE \"RateId\" = @rateId";
-            AddParameter(command, "@rateId", rateId);
+            AddParameter(command, "@rateId", rateId, DbType.Guid);
 
             var value = await command.ExecuteScalarAsync(cancellationToken);
             return value is null or DBNull ? null : Convert.ToString(value)?.Trim();
@@ -66,10 +66,10 @@ public sealed class RateCommentStore(ServiceDbContext dbContext) : IRateCommentS
                     "UpdatedBy" = EXCLUDED."UpdatedBy";
                 """;
 
-            AddParameter(command, "@rateId", rateId);
-            AddParameter(command, "@comments", normalized);
-            AddParameter(command, "@updatedAtUtc", DateTime.UtcNow);
-            AddParameter(command, "@updatedBy", updatedBy);
+            AddParameter(command, "@rateId", rateId, DbType.Guid);
+            AddParameter(command, "@comments", normalized, DbType.String);
+            AddParameter(command, "@updatedAtUtc", DateTime.UtcNow, DbType.DateTime);
+            AddParameter(command, "@updatedBy", updatedBy, DbType.Guid);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
         finally
@@ -79,10 +79,16 @@ public sealed class RateCommentStore(ServiceDbContext dbContext) : IRateCommentS
         }
     }
 
-    private static void AddParameter(DbCommand command, string name, object? value)
+    private static void AddParameter(
+        DbCommand command,
+        string name,
+        object? value,
+        DbType dbType
+    )
     {
         var parameter = command.CreateParameter();
         parameter.ParameterName = name;
+        parameter.DbType = dbType;
         parameter.Value = value ?? DBNull.Value;
         command.Parameters.Add(parameter);
     }
