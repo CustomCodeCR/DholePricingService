@@ -57,7 +57,7 @@ app.UseMiddleware<AuditEndpointMiddleware>();
 
 app.MapCostEndpoints();
 app.MapFtlTariffEndpoints();
-app.MapCostRoutePortSelectionEndpoints();
+app.MapCostRoutePortEndpoints();
 app.MapImportRateEndpoints();
 app.MapManualOceanFreightEndpoints();
 app.MapImportRateInactivationEndpoints();
