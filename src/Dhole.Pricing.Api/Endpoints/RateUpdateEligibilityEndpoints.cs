@@ -1,6 +1,5 @@
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
-using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
@@ -26,24 +25,16 @@ public static class RateUpdateEligibilityEndpoints
             .FirstOrDefaultAsync(cancellationToken);
         if (!rateStatus.HasValue) return Results.NotFound();
 
-        var linkedRequests = await db.RateRequests.AsNoTracking()
-            .Where(x => x.RateId == rateId)
-            .Select(x => new { x.Id, x.Status })
-            .ToListAsync(cancellationToken);
-
-        var decision = RateUpdateWindowPolicy.Evaluate(
-            rateStatus.Value,
-            linkedRequests.Count > 0,
-            linkedRequests.Any(x => x.Status == RateRequestStatus.Open));
-
+        // Compatibility endpoint for older DholeWeb builds. Updating a rate no longer has
+        // an artificial window or mandatory reason just because it is an update.
         return Results.Ok(new
         {
-            canUpdate = decision.CanUpdate,
-            requiresReason = true,
+            canUpdate = true,
+            requiresReason = false,
             rateStatus = rateStatus.Value.ToString(),
-            updateWindow = decision.UpdateWindow,
-            message = decision.Message,
-            requestIds = linkedRequests.Select(x => x.Id).ToArray(),
+            updateWindow = (string?)null,
+            message = "La tarifa puede actualizarse con las mismas reglas funcionales de una tarifa nueva.",
+            requestIds = Array.Empty<Guid>(),
         });
     }
 }
