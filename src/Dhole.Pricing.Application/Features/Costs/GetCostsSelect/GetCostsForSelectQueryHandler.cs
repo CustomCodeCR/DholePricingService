@@ -98,28 +98,42 @@ public sealed class GetCostsForSelectQueryHandler(
         CostRoutePortSelectionSet? selection
     )
     {
-        if (!PartyMatches(selection?.CarrierIds, cost.CarrierId, query.CarrierId))
+        // Optional charges are auto-selected by the wizard. Because of that, a configured
+        // restriction must have a concrete matching value in the current quote before the
+        // optional charge is returned. Generic optionals (without that restriction) remain
+        // valid wildcards. Fixed/variable costs keep their historical wildcard behavior.
+        var requireConfiguredContext = string.Equals(
+            cost.CostType,
+            "Optional",
+            StringComparison.OrdinalIgnoreCase
+        );
+
+        if (!PartyMatches(selection?.CarrierIds, cost.CarrierId, query.CarrierId, requireConfiguredContext))
             return false;
 
-        if (!PartyMatches(selection?.AgentIds, cost.AgentId, query.AgentId))
+        if (!PartyMatches(selection?.AgentIds, cost.AgentId, query.AgentId, requireConfiguredContext))
             return false;
 
-        if (!RouteRoleMatches(selection?.PolIds, cost.PolId, query.PolId))
+        if (!RouteRoleMatches(selection?.PolIds, cost.PolId, query.PolId, requireConfiguredContext))
             return false;
 
-        if (!RouteRoleMatches(selection?.PoeIds, cost.PoeId, query.PoeId))
+        if (!RouteRoleMatches(selection?.PoeIds, cost.PoeId, query.PoeId, requireConfiguredContext))
             return false;
 
-        if (!RouteRoleMatches(selection?.PodIds, cost.PodId, query.PodId))
+        if (!RouteRoleMatches(selection?.PodIds, cost.PodId, query.PodId, requireConfiguredContext))
             return false;
 
-        if (
-            query.IncotermId.HasValue
-            && cost.Incoterms.Count > 0
-            && !cost.Incoterms.Any(incoterm => incoterm.Id == query.IncotermId.Value)
-        )
+        if (cost.Incoterms.Count > 0)
         {
-            return false;
+            if (!query.IncotermId.HasValue)
+            {
+                if (requireConfiguredContext)
+                    return false;
+            }
+            else if (!cost.Incoterms.Any(incoterm => incoterm.Id == query.IncotermId.Value))
+            {
+                return false;
+            }
         }
 
         if (cost.Services?.Count > 0)
@@ -130,20 +144,24 @@ public sealed class GetCostsForSelectQueryHandler(
                 return false;
         }
 
-        if (
-            query.ShipmentMode.HasValue
-            && !string.IsNullOrWhiteSpace(cost.ShipmentMode)
-            && !string.Equals(
+        if (!string.IsNullOrWhiteSpace(cost.ShipmentMode))
+        {
+            if (!query.ShipmentMode.HasValue)
+            {
+                if (requireConfiguredContext)
+                    return false;
+            }
+            else if (!string.Equals(
                 cost.ShipmentMode,
                 query.ShipmentMode.Value.ToString(),
                 StringComparison.OrdinalIgnoreCase
-            )
-        )
-        {
-            return false;
+            ))
+            {
+                return false;
+            }
         }
 
-        if (cost.PortId.HasValue && !LegacyPortMatches(cost, query))
+        if (cost.PortId.HasValue && !LegacyPortMatches(cost, query, requireConfiguredContext))
             return false;
 
         return true;
@@ -152,12 +170,15 @@ public sealed class GetCostsForSelectQueryHandler(
     private static bool PartyMatches(
         IReadOnlyCollection<Guid>? selectedPartyIds,
         Guid? legacyPartyId,
-        Guid? contextPartyId
+        Guid? contextPartyId,
+        bool requireConfiguredContext
     )
     {
-        // Preserve wildcard behavior when the current quote does not define this party.
         if (!contextPartyId.HasValue)
-            return true;
+        {
+            var hasRestriction = selectedPartyIds is { Count: > 0 } || legacyPartyId.HasValue;
+            return !requireConfiguredContext || !hasRestriction;
+        }
 
         if (selectedPartyIds is { Count: > 0 })
             return selectedPartyIds.Contains(contextPartyId.Value);
@@ -168,12 +189,15 @@ public sealed class GetCostsForSelectQueryHandler(
     private static bool RouteRoleMatches(
         IReadOnlyCollection<Guid>? selectedPortIds,
         Guid? legacyPortId,
-        Guid? contextPortId
+        Guid? contextPortId,
+        bool requireConfiguredContext
     )
     {
-        // Preserve the old behavior when the current quote does not provide this route role.
         if (!contextPortId.HasValue)
-            return true;
+        {
+            var hasRestriction = selectedPortIds is { Count: > 0 } || legacyPortId.HasValue;
+            return !requireConfiguredContext || !hasRestriction;
+        }
 
         if (selectedPortIds is { Count: > 0 })
             return selectedPortIds.Contains(contextPortId.Value);
@@ -181,21 +205,32 @@ public sealed class GetCostsForSelectQueryHandler(
         return !legacyPortId.HasValue || legacyPortId.Value == contextPortId.Value;
     }
 
-    private static bool LegacyPortMatches(CostSelectDto cost, GetCostsForSelectQuery query)
+    private static bool LegacyPortMatches(
+        CostSelectDto cost,
+        GetCostsForSelectQuery query,
+        bool requireConfiguredContext
+    )
     {
         if (!cost.PortId.HasValue)
             return true;
 
         return cost.PortRole?.ToLowerInvariant() switch
         {
-            "pol" => !query.PolId.HasValue || cost.PortId == query.PolId,
-            "poe" => !query.PoeId.HasValue || cost.PortId == query.PoeId,
-            "pod" => !query.PodId.HasValue || cost.PortId == query.PodId,
+            "pol" => query.PolId.HasValue
+                ? cost.PortId == query.PolId
+                : !requireConfiguredContext,
+            "poe" => query.PoeId.HasValue
+                ? cost.PortId == query.PoeId
+                : !requireConfiguredContext,
+            "pod" => query.PodId.HasValue
+                ? cost.PortId == query.PodId
+                : !requireConfiguredContext,
             _ =>
-                (!query.PolId.HasValue && !query.PoeId.HasValue && !query.PodId.HasValue)
-                || cost.PortId == query.PolId
-                || cost.PortId == query.PoeId
-                || cost.PortId == query.PodId,
+                query.PolId.HasValue || query.PoeId.HasValue || query.PodId.HasValue
+                    ? cost.PortId == query.PolId
+                        || cost.PortId == query.PoeId
+                        || cost.PortId == query.PodId
+                    : !requireConfiguredContext,
         };
     }
 
