@@ -1123,6 +1123,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             (RateStatus.Sent, RateStatus.RejectedByClient) => true,
             (RateStatus.RequestedByClient, RateStatus.AcceptedByClient) => true,
             (RateStatus.RequestedByClient, RateStatus.RejectedByClient) => true,
+            (RateStatus.Expired, RateStatus.AcceptedByClient) => true,
+            (RateStatus.Expired, RateStatus.RejectedByClient) => true,
             (RateStatus.PendingApproval, RateStatus.Closed) => true,
             (RateStatus.ApprovedByManagement, RateStatus.Closed) => true,
             (RateStatus.RejectedByManagement, RateStatus.Closed) => true,
