@@ -99,28 +99,40 @@ public sealed class CostRepository(ServiceDbContext dbContext)
     public async Task<PagedResult<CostDto>> GetPagedAsync(
         PageRequest page,
         string? search = null,
-        CostType? costType = null,
-        CostDetailType? costDetailType = null,
-        Guid? carrierId = null,
-        Guid? agentId = null,
-        Guid? portId = null,
-        CostPortRole? portRole = null,
-        Guid? currencyId = null,
-        bool? isActive = null,
+        IReadOnlyCollection<CostType>? costTypes = null,
+        IReadOnlyCollection<CostDetailType>? costDetailTypes = null,
+        IReadOnlyCollection<Guid>? carrierIds = null,
+        IReadOnlyCollection<Guid>? agentIds = null,
+        IReadOnlyCollection<Guid>? portIds = null,
+        IReadOnlyCollection<CostPortRole>? portRoles = null,
+        IReadOnlyCollection<Guid>? currencyIds = null,
+        IReadOnlyCollection<bool>? activeStates = null,
         CancellationToken cancellationToken = default
     )
     {
         var query = ApplyFilters(
             dbContext.Costs.AsNoTracking().Where(x => !x.IsDeleted),
             search,
-            costType,
-            costDetailType,
-            carrierId,
-            agentId,
-            portId,
-            portRole,
-            currencyId,
-            isActive
+            costType: null,
+            costDetailType: null,
+            carrierId: null,
+            agentId: null,
+            portId: null,
+            portRole: null,
+            currencyId: null,
+            isActive: null
+        );
+
+        query = ApplyMultiFilters(
+            query,
+            costTypes,
+            costDetailTypes,
+            carrierIds,
+            agentIds,
+            portIds,
+            portRoles,
+            currencyIds,
+            activeStates
         );
 
         var total = await query.CountAsync(cancellationToken);
@@ -362,6 +374,88 @@ public sealed class CostRepository(ServiceDbContext dbContext)
         if (isActive.HasValue)
         {
             query = query.Where(x => x.IsActive == isActive.Value);
+        }
+
+        return query;
+    }
+
+    private static IQueryable<Cost> ApplyMultiFilters(
+        IQueryable<Cost> query,
+        IReadOnlyCollection<CostType>? costTypes,
+        IReadOnlyCollection<CostDetailType>? costDetailTypes,
+        IReadOnlyCollection<Guid>? carrierIds,
+        IReadOnlyCollection<Guid>? agentIds,
+        IReadOnlyCollection<Guid>? portIds,
+        IReadOnlyCollection<CostPortRole>? portRoles,
+        IReadOnlyCollection<Guid>? currencyIds,
+        IReadOnlyCollection<bool>? activeStates
+    )
+    {
+        if (costTypes is { Count: > 0 })
+        {
+            var values = costTypes.Distinct().ToArray();
+            query = query.Where(x => values.Contains(x.CostType));
+        }
+
+        if (costDetailTypes is { Count: > 0 })
+        {
+            var values = costDetailTypes.Distinct().ToArray();
+            query = query.Where(x => values.Contains(x.CostDetailType));
+        }
+
+        if (carrierIds is { Count: > 0 })
+        {
+            var values = carrierIds.Distinct().ToArray();
+            query = query.Where(x => x.CarrierId.HasValue && values.Contains(x.CarrierId.Value));
+        }
+
+        if (agentIds is { Count: > 0 })
+        {
+            var values = agentIds.Distinct().ToArray();
+            query = query.Where(x => x.AgentId.HasValue && values.Contains(x.AgentId.Value));
+        }
+
+        if (portIds is { Count: > 0 })
+        {
+            var values = portIds.Distinct().ToArray();
+            query = query.Where(x =>
+                (x.PortId.HasValue && values.Contains(x.PortId.Value))
+                || (x.PolId.HasValue && values.Contains(x.PolId.Value))
+                || (x.PoeId.HasValue && values.Contains(x.PoeId.Value))
+                || (x.PodId.HasValue && values.Contains(x.PodId.Value))
+            );
+        }
+
+        if (portRoles is { Count: > 0 })
+        {
+            var values = portRoles.Distinct().ToArray();
+            var includeAny = values.Contains(CostPortRole.Any);
+            var includePol = values.Contains(CostPortRole.Pol);
+            var includePoe = values.Contains(CostPortRole.Poe);
+            var includePod = values.Contains(CostPortRole.Pod);
+
+            query = query.Where(x =>
+                (includeAny && x.PortRole == CostPortRole.Any)
+                || (includePol && (x.PortRole == CostPortRole.Pol || x.PolId.HasValue))
+                || (includePoe && (x.PortRole == CostPortRole.Poe || x.PoeId.HasValue))
+                || (includePod && (x.PortRole == CostPortRole.Pod || x.PodId.HasValue))
+            );
+        }
+
+        if (currencyIds is { Count: > 0 })
+        {
+            var values = currencyIds.Distinct().ToArray();
+            query = query.Where(x => values.Contains(x.CurrencyId));
+        }
+
+        if (activeStates is { Count: > 0 })
+        {
+            var values = activeStates.Distinct().ToArray();
+            if (values.Length == 1)
+            {
+                var active = values[0];
+                query = query.Where(x => x.IsActive == active);
+            }
         }
 
         return query;

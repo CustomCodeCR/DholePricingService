@@ -9,12 +9,12 @@ namespace Dhole.Pricing.Application.Features.Costs.GetCosts;
 public sealed record GetCostsQuery(
     PageRequest Page,
     string? Search = null,
-    CostType? CostType = null,
-    CostDetailType? CostDetailType = null,
-    Guid? CarrierId = null,
-    Guid? AgentId = null,
-    Guid? PortId = null,
-    CostPortRole? PortRole = null,
-    Guid? CurrencyId = null,
-    bool? IsActive = null
+    IReadOnlyCollection<CostType>? CostTypes = null,
+    IReadOnlyCollection<CostDetailType>? CostDetailTypes = null,
+    IReadOnlyCollection<Guid>? CarrierIds = null,
+    IReadOnlyCollection<Guid>? AgentIds = null,
+    IReadOnlyCollection<Guid>? PortIds = null,
+    IReadOnlyCollection<CostPortRole>? PortRoles = null,
+    IReadOnlyCollection<Guid>? CurrencyIds = null,
+    IReadOnlyCollection<bool>? ActiveStates = null
 ) : IQuery<Result<PagedResult<CostDto>>>;
