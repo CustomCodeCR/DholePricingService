@@ -5,6 +5,7 @@ using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Auditing;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
 
 namespace Dhole.Pricing.Application.Features.Rates.SetRateStatus;
@@ -28,7 +29,22 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateHeaderNotFound);
         }
 
-        if (command.Status == Dhole.Pricing.Domain.Rates.Enums.RateStatus.Closed
+        var advancesQuotation = command.Status is
+            RateStatus.Open or
+            RateStatus.Sent or
+            RateStatus.RequestedByClient or
+            RateStatus.AcceptedByClient;
+
+        // Una tarifa comercial con margen inferior al 12% debe permanecer pendiente
+        // hasta que un usuario con pricing.rate.approve-low-margin la apruebe.
+        // Las solicitudes abiertas sin venta todavía pueden pasar a Open para que Pricing
+        // complete proveedor/costos sin convertirlas en una cotización utilizable.
+        if (rate.RequiredApproval && rate.TotalSaleAmount > 0m && advancesQuotation)
+        {
+            return Result.Failure(PricingErrors.RateLowMarginRequiresApproval);
+        }
+
+        if (command.Status == RateStatus.Closed
             && string.IsNullOrWhiteSpace(command.Reason))
         {
             return Result.Failure(PricingErrors.RateClosureReasonIsRequired);
@@ -38,7 +54,7 @@ public sealed class SetRateStatusCommandHandler(
 
         try
         {
-            if (command.Status == Dhole.Pricing.Domain.Rates.Enums.RateStatus.AcceptedByClient
+            if (command.Status == RateStatus.AcceptedByClient
                 && !string.IsNullOrWhiteSpace(command.IdtraNumber))
             {
                 rate.SetIdtraNumber(command.IdtraNumber, command.UpdatedBy);
