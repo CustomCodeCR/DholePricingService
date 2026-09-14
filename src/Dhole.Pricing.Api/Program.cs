@@ -52,6 +52,7 @@ app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<RateCommercialIdentityGuardMiddleware>();
 app.UseMiddleware<RateRequestSubmissionGuardMiddleware>();
+app.UseMiddleware<RateEditCreateParityMiddleware>();
 app.UseMiddleware<AuditEndpointMiddleware>();
 
 app.MapCostEndpoints();
