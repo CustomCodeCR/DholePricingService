@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Commands;
 using Dhole.Pricing.Application.Abstractions.Reports;
@@ -9,6 +10,7 @@ namespace Dhole.Pricing.Application.Features.Rates.GenerateRateDocument;
 
 public sealed class GenerateRateDocumentCommandHandler(
     IRateHeaderRepository rateHeaders,
+    IRateCommentStore rateComments,
     IRateReportDataFactory dataFactory,
     IPricingReportsClient reportsClient)
     : ICommandHandler<GenerateRateDocumentCommand, Result<GeneratedRateDocumentDto>>
@@ -44,7 +46,8 @@ public sealed class GenerateRateDocumentCommandHandler(
             : PricingFclClientQuoteTemplateCode;
 
         var fileName = rate.QuoNumber ?? rate.RateCode;
-        var dataJson = dataFactory.CreateDataJson(rate);
+        var comments = await rateComments.GetAsync(rate.Id, cancellationToken);
+        var dataJson = AddRateComments(dataFactory.CreateDataJson(rate), comments);
 
         try
         {
@@ -65,5 +68,15 @@ public sealed class GenerateRateDocumentCommandHandler(
         {
             return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.ReportGenerationTimedOut);
         }
+    }
+
+    private static string AddRateComments(string dataJson, string? comments)
+    {
+        var root = JsonNode.Parse(dataJson) as JsonObject;
+        if (root?["rate"] is not JsonObject rate)
+            return dataJson;
+
+        rate["comments"] = string.IsNullOrWhiteSpace(comments) ? string.Empty : comments.Trim();
+        return root.ToJsonString();
     }
 }
