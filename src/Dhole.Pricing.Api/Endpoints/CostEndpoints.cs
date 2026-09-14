@@ -54,14 +54,14 @@ public static class CostEndpoints
         int? pageNumber,
         int? pageSize,
         string? search,
-        CostType? costType,
-        CostDetailType? costDetailType,
-        Guid? carrierId,
-        Guid? agentId,
-        Guid? portId,
-        CostPortRole? portRole,
-        Guid? currencyId,
-        bool? isActive,
+        string[]? costType,
+        string[]? costDetailType,
+        string[]? carrierId,
+        string[]? agentId,
+        string[]? portId,
+        string[]? portRole,
+        string[]? currencyId,
+        string[]? isActive,
         IQueryDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -71,14 +71,14 @@ public static class CostEndpoints
             new GetCostsQuery(
                 PageRequest.Create(pageNumber ?? 1, pageSize ?? 20),
                 search,
-                costType,
-                costDetailType,
-                carrierId,
-                agentId,
-                portId,
-                portRole,
-                currencyId,
-                isActive
+                ParseEnumList<CostType>(costType),
+                ParseEnumList<CostDetailType>(costDetailType),
+                ParseGuidList(carrierId),
+                ParseGuidList(agentId),
+                ParseGuidList(portId),
+                ParseEnumList<CostPortRole>(portRole),
+                ParseGuidList(currencyId),
+                ParseBoolList(isActive)
             ),
             cancellationToken
         );
@@ -387,14 +387,66 @@ public static class CostEndpoints
         return EndpointResults.FromResult(result, httpContext);
     }
 
-    private static IReadOnlyCollection<Guid> ParseGuidList(string? value)
+    private static IReadOnlyCollection<Guid> ParseGuidList(string? value) =>
+        ParseGuidList(value is null ? null : [value]);
+
+    private static IReadOnlyCollection<Guid> ParseGuidList(IEnumerable<string>? values)
     {
-        if (string.IsNullOrWhiteSpace(value)) return Array.Empty<Guid>();
-        return value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(raw => Guid.TryParse(raw, out var id) ? id : Guid.Empty)
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToArray();
+        var ids = new HashSet<Guid>();
+        foreach (var value in SplitMultiValues(values))
+        {
+            if (Guid.TryParse(value, out var id) && id != Guid.Empty)
+            {
+                ids.Add(id);
+            }
+        }
+
+        return ids.ToArray();
+    }
+
+    private static IReadOnlyCollection<TEnum> ParseEnumList<TEnum>(IEnumerable<string>? values)
+        where TEnum : struct, Enum
+    {
+        var parsed = new HashSet<TEnum>();
+        foreach (var value in SplitMultiValues(values))
+        {
+            if (TryParseDefinedEnum(value, out TEnum item))
+            {
+                parsed.Add(item);
+            }
+        }
+
+        return parsed.ToArray();
+    }
+
+    private static IReadOnlyCollection<bool> ParseBoolList(IEnumerable<string>? values)
+    {
+        var parsed = new HashSet<bool>();
+        foreach (var value in SplitMultiValues(values))
+        {
+            if (bool.TryParse(value, out var item))
+            {
+                parsed.Add(item);
+            }
+        }
+
+        return parsed.ToArray();
+    }
+
+    private static IEnumerable<string> SplitMultiValues(IEnumerable<string>? values)
+    {
+        if (values is null) yield break;
+
+        foreach (var value in values)
+        {
+            foreach (var item in value.Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            ))
+            {
+                yield return item;
+            }
+        }
     }
 
     private static bool TryParseDefinedEnum<TEnum>(string? value, out TEnum result)

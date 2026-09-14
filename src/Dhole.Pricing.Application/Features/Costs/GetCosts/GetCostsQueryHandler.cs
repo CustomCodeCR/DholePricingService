@@ -17,14 +17,14 @@ public sealed class GetCostsQueryHandler(ICostRepository costs)
         var result = await costs.GetPagedAsync(
             query.Page,
             query.Search,
-            query.CostType,
-            query.CostDetailType,
-            query.CarrierId,
-            query.AgentId,
-            query.PortId,
-            query.PortRole,
-            query.CurrencyId,
-            query.IsActive,
+            query.CostTypes,
+            query.CostDetailTypes,
+            query.CarrierIds,
+            query.AgentIds,
+            query.PortIds,
+            query.PortRoles,
+            query.CurrencyIds,
+            query.ActiveStates,
             cancellationToken
         );
 

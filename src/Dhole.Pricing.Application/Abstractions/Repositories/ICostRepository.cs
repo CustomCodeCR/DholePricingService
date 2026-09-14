@@ -45,14 +45,14 @@ public interface ICostRepository : IRepository<Cost, Guid>
     Task<PagedResult<CostDto>> GetPagedAsync(
         PageRequest page,
         string? search = null,
-        CostType? costType = null,
-        CostDetailType? costDetailType = null,
-        Guid? carrierId = null,
-        Guid? agentId = null,
-        Guid? portId = null,
-        CostPortRole? portRole = null,
-        Guid? currencyId = null,
-        bool? isActive = null,
+        IReadOnlyCollection<CostType>? costTypes = null,
+        IReadOnlyCollection<CostDetailType>? costDetailTypes = null,
+        IReadOnlyCollection<Guid>? carrierIds = null,
+        IReadOnlyCollection<Guid>? agentIds = null,
+        IReadOnlyCollection<Guid>? portIds = null,
+        IReadOnlyCollection<CostPortRole>? portRoles = null,
+        IReadOnlyCollection<Guid>? currencyIds = null,
+        IReadOnlyCollection<bool>? activeStates = null,
         CancellationToken cancellationToken = default
     );
 
