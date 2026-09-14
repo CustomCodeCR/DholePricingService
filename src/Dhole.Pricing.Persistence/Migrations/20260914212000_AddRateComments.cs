@@ -30,7 +30,9 @@ public sealed class AddRateComments : Migration
                     column: x => x.RateId,
                     principalSchema: "pricing",
                     principalTable: "RateHeaders",
-                    principalColumn: "Id",
+                    // RateHeaders is a legacy table whose physical PK column is snake_case.
+                    // PostgreSQL quoted identifiers are case-sensitive, so "Id" does not exist.
+                    principalColumn: "id",
                     onDelete: ReferentialAction.Cascade);
             });
     }
