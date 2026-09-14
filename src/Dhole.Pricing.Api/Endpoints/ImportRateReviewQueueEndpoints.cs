@@ -5,6 +5,7 @@ using Dhole.Pricing.Application.Features.Imports.InactivateImportRate;
 using Dhole.Pricing.Domain.Imports.Enums;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhole.Pricing.Api.Endpoints;
@@ -42,13 +43,13 @@ public static class ImportRateReviewQueueEndpoints
 
     private static async Task<IResult> GetReviewQueueAsync(
         string? search,
-        ImportSourceType? sourceType,
-        ImportStatus? status,
-        Guid? polId,
-        Guid? poeId,
-        Guid? carrierId,
-        Guid? agentId,
-        Guid? containerTypeId,
+        [FromQuery] ImportSourceType[]? sourceType,
+        [FromQuery] ImportStatus[]? status,
+        [FromQuery] Guid[]? polId,
+        [FromQuery] Guid[]? poeId,
+        [FromQuery] Guid[]? carrierId,
+        [FromQuery] Guid[]? agentId,
+        [FromQuery] Guid[]? containerTypeId,
         Guid? importBatchId,
         DateTime? createdFrom,
         DateTime? createdTo,
@@ -61,26 +62,26 @@ public static class ImportRateReviewQueueEndpoints
             .AsNoTracking()
             .Where(x => !x.IsDeleted && x.Status != ImportStatus.Expired);
 
-        if (sourceType.HasValue)
-            query = query.Where(x => x.SourceType == sourceType.Value);
+        if (sourceType is { Length: > 0 })
+            query = query.Where(x => sourceType.Contains(x.SourceType));
 
-        if (status.HasValue)
-            query = query.Where(x => x.Status == status.Value);
+        if (status is { Length: > 0 })
+            query = query.Where(x => status.Contains(x.Status));
 
-        if (polId.HasValue)
-            query = query.Where(x => x.PolId == polId.Value);
+        if (polId is { Length: > 0 })
+            query = query.Where(x => polId.Contains(x.PolId));
 
-        if (poeId.HasValue)
-            query = query.Where(x => x.PoeId == poeId.Value);
+        if (poeId is { Length: > 0 })
+            query = query.Where(x => poeId.Contains(x.PoeId));
 
-        if (carrierId.HasValue)
-            query = query.Where(x => x.CarrierId == carrierId.Value);
+        if (carrierId is { Length: > 0 })
+            query = query.Where(x => carrierId.Contains(x.CarrierId));
 
-        if (agentId.HasValue)
-            query = query.Where(x => x.AgentId == agentId.Value);
+        if (agentId is { Length: > 0 })
+            query = query.Where(x => agentId.Contains(x.AgentId));
 
-        if (containerTypeId.HasValue)
-            query = query.Where(x => x.ContainerTypeId == containerTypeId.Value);
+        if (containerTypeId is { Length: > 0 })
+            query = query.Where(x => containerTypeId.Contains(x.ContainerTypeId));
 
         if (importBatchId.HasValue)
             query = query.Where(x => x.ImportBatchId == importBatchId.Value);
