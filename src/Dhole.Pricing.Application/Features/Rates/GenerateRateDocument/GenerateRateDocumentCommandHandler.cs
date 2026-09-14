@@ -24,6 +24,12 @@ public sealed class GenerateRateDocumentCommandHandler(
         if (rate is null || rate.IsDeleted)
             return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.RateHeaderNotFound);
 
+        // Una tarifa con margen menor al 12% todavía es una solicitud pendiente de
+        // autorización. No debe existir un PDF/XLSX/CSV utilizable como cotización
+        // hasta que gerencia apruebe el margen.
+        if (rate.RequiredApproval)
+            return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.RateLowMarginRequiresApproval);
+
         var format = string.IsNullOrWhiteSpace(command.Format)
             ? "pdf"
             : command.Format.Trim().ToLowerInvariant();
