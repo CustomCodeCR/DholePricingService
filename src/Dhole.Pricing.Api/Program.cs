@@ -57,13 +57,14 @@ app.UseMiddleware<AuditEndpointMiddleware>();
 
 app.MapCostEndpoints();
 app.MapFtlTariffEndpoints();
-app.MapCostRoutePortEndpoints();
+app.MapCostRoutePortSelectionEndpoints();
 app.MapImportRateEndpoints();
 app.MapManualOceanFreightEndpoints();
 app.MapImportRateInactivationEndpoints();
 app.MapImportRateReviewQueueEndpoints();
 app.MapCabysEndpoints();
 app.MapRateEndpoints();
+app.MapRateCommentEndpoints();
 app.MapRateUpdateEligibilityEndpoints();
 app.MapSellerRateEndpoints();
 app.MapSellerRateStatusEndpoints();
