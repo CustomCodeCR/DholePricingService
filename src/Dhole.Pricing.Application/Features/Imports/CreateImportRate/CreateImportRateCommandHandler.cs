@@ -7,6 +7,7 @@ using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Imports.Entities;
+using Dhole.Pricing.Domain.Imports.Enums;
 using Dhole.Pricing.Domain.Shared;
 
 namespace Dhole.Pricing.Application.Features.Imports.CreateImportRate;
@@ -57,6 +58,13 @@ public sealed class CreateImportRateCommandHandler(
                 command.RawDataJson,
                 command.CreatedBy
             );
+
+            // Las tarifas creadas manualmente por Pricing nacen preaprobadas.
+            // Las importadas desde correo/archivo conservan el flujo preautorizado.
+            if (command.SourceType == ImportSourceType.Manual)
+            {
+                importRate.Approve(command.CreatedBy);
+            }
         }
         catch (InvalidOperationException)
         {
@@ -65,10 +73,13 @@ public sealed class CreateImportRateCommandHandler(
 
         await importRates.AddAsync(importRate, cancellationToken);
 
-        await rateChangeNotifications.QueueApprovalRequiredNotificationsAsync(
-            importRate,
-            cancellationToken
-        );
+        if (command.SourceType != ImportSourceType.Manual)
+        {
+            await rateChangeNotifications.QueueApprovalRequiredNotificationsAsync(
+                importRate,
+                cancellationToken
+            );
+        }
 
         await rateChangeNotifications.QueueVariationNotificationsAsync(importRate, cancellationToken);
 
