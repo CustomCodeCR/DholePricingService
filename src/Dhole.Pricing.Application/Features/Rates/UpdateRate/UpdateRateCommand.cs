@@ -59,7 +59,7 @@ public sealed record UpdateRateCommand(
     string CurrencyName,
     string CurrencyCode,
     int FreeDays,
-    DateTime ValidFrom,
+    DateTime RequestedValidFrom,
     DateTime ValidTo,
     int ContainerQuantity,
     string? ClientName,
@@ -92,4 +92,10 @@ public sealed record UpdateRateCommand(
     decimal? ExchangeRateApplied,
     bool UseAllInPresentation,
     Guid? UpdatedBy
-) : ICommand<Result>;
+) : ICommand<Result>
+{
+    // La vigencia de una tarifa editada siempre reinicia hoy. Conservamos el valor
+    // solicitado únicamente para mantener compatible la firma del comando, pero el
+    // handler consume esta fecha autoritativa y nunca una vigencia histórica del cliente.
+    public DateTime ValidFrom { get; } = DateTime.UtcNow.Date;
+}
