@@ -31,6 +31,15 @@ public static class ManualOceanFreightEndpoints
         CancellationToken cancellationToken
     )
     {
+        if (request.Poe is null || request.Poe.Id == Guid.Empty)
+        {
+            return EndpointResults.BadRequest(
+                "Pricing.ManualOceanFreightPoeRequired",
+                "Debe seleccionar un POE válido para crear el flete marítimo manual.",
+                httpContext
+            );
+        }
+
         if (request.OceanFreight <= 0m)
         {
             return EndpointResults.BadRequest(
@@ -64,6 +73,10 @@ public static class ManualOceanFreightEndpoints
                     source = "manual",
                     screen = 6,
                     comments = comment,
+                    poeId = request.Poe.Id,
+                    poe = request.Poe.Name,
+                    carrierId = request.Carrier.Id,
+                    carrier = request.Carrier.Name,
                     oceanFreightCost = request.OceanFreight,
                     oceanFreightSale = totalSale,
                 }
@@ -127,7 +140,7 @@ public static class ManualOceanFreightEndpoints
 
 public sealed record SaveManualOceanFreightRequest(
     ImportCatalogSnapshotRequest Pol,
-    ImportCatalogSnapshotRequest Poe,
+    ImportCatalogSnapshotRequest? Poe,
     ImportCatalogSnapshotRequest Pod,
     ImportCatalogSnapshotRequest Carrier,
     ImportCatalogSnapshotRequest Agent,
