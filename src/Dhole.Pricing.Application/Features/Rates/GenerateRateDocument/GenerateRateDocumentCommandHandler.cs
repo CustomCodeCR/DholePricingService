@@ -27,10 +27,16 @@ public sealed class GenerateRateDocumentCommandHandler(
             return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.RateHeaderNotFound);
 
         // Una tarifa con margen menor al 12% todavía es una solicitud pendiente de
-        // autorización. No debe existir un PDF/XLSX/CSV utilizable como cotización
-        // hasta que gerencia apruebe el margen.
-        if (rate.RequiredApproval)
+        // autorización mientras RequiredApproval esté activo. Si gerencia la rechazó,
+        // RequiredApproval vuelve a false, pero eso no debe habilitar la cotización:
+        // únicamente una aprobación real o la autoaprobación por scope puede hacerlo.
+        if (
+            rate.RequiredApproval
+            || rate.Status == Dhole.Pricing.Domain.Rates.Enums.RateStatus.RejectedByManagement
+        )
+        {
             return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.RateLowMarginRequiresApproval);
+        }
 
         var format = string.IsNullOrWhiteSpace(command.Format)
             ? "pdf"
