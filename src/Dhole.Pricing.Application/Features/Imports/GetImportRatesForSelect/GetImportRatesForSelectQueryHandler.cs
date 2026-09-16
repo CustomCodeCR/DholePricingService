@@ -179,26 +179,48 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         ImportStatus status,
         CancellationToken cancellationToken)
     {
-        var page = await importRates.GetPagedAsync(
-            PageRequest.Create(1, 100),
-            query.Search,
-            query.ImportBatchId,
-            query.SourceType,
-            status,
-            query.Agent,
-            query.Carrier,
-            query.Pol,
-            query.Poe,
-            pod: null,
-            containerType: null,
-            currency: query.Currency,
-            quoteDate: null,
-            validFrom: null,
-            validTo: null,
-            cancellationToken: cancellationToken
-        );
+        const int pageSize = 100;
+        var pageNumber = 1;
+        var matches = new List<ImportRateDto>();
 
-        return page.Items;
+        // No filtramos POE en SQL en esta segunda pasada. Las importaciones históricas pueden
+        // guardar el mismo puerto como nombre, UN/LOCODE o slug distinto al catálogo actual.
+        // Primero preservamos POL/estado/moneda y luego comparamos todas las representaciones
+        // normalizadas del POE para no hacer desaparecer tarifas válidas en Pantalla 5.
+        while (true)
+        {
+            var page = await importRates.GetPagedAsync(
+                PageRequest.Create(pageNumber, pageSize),
+                query.Search,
+                query.ImportBatchId,
+                query.SourceType,
+                status,
+                query.Agent,
+                query.Carrier,
+                query.Pol,
+                poe: null,
+                pod: null,
+                containerType: null,
+                currency: query.Currency,
+                quoteDate: null,
+                validFrom: null,
+                validTo: null,
+                cancellationToken: cancellationToken
+            );
+
+            matches.AddRange(
+                page.Items.Where(rate =>
+                    PoeMatches(query.Poe, rate.Poe, rate.PoeCode, rate.PoeSlug)
+                )
+            );
+
+            if (page.Items.Count < pageSize)
+                break;
+
+            pageNumber++;
+        }
+
+        return matches;
     }
 
     private static string? ParsePoeContainsFilter(string? poe)
@@ -244,6 +266,40 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
 
         var poeCode = CanonicalText(rate.PoeCode ?? string.Empty);
         return poeCode.Length == 5 && poeCode.StartsWith("pa", StringComparison.Ordinal);
+    }
+
+    private static bool PoeMatches(
+        string? requestedPoe,
+        string? importedPoe,
+        string? importedPoeCode,
+        string? importedPoeSlug
+    )
+    {
+        if (string.IsNullOrWhiteSpace(requestedPoe)) return true;
+
+        var requestedValues = requestedPoe
+            .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(CanonicalText)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        if (requestedValues.Length == 0) return true;
+
+        var importedValues = new[] { importedPoe, importedPoeCode, importedPoeSlug }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => CanonicalText(value!))
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return requestedValues.Any(requested =>
+            importedValues.Any(imported =>
+                string.Equals(requested, imported, StringComparison.Ordinal)
+                || requested.Contains(imported, StringComparison.Ordinal)
+                || imported.Contains(requested, StringComparison.Ordinal)
+            )
+        );
     }
 
     private static bool IsSelectableStatus(ImportRateSelectDto rate) => IsSelectableStatus(rate.Status);
