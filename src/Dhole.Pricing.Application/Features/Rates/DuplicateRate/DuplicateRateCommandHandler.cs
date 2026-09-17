@@ -9,6 +9,7 @@ using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Application.Services;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
 
 namespace Dhole.Pricing.Application.Features.Rates.DuplicateRate;
@@ -106,7 +107,9 @@ public sealed class DuplicateRateCommandHandler(
         {
             duplicate = RateHeader.Create(
                 rateCode,
-                sourceImportFclRateId: source.SourceImportFclRateId,
+                // Una copia FCL nunca debe conservar la tarifa importada anterior: el flete
+                // debe seleccionarse otra vez para validar vigencia/disponibilidad actual.
+                sourceImportFclRateId: null,
                 agent?.Id,
                 agent?.SnapshotName(),
                 agent?.Code,
@@ -200,8 +203,14 @@ public sealed class DuplicateRateCommandHandler(
                 command.CreatedBy
             );
 
+            // Para FCL se conservan únicamente rubros verdaderamente manuales que no sean
+            // flete. Todo rubro ligado al catálogo (fijo, variable u opcional) se vuelve a
+            // resolver en el wizard con la naviera/flete escogidos y los costos vigentes.
+            // Otros modos mantienen el comportamiento histórico de duplicación.
             var copiedDetails = source.RateDetails.Where(x =>
-                !x.CostId.HasValue || x.CostType != CostType.Fixed
+                source.ShipmentMode == ShipmentMode.Fcl
+                    ? !x.CostId.HasValue && x.CostDetailType != CostDetailType.Freight
+                    : !x.CostId.HasValue || x.CostType != CostType.Fixed
             );
 
             var detailCurrencies = new Dictionary<Guid, PricingConfigCatalogItem>();
@@ -236,6 +245,7 @@ public sealed class DuplicateRateCommandHandler(
                 copiedDetail.ConfigureBillToClient(detail.BillToClient);
             }
 
+            // Los cargos fijos se toman de la configuración actual, nunca del snapshot viejo.
             await fixedCostSynchronizer.SynchronizeAsync(
                 duplicate,
                 command.CreatedBy,
@@ -271,6 +281,7 @@ public sealed class DuplicateRateCommandHandler(
                 {
                     SourceRateHeaderId = source.Id,
                     NewRateHeaderId = duplicate.Id,
+                    RequiresFreightReselection = source.ShipmentMode == ShipmentMode.Fcl,
                     duplicate.TotalCostAmount,
                     duplicate.TotalSaleAmount,
                     duplicate.TotalUtilityAmount,
