@@ -690,6 +690,7 @@ internal sealed class PricingCacheWarmupWorker(
             rate.IncotermId,
             rate.IncotermName,
             rate.IncotermCode,
+            rate.WarehouseId,
             rate.PickupAddress,
             rate.PickupLatitude,
             rate.PickupLongitude,
