@@ -18,7 +18,7 @@ internal static class RateRevisionSnapshotFactory
             rate.AgentId, rate.AgentName, rate.AgentCode, rate.CarrierId, rate.CarrierName, rate.CarrierCode,
             rate.PolId, rate.PolName, rate.PolCode, rate.PoeId, rate.PoeName, rate.PoeCode,
             rate.PodId, rate.PodName, rate.PodCode, rate.ContainerTypeId, rate.ContainerTypeName, rate.ContainerTypeCode,
-            rate.IncotermId, rate.IncotermName, rate.IncotermCode, rate.PickupAddress, rate.PickupLatitude, rate.PickupLongitude,
+            rate.IncotermId, rate.IncotermName, rate.IncotermCode, rate.WarehouseId, rate.PickupAddress, rate.PickupLatitude, rate.PickupLongitude,
             rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode, rate.ExchangeRatePurchase, rate.ExchangeRateSale,
             rate.ExchangeRateApplied, rate.ExchangeRateDate, rate.ExchangeRateSource, rate.FreeDays, rate.ValidFrom, rate.ValidTo,
             rate.ContainerQuantity, rate.ShipmentMode, rate.OperationType, rate.TotalPackages, rate.TotalPallets,
