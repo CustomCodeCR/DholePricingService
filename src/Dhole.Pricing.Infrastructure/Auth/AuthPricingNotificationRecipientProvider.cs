@@ -6,16 +6,32 @@ namespace Dhole.Pricing.Infrastructure.Auth;
 public sealed class AuthPricingNotificationRecipientProvider(HttpClient httpClient)
     : IPricingNotificationRecipientProvider
 {
-    public async Task<IReadOnlyCollection<PricingNotificationRecipient>> GetPricingRecipientsAsync(
+    public Task<IReadOnlyCollection<PricingNotificationRecipient>> GetPricingRecipientsAsync(
+        CancellationToken cancellationToken = default)
+        => GetAsync("/api/internal/auth/pricing-notification-recipients", cancellationToken);
+
+    public Task<IReadOnlyCollection<PricingNotificationRecipient>> GetRecipientsByScopeAsync(
+        string requiredScope,
         CancellationToken cancellationToken = default)
     {
-        using var response = await httpClient.GetAsync(
-            "/api/internal/auth/pricing-notification-recipients",
+        ArgumentException.ThrowIfNullOrWhiteSpace(requiredScope);
+
+        var encodedScope = Uri.EscapeDataString(requiredScope.Trim());
+        return GetAsync(
+            $"/api/internal/auth/pricing-notification-recipients?requiredScope={encodedScope}",
             cancellationToken
         );
+    }
+
+    private async Task<IReadOnlyCollection<PricingNotificationRecipient>> GetAsync(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.GetAsync(path, cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        return await response.Content.ReadFromJsonAsync<PricingNotificationRecipient[]>(cancellationToken: cancellationToken)
+        return await response.Content.ReadFromJsonAsync<PricingNotificationRecipient[]>(
+            cancellationToken: cancellationToken)
             ?? Array.Empty<PricingNotificationRecipient>();
     }
 }
