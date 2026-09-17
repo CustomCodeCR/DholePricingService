@@ -79,6 +79,7 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.IncotermName).HasMaxLength(120).IsRequired(false);
         builder.Property(x => x.IncotermCode).HasMaxLength(40).IsRequired(false);
 
+        builder.Property(x => x.WarehouseId).IsRequired(false);
         builder.Property(x => x.PickupAddress).HasMaxLength(1000).IsRequired(false);
         builder.Property(x => x.PickupLatitude).HasPrecision(10, 7).IsRequired(false);
         builder.Property(x => x.PickupLongitude).HasPrecision(10, 7).IsRequired(false);
@@ -187,6 +188,7 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.HasIndex(x => x.ContainerTypeId);
         builder.HasIndex(x => x.ShipmentMode);
         builder.HasIndex(x => x.IncotermId);
+        builder.HasIndex(x => x.WarehouseId);
         builder.HasIndex(x => x.RateType);
         builder.HasIndex(x => x.CurrencyId);
         builder.HasIndex(x => x.Status);
