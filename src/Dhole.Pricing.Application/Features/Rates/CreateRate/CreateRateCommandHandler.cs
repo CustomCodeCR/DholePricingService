@@ -376,6 +376,7 @@ public sealed class CreateRateCommandHandler(
                 : CreateFromImportedRate(command, importedRate, rateCode);
 
             rate.ConfigurePickupLocation(
+                command.WarehouseId,
                 command.PickupAddress,
                 command.PickupLatitude,
                 command.PickupLongitude
