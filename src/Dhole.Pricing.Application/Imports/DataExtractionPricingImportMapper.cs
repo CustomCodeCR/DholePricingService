@@ -51,6 +51,11 @@ public static class DataExtractionPricingImportMapper
     )
     {
         var isSpot = IsSpotRate(row);
+        var isLcl = string.Equals(
+            row.ContainerType?.Trim(),
+            "LCL",
+            StringComparison.OrdinalIgnoreCase
+        );
         var validFrom = row.ValidFrom;
         var validTo = row.ValidTo;
         var commodity = FirstText(
@@ -67,6 +72,9 @@ public static class DataExtractionPricingImportMapper
             )
         );
         var spaceComment = row.SpaceComment;
+        var carrier = isLcl && !HasText(row.Carrier)
+            ? "Por asignar"
+            : row.Carrier;
 
         if (isSpot)
         {
@@ -74,12 +82,15 @@ public static class DataExtractionPricingImportMapper
             validFrom = spotDate;
             validTo = spotDate;
 
-            var etd = ReadRawValue(
-                row.RawJson,
-                "etd",
-                "fechaetd",
-                "estimateddeparture",
-                "estimatedtimeofdeparture"
+            var etd = FirstText(
+                ReadRawValue(
+                    row.RawJson,
+                    "etd",
+                    "fechaetd",
+                    "estimateddeparture",
+                    "estimatedtimeofdeparture"
+                ),
+                ReadTaggedValue(row.Remarks, "TEMPLATE:ETD=")
             );
 
             spaceComment = MergeComments(
@@ -87,6 +98,16 @@ public static class DataExtractionPricingImportMapper
                 row.Remarks,
                 HasText(etd) ? $"ETD: {etd!.Trim()}" : null,
                 HasText(commodity) ? $"Commodity: {commodity!.Trim()}" : null
+            );
+        }
+        else if (isLcl)
+        {
+            spaceComment = MergeComments(
+                row.SpaceComment,
+                row.Remarks,
+                !HasText(row.Carrier)
+                    ? "LCL sin naviera explícita en la fuente; carrier pendiente de asignación."
+                    : null
             );
         }
 
@@ -98,7 +119,7 @@ public static class DataExtractionPricingImportMapper
             row.PortOfExit,
             row.DestinationPort,
             row.ContainerType,
-            row.Carrier,
+            carrier,
             row.Agent,
             commodity,
             row.Currency,
@@ -153,15 +174,37 @@ public static class DataExtractionPricingImportMapper
 
     private static bool IsSpotRate(ExtractedPricingRowRequest row)
     {
-        var rateType = ReadRawValue(
-            row.RawJson,
-            "tipotarifa",
-            "tipodetarifa",
-            "ratetype",
-            "tarifftype"
+        var rateType = FirstText(
+            ReadRawValue(
+                row.RawJson,
+                "tipotarifa",
+                "tipodetarifa",
+                "ratetype",
+                "tarifftype"
+            ),
+            ReadTaggedValue(row.Remarks, "TEMPLATE:TIPO_TARIFA=")
         );
 
         return string.Equals(rateType?.Trim(), "SPOT", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ReadTaggedValue(string? text, string tag)
+    {
+        if (!HasText(text))
+        {
+            return null;
+        }
+
+        var start = text!.IndexOf(tag, StringComparison.OrdinalIgnoreCase);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        start += tag.Length;
+        var end = text.IndexOf(';', start);
+        var value = end < 0 ? text[start..] : text[start..end];
+        return HasText(value) ? value.Trim() : null;
     }
 
     private static string? ReadRawValue(string? rawJson, params string[] normalizedAliases)
