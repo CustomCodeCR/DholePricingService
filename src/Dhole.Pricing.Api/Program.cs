@@ -102,6 +102,7 @@ app.MapGet(
     .AllowAnonymous();
 
 app.UseAuthentication();
+app.UseMiddleware<RateCreationApprovalMiddleware>();
 app.UseMiddleware<SellerRateVisibilityMiddleware>();
 app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
