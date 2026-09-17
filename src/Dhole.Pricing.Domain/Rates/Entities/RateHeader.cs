@@ -183,6 +183,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string? IncotermName { get; private set; }
     public string? IncotermCode { get; private set; }
 
+    public Guid? WarehouseId { get; private set; }
     public string? PickupAddress { get; private set; }
     public decimal? PickupLatitude { get; private set; }
     public decimal? PickupLongitude { get; private set; }
@@ -479,6 +480,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     }
 
     public void ConfigurePickupLocation(
+        Guid? warehouseId,
         string? pickupAddress,
         decimal? pickupLatitude,
         decimal? pickupLongitude
@@ -489,6 +491,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         if (!applies)
         {
+            WarehouseId = null;
             PickupAddress = null;
             PickupLatitude = null;
             PickupLongitude = null;
@@ -500,6 +503,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         if (pickupLongitude is < -180m or > 180m)
             throw new InvalidOperationException("La longitud de recolección no es válida.");
 
+        WarehouseId = NormalizeId(warehouseId);
         PickupAddress = Normalize(pickupAddress);
         PickupLatitude = pickupLatitude;
         PickupLongitude = pickupLongitude;
