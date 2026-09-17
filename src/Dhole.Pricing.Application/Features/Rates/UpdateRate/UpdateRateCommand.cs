@@ -94,11 +94,8 @@ public sealed record UpdateRateCommand(
     Guid? UpdatedBy
 ) : ICommand<Result>
 {
-    // La vigencia de una tarifa editada siempre reinicia en la fecha operativa de
-    // Costa Rica (UTC-6, sin horario de verano). Conservamos el valor solicitado
-    // únicamente para mantener compatible la firma del comando; el handler usa esta
-    // fecha autoritativa y nunca una vigencia histórica enviada por el cliente.
-    public DateTime ValidFrom { get; } = DateTimeOffset.UtcNow
-        .ToOffset(TimeSpan.FromHours(-6))
-        .Date;
+    // La vigencia seleccionada por Pricing forma parte explícita de la revisión.
+    // No la sustituimos por la fecha actual porque al duplicar/renovar una tarifa
+    // el usuario puede necesitar una ventana futura definida por la nueva oferta.
+    public DateTime ValidFrom { get; } = RequestedValidFrom.Date;
 }
