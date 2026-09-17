@@ -1,10 +1,14 @@
+using Dhole.Pricing.Persistence.DbContexts;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Dhole.Pricing.Persistence.Migrations;
 
-public partial class AddRateWarehouseSelection : Migration
+[DbContext(typeof(ServiceDbContext))]
+[Migration("20260917233000_AddRateWarehouseSelection")]
+public sealed class AddRateWarehouseSelection : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
