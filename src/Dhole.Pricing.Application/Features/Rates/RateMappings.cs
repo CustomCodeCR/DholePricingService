@@ -34,6 +34,7 @@ internal static class RateMappings
             rate.IncotermId,
             rate.IncotermName,
             rate.IncotermCode,
+            rate.WarehouseId,
             rate.PickupAddress,
             rate.PickupLatitude,
             rate.PickupLongitude,
