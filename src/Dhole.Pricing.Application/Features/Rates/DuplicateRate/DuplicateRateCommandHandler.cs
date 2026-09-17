@@ -245,12 +245,18 @@ public sealed class DuplicateRateCommandHandler(
                 copiedDetail.ConfigureBillToClient(detail.BillToClient);
             }
 
-            // Los cargos fijos se toman de la configuración actual, nunca del snapshot viejo.
-            await fixedCostSynchronizer.SynchronizeAsync(
-                duplicate,
-                command.CreatedBy,
-                cancellationToken
-            );
+            // En FCL no cargamos costos automáticos antes de escoger el nuevo flete.
+            // Esos cargos/recargos pueden depender de la naviera, POE, POD, contenedor u
+            // otras variables de la nueva opción y deben reconstruirse después de la selección.
+            // Para los demás modos sí sincronizamos inmediatamente contra Costs vigente.
+            if (source.ShipmentMode != ShipmentMode.Fcl)
+            {
+                await fixedCostSynchronizer.SynchronizeAsync(
+                    duplicate,
+                    command.CreatedBy,
+                    cancellationToken
+                );
+            }
 
             duplicate.SetAmounts(command.CreatedBy);
         }
@@ -282,6 +288,7 @@ public sealed class DuplicateRateCommandHandler(
                     SourceRateHeaderId = source.Id,
                     NewRateHeaderId = duplicate.Id,
                     RequiresFreightReselection = source.ShipmentMode == ShipmentMode.Fcl,
+                    CostsRefreshDeferred = source.ShipmentMode == ShipmentMode.Fcl,
                     duplicate.TotalCostAmount,
                     duplicate.TotalSaleAmount,
                     duplicate.TotalUtilityAmount,
