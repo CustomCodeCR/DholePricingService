@@ -4,6 +4,7 @@ using CustomCodeFramework.Cqrs.Commands;
 using Dhole.Pricing.Application.Abstractions.Reports;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Contracts.Rates.Response;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
 
 namespace Dhole.Pricing.Application.Features.Rates.GenerateRateDocument;
@@ -26,16 +27,20 @@ public sealed class GenerateRateDocumentCommandHandler(
         if (rate is null || rate.IsDeleted)
             return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.RateHeaderNotFound);
 
-        // Una tarifa con margen menor al 12% todavía es una solicitud pendiente de
-        // autorización mientras RequiredApproval esté activo. Si gerencia la rechazó,
-        // RequiredApproval vuelve a false, pero eso no debe habilitar la cotización:
-        // únicamente una aprobación real o la autoaprobación por scope puede hacerlo.
-        if (
-            rate.RequiredApproval
-            || rate.Status == Dhole.Pricing.Domain.Rates.Enums.RateStatus.RejectedByManagement
-        )
+        // Los documentos comerciales solo pueden generarse cuando la tarifa ya superó
+        // el flujo de aprobación. Esta validación vive en Application para que no pueda
+        // omitirse llamando directamente al endpoint de documentos.
+        //
+        // Open representa una tarifa que no requirió aprobación manual (margen >= mínimo)
+        // o que fue autoaprobada por un usuario autorizado. Los estados posteriores también
+        // provienen de una tarifa ya habilitada comercialmente.
+        if (!CanGenerateCommercialDocument(rate.Status, rate.RequiredApproval))
         {
-            return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.RateLowMarginRequiresApproval);
+            var error = rate.RequiredApproval || rate.Status == RateStatus.PendingApproval
+                ? PricingErrors.RateLowMarginRequiresApproval
+                : PricingErrors.RateInvalidStatus;
+
+            return Result.Failure<GeneratedRateDocumentDto>(error);
         }
 
         var format = string.IsNullOrWhiteSpace(command.Format)
@@ -47,7 +52,7 @@ public sealed class GenerateRateDocumentCommandHandler(
 
         // FCL y LCL tienen contratos visuales distintos. LCL no expone naviera ni
         // un contenedor interno de compatibilidad; FCL conserva su plantilla propia.
-        var templateCode = rate.ShipmentMode == Dhole.Pricing.Domain.Rates.Enums.ShipmentMode.Lcl
+        var templateCode = rate.ShipmentMode == ShipmentMode.Lcl
             ? PricingLclClientQuoteTemplateCode
             : PricingFclClientQuoteTemplateCode;
 
@@ -74,6 +79,21 @@ public sealed class GenerateRateDocumentCommandHandler(
         {
             return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.ReportGenerationTimedOut);
         }
+    }
+
+    private static bool CanGenerateCommercialDocument(RateStatus status, bool requiredApproval)
+    {
+        if (requiredApproval)
+            return false;
+
+        return status is
+            RateStatus.ApprovedByManagement
+            or RateStatus.Open
+            or RateStatus.Sent
+            or RateStatus.AcceptedByClient
+            or RateStatus.RejectedByClient
+            or RateStatus.Closed
+            or RateStatus.Expired;
     }
 
     private static string AddRateComments(string dataJson, string? comments)
