@@ -100,6 +100,11 @@ public sealed class DuplicateRateCommandHandler(
 
         var rateCode = await rateCodeGenerator.GenerateAsync(cancellationToken);
         var currentExchangeRate = await exchangeRateProvider.GetUsdCrcAsync(cancellationToken);
+        var today = DateTime.UtcNow.Date;
+        var duplicateValidFrom = command.ValidFrom
+            ?? (source.ShipmentMode == ShipmentMode.Fcl ? today : source.ValidFrom);
+        var duplicateValidTo = command.ValidTo
+            ?? (source.ShipmentMode == ShipmentMode.Fcl ? duplicateValidFrom : source.ValidTo);
 
         RateHeader duplicate;
 
@@ -135,8 +140,8 @@ public sealed class DuplicateRateCommandHandler(
                 currency.SnapshotName(),
                 currency.Code,
                 source.FreeDays,
-                command.ValidFrom ?? source.ValidFrom,
-                command.ValidTo ?? source.ValidTo,
+                duplicateValidFrom,
+                duplicateValidTo,
                 source.ContainerQuantity > 0 ? source.ContainerQuantity : 1,
                 source.ClientName,
                 null,
