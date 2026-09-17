@@ -15,6 +15,7 @@ namespace Dhole.Pricing.Application.Features.Imports.ApproveImportRate;
 public sealed class ApproveImportRateCommandHandler(
     IImportFclRateRepository importRates,
     IPricingConfigCatalogClient configCatalog,
+    IImportRateAiFeedbackStore aiFeedback,
     IPricingAuditService audit,
     IImportRateCacheService cache,
     IUnitOfWork unitOfWork
@@ -30,6 +31,16 @@ public sealed class ApproveImportRateCommandHandler(
         if (ids.Length == 0)
         {
             return Result.Failure(PricingErrors.InvalidImportFclRate);
+        }
+
+        // Toda tarifa originada por Email/PDF/Excel/CSV/Imagen debe pasar primero por
+        // revisión humana explícita. Las importaciones manuales no requieren feedback de IA.
+        // El store únicamente considera como revisadas las decisiones verified/corrected;
+        // una fila marcada rejected nunca puede aprobarse por un flujo batch accidental.
+        var missingHumanReview = await aiFeedback.GetMissingReviewIdsAsync(ids, cancellationToken);
+        if (missingHumanReview.Count > 0)
+        {
+            return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
         }
 
         var entities = new List<ImportFclRates>(ids.Length);
@@ -97,6 +108,7 @@ public sealed class ApproveImportRateCommandHandler(
                         importRate.Id,
                         importRate.ImportBatchId,
                         Status = importRate.Status.ToString(),
+                        HumanAiReviewRequired = true,
                     }
                 ),
                 cancellationToken
