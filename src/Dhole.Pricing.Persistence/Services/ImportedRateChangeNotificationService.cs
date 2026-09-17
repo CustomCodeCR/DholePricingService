@@ -367,6 +367,7 @@ public sealed class ImportedRateChangeNotificationService(
             TotalWeightKg: baseline.TotalWeightKg,
             TotalVolumeCbm: baseline.TotalVolumeCbm,
             CargoLines: [],
+            WarehouseId: baseline.WarehouseId,
             PickupAddress: baseline.PickupAddress,
             PickupLatitude: baseline.PickupLatitude,
             PickupLongitude: baseline.PickupLongitude,
@@ -432,6 +433,7 @@ public sealed class ImportedRateChangeNotificationService(
         );
 
         candidate.ConfigurePickupLocation(
+            baseline.WarehouseId,
             baseline.PickupAddress,
             baseline.PickupLatitude,
             baseline.PickupLongitude
