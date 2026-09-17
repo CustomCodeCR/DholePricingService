@@ -489,6 +489,7 @@ public sealed class UpdateRateCommandHandler(
             rate.SetOperationType(command.OperationType, command.UpdatedBy);
             rate.ConfigureServices(command.Services, command.UpdatedBy);
             rate.ConfigurePickupLocation(
+                command.WarehouseId,
                 command.PickupAddress,
                 command.PickupLatitude,
                 command.PickupLongitude
