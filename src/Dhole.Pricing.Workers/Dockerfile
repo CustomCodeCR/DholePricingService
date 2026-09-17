@@ -25,9 +25,26 @@ COPY ["src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj", "src/Dho
 COPY ["src/Dhole.Pricing.Infrastructure/Dhole.Pricing.Infrastructure.csproj", "src/Dhole.Pricing.Infrastructure/"]
 COPY ["src/Dhole.Pricing.Contracts/Dhole.Pricing.Contracts.csproj", "src/Dhole.Pricing.Contracts/"]
 
+# NuGet/GitHub Packages can occasionally fail on the self-hosted runner with a transient
+# TLS handshake or package-download timeout. Retry the restore and disable parallel HTTP
+# restores so one intermittent connection does not abort the complete Pricing deployment.
 RUN --mount=type=secret,id=github_token,required=true \
-  export NuGetPackageSourceCredentials_github="Username=${GITHUB_ACTOR};Password=$(cat /run/secrets/github_token);ValidAuthenticationTypes=Basic" && \
-  dotnet restore "src/Dhole.Pricing.Workers/Dhole.Pricing.Workers.csproj" --configfile /src/NuGet.Config
+  set -eu; \
+  export NuGetPackageSourceCredentials_github="Username=${GITHUB_ACTOR};Password=$(cat /run/secrets/github_token);ValidAuthenticationTypes=Basic"; \
+  attempt=1; \
+  while true; do \
+    if dotnet restore "src/Dhole.Pricing.Workers/Dhole.Pricing.Workers.csproj" --configfile /src/NuGet.Config --disable-parallel; then \
+      break; \
+    fi; \
+    if [ "$attempt" -ge 4 ]; then \
+      echo "NuGet restore failed after ${attempt} attempts." >&2; \
+      exit 1; \
+    fi; \
+    delay=$((attempt * 10)); \
+    echo "NuGet restore attempt ${attempt} failed; retrying in ${delay}s..." >&2; \
+    sleep "$delay"; \
+    attempt=$((attempt + 1)); \
+  done
 
 COPY . .
 
