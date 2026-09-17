@@ -1746,6 +1746,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDefaultValue("TransitDomestic")
                         .HasColumnName("operation_type");
 
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
+
                     b.Property<string>("PickupAddress")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
@@ -1972,6 +1976,8 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.HasIndex("IdtraNumber");
 
                     b.HasIndex("IncotermId");
+
+                    b.HasIndex("WarehouseId");
 
                     b.HasIndex("PodId");
 
