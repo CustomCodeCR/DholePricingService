@@ -83,6 +83,17 @@ public sealed record RateDto(
     IReadOnlyCollection<RateServiceDto> Services
 )
 {
+    public int? TransitDays
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(TransitTime)) return null;
+
+            var match = System.Text.RegularExpressions.Regex.Match(TransitTime, @"\d+");
+            return match.Success && int.TryParse(match.Value, out var days) ? days : null;
+        }
+    }
+
     public decimal TotalTaxUsd => CalculateTaxTotals().TaxUsd;
     public decimal TotalTaxCrc => CalculateTaxTotals().TaxCrc;
     public decimal TotalSaleWithTaxUsd => TotalSaleUsd + TotalTaxUsd;
