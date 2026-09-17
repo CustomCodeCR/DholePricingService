@@ -31,8 +31,11 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
 
         // El vendedor consume sus tarifas por /api/pricing/seller-rates. Bloquear el browse
         // y el dashboard general evita que pueda enumerar o inferir tarifas de otros vendedores.
-        if (string.Equals(path.TrimEnd('/'), "/api/pricing/rates", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/api/pricing/rates/dashboard", StringComparison.OrdinalIgnoreCase))
+        // Importante: esta restricción aplica únicamente a lecturas. Las escrituras deben
+        // continuar hacia la autorización del endpoint para respetar pricing.rate.create/update.
+        if (HttpMethods.IsGet(context.Request.Method)
+            && (string.Equals(path.TrimEnd('/'), "/api/pricing/rates", StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith("/api/pricing/rates/dashboard", StringComparison.OrdinalIgnoreCase)))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;
