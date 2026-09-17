@@ -81,6 +81,7 @@ public sealed record UpdateRateCommand(
     decimal TotalWeightKg,
     decimal TotalVolumeCbm,
     IReadOnlyCollection<RateCargoLineCommandItem> CargoLines,
+    Guid? WarehouseId,
     string? PickupAddress,
     decimal? PickupLatitude,
     decimal? PickupLongitude,
