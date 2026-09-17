@@ -12,4 +12,9 @@ public interface IPricingNotificationRecipientProvider
     Task<IReadOnlyCollection<PricingNotificationRecipient>> GetPricingRecipientsAsync(
         CancellationToken cancellationToken = default
     );
+
+    Task<IReadOnlyCollection<PricingNotificationRecipient>> GetRecipientsByScopeAsync(
+        string requiredScope,
+        CancellationToken cancellationToken = default
+    );
 }
