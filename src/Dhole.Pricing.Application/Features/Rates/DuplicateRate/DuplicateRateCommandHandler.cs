@@ -169,6 +169,7 @@ public sealed class DuplicateRateCommandHandler(
                 );
             }
             duplicate.ConfigurePickupLocation(
+                source.WarehouseId,
                 source.PickupAddress,
                 source.PickupLatitude,
                 source.PickupLongitude
