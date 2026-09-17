@@ -32,8 +32,11 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
         // El browse y dashboard operativos de Pricing no se exponen a vendedores porque
         // no están filtrados por alcance comercial. Supervisores y jefes consultan el
         // reporte de solicitudes visible para ellos y desde ahí pueden abrir cada tarifa.
-        if (string.Equals(path.TrimEnd('/'), "/api/pricing/rates", StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith("/api/pricing/rates/dashboard", StringComparison.OrdinalIgnoreCase))
+        // Importante: esta restricción aplica únicamente a lecturas. Las escrituras deben
+        // continuar hacia la autorización del endpoint para respetar pricing.rate.create/update.
+        if (HttpMethods.IsGet(context.Request.Method)
+            && (string.Equals(path.TrimEnd('/'), "/api/pricing/rates", StringComparison.OrdinalIgnoreCase)
+                || path.StartsWith("/api/pricing/rates/dashboard", StringComparison.OrdinalIgnoreCase)))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;
