@@ -49,7 +49,7 @@ public sealed class ImportRateAiFeedbackStore(ServiceDbContext dbContext)
             );
         }
 
-        await using var connection = dbContext.Database.GetDbConnection();
+        var connection = dbContext.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
         {
             await connection.OpenAsync(cancellationToken);
@@ -200,7 +200,7 @@ public sealed class ImportRateAiFeedbackStore(ServiceDbContext dbContext)
     )
     {
         var result = new HashSet<Guid>();
-        await using var connection = dbContext.Database.GetDbConnection();
+        var connection = dbContext.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
         {
             await connection.OpenAsync(cancellationToken);
@@ -235,7 +235,7 @@ public sealed class ImportRateAiFeedbackStore(ServiceDbContext dbContext)
     )
     {
         var result = new List<FeedbackRow>();
-        await using var connection = dbContext.Database.GetDbConnection();
+        var connection = dbContext.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
         {
             await connection.OpenAsync(cancellationToken);
