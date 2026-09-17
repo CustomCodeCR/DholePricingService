@@ -60,6 +60,7 @@ app.MapCostEndpoints();
 app.MapFtlTariffEndpoints();
 app.MapCostRoutePortEndpoints();
 app.MapImportRateEndpoints();
+app.MapPanamaContinuationRateEndpoints();
 app.MapManualOceanFreightEndpoints();
 app.MapImportRateInactivationEndpoints();
 app.MapImportRateReviewQueueEndpoints();
