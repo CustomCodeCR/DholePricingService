@@ -27,6 +27,7 @@ public sealed record RateDto(
     Guid? IncotermId,
     string? IncotermName,
     string? IncotermCode,
+    Guid? WarehouseId,
     string? PickupAddress,
     decimal? PickupLatitude,
     decimal? PickupLongitude,
