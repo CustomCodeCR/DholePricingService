@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Commands;
 using CustomCodeFramework.Persistence.Abstractions;
@@ -14,6 +15,7 @@ namespace Dhole.Pricing.Application.Features.Imports.ReviewImportRate;
 public sealed class ReviewImportRateCommandHandler(
     IImportFclRateRepository importRates,
     IPricingConfigCatalogClient configCatalog,
+    IImportRateAiFeedbackStore aiFeedback,
     IPricingAuditService audit,
     IImportRateCacheService cache,
     IUnitOfWork unitOfWork
@@ -77,6 +79,7 @@ public sealed class ReviewImportRateCommandHandler(
         }
 
         var before = PricingAuditSnapshots.From(importRate);
+        var beforeJson = JsonSerializer.Serialize(before);
         var podSnapshot = pod is null
             ? new CatalogSnapshot(importRate.PodId, importRate.PodName, importRate.PodCode, importRate.PodSlug)
             : Snapshot(pod);
@@ -111,6 +114,10 @@ public sealed class ReviewImportRateCommandHandler(
             return Result.Failure(PricingErrors.InvalidImportFclRate);
         }
 
+        var after = PricingAuditSnapshots.From(importRate);
+        var afterJson = JsonSerializer.Serialize(after);
+        var corrected = !string.Equals(beforeJson, afterJson, StringComparison.Ordinal);
+
         await audit.PublishAsync(
             new PricingAuditEvent(
                 EventType: PricingAuditEventTypes.ImportFclRateUpdated,
@@ -119,12 +126,13 @@ public sealed class ReviewImportRateCommandHandler(
                 EntityId: importRate.Id,
                 ActorUserId: command.UpdatedBy,
                 Before: before,
-                After: PricingAuditSnapshots.From(importRate),
+                After: after,
                 Payload: new
                 {
                     importRate.Id,
                     importRate.ImportBatchId,
                     ReviewApplied = true,
+                    HumanFeedbackOutcome = corrected ? "corrected" : "verified",
                     command.ReviewNotes,
                 }
             ),
@@ -132,6 +140,23 @@ public sealed class ReviewImportRateCommandHandler(
         );
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        await aiFeedback.SaveAsync(
+            new ImportRateAiFeedback(
+                importRate.Id,
+                ConfirmedAgainstSource: true,
+                Outcome: corrected ? "corrected" : "verified",
+                ReasonCodes: corrected ? ["human_correction"] : Array.Empty<string>(),
+                Comment: command.ReviewNotes,
+                CorrectValue: null,
+                OriginalSnapshotJson: beforeJson,
+                ReviewedSnapshotJson: afterJson,
+                ReviewedBy: command.UpdatedBy,
+                ReviewedAtUtc: DateTime.UtcNow
+            ),
+            cancellationToken
+        );
+
         await cache.RemoveImportRateCacheAsync(
             importRate.Id,
             importRate.ImportBatchId,
