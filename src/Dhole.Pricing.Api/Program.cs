@@ -47,6 +47,7 @@ if (app.Environment.IsDevelopment()) app.UseCustomCodeSwagger();
 app.MapGet("/health", () => Results.Ok(new { service = "DholePricingService", status = "Healthy", timestamp = DateTimeOffset.UtcNow })).AllowAnonymous();
 
 app.UseAuthentication();
+app.UseMiddleware<RateCreationApprovalMiddleware>();
 app.UseMiddleware<SellerRateVisibilityMiddleware>();
 app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
