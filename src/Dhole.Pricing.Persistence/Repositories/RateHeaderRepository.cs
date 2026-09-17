@@ -205,6 +205,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.IncotermId,
                 x.IncotermName,
                 x.IncotermCode,
+                x.WarehouseId,
                 x.PickupAddress,
                 x.PickupLatitude,
                 x.PickupLongitude,
