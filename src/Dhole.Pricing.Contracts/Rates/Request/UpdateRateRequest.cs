@@ -49,6 +49,7 @@ public sealed record UpdateRateRequest(
     decimal TotalVolumeCbm = 0m,
     decimal KgPerCbm = 500m,
     IReadOnlyCollection<RateCargoLineRequest>? CargoLines = null,
+    Guid? WarehouseId = null,
     string? PickupAddress = null,
     decimal? PickupLatitude = null,
     decimal? PickupLongitude = null,
