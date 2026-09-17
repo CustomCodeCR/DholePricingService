@@ -169,6 +169,10 @@ public static class PricingAuditSnapshots
             rateHeader.IncotermId,
             rateHeader.IncotermName,
             rateHeader.IncotermCode,
+            rateHeader.WarehouseId,
+            rateHeader.PickupAddress,
+            rateHeader.PickupLatitude,
+            rateHeader.PickupLongitude,
 
             rateHeader.CurrencyId,
             rateHeader.CurrencyName,
