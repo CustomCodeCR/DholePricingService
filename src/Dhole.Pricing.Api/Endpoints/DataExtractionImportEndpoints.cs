@@ -3,8 +3,6 @@ using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Imports;
 using Dhole.Pricing.Contracts.Imports.Request;
 using Dhole.Pricing.Domain.Imports.Enums;
-using Dhole.Pricing.Persistence.DbContexts;
-using Microsoft.EntityFrameworkCore;
 
 namespace Dhole.Pricing.Api.Endpoints;
 
@@ -18,9 +16,8 @@ public static class DataExtractionImportEndpoints
             .WithTags("Imported FCL Rates")
             .AllowAnonymous();
 
-        // Retrieval feedback for DataExtraction. Approved rows are positive examples;
-        // rejected rows are negative examples. The AI still treats the current source
-        // document as the only authority for facts and rates.
+        // Only explicit human-reviewed decisions become retrieval feedback for Qwen.
+        // The current email/PDF/Excel remains the only authority for current prices.
         app.MapGet(
                 "/api/pricing/rate-import-batches/learning-context",
                 GetLearningContextAsync
@@ -33,44 +30,45 @@ public static class DataExtractionImportEndpoints
 
     private static async Task<IResult> GetLearningContextAsync(
         int? limit,
-        ServiceDbContext dbContext,
+        IImportRateAiFeedbackStore feedbackStore,
         CancellationToken cancellationToken
     )
     {
-        var take = Math.Clamp(limit ?? 12, 1, 50);
-        var examples = await dbContext.ImportFclRates
-            .AsNoTracking()
-            .Where(rate =>
-                rate.Status == ImportStatus.Approved
-                || rate.Status == ImportStatus.Rejected
-            )
-            .OrderByDescending(rate => rate.ValidTo)
-            .ThenByDescending(rate => rate.ValidFrom)
-            .Take(take)
-            .Select(rate => new
-            {
-                outcome = rate.Status == ImportStatus.Approved ? "approved" : "rejected",
-                pol = rate.PolName,
-                poe = rate.PoeName,
-                pod = rate.PodName,
-                containerType = rate.ContainerTypeName,
-                carrier = rate.CarrierName,
-                currency = rate.CurrencyCode,
-                oceanFreight = rate.OceanFreight,
-                originCharges = rate.OriginCharges,
-                destinationCharges = rate.DestinationCharges,
-                surcharges = rate.Surcharges,
-                totalCost = rate.TotalCost,
-                freeDays = rate.FreeDays,
-                transitDays = rate.TransitDays,
-                validFrom = rate.ValidFrom,
-                validTo = rate.ValidTo,
-                commodity = rate.Commodity,
-                spaceComment = rate.SpaceComment,
-            })
-            .ToArrayAsync(cancellationToken);
+        var examples = await feedbackStore.GetLearningContextAsync(
+            Math.Clamp(limit ?? 12, 1, 50),
+            cancellationToken
+        );
 
-        return Results.Ok(new { examples });
+        return Results.Ok(new
+        {
+            examples = examples.Select(example => new
+            {
+                outcome = example.Outcome,
+                feedbackOutcome = example.Outcome,
+                feedbackReasonCodes = example.ReasonCodes,
+                feedbackComment = example.Comment,
+                correctValue = example.CorrectValue,
+                originalSnapshotJson = example.OriginalSnapshotJson,
+                reviewedSnapshotJson = example.ReviewedSnapshotJson,
+                pol = example.Pol,
+                poe = example.Poe,
+                pod = example.Pod,
+                containerType = example.ContainerType,
+                carrier = example.Carrier,
+                currency = example.Currency,
+                oceanFreight = example.OceanFreight,
+                originCharges = example.OriginCharges,
+                destinationCharges = example.DestinationCharges,
+                surcharges = example.Surcharges,
+                totalCost = example.TotalCost,
+                freeDays = example.FreeDays,
+                transitDays = example.TransitDays,
+                validFrom = example.ValidFrom,
+                validTo = example.ValidTo,
+                commodity = example.Commodity,
+                spaceComment = example.SpaceComment,
+            })
+        });
     }
 
     private static async Task<IResult> ImportFromExtractionAsync(
