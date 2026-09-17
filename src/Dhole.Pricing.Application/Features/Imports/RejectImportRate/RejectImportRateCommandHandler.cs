@@ -1,9 +1,11 @@
+using System.Text.Json;
 using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Commands;
 using CustomCodeFramework.Persistence.Abstractions;
 using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
+using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
@@ -13,6 +15,7 @@ namespace Dhole.Pricing.Application.Features.Imports.RejectImportRate;
 
 public sealed class RejectImportRateCommandHandler(
     IImportFclRateRepository importRates,
+    IImportRateAiFeedbackStore aiFeedback,
     IPricingAuditService audit,
     IImportRateCacheService cache,
     IUnitOfWork unitOfWork
@@ -24,14 +27,18 @@ public sealed class RejectImportRateCommandHandler(
     )
     {
         var ids = command.Ids.Where(x => x != Guid.Empty).Distinct().ToArray();
-        var reason = command.Reason?.Trim();
+        var feedback = ParseFeedback(command.Reason);
 
         if (ids.Length == 0)
         {
             return Result.Failure(PricingErrors.InvalidImportFclRate);
         }
 
-        if (string.IsNullOrWhiteSpace(reason))
+        if (
+            feedback is null
+            || !feedback.ConfirmedAgainstSource
+            || feedback.ReasonCodes.Count == 0
+        )
         {
             return Result.Failure(PricingErrors.ImportFclRateRejectReasonIsRequired);
         }
@@ -54,9 +61,6 @@ public sealed class RejectImportRateCommandHandler(
                 return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
             }
 
-            // Rejected se conserva para que el endpoint sea idempotente. Además de
-            // Pending y PreAuthorized, una tarifa Approved que todavía no haya sido
-            // utilizada como tarifa oficial puede revertirse a Rejected.
             if (importRate.Status == ImportStatus.Rejected)
             {
                 entities.Add(importRate);
@@ -78,6 +82,7 @@ public sealed class RejectImportRateCommandHandler(
         foreach (var importRate in rejectableEntities)
         {
             var before = PricingAuditSnapshots.From(importRate);
+            var snapshotJson = JsonSerializer.Serialize(before);
 
             importRate.Reject(command.RejectedBy);
 
@@ -94,9 +99,28 @@ public sealed class RejectImportRateCommandHandler(
                     {
                         importRate.Id,
                         importRate.ImportBatchId,
-                        Reason = reason,
+                        FeedbackOutcome = "rejected",
+                        feedback.ReasonCodes,
+                        feedback.Comment,
+                        feedback.CorrectValue,
                         Status = importRate.Status.ToString(),
                     }
+                ),
+                cancellationToken
+            );
+
+            await aiFeedback.SaveAsync(
+                new ImportRateAiFeedback(
+                    importRate.Id,
+                    ConfirmedAgainstSource: true,
+                    Outcome: "rejected",
+                    ReasonCodes: feedback.ReasonCodes,
+                    Comment: feedback.Comment,
+                    CorrectValue: feedback.CorrectValue,
+                    OriginalSnapshotJson: snapshotJson,
+                    ReviewedSnapshotJson: snapshotJson,
+                    ReviewedBy: command.RejectedBy,
+                    ReviewedAtUtc: DateTime.UtcNow
                 ),
                 cancellationToken
             );
@@ -120,4 +144,50 @@ public sealed class RejectImportRateCommandHandler(
 
         return Result.Success();
     }
+
+    private static StructuredFeedback? ParseFeedback(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+
+        try
+        {
+            using var document = JsonDocument.Parse(raw);
+            var root = document.RootElement;
+            var confirmed = root.TryGetProperty("confirmedAgainstSource", out var confirmedNode)
+                && confirmedNode.ValueKind == JsonValueKind.True;
+            var reasonCodes = root.TryGetProperty("reasonCodes", out var reasonsNode)
+                && reasonsNode.ValueKind == JsonValueKind.Array
+                    ? reasonsNode.EnumerateArray()
+                        .Where(item => item.ValueKind == JsonValueKind.String)
+                        .Select(item => item.GetString()?.Trim())
+                        .Where(value => !string.IsNullOrWhiteSpace(value))
+                        .Select(value => value!)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray()
+                    : Array.Empty<string>();
+            var comment = ReadText(root, "comment");
+            var correctValue = ReadText(root, "correctValue");
+
+            return new StructuredFeedback(confirmed, reasonCodes, comment, correctValue);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? ReadText(JsonElement root, string property)
+    {
+        if (!root.TryGetProperty(property, out var node) || node.ValueKind != JsonValueKind.String)
+            return null;
+        var value = node.GetString();
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private sealed record StructuredFeedback(
+        bool ConfirmedAgainstSource,
+        IReadOnlyCollection<string> ReasonCodes,
+        string? Comment,
+        string? CorrectValue
+    );
 }
