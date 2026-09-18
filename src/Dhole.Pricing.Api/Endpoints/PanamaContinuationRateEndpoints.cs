@@ -31,6 +31,8 @@ public static class PanamaContinuationRateEndpoints
         string finalDestination,
         string? containerType,
         DateTime? quoteDate,
+        string? panamaPolCode,
+        string? finalDestinationCode,
         IQueryDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken)
@@ -48,7 +50,9 @@ public static class PanamaContinuationRateEndpoints
                 panamaPol,
                 finalDestination,
                 containerType,
-                quoteDate?.Date),
+                quoteDate?.Date,
+                panamaPolCode,
+                finalDestinationCode),
             cancellationToken);
 
         return EndpointResults.FromResult(result, httpContext);
