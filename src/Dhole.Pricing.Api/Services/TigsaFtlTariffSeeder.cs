@@ -49,6 +49,21 @@ public static class TigsaFtlTariffSeeder
         { 1900m, 1600m, 1600m, 1700m, 1300m, 900m, 2900m, null },
     };
 
+    // Tarifario maestro LTL entregado por GCF. La tarifa es USD/CBM y se aplica
+    // el mínimo indicado por ruta. TransitDays conserva el extremo superior del
+    // rango operativo y Notes mantiene el rango original.
+    private static readonly LtlSeedRow[] LtlTariffs =
+    [
+        new("San José, Costa Rica", "Managua, Nicaragua", 40m, 55m, 3, "2 - 3 días", "Almacén Fiscal Premier 6117"),
+        new("San José, Costa Rica", "San Pedro Sula, Honduras", 50m, 55m, 6, "4 - 6 días", "Sicarga"),
+        new("San José, Costa Rica", "San Salvador, El Salvador", 40m, 55m, 5, "4 - 5 días", "Central Logistics SA De C.V."),
+        new("San José, Costa Rica", "Ciudad Guatemala, Guatemala", 48m, 75m, 7, "5 - 7 días", "Almacenadora Integrada"),
+        new("CFZ Panamá", "Managua, Nicaragua", 50m, 65m, 4, "3 - 4 días", "Almacén Fiscal Premier 6117"),
+        new("CFZ Panamá", "San Pedro Sula, Honduras", 60m, 65m, 5, "4 - 5 días", "Sicarga"),
+        new("CFZ Panamá", "San Salvador, El Salvador", 50m, 60m, 5, "4 - 5 días", "Central Logistics SA De C.V."),
+        new("CFZ Panamá", "Ciudad Guatemala, Guatemala", 58m, 80m, 6, "5 - 6 días", "Almacenadora Integrada"),
+    ];
+
     private static readonly IReadOnlyDictionary<string, string[]> LocationAliases =
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
@@ -153,6 +168,14 @@ public static class TigsaFtlTariffSeeder
                 TransitDaysSmall,
                 cancellationToken
             );
+            created += await SeedLtlTariffsAsync(
+                connection,
+                transaction,
+                origins,
+                destinations,
+                usd,
+                cancellationToken
+            );
 
             await transaction.CommitAsync(cancellationToken);
 
@@ -197,7 +220,12 @@ public static class TigsaFtlTariffSeeder
                 var destinationKey = Locations[destinationIndex];
                 var origin = routeCache[originKey].Origin;
                 var destination = routeCache[destinationKey].Destination;
-                if (origin is null || destination is null) continue;
+
+                // No descartar una ruta maestra si Config todavía no tiene una equivalencia.
+                // Guardamos el nombre de la oferta y dejamos IDs/códigos nulos; ResolveAsync
+                // puede resolver por nombre/país y una edición posterior puede asociar catálogos.
+                var originName = origin is null ? originKey : SnapshotName(origin);
+                var destinationName = destination is null ? destinationKey : SnapshotName(destination);
 
                 await using var command = connection.CreateCommand();
                 command.Transaction = transaction;
@@ -253,12 +281,12 @@ public static class TigsaFtlTariffSeeder
                     """;
 
                 Add(command, "id", Guid.NewGuid());
-                Add(command, "origin_id", origin.Id);
-                Add(command, "origin_name", SnapshotName(origin));
-                Add(command, "origin_code", origin.Code);
-                Add(command, "destination_id", destination.Id);
-                Add(command, "destination_name", SnapshotName(destination));
-                Add(command, "destination_code", destination.Code);
+                Add(command, "origin_id", origin?.Id);
+                Add(command, "origin_name", originName);
+                Add(command, "origin_code", origin?.Code);
+                Add(command, "destination_id", destination?.Id);
+                Add(command, "destination_name", destinationName);
+                Add(command, "destination_code", destination?.Code);
                 Add(command, "equipment_class", equipmentClass);
                 Add(command, "equipment_label", equipmentLabel);
                 Add(command, "currency_id", usd.Id);
@@ -278,6 +306,140 @@ public static class TigsaFtlTariffSeeder
         }
 
         return created;
+    }
+
+    private static async Task<int> SeedLtlTariffsAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        IReadOnlyCollection<PricingConfigCatalogItem> origins,
+        IReadOnlyCollection<PricingConfigCatalogItem> destinations,
+        PricingConfigCatalogItem usd,
+        CancellationToken cancellationToken
+    )
+    {
+        var created = 0;
+
+        foreach (var row in LtlTariffs)
+        {
+            var origin = ResolveFreeformRouteItem(origins, row.Origin);
+            var destination = ResolveFreeformRouteItem(destinations, row.Destination);
+
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = """
+                INSERT INTO pricing."FtlTariffs"
+                (
+                    id,
+                    origin_id,
+                    origin_name,
+                    origin_code,
+                    destination_id,
+                    destination_name,
+                    destination_code,
+                    shipment_mode,
+                    equipment_class,
+                    equipment_label,
+                    currency_id,
+                    currency_name,
+                    currency_code,
+                    price_amount,
+                    rate_basis,
+                    minimum_amount,
+                    transit_days,
+                    warehouse_name,
+                    source,
+                    notes,
+                    valid_from,
+                    valid_to,
+                    is_active,
+                    created_at_utc
+                )
+                SELECT
+                    @id,
+                    @origin_id,
+                    @origin_name,
+                    @origin_code,
+                    @destination_id,
+                    @destination_name,
+                    @destination_code,
+                    'Ltl',
+                    'LTL_CBM',
+                    'LTL · USD/CBM',
+                    @currency_id,
+                    @currency_name,
+                    @currency_code,
+                    @price_amount,
+                    'PerCbm',
+                    @minimum_amount,
+                    @transit_days,
+                    @warehouse_name,
+                    'GCF Centroamérica LTL Pricing Engine v2.4',
+                    @notes,
+                    NULL,
+                    NULL,
+                    TRUE,
+                    now()
+                WHERE NOT EXISTS
+                (
+                    SELECT 1
+                    FROM pricing."FtlTariffs" existing
+                    WHERE lower(existing.shipment_mode) = 'ltl'
+                      AND upper(existing.equipment_class) = 'LTL_CBM'
+                      AND lower(translate(trim(existing.origin_name), 'áéíóúüñ', 'aeiouun'))
+                          = lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun'))
+                      AND lower(translate(trim(existing.destination_name), 'áéíóúüñ', 'aeiouun'))
+                          = lower(translate(trim(@destination_name), 'áéíóúüñ', 'aeiouun'))
+                );
+                """;
+
+            Add(command, "id", Guid.NewGuid());
+            Add(command, "origin_id", origin?.Id);
+            Add(command, "origin_name", origin is null ? row.Origin : SnapshotName(origin));
+            Add(command, "origin_code", origin?.Code);
+            Add(command, "destination_id", destination?.Id);
+            Add(command, "destination_name", destination is null ? row.Destination : SnapshotName(destination));
+            Add(command, "destination_code", destination?.Code);
+            Add(command, "currency_id", usd.Id);
+            Add(command, "currency_name", SnapshotName(usd));
+            Add(command, "currency_code", usd.Code);
+            Add(command, "price_amount", row.PricePerCbm);
+            Add(command, "minimum_amount", row.MinimumAmount);
+            Add(command, "transit_days", row.TransitDays);
+            Add(command, "warehouse_name", row.Warehouse);
+            Add(command, "notes", $"Servicio LTL consolidado terrestre. Tránsito estimado original: {row.TransitRange}. Tarifa USD/CBM con mínimo por ruta.");
+
+            created += await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        return created;
+    }
+
+    private static PricingConfigCatalogItem? ResolveFreeformRouteItem(
+        IReadOnlyCollection<PricingConfigCatalogItem> items,
+        string location
+    )
+    {
+        var needle = Normalize(location);
+        var city = Normalize(location.Split(',', StringSplitOptions.TrimEntries)[0]);
+
+        return items
+            .Select(item =>
+            {
+                var fields = new[] { item.Name, item.Value ?? string.Empty, item.Code, item.Slug }
+                    .Select(Normalize)
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .ToArray();
+                var score = fields.Any(field => field == needle) ? 100
+                    : fields.Any(field => needle.Contains(field, StringComparison.Ordinal) || field.Contains(needle, StringComparison.Ordinal)) ? 80
+                    : fields.Any(field => city.Length >= 4 && (field.Contains(city, StringComparison.Ordinal) || city.Contains(field, StringComparison.Ordinal))) ? 60
+                    : 0;
+                return new { Item = item, Score = score };
+            })
+            .Where(candidate => candidate.Score > 0)
+            .OrderByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => candidate.Item.Name)
+            .Select(candidate => candidate.Item)
+            .FirstOrDefault();
     }
 
     private static async Task<IReadOnlyCollection<PricingConfigCatalogItem>> LoadFirstCatalogAsync(
@@ -401,4 +563,14 @@ public static class TigsaFtlTariffSeeder
         parameter.Value = value ?? DBNull.Value;
         command.Parameters.Add(parameter);
     }
+
+    private sealed record LtlSeedRow(
+        string Origin,
+        string Destination,
+        decimal PricePerCbm,
+        decimal MinimumAmount,
+        int TransitDays,
+        string TransitRange,
+        string Warehouse
+    );
 }
