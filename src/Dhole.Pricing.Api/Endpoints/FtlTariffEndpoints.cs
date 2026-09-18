@@ -200,7 +200,7 @@ public static class FtlTariffEndpoints
         async Task<int> CountAsync(string whereClause)
         {
             await using var command = connection.CreateCommand();
-            command.CommandText = $"SELECT COUNT(*)::int FROM pricing.\\\"FtlTariffs\\\" {whereClause};";
+            command.CommandText = $"SELECT COUNT(*)::int FROM pricing.\"FtlTariffs\" {whereClause};";
             var value = await command.ExecuteScalarAsync(cancellationToken);
             return value is null || value == DBNull.Value ? 0 : Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
         }
