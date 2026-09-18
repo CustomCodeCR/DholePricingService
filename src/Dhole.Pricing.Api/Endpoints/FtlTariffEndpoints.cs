@@ -194,15 +194,20 @@ public static class FtlTariffEndpoints
     {
         await TigsaFtlTariffSeeder.SeedAsync(services, cancellationToken);
 
-        var total = await db.Database
-            .SqlQueryRaw<int>("SELECT COUNT(*)::int AS \\"Value\\" FROM pricing.\\\"FtlTariffs\\\";")
-            .SingleAsync(cancellationToken);
-        var ftl = await db.Database
-            .SqlQueryRaw<int>("SELECT COUNT(*)::int AS \\"Value\\" FROM pricing.\\\"FtlTariffs\\\" WHERE lower(shipment_mode) = 'ftl';")
-            .SingleAsync(cancellationToken);
-        var ltl = await db.Database
-            .SqlQueryRaw<int>("SELECT COUNT(*)::int AS \\"Value\\" FROM pricing.\\\"FtlTariffs\\\" WHERE lower(shipment_mode) = 'ltl';")
-            .SingleAsync(cancellationToken);
+        await using var connection = db.Database.GetDbConnection();
+        await EnsureOpenAsync(connection, cancellationToken);
+
+        async Task<int> CountAsync(string whereClause)
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = $"SELECT COUNT(*)::int FROM pricing.\\\"FtlTariffs\\\" {whereClause};";
+            var value = await command.ExecuteScalarAsync(cancellationToken);
+            return value is null || value == DBNull.Value ? 0 : Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        var total = await CountAsync(string.Empty);
+        var ftl = await CountAsync("WHERE lower(shipment_mode) = 'ftl'");
+        var ltl = await CountAsync("WHERE lower(shipment_mode) = 'ltl'");
 
         return Results.Ok(new
         {
