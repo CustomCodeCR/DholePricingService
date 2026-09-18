@@ -34,15 +34,15 @@ builder.Services.AddPricingWorker(builder.Configuration);
 
 var host = builder.Build();
 
-// Las migraciones pertenecen al API. El run-dhole inicia API y Worker casi al mismo
-// tiempo; ejecutar MigrateAsync en ambos procesos crea una carrera innecesaria y
-// aumenta el pico de CPU/memoria durante el arranque. El Worker únicamente espera
-// a que el esquema quede listo antes de comenzar a consumir trabajo.
-await WaitForDatabaseSchemaAsync(host.Services, builder.Configuration);
+// El Worker persiste importaciones directamente en PostgreSQL. No puede asumir
+// que el API terminó de migrar antes de comenzar a consumir la cola. Aplique las
+// migraciones pendientes aquí también; EF/Npgsql serializa la migración y el Worker
+// no comenzará a procesar trabajos hasta que su propio modelo y la base estén alineados.
+await EnsureDatabaseSchemaAsync(host.Services, builder.Configuration);
 
 await host.RunAsync();
 
-static async Task WaitForDatabaseSchemaAsync(
+static async Task EnsureDatabaseSchemaAsync(
     IServiceProvider services,
     IConfiguration configuration
 )
@@ -69,10 +69,45 @@ static async Task WaitForDatabaseSchemaAsync(
 
             if (await dbContext.Database.CanConnectAsync())
             {
+                await dbContext.Database.MigrateAsync();
+
                 var pending = await dbContext.Database.GetPendingMigrationsAsync();
                 if (!pending.Any())
                 {
-                    return;
+                    // Verify the exact column used by extraction imports. This catches
+                    // schema drift where EF history says a migration ran but the physical
+                    // column is still varchar(2000).
+                    var connection = dbContext.Database.GetDbConnection();
+                    if (connection.State != System.Data.ConnectionState.Open)
+                    {
+                        await connection.OpenAsync();
+                    }
+
+                    await using var command = connection.CreateCommand();
+                    command.CommandText =
+                        """
+                        SELECT data_type, character_maximum_length
+                        FROM information_schema.columns
+                        WHERE table_schema = 'pricing'
+                          AND table_name = 'ImportFclRates'
+                          AND column_name = 'space_comment'
+                        """;
+                    await using var reader = await command.ExecuteReaderAsync();
+                    if (
+                        await reader.ReadAsync()
+                        && string.Equals(
+                            reader.GetString(0),
+                            "text",
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    )
+                    {
+                        return;
+                    }
+
+                    throw new InvalidOperationException(
+                        "La columna pricing.ImportFclRates.space_comment no está en tipo text."
+                    );
                 }
             }
         }
@@ -85,8 +120,8 @@ static async Task WaitForDatabaseSchemaAsync(
     }
 
     throw new InvalidOperationException(
-        "Pricing Worker no pudo iniciar porque la base de datos todavía no está lista. "
-            + "Inicie Dhole.Pricing.Api para aplicar las migraciones y vuelva a intentar.",
+        "Pricing Worker no pudo iniciar porque la base de datos no alcanzó el esquema esperado. "
+            + "Se intentaron aplicar las migraciones automáticamente antes de consumir trabajos.",
         lastError
     );
 }
