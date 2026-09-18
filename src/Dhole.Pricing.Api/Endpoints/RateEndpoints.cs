@@ -4,6 +4,7 @@ using CustomCodeFramework.Core.Pagination;
 using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Features.Rates.ApproveRateMargin;
 using Dhole.Pricing.Application.Features.Rates.CreateRate;
@@ -819,6 +820,7 @@ public static class RateEndpoints
         Guid rateId,
         SetRateStatusRequest request,
         ICommandDispatcher dispatcher,
+        AcceptedRateOpeningsNotificationService openingsNotificationService,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -850,6 +852,9 @@ public static class RateEndpoints
             ),
             cancellationToken
         );
+
+        if (result.IsSuccess && status == RateStatus.AcceptedByClient)
+            await openingsNotificationService.QueueAsync(rateId, cancellationToken);
 
         return EndpointResults.FromResult(result, httpContext);
     }
