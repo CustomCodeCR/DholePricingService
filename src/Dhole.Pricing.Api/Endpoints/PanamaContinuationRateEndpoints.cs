@@ -180,9 +180,14 @@ public static class PanamaContinuationRateEndpoints
             LIMIT 1;
             """;
 
+        var useCfzOrigin = UsesCfzForCostaRicaGam(finalDestination, finalDestinationCode);
+        var resolvedLandOrigin = useCfzOrigin
+            ? "CFZ / Zona Libre Colón, Panamá"
+            : panamaPol.Trim();
+
         Add(command, "equipment_class", ResolveLandEquipmentClass(containerType));
-        Add(command, "origin_name", panamaPol.Trim());
-        Add(command, "origin_code", panamaPolCode?.Trim() ?? string.Empty);
+        Add(command, "origin_name", resolvedLandOrigin);
+        Add(command, "origin_code", useCfzOrigin ? string.Empty : panamaPolCode?.Trim() ?? string.Empty);
         Add(command, "destination_name", finalDestination.Trim());
         Add(command, "destination_code", finalDestinationCode?.Trim() ?? string.Empty);
         Add(command, "quote_date", (quoteDate ?? DateTime.UtcNow).Date);
@@ -194,6 +199,17 @@ public static class PanamaContinuationRateEndpoints
         }
 
         return Results.Ok(ReadFtlTariff(reader));
+    }
+
+    private static bool UsesCfzForCostaRicaGam(string finalDestination, string? finalDestinationCode)
+    {
+        var destination = finalDestination.Trim().ToLowerInvariant();
+        var code = finalDestinationCode?.Trim().ToUpperInvariant() ?? string.Empty;
+
+        return destination.Contains("san jose", StringComparison.Ordinal)
+            || destination.Contains("san josé", StringComparison.Ordinal)
+            || string.Equals(destination, "costa rica", StringComparison.Ordinal)
+            || code.Contains("CRSJO", StringComparison.Ordinal);
     }
 
     private static string ResolveLandEquipmentClass(string? containerType)
