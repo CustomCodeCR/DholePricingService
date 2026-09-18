@@ -456,7 +456,7 @@ public sealed class UpdateRateCommandHandler(
                 command.IdtraNumber,
                 command.QuoNumber,
                 command.Includes,
-                command.SubjectTo,
+                SanitizeSubjectToForExcludedDetails(command.SubjectTo, extraDetails),
                 command.Excludes,
                 transitTime,
                 command.RateType,
@@ -812,6 +812,41 @@ public sealed class UpdateRateCommandHandler(
         if (freight.Any(x => !x.Quantity.HasValue || x.Quantity.Value <= 0)) return false;
 
         return freight.Sum(x => x.Quantity!.Value) == containers.Sum(x => x.Quantity);
+    }
+
+    private static string? SanitizeSubjectToForExcludedDetails(
+        string? subjectTo,
+        IReadOnlyCollection<UpsertRateExtraDetailCommandItem> details
+    )
+    {
+        if (string.IsNullOrWhiteSpace(subjectTo)) return subjectTo;
+        if (details.Any(detail => IsEmptyContainerReturn(detail.Name))) return subjectTo;
+
+        var lines = subjectTo
+            .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Where(line => !IsEmptyContainerReturn(line))
+            .ToArray();
+
+        return lines.Length == 0 ? null : string.Join(Environment.NewLine, lines);
+    }
+
+    private static bool IsEmptyContainerReturn(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        var normalized = value
+            .Trim()
+            .ToLowerInvariant()
+            .Replace("á", "a", StringComparison.Ordinal)
+            .Replace("é", "e", StringComparison.Ordinal)
+            .Replace("í", "i", StringComparison.Ordinal)
+            .Replace("ó", "o", StringComparison.Ordinal)
+            .Replace("ú", "u", StringComparison.Ordinal)
+            .Replace("ü", "u", StringComparison.Ordinal);
+
+        return normalized.Contains("retiro vacio", StringComparison.Ordinal)
+            || normalized.Contains("retiro de vacio", StringComparison.Ordinal);
     }
 
     private static bool IsAutomaticFixed(RateDetail detail)
