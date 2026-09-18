@@ -659,7 +659,10 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext, IConfigu
                 x.CurrencyId,
                 x.TotalSale,
                 x.TransitDays,
-                x.SpaceComment
+                x.SpaceComment,
+                x.PolCode,
+                x.PoeCode,
+                x.PodCode
             ))
             .ToListAsync(cancellationToken);
     }
