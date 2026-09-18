@@ -2,6 +2,7 @@ using System.Data.Common;
 using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.Features.Imports.GetPanamaContinuationRates;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
@@ -66,6 +67,7 @@ public static class PanamaContinuationRateEndpoints
         string? finalDestinationCode,
         DateTime? quoteDate,
         ServiceDbContext db,
+        IServiceProvider services,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
@@ -76,6 +78,10 @@ public static class PanamaContinuationRateEndpoints
                 "El POE de Panamá y el destino final son obligatorios para buscar el tramo marítimo-terrestre.",
                 httpContext);
         }
+
+        // Ensure the master terrestrial matrix exists before resolving the Panama continuation.
+        // The seeder is idempotent and only inserts missing TIGSA/GCF rows, preserving manual edits.
+        await TigsaFtlTariffSeeder.SeedAsync(services, cancellationToken);
 
         await using var connection = db.Database.GetDbConnection();
         if (connection.State != System.Data.ConnectionState.Open)
