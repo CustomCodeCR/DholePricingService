@@ -988,7 +988,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         {
             var cost = detail.CostAmount * detail.Quantity;
             var sale = detail.SaleAmount * detail.Quantity;
-            var code = detail.CurrencyCode.Trim().ToUpperInvariant();
+            var code = ResolveCurrencyIso(detail.CurrencyCode, detail.CurrencyName);
             if (code == "USD")
             {
                 costUsd += cost;
@@ -1004,7 +1004,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             else
             {
                 // Backward compatibility for currencies outside the current USD/CRC conversion scope.
-                if (string.Equals(CurrencyCode, code, StringComparison.OrdinalIgnoreCase))
+                var headerCurrency = ResolveCurrencyIso(CurrencyCode, CurrencyName);
+                if (string.Equals(headerCurrency, code, StringComparison.OrdinalIgnoreCase))
                 {
                     TotalCostAmount += cost;
                     TotalSaleAmount += sale;
@@ -1018,13 +1019,14 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         TotalSaleCrc = decimal.Round(saleCrc, 2, MidpointRounding.AwayFromZero);
         TotalUtilityCrc = TotalSaleCrc - TotalCostCrc;
 
-        if (string.Equals(CurrencyCode, "CRC", StringComparison.OrdinalIgnoreCase))
+        var headerCurrencyCode = ResolveCurrencyIso(CurrencyCode, CurrencyName);
+        if (string.Equals(headerCurrencyCode, "CRC", StringComparison.OrdinalIgnoreCase))
         {
             TotalCostAmount = TotalCostCrc;
             TotalSaleAmount = TotalSaleCrc;
             TotalUtilityAmount = TotalUtilityCrc;
         }
-        else if (string.Equals(CurrencyCode, "USD", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(headerCurrencyCode, "USD", StringComparison.OrdinalIgnoreCase))
         {
             TotalCostAmount = TotalCostUsd;
             TotalSaleAmount = TotalSaleUsd;
@@ -1554,6 +1556,24 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                 $"El ítem '{duplicate}' solo puede pertenecer a una categoría: Incluye, Sujeto a o No incluye."
             );
         }
+    }
+
+    private static string ResolveCurrencyIso(string? code, string? name)
+    {
+        static string NormalizeCurrency(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToUpperInvariant();
+
+        var normalizedCode = NormalizeCurrency(code);
+        var normalizedName = NormalizeCurrency(name);
+
+        if (normalizedCode is "USD" or "CRC") return normalizedCode;
+        if (normalizedName.Contains("USD", StringComparison.Ordinal)) return "USD";
+        if (normalizedName.Contains("CRC", StringComparison.Ordinal)
+            || normalizedName.Contains("COLON", StringComparison.Ordinal)
+            || normalizedName.Contains("COLÓN", StringComparison.Ordinal))
+            return "CRC";
+
+        return normalizedCode;
     }
 
     private static Guid? NormalizeId(Guid? value) =>
