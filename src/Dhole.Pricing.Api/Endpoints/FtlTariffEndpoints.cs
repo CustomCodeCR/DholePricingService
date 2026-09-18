@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Dhole.Pricing.Api.Authorization;
+using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,7 @@ public static class FtlTariffEndpoints
         group.MapGet("/resolve", ResolveAsync).RequireScope(PricingConstants.Scopes.CostSelect);
         group.MapPost("/", CreateAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
         group.MapPost("/import", ImportAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
+        group.MapPost("/seed-defaults", SeedDefaultsAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
         group.MapPut("/batch", UpdateBatchAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
 
         return app;
@@ -182,6 +184,33 @@ public static class FtlTariffEndpoints
         }
 
         return Results.Ok(Read(reader));
+    }
+
+    private static async Task<IResult> SeedDefaultsAsync(
+        IServiceProvider services,
+        ServiceDbContext db,
+        CancellationToken cancellationToken
+    )
+    {
+        await TigsaFtlTariffSeeder.SeedAsync(services, cancellationToken);
+
+        var total = await db.Database
+            .SqlQueryRaw<int>("SELECT COUNT(*)::int AS \\"Value\\" FROM pricing.\\\"FtlTariffs\\\";")
+            .SingleAsync(cancellationToken);
+        var ftl = await db.Database
+            .SqlQueryRaw<int>("SELECT COUNT(*)::int AS \\"Value\\" FROM pricing.\\\"FtlTariffs\\\" WHERE lower(shipment_mode) = 'ftl';")
+            .SingleAsync(cancellationToken);
+        var ltl = await db.Database
+            .SqlQueryRaw<int>("SELECT COUNT(*)::int AS \\"Value\\" FROM pricing.\\\"FtlTariffs\\\" WHERE lower(shipment_mode) = 'ltl';")
+            .SingleAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            total,
+            ftl,
+            ltl,
+            message = "Se verificaron y cargaron las tarifas base terrestres TIGSA/GCF que faltaban sin sobrescribir cambios manuales.",
+        });
     }
 
     private static async Task<IResult> CreateAsync(
