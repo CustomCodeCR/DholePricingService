@@ -128,6 +128,13 @@ public static class FtlTariffEndpoints
                       AND lower(translate(@destination_name, 'áéíóúüñ', 'aeiouun'))
                           LIKE '%' || lower(translate(trim(destination_name), 'áéíóúüñ', 'aeiouun')) || '%'
                   )
+                  OR
+                  (
+                      lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun'))
+                          LIKE '%' || lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun')) || '%'
+                      AND lower(translate(trim(destination_name), 'áéíóúüñ', 'aeiouun'))
+                          LIKE '%' || lower(translate(trim(@destination_name), 'áéíóúüñ', 'aeiouun')) || '%'
+                  )
               )
             ORDER BY
                 CASE
