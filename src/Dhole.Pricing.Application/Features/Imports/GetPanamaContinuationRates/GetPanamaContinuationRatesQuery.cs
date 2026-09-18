@@ -10,7 +10,9 @@ public sealed record GetPanamaContinuationRatesQuery(
     string PanamaPol,
     string FinalDestination,
     string? ContainerType = null,
-    DateTime? QuoteDate = null
+    DateTime? QuoteDate = null,
+    string? PanamaPolCode = null,
+    string? FinalDestinationCode = null
 ) : IQuery<Result<IReadOnlyCollection<ImportRateSelectDto>>>;
 
 public sealed class GetPanamaContinuationRatesQueryHandler(IImportFclRateRepository importRates)
@@ -28,10 +30,11 @@ public sealed class GetPanamaContinuationRatesQueryHandler(IImportFclRateReposit
         var approved = await GetRatesAsync(query, ImportStatus.Approved, cancellationToken);
         var preAuthorized = await GetRatesAsync(query, ImportStatus.PreAuthorized, cancellationToken);
         var destination = CanonicalText(query.FinalDestination);
+        var destinationCode = CanonicalText(query.FinalDestinationCode ?? string.Empty);
 
         var matches = approved
             .Concat(preAuthorized)
-            .Where(rate => DestinationMatches(destination, rate))
+            .Where(rate => DestinationMatches(destination, destinationCode, rate))
             .GroupBy(rate => rate.Id)
             .Select(group => group.First())
             .OrderBy(rate => StatusPriority(rate.Status))
@@ -50,28 +53,48 @@ public sealed class GetPanamaContinuationRatesQueryHandler(IImportFclRateReposit
     {
         return importRates.GetForSelectAsync(
             status: status,
-            pol: query.PanamaPol,
+            pol: CombineFilter(query.PanamaPol, query.PanamaPolCode),
             containerType: query.ContainerType,
             quoteDate: query.QuoteDate,
             cancellationToken: cancellationToken
         );
     }
 
-    private static bool DestinationMatches(string requested, ImportRateSelectDto rate)
+    private static bool DestinationMatches(
+        string requested,
+        string requestedCode,
+        ImportRateSelectDto rate)
     {
-        if (string.IsNullOrWhiteSpace(requested)) return true;
+        if (string.IsNullOrWhiteSpace(requested) && string.IsNullOrWhiteSpace(requestedCode))
+            return true;
 
         return Matches(requested, rate.Poe)
-            || Matches(requested, rate.Pod);
+            || Matches(requested, rate.Pod)
+            || Matches(requestedCode, rate.PoeCode)
+            || Matches(requestedCode, rate.PodCode);
     }
 
     private static bool Matches(string requested, string? imported)
     {
+        if (string.IsNullOrWhiteSpace(requested)) return false;
+
         var candidate = CanonicalText(imported ?? string.Empty);
         if (string.IsNullOrWhiteSpace(candidate)) return false;
 
         return requested.Contains(candidate, StringComparison.Ordinal)
             || candidate.Contains(requested, StringComparison.Ordinal);
+    }
+
+    private static string CombineFilter(string name, string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return name.Trim();
+
+        var normalizedName = name.Trim();
+        var normalizedCode = code.Trim();
+        if (string.Equals(normalizedName, normalizedCode, StringComparison.OrdinalIgnoreCase))
+            return normalizedName;
+
+        return $"{normalizedName}|{normalizedCode}";
     }
 
     private static int StatusPriority(string? status) =>
