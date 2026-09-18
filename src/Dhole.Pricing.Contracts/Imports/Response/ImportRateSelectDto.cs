@@ -26,7 +26,10 @@ public sealed record ImportRateSelectDto(
     Guid? CurrencyId = null,
     decimal? TotalSale = null,
     int? TransitDays = null,
-    [property: System.Text.Json.Serialization.JsonIgnore] string? RawSpaceComment = null
+    [property: System.Text.Json.Serialization.JsonIgnore] string? RawSpaceComment = null,
+    string PolCode = "",
+    string PoeCode = "",
+    string PodCode = ""
 )
 {
     private static readonly HashSet<string> CommentAliases = new(StringComparer.OrdinalIgnoreCase)
