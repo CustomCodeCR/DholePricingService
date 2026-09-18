@@ -226,11 +226,19 @@ public sealed class UpdateRateCommandHandler(
             .Distinct()
             .ToHashSet();
 
-        // Automatic fixed details belong to the rate snapshot. The wizard is allowed to
-        // edit their amounts, but an omitted/re-keyed UI row must never turn into a hard
-        // delete error for the whole LCL rate. Preserve those rows instead.
-        removedIds.RemoveWhere(id =>
-            existingDetails.TryGetValue(id, out var existing) && IsAutomaticFixed(existing));
+        // Pantalla 7 is authoritative for persisted rate details during an edit.
+        // Keep the original fixed-cost snapshot so the synchronizer can distinguish between
+        // details that already belonged to the quote and new catalog costs discovered later.
+        var automaticFixedCostIdsBeforeUpdate = existingDetails.Values
+            .Where(IsAutomaticFixed)
+            .Select(x => x.CostId!.Value)
+            .ToHashSet();
+        var explicitlyRemovedAutomaticFixedCostIds = removedIds
+            .Where(existingDetails.ContainsKey)
+            .Select(id => existingDetails[id])
+            .Where(IsAutomaticFixed)
+            .Select(x => x.CostId!.Value)
+            .ToHashSet();
 
         var updatedIds = extraDetails.Where(x => x.Id.HasValue).Select(x => x.Id!.Value).ToArray();
 
@@ -261,14 +269,9 @@ public sealed class UpdateRateCommandHandler(
 
         foreach (var id in removedIds)
         {
-            if (!existingDetails.TryGetValue(id, out var detail))
+            if (!existingDetails.ContainsKey(id))
             {
                 return Result.Failure(PricingErrors.RateCostDetailNotFound);
-            }
-
-            if (IsAutomaticFixed(detail))
-            {
-                return Result.Failure(PricingErrors.RateCostDetailFixedLocked);
             }
         }
 
@@ -599,6 +602,49 @@ public sealed class UpdateRateCommandHandler(
                     command.UpdatedBy,
                     cancellationToken
                 );
+
+                // During an edit, the persisted detail snapshot is authoritative while the
+                // route/provider selectors remain unchanged. Synchronization may refresh existing
+                // automatic fixed rows, but it must not resurrect a catalog cost that the user
+                // removed from Pantalla 7 (for example "Retiro Vacío (Merchant)").
+                var explicitAutomaticFixedCostIds = resolvedDetails
+                    .Where(x => x.CostId.HasValue && x.CostType == CostType.Fixed)
+                    .Select(x => x.CostId!.Value)
+                    .ToHashSet();
+
+                HashSet<Guid> disallowedAutomaticFixedCostIds;
+                if (selectorsChanged)
+                {
+                    disallowedAutomaticFixedCostIds = explicitlyRemovedAutomaticFixedCostIds;
+                }
+                else
+                {
+                    var allowedAutomaticFixedCostIds = automaticFixedCostIdsBeforeUpdate
+                        .Concat(explicitAutomaticFixedCostIds)
+                        .ToHashSet();
+                    allowedAutomaticFixedCostIds.ExceptWith(explicitlyRemovedAutomaticFixedCostIds);
+
+                    disallowedAutomaticFixedCostIds = rate.RateDetails
+                        .Where(IsAutomaticFixed)
+                        .Select(x => x.CostId!.Value)
+                        .Where(costId => !allowedAutomaticFixedCostIds.Contains(costId))
+                        .ToHashSet();
+                }
+
+                if (disallowedAutomaticFixedCostIds.Count > 0)
+                {
+                    var resurrectedDetailIds = rate.RateDetails
+                        .Where(detail =>
+                            IsAutomaticFixed(detail)
+                            && disallowedAutomaticFixedCostIds.Contains(detail.CostId!.Value))
+                        .Select(detail => detail.Id)
+                        .ToArray();
+
+                    foreach (var detailId in resurrectedDetailIds)
+                    {
+                        rate.RemoveRateDetail(detailId, command.UpdatedBy);
+                    }
+                }
 
                 // La resincronización reemplaza detalles fijos automáticos por nuevas instancias.
                 // No publiquemos auditorías de Added/Updated para IDs que ya no forman parte
