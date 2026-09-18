@@ -794,8 +794,7 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnName("source_url");
 
                     b.Property<string>("SpaceComment")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
+                        .HasColumnType("text")
                         .HasColumnName("space_comment");
 
                     b.Property<string>("Status")
