@@ -168,6 +168,14 @@ public static class TigsaFtlTariffSeeder
                 TransitDaysSmall,
                 cancellationToken
             );
+            created += await SeedPanamaCostaRicaFtlAsync(
+                connection,
+                transaction,
+                origins,
+                destinations,
+                usd,
+                cancellationToken
+            );
             created += await SeedLtlTariffsAsync(
                 connection,
                 transaction,
@@ -306,6 +314,121 @@ public static class TigsaFtlTariffSeeder
         }
 
         return created;
+    }
+
+    private static async Task<int> SeedPanamaCostaRicaFtlAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        IReadOnlyCollection<PricingConfigCatalogItem> origins,
+        IReadOnlyCollection<PricingConfigCatalogItem> destinations,
+        PricingConfigCatalogItem usd,
+        CancellationToken cancellationToken
+    )
+    {
+        const string originName = "CFZ / Zona Libre Colón, Panamá";
+        const string destinationName = "San José, Costa Rica";
+        const decimal priceAmount = 2140m;
+
+        var origin = ResolveFreeformRouteItem(origins, "CFZ Panamá")
+            ?? ResolveFreeformRouteItem(origins, "Zona Libre Colón, Panamá")
+            ?? ResolveFreeformRouteItem(origins, "Panamá");
+        var destination = ResolveFreeformRouteItem(destinations, destinationName)
+            ?? ResolveFreeformRouteItem(destinations, "Costa Rica");
+
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO pricing."FtlTariffs"
+            (
+                id,
+                origin_id,
+                origin_name,
+                origin_code,
+                destination_id,
+                destination_name,
+                destination_code,
+                shipment_mode,
+                equipment_class,
+                equipment_label,
+                currency_id,
+                currency_name,
+                currency_code,
+                price_amount,
+                rate_basis,
+                minimum_amount,
+                transit_days,
+                warehouse_name,
+                source,
+                notes,
+                valid_from,
+                valid_to,
+                is_active,
+                created_at_utc
+            )
+            SELECT
+                @id,
+                @origin_id,
+                @origin_name,
+                @origin_code,
+                @destination_id,
+                @destination_name,
+                @destination_code,
+                'Ftl',
+                @equipment_class,
+                @equipment_label,
+                @currency_id,
+                @currency_name,
+                @currency_code,
+                @price_amount,
+                'PerTruck',
+                NULL,
+                NULL,
+                NULL,
+                'GCF · Multimodal vía Panamá',
+                @notes,
+                NULL,
+                NULL,
+                TRUE,
+                now()
+            WHERE NOT EXISTS
+            (
+                SELECT 1
+                FROM pricing."FtlTariffs" existing
+                WHERE lower(existing.shipment_mode) = 'ftl'
+                  AND upper(existing.equipment_class) = upper(@equipment_class)
+                  AND
+                  (
+                      lower(translate(existing.origin_name, 'áéíóúüñ', 'aeiouun')) LIKE '%cfz%'
+                      OR lower(translate(existing.origin_name, 'áéíóúüñ', 'aeiouun')) LIKE '%zona libre%'
+                  )
+                  AND
+                  (
+                      lower(translate(existing.destination_name, 'áéíóúüñ', 'aeiouun')) LIKE '%san jose%'
+                      OR lower(translate(trim(existing.destination_name), 'áéíóúüñ', 'aeiouun')) = 'costa rica'
+                  )
+            );
+            """;
+
+        Add(command, "id", Guid.NewGuid());
+        Add(command, "origin_id", origin?.Id);
+        Add(command, "origin_name", originName);
+        Add(command, "origin_code", origin?.Code);
+        Add(command, "destination_id", destination?.Id);
+        Add(command, "destination_name", destinationName);
+        Add(command, "destination_code", destination?.Code);
+        Add(command, "equipment_class", LargeEquipmentClass);
+        Add(command, "equipment_label", "FTL · Contenedor marítimo vía Panamá");
+        Add(command, "currency_id", usd.Id);
+        Add(command, "currency_name", SnapshotName(usd));
+        Add(command, "currency_code", usd.Code);
+        Add(command, "price_amount", priceAmount);
+        Add(
+            command,
+            "notes",
+            "Regla GCF multimodal: flete terrestre desde CFZ / Zona Libre Colón, Panamá hacia San José, Costa Rica por USD 2,140 por unidad."
+        );
+
+        return await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static async Task<int> SeedLtlTariffsAsync(
