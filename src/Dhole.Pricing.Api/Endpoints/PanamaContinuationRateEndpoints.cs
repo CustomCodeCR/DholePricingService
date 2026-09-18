@@ -64,6 +64,7 @@ public static class PanamaContinuationRateEndpoints
         string? containerType,
         string? panamaPolCode,
         string? finalDestinationCode,
+        DateTime? quoteDate,
         ServiceDbContext db,
         HttpContext httpContext,
         CancellationToken cancellationToken)
@@ -101,19 +102,37 @@ public static class PanamaContinuationRateEndpoints
                 transit_days,
                 source,
                 notes,
-                is_active
+                is_active,
+                shipment_mode,
+                rate_basis,
+                minimum_amount,
+                warehouse_name,
+                valid_from,
+                valid_to
             FROM pricing."FtlTariffs"
             WHERE is_active = TRUE
+              AND lower(shipment_mode) = 'ftl'
               AND upper(equipment_class) = upper(@equipment_class)
+              AND (valid_from IS NULL OR valid_from <= @quote_date)
+              AND (valid_to IS NULL OR valid_to >= @quote_date)
               AND
               (
                   (
                       @origin_code <> ''
                       AND lower(trim(COALESCE(origin_code, ''))) = lower(trim(@origin_code))
                   )
-                  OR lower(trim(origin_name)) = lower(trim(@origin_name))
-                  OR lower(origin_name) LIKE '%' || lower(trim(split_part(@origin_name, ',', 1))) || '%'
-                  OR lower(@origin_name) LIKE '%' || lower(trim(origin_name)) || '%'
+                  OR
+                  (
+                      @origin_code <> ''
+                      AND length(trim(COALESCE(origin_code, ''))) >= 2
+                      AND left(upper(trim(origin_code)), 2) = left(upper(trim(@origin_code)), 2)
+                  )
+                  OR lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun'))
+                      = lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun'))
+                  OR lower(translate(@origin_name, 'áéíóúüñ', 'aeiouun'))
+                      LIKE '%' || lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun')) || '%'
+                  OR lower(translate(origin_name, 'áéíóúüñ', 'aeiouun'))
+                      LIKE '%' || lower(translate(trim(split_part(@origin_name, ',', 1)), 'áéíóúüñ', 'aeiouun')) || '%'
               )
               AND
               (
@@ -121,20 +140,35 @@ public static class PanamaContinuationRateEndpoints
                       @destination_code <> ''
                       AND lower(trim(COALESCE(destination_code, ''))) = lower(trim(@destination_code))
                   )
-                  OR lower(trim(destination_name)) = lower(trim(@destination_name))
-                  OR lower(destination_name) LIKE '%' || lower(trim(split_part(@destination_name, ',', 1))) || '%'
-                  OR lower(@destination_name) LIKE '%' || lower(trim(destination_name)) || '%'
+                  OR
+                  (
+                      @destination_code <> ''
+                      AND length(trim(COALESCE(destination_code, ''))) >= 2
+                      AND left(upper(trim(destination_code)), 2) = left(upper(trim(@destination_code)), 2)
+                  )
+                  OR lower(translate(trim(destination_name), 'áéíóúüñ', 'aeiouun'))
+                      = lower(translate(trim(@destination_name), 'áéíóúüñ', 'aeiouun'))
+                  OR lower(translate(@destination_name, 'áéíóúüñ', 'aeiouun'))
+                      LIKE '%' || lower(translate(trim(destination_name), 'áéíóúüñ', 'aeiouun')) || '%'
+                  OR lower(translate(destination_name, 'áéíóúüñ', 'aeiouun'))
+                      LIKE '%' || lower(translate(trim(split_part(@destination_name, ',', 1)), 'áéíóúüñ', 'aeiouun')) || '%'
               )
             ORDER BY
                 CASE
                     WHEN @origin_code <> '' AND lower(trim(COALESCE(origin_code, ''))) = lower(trim(@origin_code)) THEN 0
-                    WHEN lower(trim(origin_name)) = lower(trim(@origin_name)) THEN 1
-                    ELSE 2
+                    WHEN @origin_code <> '' AND length(trim(COALESCE(origin_code, ''))) >= 2
+                         AND left(upper(trim(origin_code)), 2) = left(upper(trim(@origin_code)), 2) THEN 1
+                    WHEN lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun'))
+                         = lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun')) THEN 2
+                    ELSE 3
                 END,
                 CASE
                     WHEN @destination_code <> '' AND lower(trim(COALESCE(destination_code, ''))) = lower(trim(@destination_code)) THEN 0
-                    WHEN lower(trim(destination_name)) = lower(trim(@destination_name)) THEN 1
-                    ELSE 2
+                    WHEN @destination_code <> '' AND length(trim(COALESCE(destination_code, ''))) >= 2
+                         AND left(upper(trim(destination_code)), 2) = left(upper(trim(@destination_code)), 2) THEN 1
+                    WHEN lower(translate(trim(destination_name), 'áéíóúüñ', 'aeiouun'))
+                         = lower(translate(trim(@destination_name), 'áéíóúüñ', 'aeiouun')) THEN 2
+                    ELSE 3
                 END,
                 COALESCE(updated_at_utc, created_at_utc) DESC
             LIMIT 1;
@@ -145,6 +179,7 @@ public static class PanamaContinuationRateEndpoints
         Add(command, "origin_code", panamaPolCode?.Trim() ?? string.Empty);
         Add(command, "destination_name", finalDestination.Trim());
         Add(command, "destination_code", finalDestinationCode?.Trim() ?? string.Empty);
+        Add(command, "quote_date", (quoteDate ?? DateTime.UtcNow).Date);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
@@ -189,7 +224,13 @@ public static class PanamaContinuationRateEndpoints
             reader.IsDBNull(13) ? null : reader.GetInt32(13),
             reader.IsDBNull(14) ? null : reader.GetString(14),
             reader.IsDBNull(15) ? null : reader.GetString(15),
-            reader.GetBoolean(16)
+            reader.GetBoolean(16),
+            reader.IsDBNull(17) ? "Ftl" : reader.GetString(17),
+            reader.IsDBNull(18) ? "PerTruck" : reader.GetString(18),
+            reader.IsDBNull(19) ? null : reader.GetDecimal(19),
+            reader.IsDBNull(20) ? null : reader.GetString(20),
+            reader.IsDBNull(21) ? null : reader.GetDateTime(21),
+            reader.IsDBNull(22) ? null : reader.GetDateTime(22)
         );
 
     private static void Add(DbCommand command, string name, object? value)
