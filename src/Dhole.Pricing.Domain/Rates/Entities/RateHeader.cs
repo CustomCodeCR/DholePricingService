@@ -154,6 +154,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     }
 
     public Guid? SourceImportFclRateId { get; private set; }
+    public Guid? SourceTariffRateId { get; private set; }
+    public int? SourceTariffRevisionNumber { get; private set; }
 
     public Guid? AgentId { get; private set; }
     public string? AgentName { get; private set; } = string.Empty;
@@ -543,6 +545,29 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         UseAllInPresentation = useAllInPresentation;
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
+    public void ConfigureTariffSource(Guid sourceTariffRateId, int sourceTariffRevisionNumber)
+    {
+        if (sourceTariffRateId == Guid.Empty || sourceTariffRateId == Id)
+            throw new InvalidOperationException("El tarifario origen no es válido.");
+        if (sourceTariffRevisionNumber <= 0)
+            throw new InvalidOperationException("La revisión del tarifario origen no es válida.");
+
+        SourceTariffRateId = sourceTariffRateId;
+        SourceTariffRevisionNumber = sourceTariffRevisionNumber;
+    }
+
+    public void AcceptTariffApplication(string idtraNumber, Guid? updatedBy)
+    {
+        SetIdtraNumber(idtraNumber, updatedBy);
+        Status = RateStatus.AcceptedByClient;
+        RequiredApproval = false;
+        ClosedReason = null;
+        ClosedAtUtc = null;
+        ClosedBy = null;
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
     }
 
     public void ConfigureExecutive(string? executiveName)
