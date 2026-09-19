@@ -164,6 +164,62 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.ToTable("outbox_messages", "pricing");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Domain.Competitors.Entities.CompetitorTariff", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("Id");
+
+                    b.Property<Guid[]>("CarrierIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("CarrierIds");
+
+                    b.Property<Guid[]>("PodIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("PodIds");
+
+                    b.Property<Guid[]>("PoeIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("PoeIds");
+
+                    b.Property<Guid[]>("PolIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("PolIds");
+
+                    b.Property<string>("ShipmentMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("ShipmentMode");
+
+                    b.Property<Guid>("StorageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("StorageId");
+
+                    b.Property<DateTime>("ValidFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ValidFrom");
+
+                    b.Property<DateTime>("ValidTo")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ValidTo");
+
+                    b.HasKey("Id")
+                        .HasName("PK_CompetitorTariffs");
+
+                    b.HasIndex("ShipmentMode")
+                        .HasDatabaseName("IX_CompetitorTariffs_ShipmentMode");
+
+                    b.HasIndex("ValidTo")
+                        .HasDatabaseName("IX_CompetitorTariffs_ValidTo");
+
+                    b.ToTable("CompetitorTariffs", "pricing");
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Costs.Entities.Cost", b =>
                 {
                     b.Property<Guid>("Id")

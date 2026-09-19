@@ -57,6 +57,7 @@ app.UseMiddleware<RateEditCreateParityMiddleware>();
 app.UseMiddleware<AuditEndpointMiddleware>();
 
 app.MapCostEndpoints();
+app.MapCompetitorTariffEndpoints();
 app.MapFtlTariffEndpoints();
 app.MapCostRoutePortEndpoints();
 app.MapImportRateEndpoints();
