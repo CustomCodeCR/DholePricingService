@@ -43,7 +43,13 @@ public sealed class DuplicateRateCommandHandler(
             if (
                 source.RateType != RateType.Tariff
                 || source.SourceTariffRateId.HasValue
-                || source.Status is not (RateStatus.Sent or RateStatus.RequestedByClient)
+                || source.Status is not (
+                    RateStatus.ApprovedByManagement
+                    or RateStatus.Open
+                    or RateStatus.Sent
+                    or RateStatus.RequestedByClient
+                    or RateStatus.AcceptedByClient
+                )
                 || source.ValidFrom.Date > tariffApplicationDate
                 || source.ValidTo.Date < tariffApplicationDate
             )
@@ -55,7 +61,7 @@ public sealed class DuplicateRateCommandHandler(
                 ? source.ClientName
                 : command.ClientName.Trim();
 
-            if (string.IsNullOrWhiteSpace(appliedClientName) || string.IsNullOrWhiteSpace(command.IdtraNumber))
+            if (string.IsNullOrWhiteSpace(appliedClientName))
             {
                 return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);
             }
@@ -207,10 +213,11 @@ public sealed class DuplicateRateCommandHandler(
                 }
 
                 // Un tarifario aplicado es un snapshot: no consulta fletes, Costs,
-                // Config ni tipo de cambio nuevos. Debe conservar exactamente la
-                // revisión que el cliente aprobó.
+                // Config ni tipo de cambio nuevos. Conserva exactamente esta revisión,
+                // pero nace como una QUO abierta para el cliente. La aceptación ocurre
+                // después sobre la QUO hija y nunca sobre el tarifario maestro.
                 appliedRate.SetAmounts(command.CreatedBy);
-                appliedRate.AcceptTariffApplication(command.IdtraNumber.Trim(), command.CreatedBy);
+                appliedRate.PrepareTariffApplication(command.CreatedBy);
             }
             catch (InvalidOperationException)
             {
@@ -236,7 +243,6 @@ public sealed class DuplicateRateCommandHandler(
                         NewQuoNumber = appliedRate.QuoNumber ?? appliedRate.RateCode,
                         SnapshotCopiedExactly = true,
                         appliedRate.ClientName,
-                        appliedRate.IdtraNumber,
                         Status = appliedRate.Status.ToString(),
                     }
                 ),
