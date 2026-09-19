@@ -1915,6 +1915,14 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("source_import_fcl_rate_id");
 
+                    b.Property<Guid?>("SourceTariffRateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_tariff_rate_id");
+
+                    b.Property<int?>("SourceTariffRevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("source_tariff_revision_number");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -2054,6 +2062,9 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasIndex("SourceImportFclRateId")
                         .HasDatabaseName("ix_rate_headers_source_import_fcl_rate_id");
+
+                    b.HasIndex("SourceTariffRateId")
+                        .HasDatabaseName("ix_rate_headers_source_tariff_rate_id");
 
                     b.HasIndex("Status");
 
