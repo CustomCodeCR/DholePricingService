@@ -49,6 +49,10 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             idtraNumber: null,
             quoNumber: null,
             sourceImportFclRateId: null,
+            sourceTariffRateId: null,
+            rateType: null,
+            tariffMasterOnly: null,
+            excludeTariffMasters: null,
             agentId,
             carrierId,
             polId,
@@ -101,6 +105,10 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             idtraNumber: null,
             quoNumber: null,
             sourceImportFclRateId: null,
+            sourceTariffRateId: null,
+            rateType: null,
+            tariffMasterOnly: null,
+            excludeTariffMasters: null,
             agentId,
             carrierId,
             polId,
@@ -131,6 +139,10 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         string? idtraNumber = null,
         string? quoNumber = null,
         Guid? sourceImportFclRateId = null,
+        Guid? sourceTariffRateId = null,
+        RateType? rateType = null,
+        bool? tariffMasterOnly = null,
+        bool? excludeTariffMasters = null,
         Guid? agentId = null,
         Guid? carrierId = null,
         Guid? polId = null,
@@ -152,6 +164,10 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             idtraNumber,
             quoNumber,
             sourceImportFclRateId,
+            sourceTariffRateId,
+            rateType,
+            tariffMasterOnly,
+            excludeTariffMasters,
             agentId,
             carrierId,
             polId,
@@ -330,6 +346,10 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             idtraNumber: null,
             quoNumber: null,
             sourceImportFclRateId: null,
+            sourceTariffRateId: null,
+            rateType: null,
+            tariffMasterOnly: null,
+            excludeTariffMasters: null,
             agentId,
             carrierId,
             polId,
@@ -587,6 +607,10 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         string? idtraNumber,
         string? quoNumber,
         Guid? sourceImportFclRateId,
+        Guid? sourceTariffRateId,
+        RateType? rateType,
+        bool? tariffMasterOnly,
+        bool? excludeTariffMasters,
         Guid? agentId,
         Guid? carrierId,
         Guid? polId,
@@ -648,6 +672,26 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         if (sourceImportFclRateId.HasValue)
         {
             query = query.Where(x => x.SourceImportFclRateId == sourceImportFclRateId.Value);
+        }
+
+        if (sourceTariffRateId.HasValue)
+        {
+            query = query.Where(x => x.SourceTariffRateId == sourceTariffRateId.Value);
+        }
+
+        if (rateType.HasValue)
+        {
+            query = query.Where(x => x.RateType == rateType.Value);
+        }
+
+        if (tariffMasterOnly == true)
+        {
+            query = query.Where(x => x.RateType == RateType.Tariff && !x.SourceTariffRateId.HasValue);
+        }
+
+        if (excludeTariffMasters == true)
+        {
+            query = query.Where(x => !(x.RateType == RateType.Tariff && !x.SourceTariffRateId.HasValue));
         }
 
         if (agentId.HasValue)
