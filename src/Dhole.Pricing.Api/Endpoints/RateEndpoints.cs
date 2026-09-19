@@ -768,7 +768,6 @@ public static class RateEndpoints
         Guid rateId,
         DuplicateRateRequest request,
         ICommandDispatcher dispatcher,
-        AcceptedRateOpeningsNotificationService openingsNotificationService,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -786,9 +785,6 @@ public static class RateEndpoints
             ),
             cancellationToken
         );
-
-        if (result.IsSuccess && request.ApplyTariff)
-            await openingsNotificationService.QueueAsync(result.Value, cancellationToken);
 
         return EndpointResults.FromResult(result, httpContext);
     }
