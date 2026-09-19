@@ -384,7 +384,12 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         CancellationToken cancellationToken = default
     )
     {
-        var query = dbContext.RateHeaders.AsNoTracking().Where(x => !x.IsDeleted);
+        var query = dbContext.RateHeaders
+            .AsNoTracking()
+            .Where(x =>
+                !x.IsDeleted
+                && !(x.RateType == RateType.Tariff && !x.SourceTariffRateId.HasValue)
+            );
 
         if (createdFrom.HasValue)
         {
