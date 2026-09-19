@@ -29,6 +29,15 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateHeaderNotFound);
         }
 
+        if (
+            rate.RateType == RateType.Tariff
+            && !rate.SourceTariffRateId.HasValue
+            && command.Status is RateStatus.AcceptedByClient or RateStatus.RejectedByClient
+        )
+        {
+            return Result.Failure(PricingErrors.RateInvalidStatus);
+        }
+
         var advancesQuotation = command.Status is
             RateStatus.Open or
             RateStatus.Sent or
