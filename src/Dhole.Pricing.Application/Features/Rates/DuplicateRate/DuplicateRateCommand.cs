@@ -7,5 +7,9 @@ public sealed record DuplicateRateCommand(
     Guid Id,
     DateTime? ValidFrom,
     DateTime? ValidTo,
-    Guid? CreatedBy
+    Guid? CreatedBy,
+    bool ApplyTariff = false,
+    string? ClientName = null,
+    string? ExecutiveName = null,
+    string? IdtraNumber = null
 ) : ICommand<Result<Guid>>;
