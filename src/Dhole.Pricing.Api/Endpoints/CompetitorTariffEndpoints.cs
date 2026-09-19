@@ -130,6 +130,11 @@ public static class CompetitorTariffEndpoints
 
         var moment = NormalizeUtc(validOn ?? DateTime.UtcNow);
 
+        // La comparación de competencia debe responder por contexto comercial de la
+        // tarifa (ruta + naviera + modalidad). La vigencia no debe ocultar un
+        // tarifario histórico o futuro: se usa únicamente para priorizar primero
+        // los documentos vigentes en la fecha consultada, conservando el resto para
+        // análisis y referencia comercial.
         var entities = await dbContext
             .CompetitorTariffs
             .AsNoTracking()
@@ -138,15 +143,18 @@ public static class CompetitorTariffEndpoints
                 x.PoeIds.Contains(poeId) &&
                 x.PodIds.Contains(podId) &&
                 x.CarrierIds.Contains(carrierId) &&
-                x.ShipmentMode == mode &&
-                x.ValidFrom <= moment &&
-                x.ValidTo >= moment
+                x.ShipmentMode == mode
             )
-            .OrderByDescending(x => x.ValidTo)
-            .ThenByDescending(x => x.ValidFrom)
             .ToListAsync(cancellationToken);
 
-        return EndpointResults.Ok(entities.Select(Map).ToArray());
+        var ordered = entities
+            .OrderByDescending(x => x.ValidFrom <= moment && x.ValidTo >= moment)
+            .ThenByDescending(x => x.ValidTo)
+            .ThenByDescending(x => x.ValidFrom)
+            .Select(Map)
+            .ToArray();
+
+        return EndpointResults.Ok(ordered);
     }
 
     private static async Task<IResult> GetByIdAsync(
