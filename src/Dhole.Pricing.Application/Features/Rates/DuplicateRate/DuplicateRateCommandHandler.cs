@@ -39,10 +39,13 @@ public sealed class DuplicateRateCommandHandler(
 
         if (command.ApplyTariff)
         {
+            var today = DateTime.UtcNow.Date;
             if (
                 source.RateType != RateType.Tariff
                 || source.SourceTariffRateId.HasValue
-                || source.Status is not (RateStatus.Sent or RateStatus.RequestedByClient or RateStatus.Expired)
+                || source.Status is not (RateStatus.Sent or RateStatus.RequestedByClient)
+                || source.ValidFrom.Date > today
+                || source.ValidTo.Date < today
             )
             {
                 return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);
