@@ -184,6 +184,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.RateName,
                 x.RevisionNumber,
                 x.SourceImportFclRateId,
+                x.SourceTariffRateId,
+                x.SourceTariffRevisionNumber,
                 x.AgentId,
                 x.AgentName,
                 x.AgentCode,
