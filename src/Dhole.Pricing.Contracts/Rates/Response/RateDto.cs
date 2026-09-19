@@ -6,6 +6,8 @@ public sealed record RateDto(
     string RateName,
     int RevisionNumber,
     Guid? SourceImportFclRateId,
+    Guid? SourceTariffRateId,
+    int? SourceTariffRevisionNumber,
     Guid? AgentId,
     string? AgentName,
     string? AgentCode,
