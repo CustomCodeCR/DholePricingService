@@ -37,6 +37,218 @@ public sealed class DuplicateRateCommandHandler(
             return Result.Failure<Guid>(PricingErrors.RateHeaderNotFound);
         }
 
+        if (command.ApplyTariff)
+        {
+            var today = DateTime.UtcNow.Date;
+            if (
+                source.RateType != RateType.Tariff
+                || source.SourceTariffRateId.HasValue
+                || source.Status is not (RateStatus.Sent or RateStatus.RequestedByClient)
+                || source.ValidFrom.Date > today
+                || source.ValidTo.Date < today
+            )
+            {
+                return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);
+            }
+
+            var appliedClientName = string.IsNullOrWhiteSpace(command.ClientName)
+                ? source.ClientName
+                : command.ClientName.Trim();
+
+            if (string.IsNullOrWhiteSpace(appliedClientName) || string.IsNullOrWhiteSpace(command.IdtraNumber))
+            {
+                return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);
+            }
+
+            var appliedRateCode = await rateCodeGenerator.GenerateAsync(cancellationToken);
+            RateHeader appliedRate;
+
+            try
+            {
+                appliedRate = RateHeader.Create(
+                    appliedRateCode,
+                    source.SourceImportFclRateId,
+                    source.AgentId,
+                    source.AgentName,
+                    source.AgentCode,
+                    source.CarrierId,
+                    source.CarrierName,
+                    source.CarrierCode,
+                    source.PolId,
+                    source.PolName,
+                    source.PolCode,
+                    source.PoeId,
+                    source.PoeName,
+                    source.PoeCode,
+                    source.PodId,
+                    source.PodName,
+                    source.PodCode,
+                    source.ContainerTypeId,
+                    source.ContainerTypeName,
+                    source.ContainerTypeCode,
+                    source.IncotermId,
+                    source.IncotermName,
+                    source.IncotermCode,
+                    source.CurrencyId,
+                    source.CurrencyName,
+                    source.CurrencyCode,
+                    source.FreeDays,
+                    source.ValidFrom,
+                    source.ValidTo,
+                    source.ContainerQuantity > 0 ? source.ContainerQuantity : 1,
+                    appliedClientName,
+                    null,
+                    appliedRateCode,
+                    source.Includes,
+                    source.SubjectTo,
+                    source.Excludes,
+                    source.TransitTime,
+                    RateType.Tariff,
+                    command.CreatedBy
+                );
+
+                appliedRate.ConfigureTariffSource(source.Id, source.RevisionNumber);
+                appliedRate.ConfigureExecutive(
+                    string.IsNullOrWhiteSpace(command.ExecutiveName)
+                        ? source.ExecutiveName
+                        : command.ExecutiveName.Trim()
+                );
+                appliedRate.ConfigurePickupLocation(
+                    source.WarehouseId,
+                    source.PickupAddress,
+                    source.PickupLatitude,
+                    source.PickupLongitude
+                );
+
+                var sourceAppliedExchangeRate = source.ExchangeRateApplied ?? source.ExchangeRateSale;
+                if (sourceAppliedExchangeRate is > 0m)
+                {
+                    appliedRate.ConfigureExchangeRateSnapshot(
+                        source.ExchangeRatePurchase,
+                        source.ExchangeRateSale,
+                        sourceAppliedExchangeRate.Value,
+                        source.ExchangeRateDate,
+                        source.ExchangeRateCapturedAtUtc ?? DateTime.UtcNow,
+                        source.ExchangeRateSource ?? "Tarifario origen",
+                        source.ExchangeRateManualOverride,
+                        command.CreatedBy
+                    );
+                }
+
+                var sourceContainers = source.RateContainers.Count > 0
+                    ? source.RateContainers
+                        .Select(x => new RateContainerAllocationSpec(
+                            x.ContainerTypeId,
+                            x.ContainerTypeName,
+                            x.ContainerTypeCode,
+                            x.Quantity
+                        ))
+                        .ToArray()
+                    : new[]
+                    {
+                        new RateContainerAllocationSpec(
+                            source.ContainerTypeId,
+                            source.ContainerTypeName,
+                            source.ContainerTypeCode,
+                            source.ContainerQuantity > 0 ? source.ContainerQuantity : 1
+                        )
+                    };
+
+                appliedRate.ReplaceContainerAllocations(sourceContainers, command.CreatedBy);
+                appliedRate.ConfigureShipment(
+                    source.ShipmentMode,
+                    source.TotalPackages,
+                    source.TotalPallets,
+                    source.TotalWeightKg,
+                    source.TotalVolumeCbm,
+                    source.KgPerCbm,
+                    source.CargoLinesJson,
+                    command.CreatedBy
+                );
+                appliedRate.SetOperationType(source.OperationType, command.CreatedBy);
+                appliedRate.ConfigureServices(
+                    source.RateServices
+                        .Select(x => new RateServiceSelection(
+                            x.ServiceId,
+                            x.ServiceName,
+                            x.ServiceCode
+                        ))
+                        .ToArray(),
+                    command.CreatedBy
+                );
+                appliedRate.ConfigureCommercialPresentation(
+                    source.UseAllInPresentation,
+                    command.CreatedBy
+                );
+
+                foreach (var detail in source.RateDetails)
+                {
+                    var copiedDetail = appliedRate.AddRateDetail(
+                        appliedRate.Id,
+                        detail.CostId,
+                        detail.Name,
+                        detail.CostDetailType,
+                        detail.CostType,
+                        detail.ChargeBasis,
+                        detail.CurrencyId,
+                        detail.CurrencyName,
+                        detail.CurrencyCode,
+                        detail.CostAmount,
+                        detail.SaleAmount,
+                        detail.Notes,
+                        detail.Quantity > 0m ? detail.Quantity : 1m,
+                        command.CreatedBy
+                    );
+                    copiedDetail.ConfigureDestinationTax(
+                        detail.ApplyDestinationTax,
+                        detail.DestinationTaxRate
+                    );
+                    copiedDetail.ConfigureBillToClient(detail.BillToClient);
+                }
+
+                // Un tarifario aplicado es un snapshot: no consulta fletes, Costs,
+                // Config ni tipo de cambio nuevos. Debe conservar exactamente la
+                // revisión que el cliente aprobó.
+                appliedRate.SetAmounts(command.CreatedBy);
+                appliedRate.AcceptTariffApplication(command.IdtraNumber.Trim(), command.CreatedBy);
+            }
+            catch (InvalidOperationException)
+            {
+                return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);
+            }
+
+            await rateHeaders.AddAsync(appliedRate, cancellationToken);
+
+            await audit.PublishAsync(
+                new PricingAuditEvent(
+                    EventType: PricingAuditEventTypes.RateHeaderCreated,
+                    Action: PricingAuditActions.Created,
+                    EntityType: PricingAuditEntityTypes.RateHeader,
+                    EntityId: appliedRate.Id,
+                    ActorUserId: command.CreatedBy,
+                    After: PricingAuditSnapshots.From(appliedRate),
+                    Payload: new
+                    {
+                        AppliedFromTariffRateHeaderId = source.Id,
+                        SourceTariffRevisionNumber = source.RevisionNumber,
+                        NewRateHeaderId = appliedRate.Id,
+                        SourceQuoNumber = source.QuoNumber ?? source.RateCode,
+                        NewQuoNumber = appliedRate.QuoNumber ?? appliedRate.RateCode,
+                        SnapshotCopiedExactly = true,
+                        appliedRate.ClientName,
+                        appliedRate.IdtraNumber,
+                        Status = appliedRate.Status.ToString(),
+                    }
+                ),
+                cancellationToken
+            );
+
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+            await cache.RemoveRateHeaderCacheAsync(appliedRate.Id, cancellationToken);
+
+            return Result.Success(appliedRate.Id);
+        }
+
         PricingConfigCatalogItem? agent;
         PricingConfigCatalogItem? carrier;
         PricingConfigCatalogItem? pol;
