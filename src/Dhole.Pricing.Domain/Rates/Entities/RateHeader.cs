@@ -558,11 +558,11 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         SourceTariffRevisionNumber = sourceTariffRevisionNumber;
     }
 
-    public void AcceptTariffApplication(string idtraNumber, Guid? updatedBy)
+    public void PrepareTariffApplication(Guid? updatedBy)
     {
-        SetIdtraNumber(idtraNumber, updatedBy);
-        Status = RateStatus.AcceptedByClient;
+        Status = RateStatus.Open;
         RequiredApproval = false;
+        IdtraNumber = null;
         ClosedReason = null;
         ClosedAtUtc = null;
         ClosedBy = null;
