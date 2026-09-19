@@ -4,6 +4,7 @@ using CustomCodeFramework.Messaging.Inbox;
 using CustomCodeFramework.Messaging.Outbox;
 using CustomCodeFramework.Postgres.EntityFramework.Configurations;
 using CustomCodeFramework.Postgres.EntityFramework.DbContexts;
+using Dhole.Pricing.Domain.Competitors.Entities;
 using Dhole.Pricing.Domain.Costs.Entities;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Rates.Entities;
@@ -17,6 +18,8 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
     : AppDbContextBase(options)
 {
     private const string SourceService = "DholePricingService";
+
+    public DbSet<CompetitorTariff> CompetitorTariffs => Set<CompetitorTariff>();
 
     public DbSet<Cost> Costs => Set<Cost>();
     public DbSet<CostIncoterm> CostIncoterms => Set<CostIncoterm>();
