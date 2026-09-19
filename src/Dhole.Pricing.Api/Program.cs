@@ -117,6 +117,7 @@ app.UseMiddleware<AuditEndpointMiddleware>();
 //app.MapGrpcService<ConfigCatalogGrpcService>();
 
 app.MapCostEndpoints();
+app.MapCompetitorTariffEndpoints();
 app.MapFtlTariffEndpoints();
 app.MapCostRoutePortEndpoints();
 app.MapImportRateEndpoints();
