@@ -42,8 +42,7 @@ public sealed class DuplicateRateCommandHandler(
             var tariffApplicationDate = DateTime.UtcNow.Date;
             if (
                 source.RateType != RateType.Tariff
-                || source.SourceTariffRateId.HasValue
-                || !string.IsNullOrWhiteSpace(source.ClientName)
+                || source.ClientName?.Contains("TARIFARIO", StringComparison.OrdinalIgnoreCase) != true
                 || source.Status is not (
                     RateStatus.ApprovedByManagement
                     or RateStatus.Open
