@@ -19,6 +19,7 @@ using Dhole.Pricing.Application.Features.Rates.RejectRateMargin;
 using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
 using Dhole.Pricing.Application.Features.Rates.UpdateRate;
 using Dhole.Pricing.Contracts.Rates.Request;
+using Dhole.Pricing.Contracts.Rates.Response;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -232,6 +233,7 @@ public static class RateEndpoints
         DateTime? validityFrom,
         DateTime? validityTo,
         IQueryDispatcher dispatcher,
+        RateCreatorIdentityService creatorIdentityService,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -275,7 +277,15 @@ public static class RateEndpoints
             cancellationToken
         );
 
-        return EndpointResults.FromResult(result, httpContext);
+        if (result.IsFailure)
+            return EndpointResults.FromResult(result, httpContext);
+
+        var dashboard = await creatorIdentityService.EnrichAsync(
+            result.Value,
+            cancellationToken
+        );
+
+        return EndpointResults.Ok(dashboard);
     }
 
     private static async Task<IResult> GetRatesAsync(
@@ -302,6 +312,7 @@ public static class RateEndpoints
         DateTime? validFrom,
         DateTime? validTo,
         IQueryDispatcher dispatcher,
+        RateCreatorIdentityService creatorIdentityService,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -333,12 +344,27 @@ public static class RateEndpoints
             cancellationToken
         );
 
-        return EndpointResults.FromPaged(result, httpContext);
+        if (result.IsFailure)
+            return EndpointResults.FromPaged(result, httpContext);
+
+        var items = await creatorIdentityService.EnrichAsync(
+            result.Value.Items,
+            cancellationToken
+        );
+        var page = PagedResult<RateDto>.Create(
+            items,
+            result.Value.PageNumber,
+            result.Value.PageSize,
+            result.Value.TotalCount
+        );
+
+        return EndpointResults.FromPaged(page);
     }
 
     private static async Task<IResult> GetRateByIdAsync(
         Guid rateId,
         IQueryDispatcher dispatcher,
+        RateCreatorIdentityService creatorIdentityService,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -348,7 +374,15 @@ public static class RateEndpoints
             cancellationToken
         );
 
-        return EndpointResults.FromResult(result, httpContext);
+        if (result.IsFailure)
+            return EndpointResults.FromResult(result, httpContext);
+
+        var items = await creatorIdentityService.EnrichAsync(
+            [result.Value],
+            cancellationToken
+        );
+
+        return EndpointResults.Ok(items[0]);
     }
 
     private static async Task<IResult> GetRateRevisionsAsync(
