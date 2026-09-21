@@ -87,12 +87,20 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
             user,
             PricingConstants.Scopes.RateRequestCreate
         );
-        var hasRateUpdate = visibilityService.HasScope(
-            user,
-            PricingConstants.Scopes.RateUpdate
-        );
 
-        return sellerRole || (hasRequestCreate && !hasRateUpdate);
+        var hasPricingOperatorAccess =
+            visibilityService.HasScope(user, PricingConstants.Scopes.RateCreate)
+            || visibilityService.HasScope(user, PricingConstants.Scopes.RateUpdate)
+            || visibilityService.HasScope(user, PricingConstants.Scopes.RateDelete)
+            || visibilityService.HasScope(user, PricingConstants.Scopes.RateApproveLowMargin)
+            || visibilityService.HasScope(user, PricingConstants.Scopes.RateApproveFreight)
+            || visibilityService.HasScope(user, PricingConstants.Scopes.ImportFclRateReview)
+            || visibilityService.HasScope(user, PricingConstants.Scopes.ImportFclRateApprove)
+            || visibilityService.HasScope(user, PricingConstants.Scopes.ImportFclRateReject)
+            || visibilityService.HasScope(user, PricingConstants.Scopes.ImportFclRateCreateAsRate);
+
+        var sellerCapability = sellerRole || hasRequestCreate;
+        return sellerCapability && !hasPricingOperatorAccess;
     }
 
     private static IEnumerable<string> Split(string value)
