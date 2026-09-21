@@ -315,7 +315,10 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                     .OrderBy(s => s.ServiceName)
                     .Select(s => new RateServiceDto(s.ServiceId, s.ServiceName, s.ServiceCode))
                     .ToList()
-            ))
+            )
+            {
+                CreatedByUserId = x.CreatedBy,
+            })
             .ToListAsync(cancellationToken);
 
         // RateDetails are the source of truth. Recalculate the read snapshot so historical
@@ -543,6 +546,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.UpdatedAtUtc,
                 x.ValidFrom,
                 x.ValidTo,
+                x.CreatedBy,
             })
             .ToListAsync(cancellationToken);
 
@@ -565,7 +569,10 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.UpdatedAtUtc,
                 x.ValidFrom,
                 x.ValidTo
-            ))
+            )
+            {
+                CreatedByUserId = x.CreatedBy,
+            })
             .ToList();
 
         var lastCreatedAtUtc = await query
