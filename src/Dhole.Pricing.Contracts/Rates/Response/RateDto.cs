@@ -86,6 +86,10 @@ public sealed record RateDto(
     IReadOnlyCollection<RateServiceDto> Services
 )
 {
+    public string? CreatedByUserId { get; init; }
+    public string? CreatedByUserName { get; init; }
+    public string? CreatedByDisplayName { get; init; }
+
     public int? TransitDays
     {
         get
