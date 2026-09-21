@@ -1,6 +1,7 @@
 using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.Features.Rates.GetRateById;
 using Dhole.Pricing.Contracts.Rates.Response;
 using Dhole.Pricing.Domain.Shared;
@@ -24,6 +25,7 @@ public static class SellerRateEndpoints
     private static async Task<IResult> GetMineAsync(
         ServiceDbContext db,
         IQueryDispatcher dispatcher,
+        RateCreatorIdentityService creatorIdentityService,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -55,6 +57,11 @@ public static class SellerRateEndpoints
                 items.Add(result.Value);
         }
 
-        return Results.Ok(items);
+        var enrichedItems = await creatorIdentityService.EnrichAsync(
+            items,
+            cancellationToken
+        );
+
+        return Results.Ok(enrichedItems);
     }
 }
