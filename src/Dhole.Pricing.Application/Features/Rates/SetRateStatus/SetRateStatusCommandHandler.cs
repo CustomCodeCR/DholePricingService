@@ -32,6 +32,7 @@ public sealed class SetRateStatusCommandHandler(
         if (
             rate.RateType == RateType.Tariff
             && !rate.SourceTariffRateId.HasValue
+            && string.IsNullOrWhiteSpace(rate.ClientName)
             && command.Status is RateStatus.AcceptedByClient or RateStatus.RejectedByClient
         )
         {
