@@ -25,6 +25,12 @@ public sealed class AuthSellerDirectoryService(
         return GetUsersAsync("/api/internal/auth/pricing-sales-executives", cancellationToken);
     }
 
+    public Task<IReadOnlyList<SellerDirectoryUser>> GetPricingUsersAsync(
+        CancellationToken cancellationToken)
+    {
+        return GetUsersAsync("/api/internal/auth/pricing-users", cancellationToken);
+    }
+
     public async Task<SellerDirectoryUser?> GetSellerAsync(
         Guid sellerUserId,
         CancellationToken cancellationToken)
