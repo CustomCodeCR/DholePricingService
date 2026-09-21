@@ -82,8 +82,7 @@ public static class RateEndpoints
             .RequireScope(PricingConstants.Scopes.RateApproveLowMargin);
 
         group
-            .MapPatch("/{rateId:guid}/status", SetRateStatusAsync)
-            .RequireScope(PricingConstants.Scopes.RateUpdate);
+            .MapPatch("/{rateId:guid}/status", SetRateStatusAsync);
 
         group.MapDelete("/", DeleteRatesAsync).RequireScope(PricingConstants.Scopes.RateDelete);
 
@@ -888,13 +887,33 @@ public static class RateEndpoints
             );
         }
 
+        var canUpdateRateStatus = HasScope(
+            httpContext.User,
+            PricingConstants.Scopes.RateUpdate
+        );
+        var canApproveLowMargin = HasScope(
+            httpContext.User,
+            PricingConstants.Scopes.RateApproveLowMargin
+        );
+        var isClientDecision = status is
+            RateStatus.AcceptedByClient or RateStatus.RejectedByClient;
+
+        // El permiso de aprobación de margen bajo también habilita registrar la
+        // decisión del cliente directamente desde una tarifa Abierta. El resto
+        // de transiciones comerciales sigue requiriendo pricing.rate.update.
+        if (!canUpdateRateStatus && !(isClientDecision && canApproveLowMargin))
+        {
+            return Results.Forbid();
+        }
+
         var result = await dispatcher.DispatchAsync(
             new SetRateStatusCommand(
                 rateId,
                 status,
                 request.Reason,
                 request.IdtraNumber,
-                httpContext.GetCurrentUserId()
+                httpContext.GetCurrentUserId(),
+                canApproveLowMargin
             ),
             cancellationToken
         );
