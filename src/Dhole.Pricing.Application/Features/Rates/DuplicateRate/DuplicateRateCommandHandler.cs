@@ -43,6 +43,7 @@ public sealed class DuplicateRateCommandHandler(
             if (
                 source.RateType != RateType.Tariff
                 || source.SourceTariffRateId.HasValue
+                || !string.IsNullOrWhiteSpace(source.ClientName)
                 || source.Status is not (
                     RateStatus.ApprovedByManagement
                     or RateStatus.Open
