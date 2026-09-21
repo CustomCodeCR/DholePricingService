@@ -1132,7 +1132,12 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
     }
 
-    public void SetCommercialStatus(RateStatus status, string? reason, Guid? updatedBy)
+    public void SetCommercialStatus(
+        RateStatus status,
+        string? reason,
+        Guid? updatedBy,
+        bool allowDirectClientDecision = false
+    )
     {
         // Los comandos HTTP pueden reintentarse y el frontend puede refrescar el estado
         // antes de confirmar la transición. Repetir el mismo estado debe ser idempotente,
@@ -1149,6 +1154,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             (RateStatus.PendingApproval, RateStatus.RequestedByClient) => true,
             (RateStatus.PendingApproval, RateStatus.Open) => true,
             (RateStatus.Open, RateStatus.Sent) => true,
+            (RateStatus.Open, RateStatus.AcceptedByClient) when allowDirectClientDecision => true,
+            (RateStatus.Open, RateStatus.RejectedByClient) when allowDirectClientDecision => true,
             (RateStatus.Sent, RateStatus.RequestedByClient) => true,
             (RateStatus.Sent, RateStatus.AcceptedByClient) => true,
             (RateStatus.Sent, RateStatus.RejectedByClient) => true,

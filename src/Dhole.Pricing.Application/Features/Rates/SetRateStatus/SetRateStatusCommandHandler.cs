@@ -69,7 +69,12 @@ public sealed class SetRateStatusCommandHandler(
                 rate.SetIdtraNumber(command.IdtraNumber, command.UpdatedBy);
             }
 
-            rate.SetCommercialStatus(command.Status, command.Reason, command.UpdatedBy);
+            rate.SetCommercialStatus(
+                command.Status,
+                command.Reason,
+                command.UpdatedBy,
+                command.AllowDirectClientDecision
+            );
         }
         catch (InvalidOperationException)
         {
