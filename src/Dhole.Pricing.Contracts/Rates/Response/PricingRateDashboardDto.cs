@@ -53,4 +53,9 @@ public sealed record PricingRateDashboardItemDto(
     DateTime? UpdatedAtUtc,
     DateTime ValidFrom,
     DateTime ValidTo
-);
+)
+{
+    public string? CreatedByUserId { get; init; }
+    public string? CreatedByUserName { get; init; }
+    public string? CreatedByDisplayName { get; init; }
+}
