@@ -89,9 +89,19 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var hasRequestCreate = HasScope(scopes, PricingConstants.Scopes.RateRequestCreate);
-        var hasRateUpdate = HasScope(scopes, PricingConstants.Scopes.RateUpdate);
+        var hasPricingOperatorAccess =
+            HasScope(scopes, PricingConstants.Scopes.RateCreate)
+            || HasScope(scopes, PricingConstants.Scopes.RateUpdate)
+            || HasScope(scopes, PricingConstants.Scopes.RateDelete)
+            || HasScope(scopes, PricingConstants.Scopes.RateApproveLowMargin)
+            || HasScope(scopes, PricingConstants.Scopes.RateApproveFreight)
+            || HasScope(scopes, PricingConstants.Scopes.ImportFclRateReview)
+            || HasScope(scopes, PricingConstants.Scopes.ImportFclRateApprove)
+            || HasScope(scopes, PricingConstants.Scopes.ImportFclRateReject)
+            || HasScope(scopes, PricingConstants.Scopes.ImportFclRateCreateAsRate);
 
-        return sellerRole || (hasRequestCreate && !hasRateUpdate);
+        var sellerCapability = sellerRole || hasRequestCreate;
+        return sellerCapability && !hasPricingOperatorAccess;
     }
 
     private static bool HasScope(HashSet<string> scopes, string required)
