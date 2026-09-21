@@ -408,7 +408,9 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             .AsNoTracking()
             .Where(x =>
                 !x.IsDeleted
-                && !(x.RateType == RateType.Tariff && !x.SourceTariffRateId.HasValue && x.ClientName == null)
+                && !(x.RateType == RateType.Tariff
+                    && x.ClientName != null
+                    && x.ClientName.ToLower().Contains("tarifario"))
             );
 
         if (createdFrom.HasValue)
@@ -686,12 +688,16 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
 
         if (tariffMasterOnly == true)
         {
-            query = query.Where(x => x.RateType == RateType.Tariff && !x.SourceTariffRateId.HasValue && x.ClientName == null);
+            query = query.Where(x => x.RateType == RateType.Tariff
+                    && x.ClientName != null
+                    && x.ClientName.ToLower().Contains("tarifario"));
         }
 
         if (excludeTariffMasters == true)
         {
-            query = query.Where(x => !(x.RateType == RateType.Tariff && !x.SourceTariffRateId.HasValue && x.ClientName == null));
+            query = query.Where(x => !(x.RateType == RateType.Tariff
+                    && x.ClientName != null
+                    && x.ClientName.ToLower().Contains("tarifario")));
         }
 
         if (agentId.HasValue)
