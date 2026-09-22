@@ -126,17 +126,16 @@ jobs:
             exit 0
           fi
 
-          while IFS= read -r branch; do
-            case "$branch" in master|develop) continue ;; esac
-            echo "Deleting obsolete branch: $branch"
-            if ! git push origin --delete "$branch"; then
-              echo "::warning::No se pudo eliminar la rama $branch; se continuará sin invalidar el deploy."
-            fi
-          done < <(git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin | grep -v '^HEAD
-      - name: Cleanup old images
-        if: always()
-        run: docker image prune -f
- || true)
+          git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin |
+            grep -v '^HEAD$' |
+            while IFS= read -r branch; do
+              case "$branch" in master|develop) continue ;; esac
+              echo "Deleting obsolete branch: $branch"
+              if ! git push origin --delete "$branch"; then
+                echo "::warning::No se pudo eliminar la rama $branch; se continuará sin invalidar el deploy."
+              fi
+            done
+
       - name: Cleanup old images
         if: always()
         run: docker image prune -f
