@@ -9,7 +9,7 @@ namespace Dhole.Pricing.Api.Endpoints;
 
 public static class OwnLclFobScenarioEndpoints
 {
-    private const decimal MinimumCentralAmericaProfitPerCbm = 5.70m;
+    private const decimal MinimumCentralAmericaProfitPerCbm = 5.69m;
     private const decimal MinimumPanamaProfitPerCbm = 3.40m;
     private const decimal PanamaAndCentralAmericaFreightSalePerCbm = 164m;
     private const decimal CostaRicaFreightSalePerCbm = 210m;
@@ -131,19 +131,31 @@ public static class OwnLclFobScenarioEndpoints
         {
             var code = destination.Key;
 
+            var isCentralAmerica = IsCentralAmericaDestination(code);
             var ports = OriginSurcharges.Select(origin =>
             {
-                // El escenario FOB representa únicamente el flete que se vende en la
-                // línea "Flete Internacional Marítimo". Panamá y Centroamérica usan
-                // el mismo O/F base; sus cargos de destino se cotizan aparte.
+                // El escenario FOB representa únicamente el flete marítimo.
                 var cost = code == "CR"
                     ? CeilingCent(baseOcean + origin.Value + destinationPerCbm + crTransferPerCbm)
                     : CeilingCent(baseOcean + origin.Value);
-                var htmlBaseSale = code == "CR"
-                    ? CostaRicaFreightSalePerCbm
-                    : PanamaAndCentralAmericaFreightSalePerCbm;
-                var recommended = htmlBaseSale + origin.Value;
-                var sale = sales.TryGetValue((code, origin.Key), out var stored) ? stored : recommended;
+
+                decimal recommended;
+                decimal sale;
+                if (isCentralAmerica)
+                {
+                    // Regla invariable: venta = costo + USD 5.69/CBM.
+                    recommended = cost + MinimumCentralAmericaProfitPerCbm;
+                    sale = recommended;
+                }
+                else
+                {
+                    var htmlBaseSale = code == "CR"
+                        ? CostaRicaFreightSalePerCbm
+                        : PanamaAndCentralAmericaFreightSalePerCbm;
+                    recommended = htmlBaseSale + origin.Value;
+                    sale = sales.TryGetValue((code, origin.Key), out var stored) ? stored : recommended;
+                }
+
                 return new OwnLclFobScenarioPortDto(origin.Key, cost, sale, recommended, origin.Value);
             }).ToArray();
 
@@ -179,15 +191,19 @@ public static class OwnLclFobScenarioEndpoints
         int consolidationNumber;
         string matrixVersion;
         DateOnly? validTo;
+        decimal oceanFreight;
+        decimal maximumCbm;
         await using (var lookup = connection.CreateCommand())
         {
-            lookup.CommandText = "SELECT consolidation_number, matrix_version, etd FROM pricing.\"OwnLclConsolidations\" WHERE id=@id AND is_active=TRUE LIMIT 1;";
+            lookup.CommandText = "SELECT consolidation_number, matrix_version, etd, ocean_freight, maximum_cbm FROM pricing.\"OwnLclConsolidations\" WHERE id=@id AND is_active=TRUE LIMIT 1;";
             Add(lookup, "id", id);
             await using var reader = await lookup.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct)) return Results.NotFound();
             consolidationNumber = reader.GetInt32(0);
             matrixVersion = reader.GetString(1);
             validTo = reader.IsDBNull(2) ? null : DateOnly.FromDateTime(reader.GetDateTime(2));
+            oceanFreight = reader.GetDecimal(3);
+            maximumCbm = Math.Max(0.01m, reader.GetDecimal(4));
         }
 
         await using var tx = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
@@ -214,7 +230,10 @@ public static class OwnLclFobScenarioEndpoints
             Add(command, "number", consolidationNumber);
             Add(command, "destination", destination);
             Add(command, "pol", pol);
-            Add(command, "sale", row.SalePerCbm);
+            var salePerCbm = IsCentralAmericaDestination(destination)
+                ? (oceanFreight / maximumCbm) + OriginSurcharges[pol] + MinimumCentralAmericaProfitPerCbm
+                : row.SalePerCbm;
+            Add(command, "sale", salePerCbm);
             Add(command, "valid_to", validTo);
             Add(command, "version", matrixVersion);
             await command.ExecuteNonQueryAsync(ct);
@@ -286,18 +305,29 @@ public static class OwnLclFobScenarioEndpoints
         }
 
         var overrides = await LoadPricingLineOverridesAsync(connection, id, ct);
+        var panamaDestination = ResolvePricingLine(
+            overrides,
+            "PA_DESTINATION_CHARGE",
+            destinationCostPerCbm);
         var rows = OwnLclPricingLineCatalog.All.Select(definition =>
         {
             var fallbackCost = definition.DefaultCostUnit
                 ?? (definition.LineKey == "PA_DESTINATION_CHARGE" ? destinationCostPerCbm : 0m);
             var value = ResolvePricingLine(overrides, definition.LineKey, fallbackCost);
+            var sale = definition.LineKey switch
+            {
+                "CA_TRANSSHIPMENT" => panamaDestination.Sale + 9m,
+                "CA_STUFFING" => 550m / 60m,
+                "CA_DOCUMENTATION" => 185m,
+                _ => value.Sale,
+            };
             return new OwnLclPricingLineDto(
                 definition.LineKey,
                 definition.Scope,
                 definition.Name,
                 definition.ChargeBasis,
                 value.Cost,
-                value.Sale);
+                sale);
         }).ToArray();
 
         return Results.Ok(rows);
@@ -312,8 +342,22 @@ public static class OwnLclFobScenarioEndpoints
         if (request.Rows.Count == 0)
             return Results.BadRequest(new { code = "Pricing.OwnLclPricingLinesRequired", message = "Agregue al menos una línea de costo/venta." });
 
-        var normalized = request.Rows
+        var incoming = request.Rows
             .Select(row => row with { LineKey = Normalize(row.LineKey) })
+            .ToArray();
+        var panamaDestinationSale = incoming
+            .FirstOrDefault(row => row.LineKey == "PA_DESTINATION_CHARGE")
+            ?.SaleUnit
+            ?? OwnLclPricingLineCatalog.Find("PA_DESTINATION_CHARGE")!.DefaultSaleUnit;
+
+        var normalized = incoming
+            .Select(row => row.LineKey switch
+            {
+                "CA_TRANSSHIPMENT" => row with { SaleUnit = panamaDestinationSale + 9m },
+                "CA_STUFFING" => row with { SaleUnit = 550m / 60m },
+                "CA_DOCUMENTATION" => row with { SaleUnit = 185m },
+                _ => row,
+            })
             .ToArray();
         if (normalized.Select(row => row.LineKey).Distinct(StringComparer.OrdinalIgnoreCase).Count() != normalized.Length
             || normalized.Any(row => OwnLclPricingLineCatalog.Find(row.LineKey) is null || row.CostUnit < 0m || row.SaleUnit < 0m))
@@ -383,6 +427,9 @@ public static class OwnLclFobScenarioEndpoints
             ?? throw new InvalidOperationException($"Línea LCL propia desconocida: {lineKey}.");
         return (definition.DefaultCostUnit ?? fallbackCost, definition.DefaultSaleUnit);
     }
+
+    private static bool IsCentralAmericaDestination(string? destination) =>
+        destination is "NI" or "HN" or "GT" or "SV";
 
     private static string Normalize(string? value) => (value ?? string.Empty).Trim().ToUpperInvariant();
     private static decimal CeilingCent(decimal value) => Math.Ceiling(value * 100m) / 100m;
