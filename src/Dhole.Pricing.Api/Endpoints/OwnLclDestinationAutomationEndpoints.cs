@@ -231,7 +231,7 @@ public static class OwnLclDestinationAutomationEndpoints
                 panama_to_cr_cost=@panama_to_cr,
                 bunker_cost=@bunker,
                 cr_transfer_base_cbm=@cr_base,
-                freight_profit_per_cbm=@freight_profit_per_cbm,
+                freight_profit_per_cbm=COALESCE(@freight_profit_per_cbm, freight_profit_per_cbm),
                 panama_arrival_port_id=@arrival_port_id,
                 panama_arrival_port_name=@arrival_port_name,
                 panama_arrival_port_code=@arrival_port_code,
@@ -261,7 +261,7 @@ public static class OwnLclDestinationAutomationEndpoints
         Add(command, "panama_to_cr", profile.CostaRicaTransfer.PanamaToCostaRica);
         Add(command, "bunker", profile.CostaRicaTransfer.Bunker);
         Add(command, "cr_base", profile.CostaRicaTransfer.BaseCbm);
-        Add(command, "freight_profit_per_cbm", Math.Max(0m, request.FreightProfitPerCbm ?? 5.69m));
+        Add(command, "freight_profit_per_cbm", request.FreightProfitPerCbm.HasValue ? Math.Max(0m, request.FreightProfitPerCbm.Value) : null);
         Add(command, "arrival_port_id", request.PanamaArrivalPortId);
         Add(command, "arrival_port_name", NullIfBlank(request.PanamaArrivalPortName));
         Add(command, "arrival_port_code", Normalize(request.PanamaArrivalPortCode));
@@ -616,7 +616,7 @@ public sealed record AutomaticOwnLclConsolidationRequest(
     string PanamaArrivalPortCode,
     bool? IncludeEmptyReturn,
     decimal? BunkerCost = 280m,
-    decimal? FreightProfitPerCbm = 5.69m);
+    decimal? FreightProfitPerCbm = null);
 
 public sealed record AutomaticOwnLclCreatedResponse(
     Guid Id,
