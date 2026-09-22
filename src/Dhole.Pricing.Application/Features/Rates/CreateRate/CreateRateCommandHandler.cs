@@ -383,6 +383,7 @@ public sealed class CreateRateCommandHandler(
             );
             rate.ConfigureExecutive(command.ExecutiveName);
             rate.ConfigureCommercialPresentation(command.UseAllInPresentation, command.CreatedBy);
+            rate.ConfigureFinalBackupStorageIds(command.FinalBackupStorageIds);
             rate.SetOperationType(command.OperationType, command.CreatedBy);
             rate.ConfigureServices(command.Services, command.CreatedBy);
             rate.ConfigureExchangeRateSnapshot(
