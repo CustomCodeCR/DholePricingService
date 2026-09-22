@@ -9,7 +9,7 @@ permissions:
   packages: read
 concurrency:
   group: dhole-pricing-production
-  cancel-in-progress: false
+  cancel-in-progress: true
 env:
   COMPOSE_FILE: .dhole-system/deploy/docker-compose.services.yml
   DHOLE_IMAGE_TAG: latest
@@ -30,6 +30,26 @@ jobs:
           echo "DHOLE_ENV_FILE=$RUNNER_TEMP/dhole-env/.env.production" >> "$GITHUB_ENV"
       - name: Verify production server
         run: docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" config -q
+      - name: Verify EF migrations are synchronized
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src" \
+            -w /src \
+            -e GITHUB_ACTOR="$GITHUB_ACTOR" \
+            -e GITHUB_TOKEN="$GITHUB_TOKEN" \
+            mcr.microsoft.com/dotnet/sdk:10.0 \
+            bash -lc '
+              set -euo pipefail
+              export NuGetPackageSourceCredentials_github="Username=$GITHUB_ACTOR;Password=$GITHUB_TOKEN;ValidAuthenticationTypes=Basic"
+              dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile /src/NuGet.Config
+              dotnet tool install --tool-path /tmp/ef dotnet-ef --version 10.0.9
+              /tmp/ef/dotnet-ef migrations has-pending-model-changes \
+                --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
+                --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj
+            '
       - name: Build images
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
