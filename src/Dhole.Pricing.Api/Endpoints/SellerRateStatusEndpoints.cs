@@ -3,6 +3,7 @@ using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
 using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.Abstractions.Auditing;
+using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
@@ -30,6 +31,7 @@ public static class SellerRateStatusEndpoints
         SellerRateStatusRequest request,
         ServiceDbContext db,
         ICommandDispatcher dispatcher,
+        IRateHeaderRepository rateHeaders,
         IPricingAuditService audit,
         IRateHeaderCacheService cache,
         AcceptedRateOpeningsNotificationService openingsNotificationService,
@@ -86,6 +88,20 @@ public static class SellerRateStatusEndpoints
 
         if (status == RateStatus.AcceptedByClient && string.IsNullOrWhiteSpace(currentRate.IdtraNumber))
         {
+            var capacity = await rateHeaders.GetOwnLclCapacityForRateAsync(
+                currentRate.Id,
+                cancellationToken
+            );
+            if (capacity is not null
+                && capacity.RequestedCbm > capacity.RemainingCbm + 0.000001m)
+            {
+                return Results.Conflict(new
+                {
+                    code = "Pricing.OwnLclCapacityExceeded",
+                    message = $"El consolidado #{capacity.ConsolidationNumber} solo tiene {capacity.RemainingCbm:0.###} CBM disponibles para aprobación y esta tarifa requiere {capacity.RequestedCbm:0.###} CBM.",
+                });
+            }
+
             var before = PricingAuditSnapshots.From(currentRate);
 
             db.Entry(currentRate).Property(x => x.Status).CurrentValue = RateStatus.AcceptedByClient;
