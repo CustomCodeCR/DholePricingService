@@ -17,6 +17,8 @@ public static class OwnLclRouteMatrixV2Endpoints
 {
     private const decimal MinimumCentralAmericaProfitPerCbm = 5.70m;
     private const decimal MinimumPanamaOceanProfitPerCbm = 3.40m;
+    private const decimal PanamaAndCentralAmericaFreightSalePerCbm = 164m;
+    private const decimal CostaRicaFreightSalePerCbm = 210m;
 
     // CNCA matrices: negotiated China origin differential for Costa Rica / Panama.
     private static readonly IReadOnlyDictionary<string, decimal> OriginSurcharges =
@@ -32,25 +34,6 @@ public static class OwnLclRouteMatrixV2Endpoints
             ["FUZHOU"] = 57m,
             ["SHENZHEN"] = 62m,
             ["XINGANG"] = 62m,
-            ["SHEKOU"] = 62m,
-            ["GUANGZHOU"] = 62m,
-        };
-
-    // The Centroamérica cost block in both supplied CNCA spreadsheets uses a
-    // slightly different free-hand origin matrix than CR/PA.
-    private static readonly IReadOnlyDictionary<string, decimal> CentralAmericaOriginSurcharges =
-        new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["SHANGHAI"] = 0m,
-            ["NINGBO"] = 52m,
-            ["QINGDAO"] = 57m,
-            ["XIAMEN"] = 57m,
-            ["SHANTOU"] = 57m,
-            ["DALIAN"] = 57m,
-            ["CHONGQING"] = 57m,
-            ["FUZHOU"] = 57m,
-            ["SHENZHEN"] = 62m,
-            ["XINGANG"] = 57m,
             ["SHEKOU"] = 62m,
             ["GUANGZHOU"] = 62m,
         };
@@ -167,9 +150,9 @@ public static class OwnLclRouteMatrixV2Endpoints
             + costaRicaTransferCostPerCbm;
 
         var isCentralAmerica = CentralAmericaInland.ContainsKey(destination);
-        var originSurchargePerCbm = isCentralAmerica
-            ? CentralAmericaOriginSurcharges.GetValueOrDefault(requestedPol)
-            : OriginSurcharges.GetValueOrDefault(requestedPol);
+        // El HTML usa exactamente el mismo diferencial de origen que Panamá
+        // para Nicaragua, Honduras, Guatemala y El Salvador.
+        var originSurchargePerCbm = OriginSurcharges.GetValueOrDefault(requestedPol);
 
         decimal routeDestinationCostPerCbm;
         decimal routeTransferCostPerCbm;
@@ -208,28 +191,25 @@ public static class OwnLclRouteMatrixV2Endpoints
                 + routeInlandCostPerCbm;
         }
 
-        decimal? historicalSale = null;
-        if (destination is "CR" or "PA")
-        {
-            historicalSale = await LoadHistoricalSaleAsync(
-                consolidation.ConsolidationNumber,
-                destination,
-                requestedPol,
-                db,
-                ct);
-        }
+        var historicalSale = await LoadHistoricalSaleAsync(
+            consolidation.ConsolidationNumber,
+            destination,
+            requestedPol,
+            db,
+            ct);
 
-        var minimumForRecommendation = destination == "PA"
-            ? MinimumPanamaOceanProfitPerCbm
-            : MinimumCentralAmericaProfitPerCbm;
-
-        // In Panama the negotiated O/F excludes destination charges, matching the Excel.
-        // CR and the rest of Central America use the complete variable route cost.
-        var freightCostPerCbm = destination == "PA"
-            ? oceanCostPerCbm + originSurchargePerCbm
-            : routeCostPerCbm;
-        var recommendedSalePerCbm = historicalSale
-            ?? CeilingCent(freightCostPerCbm + minimumForRecommendation);
+        // Panamá es la referencia comercial del HTML: el O/F se cobra separado de
+        // los cargos de destino. Centroamérica usa el mismo O/F que Panamá y agrega
+        // Transbordo, Flete Terrestre, Stuffing y cargos fijos como líneas aparte.
+        // Costa Rica sí conserva su O/F all-in hasta GAM (base 210 desde Shanghai).
+        var freightCostPerCbm = destination == "CR"
+            ? routeCostPerCbm
+            : oceanCostPerCbm + originSurchargePerCbm;
+        var htmlBaseSalePerCbm = destination == "CR"
+            ? CostaRicaFreightSalePerCbm
+            : PanamaAndCentralAmericaFreightSalePerCbm;
+        var defaultFreightSalePerCbm = htmlBaseSalePerCbm + originSurchargePerCbm;
+        var recommendedSalePerCbm = historicalSale ?? defaultFreightSalePerCbm;
         var freightSalePerCbm = request.SalePerCbm is > 0
             ? request.SalePerCbm.Value
             : recommendedSalePerCbm;
@@ -348,6 +328,8 @@ public static class OwnLclRouteMatrixV2Endpoints
             return;
         }
 
+        // En Centroamérica el O/F queda separado, igual que Panamá.
+        // Estos costos/sales salen del tarifario del propio consolidado.
         AddConfiguredLine(lines, pricingLines, "CA_TRANSSHIPMENT", cbm);
         AddConfiguredLine(
             lines,
