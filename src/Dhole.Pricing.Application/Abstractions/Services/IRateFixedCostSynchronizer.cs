@@ -7,6 +7,7 @@ public interface IRateFixedCostSynchronizer
     Task SynchronizeAsync(
         RateHeader rate,
         Guid? updatedBy,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool preserveExplicitFixedDetails = false
     );
 }
