@@ -154,6 +154,14 @@ public static class OwnLclRouteMatrixV2Endpoints
         // para Nicaragua, Honduras, Guatemala y El Salvador.
         var originSurchargePerCbm = OriginSurcharges.GetValueOrDefault(requestedPol);
         var pricingLineOverrides = await LoadPricingLineOverridesAsync(consolidation.Id, db, ct);
+        if (isCentralAmerica && !pricingLineOverrides.ContainsKey("CA_TRANSSHIPMENT"))
+        {
+            var panamaSale = ResolveConfiguredLine(pricingLineOverrides, "PA_DESTINATION_CHARGE").Sale;
+            pricingLineOverrides["CA_TRANSSHIPMENT"] = (
+                panamaDestinationCostPerCbm + 9m,
+                panamaSale + 9m,
+                null);
+        }
 
         decimal routeDestinationCostPerCbm;
         decimal routeTransferCostPerCbm;
