@@ -150,6 +150,9 @@ public static class OwnLclRouteMatrixV2Endpoints
             + costaRicaTransferCostPerCbm;
 
         var isCentralAmerica = CentralAmericaInland.ContainsKey(destination);
+        var centralAmericaFreightProfitPerCbm = isCentralAmerica
+            ? await LoadFreightProfitPerCbmAsync(consolidation.Id, db, ct)
+            : MinimumCentralAmericaProfitPerCbm;
         // El HTML usa exactamente el mismo diferencial de origen que Panamá
         // para Nicaragua, Honduras, Guatemala y El Salvador.
         var originSurchargePerCbm = OriginSurcharges.GetValueOrDefault(requestedPol);
@@ -221,8 +224,8 @@ public static class OwnLclRouteMatrixV2Endpoints
         }
 
         // Panamá es la referencia para separar el O/F de los cargos de destino.
-        // En Centroamérica la venta del flete SIEMPRE es costo + USD 5.69/CBM.
-        // No se admite histórico ni override manual para cambiar ese diferencial.
+        // En Centroamérica la venta del flete usa la utilidad configurada en el consolidado.
+        // No se admite un override de la cotización que cambie ese diferencial.
         var freightCostPerCbm = destination == "CR"
             ? routeCostPerCbm
             : oceanCostPerCbm + originSurchargePerCbm;
@@ -231,7 +234,7 @@ public static class OwnLclRouteMatrixV2Endpoints
         decimal freightSalePerCbm;
         if (isCentralAmerica)
         {
-            recommendedSalePerCbm = freightCostPerCbm + MinimumCentralAmericaProfitPerCbm;
+            recommendedSalePerCbm = freightCostPerCbm + centralAmericaFreightProfitPerCbm;
             freightSalePerCbm = recommendedSalePerCbm;
         }
         else
@@ -275,11 +278,13 @@ public static class OwnLclRouteMatrixV2Endpoints
         var oceanProfitPerCbm = freightSalePerCbm - freightCostPerCbm;
         var minimumProfit = destination == "PA"
             ? MinimumPanamaOceanProfitPerCbm
-            : MinimumCentralAmericaProfitPerCbm;
+            : isCentralAmerica
+                ? centralAmericaFreightProfitPerCbm
+                : MinimumCentralAmericaProfitPerCbm;
         var meetsMinimum = destination == "PA"
             ? oceanProfitPerCbm >= MinimumPanamaOceanProfitPerCbm
             : isCentralAmerica
-                ? Math.Abs(oceanProfitPerCbm - MinimumCentralAmericaProfitPerCbm) <= 0.000001m
+                ? Math.Abs(oceanProfitPerCbm - centralAmericaFreightProfitPerCbm) <= 0.000001m
                 : profitPerCbm >= MinimumCentralAmericaProfitPerCbm;
 
         return Results.Ok(new OwnLclRouteMatrixQuoteDto(
@@ -501,6 +506,27 @@ if (string.Equals(originPol, "SHANGHAI", StringComparison.OrdinalIgnoreCase))
                 reader.IsDBNull(3) ? null : reader.GetDecimal(3));
         }
         return result;
+    }
+
+    private static async Task<decimal> LoadFreightProfitPerCbmAsync(
+        Guid consolidationId,
+        ServiceDbContext db,
+        CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        await EnsureOpenAsync(connection, ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT freight_profit_per_cbm
+            FROM pricing."OwnLclConsolidations"
+            WHERE id=@id AND is_active=TRUE
+            LIMIT 1;
+            """;
+        Add(command, "id", consolidationId);
+        var value = await command.ExecuteScalarAsync(ct);
+        return value is null or DBNull
+            ? MinimumCentralAmericaProfitPerCbm
+            : Math.Max(0m, Convert.ToDecimal(value));
     }
 
     private static async Task<decimal?> LoadHistoricalSaleAsync(
