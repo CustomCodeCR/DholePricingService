@@ -15,7 +15,7 @@ namespace Dhole.Pricing.Api.Endpoints;
 /// </summary>
 public static class OwnLclRouteMatrixV2Endpoints
 {
-    private const decimal MinimumCentralAmericaProfitPerCbm = 5.70m;
+    private const decimal MinimumCentralAmericaProfitPerCbm = 5.69m;
     private const decimal MinimumPanamaOceanProfitPerCbm = 3.40m;
     private const decimal PanamaAndCentralAmericaFreightSalePerCbm = 164m;
     private const decimal CostaRicaFreightSalePerCbm = 210m;
@@ -191,28 +191,42 @@ public static class OwnLclRouteMatrixV2Endpoints
                 + routeInlandCostPerCbm;
         }
 
-        var historicalSale = await LoadHistoricalSaleAsync(
-            consolidation.ConsolidationNumber,
-            destination,
-            requestedPol,
-            db,
-            ct);
+        decimal? historicalSale = null;
+        if (!isCentralAmerica)
+        {
+            historicalSale = await LoadHistoricalSaleAsync(
+                consolidation.ConsolidationNumber,
+                destination,
+                requestedPol,
+                db,
+                ct);
+        }
 
-        // Panamá es la referencia comercial del HTML: el O/F se cobra separado de
-        // los cargos de destino. Centroamérica usa el mismo O/F que Panamá y agrega
-        // Transbordo, Flete Terrestre, Stuffing y cargos fijos como líneas aparte.
-        // Costa Rica sí conserva su O/F all-in hasta GAM (base 210 desde Shanghai).
+        // Panamá es la referencia para separar el O/F de los cargos de destino.
+        // En Centroamérica la venta del flete SIEMPRE es costo + USD 5.69/CBM.
+        // No se admite histórico ni override manual para cambiar ese diferencial.
         var freightCostPerCbm = destination == "CR"
             ? routeCostPerCbm
             : oceanCostPerCbm + originSurchargePerCbm;
-        var htmlBaseSalePerCbm = destination == "CR"
-            ? CostaRicaFreightSalePerCbm
-            : PanamaAndCentralAmericaFreightSalePerCbm;
-        var defaultFreightSalePerCbm = htmlBaseSalePerCbm + originSurchargePerCbm;
-        var recommendedSalePerCbm = historicalSale ?? defaultFreightSalePerCbm;
-        var freightSalePerCbm = request.SalePerCbm is > 0
-            ? request.SalePerCbm.Value
-            : recommendedSalePerCbm;
+
+        decimal recommendedSalePerCbm;
+        decimal freightSalePerCbm;
+        if (isCentralAmerica)
+        {
+            recommendedSalePerCbm = freightCostPerCbm + MinimumCentralAmericaProfitPerCbm;
+            freightSalePerCbm = recommendedSalePerCbm;
+        }
+        else
+        {
+            var htmlBaseSalePerCbm = destination == "CR"
+                ? CostaRicaFreightSalePerCbm
+                : PanamaAndCentralAmericaFreightSalePerCbm;
+            var defaultFreightSalePerCbm = htmlBaseSalePerCbm + originSurchargePerCbm;
+            recommendedSalePerCbm = historicalSale ?? defaultFreightSalePerCbm;
+            freightSalePerCbm = request.SalePerCbm is > 0
+                ? request.SalePerCbm.Value
+                : recommendedSalePerCbm;
+        }
 
         var pricingLineOverrides = await LoadPricingLineOverridesAsync(consolidation.Id, db, ct);
         var lines = new List<OwnLclQuoteLine>();
@@ -247,7 +261,9 @@ public static class OwnLclRouteMatrixV2Endpoints
             : MinimumCentralAmericaProfitPerCbm;
         var meetsMinimum = destination == "PA"
             ? oceanProfitPerCbm >= MinimumPanamaOceanProfitPerCbm
-            : profitPerCbm >= MinimumCentralAmericaProfitPerCbm;
+            : isCentralAmerica
+                ? Math.Abs(oceanProfitPerCbm - MinimumCentralAmericaProfitPerCbm) <= 0.000001m
+                : profitPerCbm >= MinimumCentralAmericaProfitPerCbm;
 
         return Results.Ok(new OwnLclRouteMatrixQuoteDto(
             consolidation.Id,
@@ -328,9 +344,17 @@ public static class OwnLclRouteMatrixV2Endpoints
             return;
         }
 
-        // En Centroamérica el O/F queda separado, igual que Panamá.
-        // Estos costos/sales salen del tarifario del propio consolidado.
-        AddConfiguredLine(lines, pricingLines, "CA_TRANSSHIPMENT", cbm);
+        // Centroamérica: fórmulas comerciales obligatorias.
+        // Transbordo = venta de Destination Charge Panamá + USD 9.
+        // Stuffing = USD 550 / 60 CBM.
+        // Documentación = USD 185 por HBL.
+        var panamaDestinationSale = ResolveConfiguredSale(pricingLines, "PA_DESTINATION_CHARGE");
+        AddFormulaManagedLine(
+            lines,
+            pricingLines,
+            "CA_TRANSSHIPMENT",
+            cbm,
+            panamaDestinationSale + 9m);
         AddConfiguredLine(
             lines,
             pricingLines,
@@ -343,8 +367,8 @@ public static class OwnLclRouteMatrixV2Endpoints
                 _ => throw new InvalidOperationException($"Destino centroamericano no soportado: {destination}."),
             },
             cbm);
-        AddConfiguredLine(lines, pricingLines, "CA_STUFFING", cbm);
-        AddConfiguredLine(lines, pricingLines, "CA_DOCUMENTATION", 1);
+        AddFormulaManagedLine(lines, pricingLines, "CA_STUFFING", cbm, 550m / 60m);
+        AddFormulaManagedLine(lines, pricingLines, "CA_DOCUMENTATION", 1m, 185m);
         AddConfiguredLine(lines, pricingLines, "CA_HANDLING", 1);
         AddConfiguredLine(lines, pricingLines, "CA_DESTINATION_HANDLING", 1);
     }
@@ -375,6 +399,34 @@ if (string.Equals(originPol, "SHANGHAI", StringComparison.OrdinalIgnoreCase))
 
         if (incoterm == "EXW")
             AddConfiguredLine(lines, pricingLines, "ORIGIN_PICK_UP", 1);
+    }
+
+    private static decimal ResolveConfiguredSale(
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale)> pricingLines,
+        string lineKey)
+    {
+        if (pricingLines.TryGetValue(lineKey, out var stored))
+            return stored.Sale;
+
+        var definition = OwnLclPricingLineCatalog.Find(lineKey)
+            ?? throw new InvalidOperationException($"Línea LCL propia desconocida: {lineKey}.");
+        return definition.DefaultSaleUnit;
+    }
+
+    private static void AddFormulaManagedLine(
+        List<OwnLclQuoteLine> lines,
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale)> pricingLines,
+        string lineKey,
+        decimal quantity,
+        decimal forcedSaleUnit)
+    {
+        var definition = OwnLclPricingLineCatalog.Find(lineKey)
+            ?? throw new InvalidOperationException($"Línea LCL propia desconocida: {lineKey}.");
+        var cost = pricingLines.TryGetValue(lineKey, out var stored)
+            ? stored.Cost
+            : definition.DefaultCostUnit ?? 0m;
+
+        AddLine(lines, definition.Name, definition.ChargeBasis, quantity, cost, forcedSaleUnit);
     }
 
     private static void AddConfiguredLine(
