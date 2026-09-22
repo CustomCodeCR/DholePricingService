@@ -86,4 +86,25 @@ public interface IRateHeaderRepository : IRepository<RateHeader, Guid>
         DateTime? quoteDate = null,
         CancellationToken cancellationToken = default
     );
+
+    Task<decimal> GetAcceptedOwnLclCbmAsync(
+        Guid consolidationId,
+        int consolidationNumber,
+        CancellationToken cancellationToken = default
+    );
+
+    Task<OwnLclCapacitySnapshot?> GetOwnLclCapacityForRateAsync(
+        Guid rateId,
+        CancellationToken cancellationToken = default
+    );
 }
+
+
+public sealed record OwnLclCapacitySnapshot(
+    Guid ConsolidationId,
+    int ConsolidationNumber,
+    decimal MaximumCbm,
+    decimal ApprovedCbm,
+    decimal RemainingCbm,
+    decimal RequestedCbm
+);
