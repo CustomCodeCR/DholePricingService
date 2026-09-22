@@ -803,7 +803,7 @@ public static class RateEndpoints
                 httpContext.GetCurrentUserId()
             )
             {
-                FinalBackupStorageIds = request.FinalBackupStorageIds ?? [],
+                FinalBackupStorageIds = request.FinalBackupStorageIds,
             },
             cancellationToken
         );
