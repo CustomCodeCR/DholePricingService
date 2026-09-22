@@ -220,6 +220,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public decimal KgPerCbm { get; private set; } = 500m;
     public decimal ChargeableQuantity { get; private set; } = 1m;
     public string? CargoLinesJson { get; private set; }
+    public Guid[] FinalBackupStorageIds { get; private set; } = [];
 
     public string? ClientName { get; private set; }
     public string? ExecutiveName { get; private set; }
@@ -545,6 +546,14 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         UseAllInPresentation = useAllInPresentation;
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
+    public void ConfigureFinalBackupStorageIds(IReadOnlyCollection<Guid>? storageIds)
+    {
+        FinalBackupStorageIds = (storageIds ?? Array.Empty<Guid>())
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
     }
 
     public void ConfigureTariffSource(Guid sourceTariffRateId, int sourceTariffRevisionNumber)
