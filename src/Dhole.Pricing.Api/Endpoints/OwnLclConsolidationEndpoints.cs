@@ -11,7 +11,7 @@ namespace Dhole.Pricing.Api.Endpoints;
 public static class OwnLclConsolidationEndpoints
 {
     private const decimal DefaultMaximumCbm = 50m;
-    private const decimal MinimumCentralAmericaProfitPerCbm = 5.70m;
+    private const decimal MinimumCentralAmericaProfitPerCbm = 5.69m;
     private const decimal MinimumPanamaOceanProfitPerCbm = 3.40m;
     private const decimal PanamaAndCentralAmericaFreightSalePerCbm = 164m;
     private const decimal CostaRicaFreightSalePerCbm = 210m;
@@ -257,17 +257,30 @@ public static class OwnLclConsolidationEndpoints
             ? oceanCostWithOrigin + destinationCostPerCbm + crTransferCostPerCbm
             : oceanCostWithOrigin;
 
-        var historicalSale = await LoadHistoricalSaleAsync(
-            consolidation.ConsolidationNumber,
-            destination,
-            originPort,
-            db,
-            ct);
-        var htmlBaseSalePerCbm = destination == "CR"
-            ? CostaRicaFreightSalePerCbm
-            : PanamaAndCentralAmericaFreightSalePerCbm;
-        var recommendedSalePerCbm = historicalSale ?? (htmlBaseSalePerCbm + originSurcharge);
-        var freightSalePerCbm = request.SalePerCbm is > 0 ? request.SalePerCbm.Value : recommendedSalePerCbm;
+        var isCentralAmerica = CentralAmericaLandFreight.ContainsKey(destination);
+        decimal recommendedSalePerCbm;
+        decimal freightSalePerCbm;
+
+        if (isCentralAmerica)
+        {
+            // Regla obligatoria: venta del flete = costo + USD 5.69/CBM.
+            recommendedSalePerCbm = freightCostPerCbm + MinimumCentralAmericaProfitPerCbm;
+            freightSalePerCbm = recommendedSalePerCbm;
+        }
+        else
+        {
+            var historicalSale = await LoadHistoricalSaleAsync(
+                consolidation.ConsolidationNumber,
+                destination,
+                originPort,
+                db,
+                ct);
+            var htmlBaseSalePerCbm = destination == "CR"
+                ? CostaRicaFreightSalePerCbm
+                : PanamaAndCentralAmericaFreightSalePerCbm;
+            recommendedSalePerCbm = historicalSale ?? (htmlBaseSalePerCbm + originSurcharge);
+            freightSalePerCbm = request.SalePerCbm is > 0 ? request.SalePerCbm.Value : recommendedSalePerCbm;
+        }
 
         var lines = new List<OwnLclQuoteLine>();
         AddLine(lines, "Flete Internacional Marítimo", "CBM", billableCbm, freightCostPerCbm, freightSalePerCbm);
@@ -291,7 +304,9 @@ public static class OwnLclConsolidationEndpoints
         var minimumProfit = destination == "PA" ? MinimumPanamaOceanProfitPerCbm : MinimumCentralAmericaProfitPerCbm;
         var meetsMinimum = destination == "PA"
             ? oceanProfitPerCbm >= MinimumPanamaOceanProfitPerCbm
-            : profitPerCbm >= MinimumCentralAmericaProfitPerCbm;
+            : isCentralAmerica
+                ? Math.Abs(oceanProfitPerCbm - MinimumCentralAmericaProfitPerCbm) <= 0.000001m
+                : profitPerCbm >= MinimumCentralAmericaProfitPerCbm;
 
         return Results.Ok(new OwnLclQuoteCalculationDto(
             consolidation.Id,
@@ -362,7 +377,18 @@ public static class OwnLclConsolidationEndpoints
                 break;
 
             default:
-                AddConfiguredDestinationLine(lines, pricingLines, "CA_TRANSSHIPMENT", "Transbordo", "CBM", cbm);
+                var panamaDestinationSale = pricingLines.TryGetValue("PA_DESTINATION_CHARGE", out var panamaDestination)
+                    ? panamaDestination.SaleUnit
+                    : 20m;
+
+                AddFormulaManagedDestinationLine(
+                    lines,
+                    pricingLines,
+                    "CA_TRANSSHIPMENT",
+                    "Transbordo",
+                    "CBM",
+                    cbm,
+                    panamaDestinationSale + 9m);
                 AddConfiguredDestinationLine(
                     lines,
                     pricingLines,
@@ -377,12 +403,28 @@ public static class OwnLclConsolidationEndpoints
                     "Flete Terrestre",
                     "CBM",
                     cbm);
-                AddConfiguredDestinationLine(lines, pricingLines, "CA_STUFFING", "Stuffing", "CBM", cbm);
-                AddConfiguredDestinationLine(lines, pricingLines, "CA_DOCUMENTATION", "Documentación", "HBL", 1m);
+                AddFormulaManagedDestinationLine(lines, pricingLines, "CA_STUFFING", "Stuffing", "CBM", cbm, 550m / 60m);
+                AddFormulaManagedDestinationLine(lines, pricingLines, "CA_DOCUMENTATION", "Documentación", "HBL", 1m, 185m);
                 AddConfiguredDestinationLine(lines, pricingLines, "CA_HANDLING", "Manejos", "HBL", 1m);
                 AddConfiguredDestinationLine(lines, pricingLines, "CA_DESTINATION_HANDLING", "Manejos en Destino", "HBL", 1m);
                 break;
         }
+    }
+
+    private static void AddFormulaManagedDestinationLine(
+        List<OwnLclQuoteLine> lines,
+        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)> pricingLines,
+        string lineKey,
+        string name,
+        string basis,
+        decimal quantity,
+        decimal forcedSaleUnit)
+    {
+        var cost = pricingLines.TryGetValue(lineKey, out var values)
+            ? Math.Max(0m, values.CostUnit)
+            : 0m;
+
+        AddLine(lines, name, basis, quantity, cost, forcedSaleUnit);
     }
 
     private static void AddConfiguredDestinationLine(
