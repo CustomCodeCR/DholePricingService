@@ -120,6 +120,7 @@ public static class OwnLclDestinationAutomationEndpoints
                      pol_id, pol_name, pol_code,
                      ocean_freight, maximum_cbm,
                      carrier_destination_cost_total, panama_to_cr_cost, bunker_cost, cr_transfer_base_cbm,
+                     freight_profit_per_cbm,
                      panama_arrival_port_id, panama_arrival_port_name, panama_arrival_port_code,
                      destination_profile_code, destination_profile_version, destination_charge_snapshot_json,
                      include_empty_return, matrix_version, status, is_active, created_at_utc)
@@ -130,6 +131,7 @@ public static class OwnLclDestinationAutomationEndpoints
                      @pol_id, @pol_name, @pol_code,
                      @ocean_freight, @maximum_cbm,
                      @destination_total, @panama_to_cr, @bunker, @cr_base,
+                     @freight_profit_per_cbm,
                      @arrival_port_id, @arrival_port_name, @arrival_port_code,
                      @profile_code, @profile_version, CAST(@snapshot AS jsonb),
                      @include_empty_return, @matrix_version, 'Draft', TRUE, now());
@@ -155,6 +157,7 @@ public static class OwnLclDestinationAutomationEndpoints
             Add(command, "panama_to_cr", profile.CostaRicaTransfer.PanamaToCostaRica);
             Add(command, "bunker", profile.CostaRicaTransfer.Bunker);
             Add(command, "cr_base", profile.CostaRicaTransfer.BaseCbm);
+            Add(command, "freight_profit_per_cbm", Math.Max(0m, request.FreightProfitPerCbm ?? 5.69m));
             Add(command, "arrival_port_id", request.PanamaArrivalPortId);
             Add(command, "arrival_port_name", NullIfBlank(request.PanamaArrivalPortName));
             Add(command, "arrival_port_code", Normalize(request.PanamaArrivalPortCode));
@@ -228,6 +231,7 @@ public static class OwnLclDestinationAutomationEndpoints
                 panama_to_cr_cost=@panama_to_cr,
                 bunker_cost=@bunker,
                 cr_transfer_base_cbm=@cr_base,
+                freight_profit_per_cbm=@freight_profit_per_cbm,
                 panama_arrival_port_id=@arrival_port_id,
                 panama_arrival_port_name=@arrival_port_name,
                 panama_arrival_port_code=@arrival_port_code,
@@ -257,6 +261,7 @@ public static class OwnLclDestinationAutomationEndpoints
         Add(command, "panama_to_cr", profile.CostaRicaTransfer.PanamaToCostaRica);
         Add(command, "bunker", profile.CostaRicaTransfer.Bunker);
         Add(command, "cr_base", profile.CostaRicaTransfer.BaseCbm);
+        Add(command, "freight_profit_per_cbm", Math.Max(0m, request.FreightProfitPerCbm ?? 5.69m));
         Add(command, "arrival_port_id", request.PanamaArrivalPortId);
         Add(command, "arrival_port_name", NullIfBlank(request.PanamaArrivalPortName));
         Add(command, "arrival_port_code", Normalize(request.PanamaArrivalPortCode));
@@ -314,6 +319,8 @@ public static class OwnLclDestinationAutomationEndpoints
             return new { code = "Pricing.OwnLclOceanFreightRequired", message = "Ingrese el flete marítimo del consolidado." };
         if (request.MaximumCbm is <= 0)
             return new { code = "Pricing.OwnLclMaximumCbmInvalid", message = "La base máxima de CBM debe ser mayor a cero." };
+        if (request.FreightProfitPerCbm is < 0)
+            return new { code = "Pricing.OwnLclFreightProfitInvalid", message = "La utilidad por CBM no puede ser negativa." };
         if (request.BunkerCost is < 0)
             return new { code = "Pricing.OwnLclBunkerInvalid", message = "El Bunker no puede ser negativo." };
         return null;
@@ -608,7 +615,8 @@ public sealed record AutomaticOwnLclConsolidationRequest(
     string? PanamaArrivalPortName,
     string PanamaArrivalPortCode,
     bool? IncludeEmptyReturn,
-    decimal? BunkerCost = 280m);
+    decimal? BunkerCost = 280m,
+    decimal? FreightProfitPerCbm = 5.69m);
 
 public sealed record AutomaticOwnLclCreatedResponse(
     Guid Id,
