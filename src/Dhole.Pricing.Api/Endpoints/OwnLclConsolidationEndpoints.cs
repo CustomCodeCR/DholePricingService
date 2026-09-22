@@ -13,6 +13,8 @@ public static class OwnLclConsolidationEndpoints
     private const decimal DefaultMaximumCbm = 50m;
     private const decimal MinimumCentralAmericaProfitPerCbm = 5.70m;
     private const decimal MinimumPanamaOceanProfitPerCbm = 3.40m;
+    private const decimal PanamaAndCentralAmericaFreightSalePerCbm = 164m;
+    private const decimal CostaRicaFreightSalePerCbm = 210m;
     private const decimal CentralAmericaOperationBaseCbm = 70m;
     private const decimal CostaRicaWarehouseOperation = 415m;
 
@@ -248,17 +250,23 @@ public static class OwnLclConsolidationEndpoints
         var destinationCostPerCbm = consolidation.CarrierDestinationCostTotal / maximumCbm;
         var crTransferCostPerCbm = (consolidation.PanamaToCostaRicaCost + consolidation.BunkerCost) / Math.Max(1m, consolidation.CostaRicaTransferBaseCbm);
 
-        // Panamá termina el tramo marítimo en Balboa. Costa Rica y el resto de
-        // Centroamérica continúan por CFZ y el tramo terrestre Panamá -> CRC.
-        var freightCostPerCbm = destination == "PA"
-            ? oceanCostWithOrigin
-            : oceanCostWithOrigin + destinationCostPerCbm + crTransferCostPerCbm;
+        // Igual que en el HTML: Panamá y Centroamérica venden el O/F por
+        // separado de sus cargos de destino. Costa Rica mantiene el tramo hasta GAM
+        // dentro del costo del flete base.
+        var freightCostPerCbm = destination == "CR"
+            ? oceanCostWithOrigin + destinationCostPerCbm + crTransferCostPerCbm
+            : oceanCostWithOrigin;
 
-        var historicalDestination = destination;
-        var historicalSale = await LoadHistoricalSaleAsync(consolidation.ConsolidationNumber, historicalDestination, originPort, db, ct);
-        var minimumForRecommendation = destination == "PA" ? MinimumPanamaOceanProfitPerCbm : MinimumCentralAmericaProfitPerCbm;
-        var calculatedRecommended = CeilingCent(freightCostPerCbm + minimumForRecommendation);
-        var recommendedSalePerCbm = historicalSale ?? calculatedRecommended;
+        var historicalSale = await LoadHistoricalSaleAsync(
+            consolidation.ConsolidationNumber,
+            destination,
+            originPort,
+            db,
+            ct);
+        var htmlBaseSalePerCbm = destination == "CR"
+            ? CostaRicaFreightSalePerCbm
+            : PanamaAndCentralAmericaFreightSalePerCbm;
+        var recommendedSalePerCbm = historicalSale ?? (htmlBaseSalePerCbm + originSurcharge);
         var freightSalePerCbm = request.SalePerCbm is > 0 ? request.SalePerCbm.Value : recommendedSalePerCbm;
 
         var lines = new List<OwnLclQuoteLine>();
