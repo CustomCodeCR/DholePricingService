@@ -19,6 +19,15 @@ jobs:
   deploy:
     runs-on: [self-hosted, linux, x64, dhole]
     steps:
+      - name: Normalize runner workspace permissions
+        run: |
+          set -euo pipefail
+          if [ -d "$GITHUB_WORKSPACE" ]; then
+            RUNNER_UID="$(id -u)"
+            RUNNER_GID="$(id -g)"
+            docker run --rm -v "$GITHUB_WORKSPACE:/workspace" alpine:3.22 \
+              sh -c "chown -R ${RUNNER_UID}:${RUNNER_GID} /workspace"
+          fi
       - uses: actions/checkout@v4
       - name: Load Dhole deployment infrastructure
         run: |
@@ -36,8 +45,11 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm \
+            --user "$(id -u):$(id -g)" \
             -v "$GITHUB_WORKSPACE:/src" \
             -w /src \
+            -e HOME=/tmp \
+            -e DOTNET_CLI_HOME=/tmp \
             -e GITHUB_ACTOR="$GITHUB_ACTOR" \
             -e GITHUB_TOKEN="$GITHUB_TOKEN" \
             mcr.microsoft.com/dotnet/sdk:10.0 \
