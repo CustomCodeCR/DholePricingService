@@ -598,7 +598,10 @@ public static class RateEndpoints
                 request.UseAllInPresentation,
                 canApproveLowMargin,
                 httpContext.GetCurrentUserId()
-            ),
+            )
+            {
+                FinalBackupStorageIds = request.FinalBackupStorageIds ?? [],
+            },
             cancellationToken
         );
 
@@ -798,7 +801,10 @@ public static class RateEndpoints
                 request.ExchangeRateApplied,
                 request.UseAllInPresentation,
                 httpContext.GetCurrentUserId()
-            ),
+            )
+            {
+                FinalBackupStorageIds = request.FinalBackupStorageIds ?? [],
+            },
             cancellationToken
         );
 
