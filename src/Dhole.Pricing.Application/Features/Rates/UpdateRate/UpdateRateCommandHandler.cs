@@ -602,7 +602,8 @@ public sealed class UpdateRateCommandHandler(
                 await fixedCostSynchronizer.SynchronizeAsync(
                     rate,
                     command.UpdatedBy,
-                    cancellationToken
+                    cancellationToken,
+                    preserveExplicitFixedDetails: command.SourceImportFclRateId.HasValue
                 );
 
                 // During an edit, the persisted detail snapshot is authoritative while the
