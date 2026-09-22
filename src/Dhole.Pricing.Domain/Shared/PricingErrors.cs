@@ -253,6 +253,15 @@ public static class PricingErrors
         "La tarifa requiere aprobación porque el margen es menor al mínimo permitido."
     );
 
+    public static Error OwnLclCapacityExceeded(
+        int consolidationNumber,
+        decimal requestedCbm,
+        decimal remainingCbm
+    ) => new(
+        "Pricing.OwnLclCapacityExceeded",
+        $"El consolidado #{consolidationNumber} solo tiene {remainingCbm:0.###} CBM disponibles para aprobación y esta tarifa requiere {requestedCbm:0.###} CBM."
+    );
+
     public static readonly Error MarginApprovalNotFound = new(
         "Pricing.MarginApprovalNotFound",
         "La aprobación de margen no existe."
