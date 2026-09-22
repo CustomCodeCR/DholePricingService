@@ -1606,6 +1606,13 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("cargo_lines_json");
 
+                    b.Property<Guid[]>("FinalBackupStorageIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid[]")
+                        .HasDefaultValueSql("'{}'::uuid[]")
+                        .HasColumnName("final_backup_storage_ids");
+
                     b.Property<string>("CarrierCode")
                         .IsRequired()
                         .HasMaxLength(80)
