@@ -59,5 +59,6 @@ public sealed record UpdateRateRequest(
     decimal? ExchangeRateSale = null,
     decimal? ExchangeRateApplied = null,
     bool UseAllInPresentation = false,
-    string? UpdateReason = null
+    string? UpdateReason = null,
+    IReadOnlyCollection<Guid>? FinalBackupStorageIds = null
 );
