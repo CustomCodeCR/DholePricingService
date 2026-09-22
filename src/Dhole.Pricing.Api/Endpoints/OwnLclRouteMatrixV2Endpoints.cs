@@ -153,6 +153,7 @@ public static class OwnLclRouteMatrixV2Endpoints
         // El HTML usa exactamente el mismo diferencial de origen que Panamá
         // para Nicaragua, Honduras, Guatemala y El Salvador.
         var originSurchargePerCbm = OriginSurcharges.GetValueOrDefault(requestedPol);
+        var pricingLineOverrides = await LoadPricingLineOverridesAsync(consolidation.Id, db, ct);
 
         decimal routeDestinationCostPerCbm;
         decimal routeTransferCostPerCbm;
@@ -178,15 +179,24 @@ public static class OwnLclRouteMatrixV2Endpoints
         }
         else
         {
-            var inland = CentralAmericaInland[destination];
-            routeDestinationCostPerCbm = CentralAmericaDestinationCostPerCbm;
-            routeTransferCostPerCbm = CentralAmericaPanamaToCostaRicaTotal / CentralAmericaPanamaToCostaRicaBaseCbm;
-            routeWarehouseCostPerCbm = CentralAmericaWarehouseTotal / CentralAmericaWarehouseBaseCbm;
-            routeInlandCostPerCbm = inland.InlandTotal / CentralAmericaInlandBaseCbm;
+            var inlandKey = CentralAmericaInlandLineKey(destination);
+            var inland = ResolveConfiguredLine(pricingLineOverrides, inlandKey);
+            var inlandBaseCbm = inland.CalculationBaseCbm is > 0m
+                ? inland.CalculationBaseCbm.Value
+                : CentralAmericaInlandBaseCbm;
+
+            var transshipment = ResolveConfiguredLine(pricingLineOverrides, "CA_TRANSSHIPMENT");
+            var stuffing = ResolveConfiguredLine(pricingLineOverrides, "CA_STUFFING");
+
+            // Todos estos conceptos son cargos de destino separados del O/F.
+            // RouteCostPerCbm es informativo; FreightCostPerCbm NO los incorpora.
+            routeDestinationCostPerCbm = transshipment.Cost;
+            routeTransferCostPerCbm = 0m;
+            routeWarehouseCostPerCbm = stuffing.Cost;
+            routeInlandCostPerCbm = inland.Cost / inlandBaseCbm;
             routeCostPerCbm = oceanCostPerCbm
                 + originSurchargePerCbm
                 + routeDestinationCostPerCbm
-                + routeTransferCostPerCbm
                 + routeWarehouseCostPerCbm
                 + routeInlandCostPerCbm;
         }
@@ -228,7 +238,6 @@ public static class OwnLclRouteMatrixV2Endpoints
                 : recommendedSalePerCbm;
         }
 
-        var pricingLineOverrides = await LoadPricingLineOverridesAsync(consolidation.Id, db, ct);
         var lines = new List<OwnLclQuoteLine>();
         AddLine(lines, "Flete Internacional Marítimo LCL", "CBM", billableCbm, freightCostPerCbm, freightSalePerCbm);
         AddDestinationLines(
@@ -326,7 +335,7 @@ public static class OwnLclRouteMatrixV2Endpoints
         string destination,
         decimal cbm,
         decimal routeDestinationCostPerCbm,
-        IReadOnlyDictionary<string, (decimal Cost, decimal Sale)> pricingLines)
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale, decimal? CalculationBaseCbm)> pricingLines)
     {
         if (destination == "PA")
         {
@@ -344,31 +353,17 @@ public static class OwnLclRouteMatrixV2Endpoints
             return;
         }
 
-        // Centroamérica: fórmulas comerciales obligatorias.
-        // Transbordo = venta de Destination Charge Panamá + USD 9.
-        // Stuffing = USD 550 / 60 CBM.
-        // Documentación = USD 185 por HBL.
-        var panamaDestinationSale = ResolveConfiguredSale(pricingLines, "PA_DESTINATION_CHARGE");
-        AddFormulaManagedLine(
+        // Centroamérica usa exactamente los valores guardados en el consolidado.
+        // Transbordo/Stuffing/Documentación se inicializan con sus fórmulas, pero
+        // permanecen editables. El flete terrestre guarda costo total + CBM base.
+        AddConfiguredLine(lines, pricingLines, "CA_TRANSSHIPMENT", cbm);
+        AddConfiguredCalculatedInlandLine(
             lines,
             pricingLines,
-            "CA_TRANSSHIPMENT",
-            cbm,
-            panamaDestinationSale + 9m);
-        AddConfiguredLine(
-            lines,
-            pricingLines,
-            destination switch
-            {
-                "NI" => "CA_INLAND_NI",
-                "HN" => "CA_INLAND_HN",
-                "GT" => "CA_INLAND_GT",
-                "SV" => "CA_INLAND_SV",
-                _ => throw new InvalidOperationException($"Destino centroamericano no soportado: {destination}."),
-            },
+            CentralAmericaInlandLineKey(destination),
             cbm);
-        AddFormulaManagedLine(lines, pricingLines, "CA_STUFFING", cbm, 550m / 60m);
-        AddFormulaManagedLine(lines, pricingLines, "CA_DOCUMENTATION", 1m, 185m);
+        AddConfiguredLine(lines, pricingLines, "CA_STUFFING", cbm);
+        AddConfiguredLine(lines, pricingLines, "CA_DOCUMENTATION", 1m);
         AddConfiguredLine(lines, pricingLines, "CA_HANDLING", 1);
         AddConfiguredLine(lines, pricingLines, "CA_DESTINATION_HANDLING", 1);
     }
@@ -382,7 +377,7 @@ public static class OwnLclRouteMatrixV2Endpoints
         int hbl,
         decimal pickupCost,
         decimal pickupSale,
-        IReadOnlyDictionary<string, (decimal Cost, decimal Sale)> pricingLines)
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale, decimal? CalculationBaseCbm)> pricingLines)
     {
         if (incoterm == "FOB") return;
 
@@ -401,37 +396,48 @@ if (string.Equals(originPol, "SHANGHAI", StringComparison.OrdinalIgnoreCase))
             AddConfiguredLine(lines, pricingLines, "ORIGIN_PICK_UP", 1);
     }
 
-    private static decimal ResolveConfiguredSale(
-        IReadOnlyDictionary<string, (decimal Cost, decimal Sale)> pricingLines,
+    private static string CentralAmericaInlandLineKey(string destination) =>
+        destination switch
+        {
+            "NI" => "CA_INLAND_NI",
+            "HN" => "CA_INLAND_HN",
+            "GT" => "CA_INLAND_GT",
+            "SV" => "CA_INLAND_SV",
+            _ => throw new InvalidOperationException($"Destino centroamericano no soportado: {destination}."),
+        };
+
+    private static (decimal Cost, decimal Sale, decimal? CalculationBaseCbm) ResolveConfiguredLine(
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale, decimal? CalculationBaseCbm)> pricingLines,
         string lineKey)
     {
         if (pricingLines.TryGetValue(lineKey, out var stored))
-            return stored.Sale;
+            return stored;
 
         var definition = OwnLclPricingLineCatalog.Find(lineKey)
             ?? throw new InvalidOperationException($"Línea LCL propia desconocida: {lineKey}.");
-        return definition.DefaultSaleUnit;
+        return (
+            definition.DefaultCostUnit ?? 0m,
+            definition.DefaultSaleUnit,
+            lineKey.StartsWith("CA_INLAND_", StringComparison.OrdinalIgnoreCase) ? 70m : null);
     }
 
-    private static void AddFormulaManagedLine(
+    private static void AddConfiguredCalculatedInlandLine(
         List<OwnLclQuoteLine> lines,
-        IReadOnlyDictionary<string, (decimal Cost, decimal Sale)> pricingLines,
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale, decimal? CalculationBaseCbm)> pricingLines,
         string lineKey,
-        decimal quantity,
-        decimal forcedSaleUnit)
+        decimal quantity)
     {
         var definition = OwnLclPricingLineCatalog.Find(lineKey)
             ?? throw new InvalidOperationException($"Línea LCL propia desconocida: {lineKey}.");
-        var cost = pricingLines.TryGetValue(lineKey, out var stored)
-            ? stored.Cost
-            : definition.DefaultCostUnit ?? 0m;
-
-        AddLine(lines, definition.Name, definition.ChargeBasis, quantity, cost, forcedSaleUnit);
+        var configured = ResolveConfiguredLine(pricingLines, lineKey);
+        var baseCbm = configured.CalculationBaseCbm is > 0m ? configured.CalculationBaseCbm.Value : 70m;
+        var costPerCbm = configured.Cost / baseCbm;
+        AddLine(lines, definition.Name, definition.ChargeBasis, quantity, costPerCbm, configured.Sale);
     }
 
     private static void AddConfiguredLine(
         List<OwnLclQuoteLine> lines,
-        IReadOnlyDictionary<string, (decimal Cost, decimal Sale)> pricingLines,
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale, decimal? CalculationBaseCbm)> pricingLines,
         string lineKey,
         decimal quantity,
         decimal? fallbackCost = null)
@@ -463,24 +469,29 @@ if (string.Equals(originPol, "SHANGHAI", StringComparison.OrdinalIgnoreCase))
             quantity * (saleUnit - costUnit)));
     }
 
-    private static async Task<Dictionary<string, (decimal Cost, decimal Sale)>> LoadPricingLineOverridesAsync(
+    private static async Task<Dictionary<string, (decimal Cost, decimal Sale, decimal? CalculationBaseCbm)>> LoadPricingLineOverridesAsync(
         Guid consolidationId,
         ServiceDbContext db,
         CancellationToken ct)
     {
-        var result = new Dictionary<string, (decimal Cost, decimal Sale)>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, (decimal Cost, decimal Sale, decimal? CalculationBaseCbm)>(StringComparer.OrdinalIgnoreCase);
         var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT line_key, cost_unit, sale_unit
+            SELECT line_key, cost_unit, sale_unit, calculation_base_cbm
             FROM pricing."OwnLclConsolidationPricingLines"
             WHERE consolidation_id=@id;
             """;
         Add(command, "id", consolidationId);
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
-            result[reader.GetString(0)] = (reader.GetDecimal(1), reader.GetDecimal(2));
+        {
+            result[reader.GetString(0)] = (
+                reader.GetDecimal(1),
+                reader.GetDecimal(2),
+                reader.IsDBNull(3) ? null : reader.GetDecimal(3));
+        }
         return result;
     }
 
