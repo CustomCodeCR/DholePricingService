@@ -133,6 +133,10 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.KgPerCbm).HasPrecision(18, 4).IsRequired().HasDefaultValue(500m);
         builder.Property(x => x.ChargeableQuantity).HasPrecision(18, 6).IsRequired().HasDefaultValue(1m);
         builder.Property(x => x.CargoLinesJson).HasColumnType("jsonb").IsRequired(false);
+        builder.Property(x => x.FinalBackupStorageIds)
+            .HasColumnType("uuid[]")
+            .IsRequired()
+            .HasDefaultValueSql("'{}'::uuid[]");
 
         builder.Property(x => x.TotalCostAmount).HasPrecision(18, 2).IsRequired();
 
