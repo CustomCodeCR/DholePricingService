@@ -26,7 +26,8 @@ public sealed class RateFixedCostSynchronizer(
     public async Task SynchronizeAsync(
         RateHeader rate,
         Guid? updatedBy,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        bool preserveExplicitFixedDetails = false
     )
     {
         // LCL propio ya lleva la matriz del consolidado prorrateada dentro del flete/CBM.
@@ -76,7 +77,7 @@ public sealed class RateFixedCostSynchronizer(
         // hacía desaparecer BL, cargos de destino, origen, recolecta, etc. Los snapshots que
         // llegaron explícitamente tienen prioridad; solo completamos costos automáticos que no
         // hayan sido enviados.
-        var preserveExplicitFixedDetails = rate.SourceImportFclRateId.HasValue;
+        preserveExplicitFixedDetails = preserveExplicitFixedDetails || rate.SourceImportFclRateId.HasValue;
         if (!preserveExplicitFixedDetails)
         {
             rate.RemoveAutomaticFixedDetails(updatedBy);
