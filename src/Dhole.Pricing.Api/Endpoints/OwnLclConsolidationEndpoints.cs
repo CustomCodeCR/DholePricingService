@@ -188,7 +188,7 @@ public static class OwnLclConsolidationEndpoints
                 pol_id=@pol_id, pol_name=@pol_name, pol_code=@pol_code, ocean_freight=@ocean_freight,
                 maximum_cbm=@maximum_cbm, carrier_destination_cost_total=@destination_cost,
                 panama_to_cr_cost=@panama_to_cr, bunker_cost=@bunker, cr_transfer_base_cbm=@cr_base,
-                freight_profit_per_cbm=@freight_profit_per_cbm,
+                freight_profit_per_cbm=COALESCE(@freight_profit_per_cbm, freight_profit_per_cbm),
                 matrix_version = CASE WHEN matrix_version LIKE '%-v1' THEN replace(matrix_version, '-v1', '-v2') ELSE matrix_version END,
                 updated_at_utc=now()
             WHERE id=@id AND is_active=TRUE;
@@ -211,7 +211,7 @@ public static class OwnLclConsolidationEndpoints
         Add(command, "panama_to_cr", request.PanamaToCostaRicaCost);
         Add(command, "bunker", request.BunkerCost);
         Add(command, "cr_base", request.CostaRicaTransferBaseCbm > 0 ? request.CostaRicaTransferBaseCbm : 95m);
-        Add(command, "freight_profit_per_cbm", Math.Max(0m, request.FreightProfitPerCbm));
+        Add(command, "freight_profit_per_cbm", request.FreightProfitPerCbm.HasValue ? Math.Max(0m, request.FreightProfitPerCbm.Value) : null);
 
         return await command.ExecuteNonQueryAsync(ct) == 0 ? Results.NotFound() : Results.NoContent();
     }
@@ -731,7 +731,7 @@ public sealed record UpdateOwnLclConsolidationRequest(
     decimal PanamaToCostaRicaCost,
     decimal BunkerCost,
     decimal CostaRicaTransferBaseCbm,
-    decimal FreightProfitPerCbm);
+    decimal? FreightProfitPerCbm = null);
 
 public sealed record CalculateOwnLclQuoteRequest(
     string DestinationCode,
