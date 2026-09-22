@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using Dhole.Pricing.Api.Authorization;
+using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
@@ -56,7 +57,11 @@ public static class OwnLclConsolidationEndpoints
         return app;
     }
 
-    private static async Task<IResult> BrowseAsync(ServiceDbContext db, CancellationToken ct)
+    private static async Task<IResult> BrowseAsync(
+        ServiceDbContext db,
+        IRateHeaderRepository rateHeaders,
+        CancellationToken ct
+    )
     {
         await using var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
@@ -70,19 +75,38 @@ public static class OwnLclConsolidationEndpoints
                    bunker_cost, cr_transfer_base_cbm, matrix_version, status, is_active
             FROM pricing."OwnLclConsolidations"
             WHERE is_active = TRUE
+              AND (etd IS NULL OR etd > @today)
             ORDER BY consolidation_number DESC;
             """;
 
-        await using var reader = await command.ExecuteReaderAsync(ct);
+        Add(command, "today", CurrentBusinessDate());
+
         var result = new List<OwnLclConsolidationDto>();
-        while (await reader.ReadAsync(ct)) result.Add(ReadConsolidation(reader));
-        return Results.Ok(result);
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+                result.Add(ReadConsolidation(reader));
+        }
+
+        var enriched = new List<OwnLclConsolidationDto>(result.Count);
+        foreach (var row in result)
+            enriched.Add(await WithCapacityAsync(row, rateHeaders, ct));
+
+        return Results.Ok(enriched);
     }
 
-    private static async Task<IResult> GetAsync(Guid id, ServiceDbContext db, CancellationToken ct)
+    private static async Task<IResult> GetAsync(
+        Guid id,
+        ServiceDbContext db,
+        IRateHeaderRepository rateHeaders,
+        CancellationToken ct
+    )
     {
         var row = await LoadAsync(id, db, ct);
-        return row is null ? Results.NotFound() : Results.Ok(row);
+        if (row is null)
+            return Results.NotFound();
+
+        return Results.Ok(await WithCapacityAsync(row, rateHeaders, ct));
     }
 
     private static async Task<IResult> CreateAsync(CreateOwnLclConsolidationRequest request, ServiceDbContext db, CancellationToken ct)
@@ -194,6 +218,15 @@ public static class OwnLclConsolidationEndpoints
     {
         var consolidation = await LoadAsync(id, db, ct);
         if (consolidation is null) return Results.NotFound();
+        if (consolidation.Etd.HasValue && CurrentBusinessDate() >= consolidation.Etd.Value)
+        {
+            return Results.Conflict(new
+            {
+                code = "Pricing.OwnLclEtdExpired",
+                message = "El consolidado ya alcanzó o superó su ETD y no está disponible para nuevas cotizaciones.",
+            });
+        }
+
         var consolidationPricingLines = await LoadConsolidationPricingLinesAsync(id, db, ct);
         if (request.CargoLines.Count == 0) return Results.BadRequest(new { code = "Pricing.OwnLclCargoRequired", message = "Agregue al menos una línea de carga." });
 
@@ -413,6 +446,45 @@ public static class OwnLclConsolidationEndpoints
         return value is null or DBNull ? null : Convert.ToDecimal(value);
     }
 
+    private static async Task<OwnLclConsolidationDto> WithCapacityAsync(
+        OwnLclConsolidationDto row,
+        IRateHeaderRepository rateHeaders,
+        CancellationToken ct
+    )
+    {
+        var approvedCbm = await rateHeaders.GetAcceptedOwnLclCbmAsync(
+            row.Id,
+            row.ConsolidationNumber,
+            ct
+        );
+        var remainingCbm = Math.Max(0m, row.MaximumCbm - approvedCbm);
+
+        return row with
+        {
+            ApprovedCbm = approvedCbm,
+            RemainingCbm = remainingCbm,
+            CapacityReached = remainingCbm <= 0m,
+        };
+    }
+
+    private static DateOnly CurrentBusinessDate()
+    {
+        try
+        {
+            var timeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Costa_Rica");
+            var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, timeZone);
+            return DateOnly.FromDateTime(localNow);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return DateOnly.FromDateTime(DateTime.UtcNow);
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return DateOnly.FromDateTime(DateTime.UtcNow);
+        }
+    }
+
     private static async Task<OwnLclConsolidationDto?> LoadAsync(Guid id, ServiceDbContext db, CancellationToken ct)
     {
         await using var connection = db.Database.GetDbConnection();
@@ -594,7 +666,10 @@ public sealed record OwnLclConsolidationDto(
     decimal CostaRicaTransferBaseCbm,
     string MatrixVersion,
     string Status,
-    bool IsActive);
+    bool IsActive,
+    decimal ApprovedCbm = 0m,
+    decimal RemainingCbm = 0m,
+    bool CapacityReached = false);
 
 public sealed record OwnLclQuoteCalculationDto(
     Guid ConsolidationId,
