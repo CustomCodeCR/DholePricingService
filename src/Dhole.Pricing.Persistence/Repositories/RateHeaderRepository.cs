@@ -883,7 +883,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         $"ConsolidadoId: {consolidationId:D}";
 
     private static string BuildOwnLclNumberMarker(int consolidationNumber) =>
-        $"Consolidado: #{consolidationNumber}";
+        $"Consolidado: #{consolidationNumber} ·";
 
     private static decimal ResolveOwnLclBillableCbm(
         RateHeader rate,
