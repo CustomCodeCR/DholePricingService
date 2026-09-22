@@ -113,6 +113,9 @@ public static class OwnLclRouteMatrixV2Endpoints
         if (incoterm is null)
             return Results.BadRequest(new { code = "Pricing.OwnLclIncotermInvalid", message = "El Incoterm debe ser FOB, FCA o EXW." });
 
+        if (OwnLclPricingLineCatalog.IsMiamiOrigin(consolidation.PolCode, consolidation.PolName))
+            return await CalculateMiamiAsync(consolidation, request, destination, incoterm, db, ct);
+
         var requestedPol = NormalizeChinaPol(request.PolCode);
         if (requestedPol is null && !string.IsNullOrWhiteSpace(request.PolCode))
         {
@@ -323,6 +326,123 @@ public static class OwnLclRouteMatrixV2Endpoints
             oceanProfitPerCbm,
             meetsMinimum,
             !meetsMinimum));
+    }
+
+    private static async Task<IResult> CalculateMiamiAsync(
+        OwnLclMatrixConsolidationDto consolidation,
+        CalculateOwnLclQuoteRequest request,
+        string destination,
+        string incoterm,
+        ServiceDbContext db,
+        CancellationToken ct)
+    {
+        var requestedPol = string.IsNullOrWhiteSpace(request.PolCode)
+            ? consolidation.PolName ?? consolidation.PolCode
+            : request.PolCode;
+        if (!OwnLclPricingLineCatalog.IsMiamiOrigin(requestedPol, requestedPol))
+        {
+            return Results.BadRequest(new
+            {
+                code = "Pricing.OwnLclMiamiPolInvalid",
+                message = $"El consolidado usa matriz Miami y no puede cotizar el POL '{request.PolCode}'.",
+            });
+        }
+
+        var cargo = request.CargoLines.Select(CalculateCargoLine).ToArray();
+        var chargeableCbm = cargo.Sum(line => line.ChargeableCbm);
+        var billableCbm = chargeableCbm > 0 ? Math.Max(1m, chargeableCbm) : 0m;
+        if (billableCbm <= 0)
+            return Results.BadRequest(new { code = "Pricing.OwnLclChargeableCbmRequired", message = "La carga no genera CBM cobrable." });
+
+        var oceanCostPerCbm = consolidation.OceanFreight / Math.Max(1m, consolidation.MaximumCbm);
+        var configuredLines = await LoadPricingLineOverridesAsync(consolidation.Id, db, ct);
+        var freightSalePerCbm = request.SalePerCbm is > 0
+            ? request.SalePerCbm.Value
+            : CeilingCent(oceanCostPerCbm + MinimumCentralAmericaProfitPerCbm);
+        var recommendedSalePerCbm = CeilingCent(oceanCostPerCbm + MinimumCentralAmericaProfitPerCbm);
+
+        var lines = new List<OwnLclQuoteLine>();
+        AddLine(lines, "Flete Internacional Marítimo LCL", "CBM", billableCbm, oceanCostPerCbm, freightSalePerCbm);
+        AddMiamiMatrixLines(lines, configuredLines, billableCbm);
+
+        var matrixCost = lines.Skip(1).Sum(line => line.CostTotal);
+        var matrixCostPerCbm = matrixCost / billableCbm;
+        var routeCostPerCbm = oceanCostPerCbm + matrixCostPerCbm;
+
+        var totalCost = lines.Sum(line => line.CostTotal);
+        var subtotalSale = lines.Sum(line => line.SaleTotal);
+        var discount = Math.Min(Math.Max(0m, request.Discount), subtotalSale);
+        var finalSale = subtotalSale - discount;
+        var profit = finalSale - totalCost;
+        var profitPerCbm = profit / billableCbm;
+        var profitPercentage = finalSale > 0 ? profit / finalSale * 100m : 0m;
+        var oceanProfitPerCbm = freightSalePerCbm - oceanCostPerCbm;
+        var minimumProfit = MinimumCentralAmericaProfitPerCbm;
+        var meetsMinimum = profitPerCbm >= minimumProfit;
+
+        return Results.Ok(new OwnLclRouteMatrixQuoteDto(
+            consolidation.Id,
+            consolidation.ConsolidationNumber,
+            consolidation.Name,
+            consolidation.MatrixVersion,
+            "MIAMI",
+            destination,
+            incoterm,
+            cargo,
+            chargeableCbm,
+            billableCbm,
+            oceanCostPerCbm,
+            0m,
+            matrixCostPerCbm,
+            routeCostPerCbm,
+            0m,
+            routeCostPerCbm,
+            0m,
+            0m,
+            0m,
+            routeCostPerCbm,
+            oceanCostPerCbm,
+            recommendedSalePerCbm,
+            freightSalePerCbm,
+            lines,
+            totalCost,
+            subtotalSale,
+            discount,
+            finalSale,
+            profit,
+            profitPerCbm,
+            profitPercentage,
+            minimumProfit,
+            oceanProfitPerCbm,
+            meetsMinimum,
+            !meetsMinimum));
+    }
+
+    private static void AddMiamiMatrixLines(
+        List<OwnLclQuoteLine> lines,
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale, decimal? CalculationBaseCbm)> pricingLines,
+        decimal cbm)
+    {
+        foreach (var definition in OwnLclPricingLineCatalog.Miami)
+        {
+            var configured = pricingLines.TryGetValue(definition.LineKey, out var stored)
+                ? stored
+                : (
+                    Cost: definition.DefaultCostUnit ?? 0m,
+                    Sale: definition.DefaultSaleUnit,
+                    CalculationBaseCbm: (decimal?)null);
+
+            var quantity = definition.ChargeBasis.Equals("CBM", StringComparison.OrdinalIgnoreCase)
+                ? cbm
+                : 1m;
+            AddLine(
+                lines,
+                definition.Name,
+                definition.ChargeBasis,
+                quantity,
+                Math.Max(0m, configured.Cost),
+                Math.Max(0m, configured.Sale));
+        }
     }
 
     private static CargoCalculationLine CalculateCargoLine(OwnLclCargoLineRequest line)
