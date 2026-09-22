@@ -1,7 +1,11 @@
+using System.Data;
+using System.Data.Common;
+using System.Text.RegularExpressions;
 using CustomCodeFramework.Core.Pagination;
 using CustomCodeFramework.Postgres.EntityFramework.Repositories;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Contracts.Rates.Response;
+using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Persistence.DbContexts;
@@ -22,6 +26,83 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             .RateHeaders.Include(x => x.RateDetails).Include(x => x.RateContainers).Include(x => x.RateServices)
             .AsSplitQuery()
             .FirstOrDefaultAsync(x => x.Id == id && !x.IsDeleted, cancellationToken);
+    }
+
+    public async Task<decimal> GetAcceptedOwnLclCbmAsync(
+        Guid consolidationId,
+        int consolidationNumber,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var idMarker = BuildOwnLclIdMarker(consolidationId);
+        var numberMarker = BuildOwnLclNumberMarker(consolidationNumber);
+
+        var acceptedRates = await dbContext
+            .RateHeaders.AsNoTracking()
+            .Include(x => x.RateDetails)
+            .AsSplitQuery()
+            .Where(x =>
+                !x.IsDeleted
+                && x.ShipmentMode == ShipmentMode.Lcl
+                && x.Status == RateStatus.AcceptedByClient
+                && x.RateDetails.Any(detail =>
+                    detail.Notes != null
+                    && (detail.Notes.Contains(idMarker) || detail.Notes.Contains(numberMarker))
+                )
+            )
+            .ToListAsync(cancellationToken);
+
+        return acceptedRates.Sum(rate =>
+            ResolveOwnLclBillableCbm(rate, idMarker, numberMarker)
+        );
+    }
+
+    public async Task<OwnLclCapacitySnapshot?> GetOwnLclCapacityForRateAsync(
+        Guid rateId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var rate = await dbContext
+            .RateHeaders.AsNoTracking()
+            .Include(x => x.RateDetails)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
+
+        if (rate is null || rate.ShipmentMode != ShipmentMode.Lcl)
+            return null;
+
+        var source = ResolveOwnLclSource(rate);
+        if (source is null)
+            return null;
+
+        var consolidation = await LoadOwnLclConsolidationAsync(
+            source.Value.ConsolidationId,
+            source.Value.ConsolidationNumber,
+            cancellationToken
+        );
+        if (consolidation is null)
+            return null;
+
+        var approvedCbm = await GetAcceptedOwnLclCbmAsync(
+            consolidation.Value.Id,
+            consolidation.Value.Number,
+            cancellationToken
+        );
+        var remainingCbm = Math.Max(0m, consolidation.Value.MaximumCbm - approvedCbm);
+        var requestedCbm = ResolveOwnLclBillableCbm(
+            rate,
+            BuildOwnLclIdMarker(consolidation.Value.Id),
+            BuildOwnLclNumberMarker(consolidation.Value.Number)
+        );
+
+        return new OwnLclCapacitySnapshot(
+            consolidation.Value.Id,
+            consolidation.Value.Number,
+            consolidation.Value.MaximumCbm,
+            approvedCbm,
+            remainingCbm,
+            requestedCbm
+        );
     }
 
     public async Task<IReadOnlyCollection<RateHeader>> GetValidRateHeadersAsync(
@@ -786,6 +867,128 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         }
 
         return query;
+    }
+
+    private static readonly Regex OwnLclIdRegex = new(
+        @"ConsolidadoId:\s*(?<id>[0-9a-fA-F-]{36})",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
+    );
+
+    private static readonly Regex OwnLclNumberRegex = new(
+        @"Consolidado:\s*#(?<number>\d+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
+    );
+
+    private static string BuildOwnLclIdMarker(Guid consolidationId) =>
+        $"ConsolidadoId: {consolidationId:D}";
+
+    private static string BuildOwnLclNumberMarker(int consolidationNumber) =>
+        $"Consolidado: #{consolidationNumber}";
+
+    private static decimal ResolveOwnLclBillableCbm(
+        RateHeader rate,
+        string idMarker,
+        string numberMarker
+    )
+    {
+        var quantity = rate.RateDetails
+            .Where(detail =>
+                detail.CostDetailType == CostDetailType.Freight
+                && detail.ChargeBasis is ChargeBasis.PerCbm or ChargeBasis.PerChargeableCbm
+                && detail.Notes != null
+                && (detail.Notes.Contains(idMarker, StringComparison.OrdinalIgnoreCase)
+                    || detail.Notes.Contains(numberMarker, StringComparison.OrdinalIgnoreCase))
+            )
+            .Select(detail => detail.Quantity)
+            .DefaultIfEmpty(0m)
+            .Max();
+
+        return quantity > 0m ? quantity : Math.Max(0m, rate.ChargeableQuantity);
+    }
+
+    private static (Guid? ConsolidationId, int? ConsolidationNumber)? ResolveOwnLclSource(
+        RateHeader rate
+    )
+    {
+        foreach (var notes in rate.RateDetails
+                     .Select(detail => detail.Notes)
+                     .Where(notes => !string.IsNullOrWhiteSpace(notes)))
+        {
+            var idMatch = OwnLclIdRegex.Match(notes!);
+            Guid? id = null;
+            if (idMatch.Success && Guid.TryParse(idMatch.Groups["id"].Value, out var parsedId))
+                id = parsedId;
+
+            var numberMatch = OwnLclNumberRegex.Match(notes!);
+            int? number = null;
+            if (numberMatch.Success
+                && int.TryParse(numberMatch.Groups["number"].Value, out var parsedNumber))
+                number = parsedNumber;
+
+            if (id.HasValue || number.HasValue)
+                return (id, number);
+        }
+
+        return null;
+    }
+
+    private async Task<(Guid Id, int Number, decimal MaximumCbm)?> LoadOwnLclConsolidationAsync(
+        Guid? consolidationId,
+        int? consolidationNumber,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!consolidationId.HasValue && !consolidationNumber.HasValue)
+            return null;
+
+        var connection = dbContext.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose)
+            await connection.OpenAsync(cancellationToken);
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            if (consolidationId.HasValue)
+            {
+                command.CommandText = """
+                    SELECT id, consolidation_number, maximum_cbm
+                    FROM pricing."OwnLclConsolidations"
+                    WHERE id = @source AND is_active = TRUE
+                    LIMIT 1;
+                    """;
+                AddDbParameter(command, "source", consolidationId.Value);
+            }
+            else
+            {
+                command.CommandText = """
+                    SELECT id, consolidation_number, maximum_cbm
+                    FROM pricing."OwnLclConsolidations"
+                    WHERE consolidation_number = @source AND is_active = TRUE
+                    LIMIT 1;
+                    """;
+                AddDbParameter(command, "source", consolidationNumber!.Value);
+            }
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (!await reader.ReadAsync(cancellationToken))
+                return null;
+
+            return (reader.GetGuid(0), reader.GetInt32(1), reader.GetDecimal(2));
+        }
+        finally
+        {
+            if (shouldClose)
+                await connection.CloseAsync();
+        }
+    }
+
+    private static void AddDbParameter(DbCommand command, string name, object value)
+    {
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = $"@{name}";
+        parameter.Value = value;
+        command.Parameters.Add(parameter);
     }
 
     private static string BuildRateHeaderLabel(
