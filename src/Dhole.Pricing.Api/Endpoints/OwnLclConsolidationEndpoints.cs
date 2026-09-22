@@ -491,15 +491,18 @@ public static class OwnLclConsolidationEndpoints
         ServiceDbContext db,
         CancellationToken ct)
     {
-        var values = OwnLclPricingLineCatalog.All.ToDictionary(
-            definition => definition.LineKey,
-            definition => (
-                definition.LineKey == "CA_TRANSSHIPMENT"
-                    ? destinationCostPerCbm + 9m
-                    : definition.DefaultCostUnit ?? 0m,
-                definition.DefaultSaleUnit,
-                definition.LineKey.StartsWith("CA_INLAND_", StringComparison.OrdinalIgnoreCase) ? (decimal?)70m : null),
-            StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, (decimal CostUnit, decimal SaleUnit, decimal? CalculationBaseCbm)> values =
+            OwnLclPricingLineCatalog.All.ToDictionary(
+                definition => definition.LineKey,
+                definition => (
+                    CostUnit: definition.LineKey == "CA_TRANSSHIPMENT"
+                        ? destinationCostPerCbm + 9m
+                        : definition.DefaultCostUnit ?? 0m,
+                    SaleUnit: definition.DefaultSaleUnit,
+                    CalculationBaseCbm: definition.LineKey.StartsWith("CA_INLAND_", StringComparison.OrdinalIgnoreCase)
+                        ? (decimal?)70m
+                        : null),
+                StringComparer.OrdinalIgnoreCase);
         var hasStoredTransshipment = false;
 
         await using var connection = db.Database.GetDbConnection();
