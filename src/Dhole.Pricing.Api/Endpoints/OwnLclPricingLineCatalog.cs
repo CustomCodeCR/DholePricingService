@@ -24,13 +24,13 @@ internal static class OwnLclPricingLineCatalog
         // Costos CNCA-024/#049: el flete marítimo se maneja igual que Panamá.
         // Los componentes adicionales de Centroamérica quedan separados como cargos
         // de destino, exactamente como el HTML de Pricing.
-        new("CA_TRANSSHIPMENT", "CA", "Transbordo", "CBM", 39.719736842105264m, 29m),
+        new("CA_TRANSSHIPMENT", "CA", "Transbordo", "CBM", 39.719736842105264m, 29m), // venta = Destination Charge Panamá + 9
         new("CA_INLAND_NI", "CA", "Flete Terrestre · Nicaragua", "CBM", 16.428571428571429m, 40m),
         new("CA_INLAND_HN", "CA", "Flete Terrestre · Honduras", "CBM", 26.071428571428573m, 50m),
         new("CA_INLAND_GT", "CA", "Flete Terrestre · Guatemala", "CBM", 35m, 48m),
         new("CA_INLAND_SV", "CA", "Flete Terrestre · El Salvador", "CBM", 31.428571428571429m, 40m),
-        new("CA_STUFFING", "CA", "Stuffing", "CBM", 5.928571428571429m, 10m),
-        new("CA_DOCUMENTATION", "CA", "Documentación", "HBL", 0m, 140m),
+        new("CA_STUFFING", "CA", "Stuffing", "CBM", 5.928571428571429m, 550m / 60m),
+        new("CA_DOCUMENTATION", "CA", "Documentación", "HBL", 0m, 185m),
         new("CA_HANDLING", "CA", "Manejos", "HBL", 0m, 45m),
         new("CA_DESTINATION_HANDLING", "CA", "Manejos en Destino", "HBL", 0m, 70m),
         new("ORIGIN_CFS", "ORIGIN", "CFS", "CBM", 8m, 8m),
