@@ -226,7 +226,6 @@ public static class OwnLclConsolidationEndpoints
             });
         }
 
-        var consolidationPricingLines = await LoadConsolidationPricingLinesAsync(id, db, ct);
         if (request.CargoLines.Count == 0) return Results.BadRequest(new { code = "Pricing.OwnLclCargoRequired", message = "Agregue al menos una línea de carga." });
 
         var destination = NormalizeDestination(request.DestinationCode);
@@ -248,6 +247,7 @@ public static class OwnLclConsolidationEndpoints
         var originSurcharge = OriginSurcharges.GetValueOrDefault(originPort);
         var oceanCostWithOrigin = baseOceanCost + originSurcharge;
         var destinationCostPerCbm = consolidation.CarrierDestinationCostTotal / maximumCbm;
+        var consolidationPricingLines = await LoadConsolidationPricingLinesAsync(id, destinationCostPerCbm, db, ct);
         var crTransferCostPerCbm = (consolidation.PanamaToCostaRicaCost + consolidation.BunkerCost) / Math.Max(1m, consolidation.CostaRicaTransferBaseCbm);
 
         // Igual que en el HTML: Panamá y Centroamérica venden el O/F por
@@ -487,16 +487,20 @@ public static class OwnLclConsolidationEndpoints
 
     private static async Task<IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit, decimal? CalculationBaseCbm)>> LoadConsolidationPricingLinesAsync(
         Guid consolidationId,
+        decimal destinationCostPerCbm,
         ServiceDbContext db,
         CancellationToken ct)
     {
         var values = OwnLclPricingLineCatalog.All.ToDictionary(
             definition => definition.LineKey,
             definition => (
-                definition.DefaultCostUnit ?? 0m,
+                definition.LineKey == "CA_TRANSSHIPMENT"
+                    ? destinationCostPerCbm + 9m
+                    : definition.DefaultCostUnit ?? 0m,
                 definition.DefaultSaleUnit,
                 definition.LineKey.StartsWith("CA_INLAND_", StringComparison.OrdinalIgnoreCase) ? (decimal?)70m : null),
             StringComparer.OrdinalIgnoreCase);
+        var hasStoredTransshipment = false;
 
         await using var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
@@ -513,10 +517,18 @@ public static class OwnLclConsolidationEndpoints
         {
             var key = reader.GetString(0);
             if (!values.ContainsKey(key)) continue;
+            if (key.Equals("CA_TRANSSHIPMENT", StringComparison.OrdinalIgnoreCase))
+                hasStoredTransshipment = true;
             values[key] = (
                 reader.GetDecimal(1),
                 reader.GetDecimal(2),
                 reader.IsDBNull(3) ? null : reader.GetDecimal(3));
+        }
+
+        if (!hasStoredTransshipment)
+        {
+            var panamaSale = values["PA_DESTINATION_CHARGE"].SaleUnit;
+            values["CA_TRANSSHIPMENT"] = (destinationCostPerCbm + 9m, panamaSale + 9m, null);
         }
 
         return values;
