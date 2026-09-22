@@ -489,6 +489,7 @@ public sealed class UpdateRateCommandHandler(
             );
             rate.ConfigureExecutive(command.ExecutiveName);
             rate.ConfigureCommercialPresentation(command.UseAllInPresentation, command.UpdatedBy);
+            rate.ConfigureFinalBackupStorageIds(command.FinalBackupStorageIds);
             rate.SetOperationType(command.OperationType, command.UpdatedBy);
             rate.ConfigureServices(command.Services, command.UpdatedBy);
             rate.ConfigurePickupLocation(
