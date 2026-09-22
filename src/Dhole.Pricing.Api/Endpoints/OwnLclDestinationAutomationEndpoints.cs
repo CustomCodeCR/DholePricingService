@@ -75,16 +75,19 @@ public static class OwnLclDestinationAutomationEndpoints
         if (validation is not null) return Results.BadRequest(validation);
 
         var maximumCbm = request.MaximumCbm is > 0 ? request.MaximumCbm.Value : DefaultMaximumCbm;
-        var profile = await ResolveAsync(
-            request.CarrierCode,
-            request.CarrierName,
-            request.PanamaArrivalPortCode,
-            maximumCbm,
-            request.IncludeEmptyReturn,
-            request.ContainerCode,
-            request.BunkerCost,
-            db,
-            ct);
+        var isMiami = OwnLclPricingLineCatalog.IsMiamiOrigin(request.PolCode, request.PolName);
+        var profile = isMiami
+            ? BuildMiamiProfile(request, maximumCbm)
+            : await ResolveAsync(
+                request.CarrierCode,
+                request.CarrierName,
+                request.PanamaArrivalPortCode,
+                maximumCbm,
+                request.IncludeEmptyReturn,
+                request.ContainerCode,
+                request.BunkerCost,
+                db,
+                ct);
 
         if (profile is null)
             return Results.BadRequest(new
@@ -98,15 +101,35 @@ public static class OwnLclDestinationAutomationEndpoints
         await using var tx = await connection.BeginTransactionAsync(IsolationLevel.Serializable, ct);
 
         int nextNumber;
-        await using (var sequence = connection.CreateCommand())
+        if (request.ConsolidationNumber is > 0)
         {
+            nextNumber = request.ConsolidationNumber.Value;
+            if (await ConsolidationNumberExistsAsync(connection, tx, nextNumber, null, ct))
+            {
+                await tx.RollbackAsync(ct);
+                return Results.Conflict(new
+                {
+                    code = "Pricing.OwnLclConsolidationNumberAlreadyExists",
+                    message = $"Ya existe un consolidado con el número {nextNumber}.",
+                });
+            }
+        }
+        else
+        {
+            await using var sequence = connection.CreateCommand();
             sequence.Transaction = tx;
             sequence.CommandText = "SELECT GREATEST(COALESCE(MAX(consolidation_number), 47) + 1, 48) FROM pricing.\"OwnLclConsolidations\";";
             nextNumber = Convert.ToInt32(await sequence.ExecuteScalarAsync(ct));
         }
 
         var id = Guid.NewGuid();
-        var version = $"CNCA-{nextNumber:000}-v1";
+        var consolidationName = string.IsNullOrWhiteSpace(request.Name)
+            ? OwnLclPricingLineCatalog.DefaultConsolidationName(request.PolCode, request.PolName, nextNumber)
+            : request.Name.Trim();
+        var version = BuildMatrixVersion(
+            OwnLclPricingLineCatalog.MatrixVersionPrefix(request.PolCode, request.PolName),
+            nextNumber,
+            null);
         var snapshot = JsonSerializer.Serialize(profile, JsonOptions);
 
         await using (var command = connection.CreateCommand())
@@ -139,7 +162,7 @@ public static class OwnLclDestinationAutomationEndpoints
 
             Add(command, "id", id);
             Add(command, "number", nextNumber);
-            Add(command, "name", $"Consolidado {nextNumber}");
+            Add(command, "name", consolidationName);
             Add(command, "booking", NullIfBlank(request.Booking));
             Add(command, "etd", request.Etd);
             Add(command, "carrier_id", request.CarrierId);
@@ -175,7 +198,7 @@ public static class OwnLclDestinationAutomationEndpoints
             new AutomaticOwnLclCreatedResponse(
                 id,
                 nextNumber,
-                $"Consolidado {nextNumber}",
+                consolidationName,
                 version,
                 profile));
     }
@@ -190,16 +213,19 @@ public static class OwnLclDestinationAutomationEndpoints
         if (validation is not null) return Results.BadRequest(validation);
 
         var maximumCbm = request.MaximumCbm is > 0 ? request.MaximumCbm.Value : DefaultMaximumCbm;
-        var profile = await ResolveAsync(
-            request.CarrierCode,
-            request.CarrierName,
-            request.PanamaArrivalPortCode,
-            maximumCbm,
-            request.IncludeEmptyReturn,
-            request.ContainerCode,
-            request.BunkerCost,
-            db,
-            ct);
+        var isMiami = OwnLclPricingLineCatalog.IsMiamiOrigin(request.PolCode, request.PolName);
+        var profile = isMiami
+            ? BuildMiamiProfile(request, maximumCbm)
+            : await ResolveAsync(
+                request.CarrierCode,
+                request.CarrierName,
+                request.PanamaArrivalPortCode,
+                maximumCbm,
+                request.IncludeEmptyReturn,
+                request.ContainerCode,
+                request.BunkerCost,
+                db,
+                ct);
 
         if (profile is null)
             return Results.BadRequest(new
@@ -211,66 +237,142 @@ public static class OwnLclDestinationAutomationEndpoints
         var snapshot = JsonSerializer.Serialize(profile, JsonOptions);
         await using var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            UPDATE pricing."OwnLclConsolidations"
-            SET booking=@booking,
-                etd=@etd,
-                carrier_id=@carrier_id,
-                carrier_name=@carrier_name,
-                carrier_code=@carrier_code,
-                container_id=@container_id,
-                container_name=@container_name,
-                container_code=@container_code,
-                pol_id=@pol_id,
-                pol_name=@pol_name,
-                pol_code=@pol_code,
-                ocean_freight=@ocean_freight,
-                maximum_cbm=@maximum_cbm,
-                carrier_destination_cost_total=@destination_total,
-                panama_to_cr_cost=@panama_to_cr,
-                bunker_cost=@bunker,
-                cr_transfer_base_cbm=@cr_base,
-                freight_profit_per_cbm=COALESCE(@freight_profit_per_cbm, freight_profit_per_cbm),
-                panama_arrival_port_id=@arrival_port_id,
-                panama_arrival_port_name=@arrival_port_name,
-                panama_arrival_port_code=@arrival_port_code,
-                destination_profile_code=@profile_code,
-                destination_profile_version=@profile_version,
-                destination_charge_snapshot_json=CAST(@snapshot AS jsonb),
-                include_empty_return=@include_empty_return,
-                updated_at_utc=now()
-            WHERE id=@id AND is_active=TRUE;
-            """;
+        await using var tx = await connection.BeginTransactionAsync(IsolationLevel.Serializable, ct);
 
-        Add(command, "id", id);
-        Add(command, "booking", NullIfBlank(request.Booking));
-        Add(command, "etd", request.Etd);
-        Add(command, "carrier_id", request.CarrierId);
-        Add(command, "carrier_name", NullIfBlank(request.CarrierName));
-        Add(command, "carrier_code", Normalize(request.CarrierCode));
-        Add(command, "container_id", request.ContainerId);
-        Add(command, "container_name", NullIfBlank(request.ContainerName));
-        Add(command, "container_code", Normalize(request.ContainerCode));
-        Add(command, "pol_id", request.PolId);
-        Add(command, "pol_name", NullIfBlank(request.PolName));
-        Add(command, "pol_code", Normalize(request.PolCode));
-        Add(command, "ocean_freight", request.OceanFreight);
-        Add(command, "maximum_cbm", maximumCbm);
-        Add(command, "destination_total", profile.TotalCost);
-        Add(command, "panama_to_cr", profile.CostaRicaTransfer.PanamaToCostaRica);
-        Add(command, "bunker", profile.CostaRicaTransfer.Bunker);
-        Add(command, "cr_base", profile.CostaRicaTransfer.BaseCbm);
-        Add(command, "freight_profit_per_cbm", request.FreightProfitPerCbm.HasValue ? Math.Max(0m, request.FreightProfitPerCbm.Value) : null);
-        Add(command, "arrival_port_id", request.PanamaArrivalPortId);
-        Add(command, "arrival_port_name", NullIfBlank(request.PanamaArrivalPortName));
-        Add(command, "arrival_port_code", Normalize(request.PanamaArrivalPortCode));
-        Add(command, "profile_code", profile.ProfileCode);
-        Add(command, "profile_version", profile.Version);
-        Add(command, "snapshot", snapshot);
-        Add(command, "include_empty_return", profile.IncludeEmptyReturn);
+        int currentNumber;
+        string currentName;
+        string currentVersion;
+        await using (var lookup = connection.CreateCommand())
+        {
+            lookup.Transaction = tx;
+            lookup.CommandText = """
+                SELECT consolidation_number, name, matrix_version
+                FROM pricing."OwnLclConsolidations"
+                WHERE id=@id AND is_active=TRUE
+                LIMIT 1;
+                """;
+            Add(lookup, "id", id);
+            await using var reader = await lookup.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct))
+            {
+                await tx.RollbackAsync(ct);
+                return Results.NotFound();
+            }
 
-        return await command.ExecuteNonQueryAsync(ct) == 0 ? Results.NotFound() : Results.Ok(profile);
+            currentNumber = reader.GetInt32(0);
+            currentName = reader.GetString(1);
+            currentVersion = reader.GetString(2);
+        }
+
+        var newNumber = request.ConsolidationNumber is > 0
+            ? request.ConsolidationNumber.Value
+            : currentNumber;
+        if (await ConsolidationNumberExistsAsync(connection, tx, newNumber, id, ct))
+        {
+            await tx.RollbackAsync(ct);
+            return Results.Conflict(new
+            {
+                code = "Pricing.OwnLclConsolidationNumberAlreadyExists",
+                message = $"Ya existe otro consolidado con el número {newNumber}.",
+            });
+        }
+
+        var newName = string.IsNullOrWhiteSpace(request.Name) ? currentName : request.Name.Trim();
+        var newVersion = BuildMatrixVersion(
+            OwnLclPricingLineCatalog.MatrixVersionPrefix(request.PolCode, request.PolName),
+            newNumber,
+            currentVersion);
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = tx;
+            command.CommandText = """
+                UPDATE pricing."OwnLclConsolidations"
+                SET consolidation_number=@number,
+                    name=@name,
+                    booking=@booking,
+                    etd=@etd,
+                    carrier_id=@carrier_id,
+                    carrier_name=@carrier_name,
+                    carrier_code=@carrier_code,
+                    container_id=@container_id,
+                    container_name=@container_name,
+                    container_code=@container_code,
+                    pol_id=@pol_id,
+                    pol_name=@pol_name,
+                    pol_code=@pol_code,
+                    ocean_freight=@ocean_freight,
+                    maximum_cbm=@maximum_cbm,
+                    carrier_destination_cost_total=@destination_total,
+                    panama_to_cr_cost=@panama_to_cr,
+                    bunker_cost=@bunker,
+                    cr_transfer_base_cbm=@cr_base,
+                    freight_profit_per_cbm=COALESCE(@freight_profit_per_cbm, freight_profit_per_cbm),
+                    panama_arrival_port_id=@arrival_port_id,
+                    panama_arrival_port_name=@arrival_port_name,
+                    panama_arrival_port_code=@arrival_port_code,
+                    destination_profile_code=@profile_code,
+                    destination_profile_version=@profile_version,
+                    destination_charge_snapshot_json=CAST(@snapshot AS jsonb),
+                    include_empty_return=@include_empty_return,
+                    matrix_version=@matrix_version,
+                    updated_at_utc=now()
+                WHERE id=@id AND is_active=TRUE;
+                """;
+
+            Add(command, "id", id);
+            Add(command, "number", newNumber);
+            Add(command, "name", newName);
+            Add(command, "booking", NullIfBlank(request.Booking));
+            Add(command, "etd", request.Etd);
+            Add(command, "carrier_id", request.CarrierId);
+            Add(command, "carrier_name", NullIfBlank(request.CarrierName));
+            Add(command, "carrier_code", Normalize(request.CarrierCode));
+            Add(command, "container_id", request.ContainerId);
+            Add(command, "container_name", NullIfBlank(request.ContainerName));
+            Add(command, "container_code", Normalize(request.ContainerCode));
+            Add(command, "pol_id", request.PolId);
+            Add(command, "pol_name", NullIfBlank(request.PolName));
+            Add(command, "pol_code", Normalize(request.PolCode));
+            Add(command, "ocean_freight", request.OceanFreight);
+            Add(command, "maximum_cbm", maximumCbm);
+            Add(command, "destination_total", profile.TotalCost);
+            Add(command, "panama_to_cr", profile.CostaRicaTransfer.PanamaToCostaRica);
+            Add(command, "bunker", profile.CostaRicaTransfer.Bunker);
+            Add(command, "cr_base", profile.CostaRicaTransfer.BaseCbm);
+            Add(command, "freight_profit_per_cbm", request.FreightProfitPerCbm.HasValue ? Math.Max(0m, request.FreightProfitPerCbm.Value) : null);
+            Add(command, "arrival_port_id", request.PanamaArrivalPortId);
+            Add(command, "arrival_port_name", NullIfBlank(request.PanamaArrivalPortName));
+            Add(command, "arrival_port_code", Normalize(request.PanamaArrivalPortCode));
+            Add(command, "profile_code", profile.ProfileCode);
+            Add(command, "profile_version", profile.Version);
+            Add(command, "snapshot", snapshot);
+            Add(command, "include_empty_return", profile.IncludeEmptyReturn);
+            Add(command, "matrix_version", newVersion);
+
+            if (await command.ExecuteNonQueryAsync(ct) == 0)
+            {
+                await tx.RollbackAsync(ct);
+                return Results.NotFound();
+            }
+        }
+
+        if (newNumber != currentNumber)
+        {
+            await using var history = connection.CreateCommand();
+            history.Transaction = tx;
+            history.CommandText = """
+                UPDATE pricing."OwnLclHistoricalRates"
+                SET consolidation_number=@new_number
+                WHERE consolidation_number=@old_number;
+                """;
+            Add(history, "new_number", newNumber);
+            Add(history, "old_number", currentNumber);
+            await history.ExecuteNonQueryAsync(ct);
+        }
+
+        await tx.CommitAsync(ct);
+        return Results.Ok(profile);
     }
 
     private static async Task<IResult> GetAutomationAsync(Guid id, ServiceDbContext db, CancellationToken ct)
@@ -301,6 +403,78 @@ public static class OwnLclDestinationAutomationEndpoints
         });
     }
 
+    private static AutomaticDestinationProfileDto BuildMiamiProfile(
+        AutomaticOwnLclConsolidationRequest request,
+        decimal maximumCbm)
+    {
+        var arrivalCode = Normalize(request.PanamaArrivalPortCode);
+        var arrivalName = string.IsNullOrWhiteSpace(request.PanamaArrivalPortName)
+            ? arrivalCode
+            : request.PanamaArrivalPortName.Trim();
+
+        return new AutomaticDestinationProfileDto(
+            "MIAMI-PROJECT",
+            "MIA-LIVE",
+            "Matriz propia Miami",
+            "USD",
+            arrivalCode,
+            arrivalCode,
+            arrivalName,
+            request.IncludeEmptyReturn ?? false,
+            Array.Empty<AutomaticDestinationChargeDto>(),
+            0m,
+            0m,
+            new CostaRicaTransferDto(0m, 0m, Math.Max(0.01m, maximumCbm)),
+            true,
+            "Pricing: matriz Miami por consolidado");
+    }
+
+    private static string BuildMatrixVersion(string prefix, int consolidationNumber, string? currentVersion)
+    {
+        var revision = 1;
+        if (!string.IsNullOrWhiteSpace(currentVersion))
+        {
+            var marker = currentVersion.LastIndexOf("-v", StringComparison.OrdinalIgnoreCase);
+            if (marker >= 0
+                && int.TryParse(currentVersion[(marker + 2)..], out var parsed)
+                && parsed > 0)
+            {
+                revision = parsed;
+            }
+        }
+
+        return $"{prefix}-{consolidationNumber:000}-v{revision}";
+    }
+
+    private static async Task<bool> ConsolidationNumberExistsAsync(
+        DbConnection connection,
+        DbTransaction transaction,
+        int consolidationNumber,
+        Guid? excludeId,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = excludeId.HasValue
+            ? """
+              SELECT EXISTS (
+                  SELECT 1
+                  FROM pricing."OwnLclConsolidations"
+                  WHERE consolidation_number=@number AND id<>@id
+              );
+              """
+            : """
+              SELECT EXISTS (
+                  SELECT 1
+                  FROM pricing."OwnLclConsolidations"
+                  WHERE consolidation_number=@number
+              );
+              """;
+        Add(command, "number", consolidationNumber);
+        if (excludeId.HasValue) Add(command, "id", excludeId.Value);
+        return Convert.ToBoolean(await command.ExecuteScalarAsync(ct));
+    }
+
     private static object? Validate(AutomaticOwnLclConsolidationRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.CarrierCode) && string.IsNullOrWhiteSpace(request.CarrierName))
@@ -323,6 +497,8 @@ public static class OwnLclDestinationAutomationEndpoints
             return new { code = "Pricing.OwnLclFreightProfitInvalid", message = "La utilidad por CBM no puede ser negativa." };
         if (request.BunkerCost is < 0)
             return new { code = "Pricing.OwnLclBunkerInvalid", message = "El Bunker no puede ser negativo." };
+        if (request.ConsolidationNumber is <= 0)
+            return new { code = "Pricing.OwnLclConsolidationNumberInvalid", message = "El número del consolidado debe ser mayor a cero." };
         return null;
     }
 
@@ -616,7 +792,9 @@ public sealed record AutomaticOwnLclConsolidationRequest(
     string PanamaArrivalPortCode,
     bool? IncludeEmptyReturn,
     decimal? BunkerCost = 280m,
-    decimal? FreightProfitPerCbm = null);
+    decimal? FreightProfitPerCbm = null,
+    string? Name = null,
+    int? ConsolidationNumber = null);
 
 public sealed record AutomaticOwnLclCreatedResponse(
     Guid Id,
