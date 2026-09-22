@@ -263,7 +263,12 @@ public static class OwnLclConsolidationEndpoints
 
         var lines = new List<OwnLclQuoteLine>();
         AddLine(lines, "Flete Internacional Marítimo", "CBM", billableCbm, freightCostPerCbm, freightSalePerCbm);
-        AddDestinationLines(lines, destination, billableCbm, destinationCostPerCbm);
+        AddDestinationLines(
+            lines,
+            destination,
+            billableCbm,
+            destinationCostPerCbm,
+            consolidationPricingLines);
         AddOriginLines(lines, incoterm, originPort, billableCbm, Math.Max(1, request.Sets), Math.Max(1, request.Hbl), consolidationPricingLines);
 
         var subtotalCost = lines.Sum(x => x.CostTotal);
@@ -320,34 +325,69 @@ public static class OwnLclConsolidationEndpoints
         return new CargoCalculationLine(line.Description?.Trim() ?? string.Empty, units, line.TotalWeightKg, dim, weight, Math.Max(dim, weight));
     }
 
-    private static void AddDestinationLines(List<OwnLclQuoteLine> lines, string destination, decimal cbm, decimal destinationCostPerCbm)
+    private static void AddDestinationLines(
+        List<OwnLclQuoteLine> lines,
+        string destination,
+        decimal cbm,
+        decimal destinationCostPerCbm,
+        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)> pricingLines)
     {
         switch (destination)
         {
             case "PA":
-                AddLine(lines, "Destination Charge", "CBM", cbm, destinationCostPerCbm, 20m);
-                AddLine(lines, "DMCE", "HBL", 1, 65m, 65m);
-                AddLine(lines, "Manejos", "HBL", 1, 25m, 25m);
-                AddLine(lines, "Zone Charge", "HBL", 1, 30m, 30m);
+                AddConfiguredDestinationLine(
+                    lines,
+                    pricingLines,
+                    "PA_DESTINATION_CHARGE",
+                    "Destination Charge",
+                    "CBM",
+                    cbm,
+                    destinationCostPerCbm);
+                AddConfiguredDestinationLine(lines, pricingLines, "PA_DMCE", "DMCE", "HBL", 1m);
+                AddConfiguredDestinationLine(lines, pricingLines, "PA_HANDLING", "Handling", "HBL", 1m);
+                AddConfiguredDestinationLine(lines, pricingLines, "PA_ZONE", "Zone Charge", "HBL", 1m);
                 break;
+
             case "CR":
-                AddLine(lines, "Manejos", "HBL", 1, 65m, 65m);
-                AddLine(lines, "Zone Charge", "HBL", 1, 50m, 50m);
+                AddConfiguredDestinationLine(lines, pricingLines, "CR_HANDLING", "Manejos", "HBL", 1m);
+                AddConfiguredDestinationLine(lines, pricingLines, "CR_ZONE", "Zone Charge", "HBL", 1m);
                 break;
+
             default:
-                AddCentralAmericaLines(lines, destination, cbm);
+                AddConfiguredDestinationLine(lines, pricingLines, "CA_DOCUMENTATION", "Documentación", "HBL", 1m);
+                AddConfiguredDestinationLine(lines, pricingLines, "CA_ZONE", "Zone Charge", "HBL", 1m);
+                AddConfiguredDestinationLine(lines, pricingLines, "CA_HANDLING", "Manejos destino", "HBL", 1m);
                 break;
         }
     }
 
-    private static void AddCentralAmericaLines(List<OwnLclQuoteLine> lines, string destination, decimal cbm)
+    private static void AddConfiguredDestinationLine(
+        List<OwnLclQuoteLine> lines,
+        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)> pricingLines,
+        string lineKey,
+        string name,
+        string basis,
+        decimal quantity,
+        decimal? fallbackCost = null)
     {
-        if (!CentralAmericaLandFreight.TryGetValue(destination, out var inland)) return;
+        if (!pricingLines.TryGetValue(lineKey, out var values))
+            return;
 
-        var warehousePerCbm = CostaRicaWarehouseOperation / CentralAmericaOperationBaseCbm;
-        var inlandPerCbm = inland.Total / CentralAmericaOperationBaseCbm;
-        AddLine(lines, "Almacenaje CRC", "CBM", cbm, warehousePerCbm, warehousePerCbm);
-        AddLine(lines, inland.Label, "CBM", cbm, inlandPerCbm, inlandPerCbm);
+        var cost = values.CostUnit;
+        if (lineKey.Equals("PA_DESTINATION_CHARGE", StringComparison.OrdinalIgnoreCase)
+            && cost <= 0m
+            && fallbackCost.HasValue)
+        {
+            cost = fallbackCost.Value;
+        }
+
+        AddLine(
+            lines,
+            name,
+            basis,
+            quantity,
+            Math.Max(0m, cost),
+            Math.Max(0m, values.SaleUnit));
     }
 
     private static void AddOriginLines(
