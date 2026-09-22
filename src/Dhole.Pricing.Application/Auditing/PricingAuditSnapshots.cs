@@ -165,6 +165,7 @@ public static class PricingAuditSnapshots
             rateHeader.KgPerCbm,
             rateHeader.ChargeableQuantity,
             rateHeader.CargoLinesJson,
+            rateHeader.FinalBackupStorageIds,
 
             rateHeader.IncotermId,
             rateHeader.IncotermName,
