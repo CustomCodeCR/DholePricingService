@@ -309,25 +309,42 @@ public static class OwnLclFobScenarioEndpoints
             overrides,
             "PA_DESTINATION_CHARGE",
             destinationCostPerCbm);
+
         var rows = OwnLclPricingLineCatalog.All.Select(definition =>
         {
-            var fallbackCost = definition.DefaultCostUnit
-                ?? (definition.LineKey == "PA_DESTINATION_CHARGE" ? destinationCostPerCbm : 0m);
-            var value = ResolvePricingLine(overrides, definition.LineKey, fallbackCost);
-            var sale = definition.LineKey switch
+            if (overrides.TryGetValue(definition.LineKey, out var stored))
+            {
+                return new OwnLclPricingLineDto(
+                    definition.LineKey,
+                    definition.Scope,
+                    definition.Name,
+                    definition.ChargeBasis,
+                    stored.Cost,
+                    stored.Sale,
+                    stored.CalculationBaseCbm);
+            }
+
+            var defaultCost = definition.LineKey switch
+            {
+                "PA_DESTINATION_CHARGE" => destinationCostPerCbm,
+                "CA_TRANSSHIPMENT" => panamaDestination.Cost + 9m,
+                _ => definition.DefaultCostUnit ?? 0m,
+            };
+            var defaultSale = definition.LineKey switch
             {
                 "CA_TRANSSHIPMENT" => panamaDestination.Sale + 9m,
-                "CA_STUFFING" => 550m / 60m,
-                "CA_DOCUMENTATION" => 185m,
-                _ => value.Sale,
+                _ => definition.DefaultSaleUnit,
             };
+            var defaultBase = IsCentralAmericaInlandLine(definition.LineKey) ? 70m : (decimal?)null;
+
             return new OwnLclPricingLineDto(
                 definition.LineKey,
                 definition.Scope,
                 definition.Name,
                 definition.ChargeBasis,
-                value.Cost,
-                sale);
+                defaultCost,
+                defaultSale,
+                defaultBase);
         }).ToArray();
 
         return Results.Ok(rows);
@@ -342,27 +359,21 @@ public static class OwnLclFobScenarioEndpoints
         if (request.Rows.Count == 0)
             return Results.BadRequest(new { code = "Pricing.OwnLclPricingLinesRequired", message = "Agregue al menos una línea de costo/venta." });
 
-        var incoming = request.Rows
+        var normalized = request.Rows
             .Select(row => row with { LineKey = Normalize(row.LineKey) })
             .ToArray();
-        var panamaDestinationSale = incoming
-            .FirstOrDefault(row => row.LineKey == "PA_DESTINATION_CHARGE")
-            ?.SaleUnit
-            ?? OwnLclPricingLineCatalog.Find("PA_DESTINATION_CHARGE")!.DefaultSaleUnit;
-
-        var normalized = incoming
-            .Select(row => row.LineKey switch
-            {
-                "CA_TRANSSHIPMENT" => row with { SaleUnit = panamaDestinationSale + 9m },
-                "CA_STUFFING" => row with { SaleUnit = 550m / 60m },
-                "CA_DOCUMENTATION" => row with { SaleUnit = 185m },
-                _ => row,
-            })
-            .ToArray();
         if (normalized.Select(row => row.LineKey).Distinct(StringComparer.OrdinalIgnoreCase).Count() != normalized.Length
-            || normalized.Any(row => OwnLclPricingLineCatalog.Find(row.LineKey) is null || row.CostUnit < 0m || row.SaleUnit < 0m))
+            || normalized.Any(row =>
+                OwnLclPricingLineCatalog.Find(row.LineKey) is null
+                || row.CostUnit < 0m
+                || row.SaleUnit < 0m
+                || (IsCentralAmericaInlandLine(row.LineKey) && (!row.CalculationBaseCbm.HasValue || row.CalculationBaseCbm.Value <= 0m))))
         {
-            return Results.BadRequest(new { code = "Pricing.OwnLclPricingLineInvalid", message = "Las líneas del consolidado deben ser válidas y sus costos/ventas no pueden ser negativos." });
+            return Results.BadRequest(new
+            {
+                code = "Pricing.OwnLclPricingLineInvalid",
+                message = "Las líneas deben ser válidas. Los fletes terrestres de Centroamérica requieren costo total, CBM base mayor a cero y venta por CBM.",
+            });
         }
 
         await using var connection = db.Database.GetDbConnection();
@@ -382,51 +393,64 @@ public static class OwnLclFobScenarioEndpoints
             command.Transaction = tx;
             command.CommandText = """
                 INSERT INTO pricing."OwnLclConsolidationPricingLines"
-                    (id, consolidation_id, line_key, cost_unit, sale_unit, updated_at_utc)
+                    (id, consolidation_id, line_key, cost_unit, sale_unit, calculation_base_cbm, updated_at_utc)
                 VALUES
-                    (gen_random_uuid(), @id, @key, @cost, @sale, now())
+                    (gen_random_uuid(), @id, @key, @cost, @sale, @base_cbm, now())
                 ON CONFLICT (consolidation_id, line_key)
-                DO UPDATE SET cost_unit=EXCLUDED.cost_unit, sale_unit=EXCLUDED.sale_unit, updated_at_utc=now();
+                DO UPDATE SET
+                    cost_unit=EXCLUDED.cost_unit,
+                    sale_unit=EXCLUDED.sale_unit,
+                    calculation_base_cbm=EXCLUDED.calculation_base_cbm,
+                    updated_at_utc=now();
                 """;
             Add(command, "id", id);
             Add(command, "key", row.LineKey);
             Add(command, "cost", row.CostUnit);
             Add(command, "sale", row.SaleUnit);
+            Add(command, "base_cbm", IsCentralAmericaInlandLine(row.LineKey) ? row.CalculationBaseCbm : null);
             await command.ExecuteNonQueryAsync(ct);
         }
         await tx.CommitAsync(ct);
         return Results.NoContent();
     }
 
-    private static async Task<Dictionary<string, (decimal Cost, decimal Sale)>> LoadPricingLineOverridesAsync(
+    private static async Task<Dictionary<string, (decimal Cost, decimal Sale, decimal? CalculationBaseCbm)>> LoadPricingLineOverridesAsync(
         DbConnection connection,
         Guid id,
         CancellationToken ct)
     {
-        var result = new Dictionary<string, (decimal Cost, decimal Sale)>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, (decimal Cost, decimal Sale, decimal? CalculationBaseCbm)>(StringComparer.OrdinalIgnoreCase);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT line_key, cost_unit, sale_unit
+            SELECT line_key, cost_unit, sale_unit, calculation_base_cbm
             FROM pricing."OwnLclConsolidationPricingLines"
             WHERE consolidation_id=@id;
             """;
         Add(command, "id", id);
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
-            result[reader.GetString(0)] = (reader.GetDecimal(1), reader.GetDecimal(2));
+        {
+            result[reader.GetString(0)] = (
+                reader.GetDecimal(1),
+                reader.GetDecimal(2),
+                reader.IsDBNull(3) ? null : reader.GetDecimal(3));
+        }
         return result;
     }
 
-    private static (decimal Cost, decimal Sale) ResolvePricingLine(
-        IReadOnlyDictionary<string, (decimal Cost, decimal Sale)> overrides,
+    private static (decimal Cost, decimal Sale, decimal? CalculationBaseCbm) ResolvePricingLine(
+        IReadOnlyDictionary<string, (decimal Cost, decimal Sale, decimal? CalculationBaseCbm)> overrides,
         string lineKey,
         decimal fallbackCost)
     {
         if (overrides.TryGetValue(lineKey, out var stored)) return stored;
         var definition = OwnLclPricingLineCatalog.Find(lineKey)
             ?? throw new InvalidOperationException($"Línea LCL propia desconocida: {lineKey}.");
-        return (definition.DefaultCostUnit ?? fallbackCost, definition.DefaultSaleUnit);
+        return (definition.DefaultCostUnit ?? fallbackCost, definition.DefaultSaleUnit, IsCentralAmericaInlandLine(lineKey) ? 70m : null);
     }
+
+    private static bool IsCentralAmericaInlandLine(string? lineKey) =>
+        lineKey is "CA_INLAND_NI" or "CA_INLAND_HN" or "CA_INLAND_GT" or "CA_INLAND_SV";
 
     private static bool IsCentralAmericaDestination(string? destination) =>
         destination is "NI" or "HN" or "GT" or "SV";
@@ -489,7 +513,12 @@ public sealed record OwnLclPricingLineDto(
     string Name,
     string ChargeBasis,
     decimal CostUnit,
-    decimal SaleUnit);
+    decimal SaleUnit,
+    decimal? CalculationBaseCbm);
 
-public sealed record SaveOwnLclPricingLineRequest(string LineKey, decimal CostUnit, decimal SaleUnit);
+public sealed record SaveOwnLclPricingLineRequest(
+    string LineKey,
+    decimal CostUnit,
+    decimal SaleUnit,
+    decimal? CalculationBaseCbm);
 public sealed record SaveOwnLclPricingLinesRequest(IReadOnlyCollection<SaveOwnLclPricingLineRequest> Rows);
