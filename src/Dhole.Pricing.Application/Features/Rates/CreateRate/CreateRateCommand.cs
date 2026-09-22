@@ -92,4 +92,7 @@ public sealed record CreateRateCommand(
     bool UseAllInPresentation,
     bool CanApproveLowMargin,
     Guid? CreatedBy
-) : ICommand<Result<Guid>>;
+) : ICommand<Result<Guid>>
+{
+    public IReadOnlyCollection<Guid> FinalBackupStorageIds { get; init; } = [];
+}
