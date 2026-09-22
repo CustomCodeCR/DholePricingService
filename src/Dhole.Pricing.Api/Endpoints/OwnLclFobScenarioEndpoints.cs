@@ -78,12 +78,14 @@ public static class OwnLclFobScenarioEndpoints
         decimal panamaToCr;
         decimal bunker;
         decimal crBase;
+        decimal freightProfitPerCbm;
 
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
                 SELECT consolidation_number, matrix_version, etd, ocean_freight, maximum_cbm,
-                       carrier_destination_cost_total, panama_to_cr_cost, bunker_cost, cr_transfer_base_cbm
+                       carrier_destination_cost_total, panama_to_cr_cost, bunker_cost, cr_transfer_base_cbm,
+                       freight_profit_per_cbm
                 FROM pricing."OwnLclConsolidations"
                 WHERE id=@id AND is_active=TRUE
                 LIMIT 1;
@@ -101,6 +103,7 @@ public static class OwnLclFobScenarioEndpoints
             panamaToCr = reader.GetDecimal(6);
             bunker = reader.GetDecimal(7);
             crBase = Math.Max(0.01m, reader.GetDecimal(8));
+            freightProfitPerCbm = Math.Max(0m, reader.GetDecimal(9));
         }
 
         var sales = new Dictionary<(string Destination, string Pol), decimal>();
@@ -143,8 +146,8 @@ public static class OwnLclFobScenarioEndpoints
                 decimal sale;
                 if (isCentralAmerica)
                 {
-                    // Regla invariable: venta = costo + USD 5.69/CBM.
-                    recommended = cost + MinimumCentralAmericaProfitPerCbm;
+                    // La utilidad del flete se define por consolidado.
+                    recommended = cost + freightProfitPerCbm;
                     sale = recommended;
                 }
                 else
@@ -193,9 +196,10 @@ public static class OwnLclFobScenarioEndpoints
         DateOnly? validTo;
         decimal oceanFreight;
         decimal maximumCbm;
+        decimal freightProfitPerCbm;
         await using (var lookup = connection.CreateCommand())
         {
-            lookup.CommandText = "SELECT consolidation_number, matrix_version, etd, ocean_freight, maximum_cbm FROM pricing.\"OwnLclConsolidations\" WHERE id=@id AND is_active=TRUE LIMIT 1;";
+            lookup.CommandText = "SELECT consolidation_number, matrix_version, etd, ocean_freight, maximum_cbm, freight_profit_per_cbm FROM pricing.\"OwnLclConsolidations\" WHERE id=@id AND is_active=TRUE LIMIT 1;";
             Add(lookup, "id", id);
             await using var reader = await lookup.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct)) return Results.NotFound();
@@ -204,6 +208,7 @@ public static class OwnLclFobScenarioEndpoints
             validTo = reader.IsDBNull(2) ? null : DateOnly.FromDateTime(reader.GetDateTime(2));
             oceanFreight = reader.GetDecimal(3);
             maximumCbm = Math.Max(0.01m, reader.GetDecimal(4));
+            freightProfitPerCbm = Math.Max(0m, reader.GetDecimal(5));
         }
 
         await using var tx = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
@@ -231,7 +236,7 @@ public static class OwnLclFobScenarioEndpoints
             Add(command, "destination", destination);
             Add(command, "pol", pol);
             var salePerCbm = IsCentralAmericaDestination(destination)
-                ? (oceanFreight / maximumCbm) + OriginSurcharges[pol] + MinimumCentralAmericaProfitPerCbm
+                ? (oceanFreight / maximumCbm) + OriginSurcharges[pol] + freightProfitPerCbm
                 : row.SalePerCbm;
             Add(command, "sale", salePerCbm);
             Add(command, "valid_to", validTo);
