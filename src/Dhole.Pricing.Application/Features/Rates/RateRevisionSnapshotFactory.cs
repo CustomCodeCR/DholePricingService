@@ -29,6 +29,7 @@ internal static class RateRevisionSnapshotFactory
             rate.ExchangeRateApplied, rate.ExchangeRateDate, rate.ExchangeRateSource, rate.FreeDays, rate.ValidFrom, rate.ValidTo,
             rate.ContainerQuantity, rate.ShipmentMode, rate.OperationType, rate.TotalPackages, rate.TotalPallets,
             rate.TotalWeightKg, rate.TotalVolumeCbm, rate.KgPerCbm, rate.ChargeableQuantity, rate.CargoLinesJson,
+            rate.FinalBackupStorageIds,
             rate.Includes, rate.SubjectTo, rate.Excludes, rate.TransitTime, rate.RateType,
             TotalCostAmount = ResolveHeaderAmount(rate, totals.CostUsd, totals.CostCrc),
             TotalSaleAmount = ResolveHeaderAmount(rate, totals.SaleUsd, totals.SaleCrc),
