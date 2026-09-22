@@ -354,9 +354,25 @@ public static class OwnLclConsolidationEndpoints
                 break;
 
             default:
+                AddConfiguredDestinationLine(lines, pricingLines, "CA_TRANSSHIPMENT", "Transbordo", "CBM", cbm);
+                AddConfiguredDestinationLine(
+                    lines,
+                    pricingLines,
+                    destination switch
+                    {
+                        "NI" => "CA_INLAND_NI",
+                        "HN" => "CA_INLAND_HN",
+                        "GT" => "CA_INLAND_GT",
+                        "SV" => "CA_INLAND_SV",
+                        _ => throw new InvalidOperationException($"Destino centroamericano no soportado: {destination}."),
+                    },
+                    "Flete Terrestre",
+                    "CBM",
+                    cbm);
+                AddConfiguredDestinationLine(lines, pricingLines, "CA_STUFFING", "Stuffing", "CBM", cbm);
                 AddConfiguredDestinationLine(lines, pricingLines, "CA_DOCUMENTATION", "Documentación", "HBL", 1m);
-                AddConfiguredDestinationLine(lines, pricingLines, "CA_ZONE", "Zone Charge", "HBL", 1m);
-                AddConfiguredDestinationLine(lines, pricingLines, "CA_HANDLING", "Manejos destino", "HBL", 1m);
+                AddConfiguredDestinationLine(lines, pricingLines, "CA_HANDLING", "Manejos", "HBL", 1m);
+                AddConfiguredDestinationLine(lines, pricingLines, "CA_DESTINATION_HANDLING", "Manejos en Destino", "HBL", 1m);
                 break;
         }
     }
