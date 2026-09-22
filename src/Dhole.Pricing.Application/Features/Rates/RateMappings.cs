@@ -140,7 +140,10 @@ internal static class RateMappings
                 .OrderBy(x => x.ServiceName)
                 .Select(x => new RateServiceDto(x.ServiceId, x.ServiceName, x.ServiceCode))
                 .ToList()
-        );
+        )
+        {
+            FinalBackupStorageIds = rate.FinalBackupStorageIds,
+        };
 
         return dto.WithRecalculatedFinancials();
     }
