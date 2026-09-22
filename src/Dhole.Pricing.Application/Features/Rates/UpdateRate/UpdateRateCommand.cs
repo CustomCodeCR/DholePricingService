@@ -97,6 +97,11 @@ public sealed record UpdateRateCommand(
 {
     public IReadOnlyCollection<Guid>? FinalBackupStorageIds { get; init; }
 
+    // El middleware de edición neutraliza temporalmente SourceImportFclRateId en la entidad
+    // para permitir cambiar la fuente/estructura. Conservamos el valor pedido por Web como
+    // contexto de sincronización para no perder los cargos fijos explícitos de la importación.
+    public Guid? SourceImportFclRateId { get; init; }
+
     // La vigencia seleccionada por Pricing forma parte explícita de la revisión.
     // No la sustituimos por la fecha actual porque al duplicar/renovar una tarifa
     // el usuario puede necesitar una ventana futura definida por la nueva oferta.
