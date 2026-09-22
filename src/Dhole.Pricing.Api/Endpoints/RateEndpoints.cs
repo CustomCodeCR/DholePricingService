@@ -804,6 +804,7 @@ public static class RateEndpoints
             )
             {
                 FinalBackupStorageIds = request.FinalBackupStorageIds,
+                SourceImportFclRateId = request.SourceImportFclRateId,
             },
             cancellationToken
         );
