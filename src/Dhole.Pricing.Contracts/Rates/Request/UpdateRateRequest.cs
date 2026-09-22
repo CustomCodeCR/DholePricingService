@@ -60,5 +60,6 @@ public sealed record UpdateRateRequest(
     decimal? ExchangeRateApplied = null,
     bool UseAllInPresentation = false,
     string? UpdateReason = null,
-    IReadOnlyCollection<Guid>? FinalBackupStorageIds = null
+    IReadOnlyCollection<Guid>? FinalBackupStorageIds = null,
+    Guid? SourceImportFclRateId = null
 );
