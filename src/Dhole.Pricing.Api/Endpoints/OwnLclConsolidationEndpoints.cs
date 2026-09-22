@@ -74,7 +74,7 @@ public static class OwnLclConsolidationEndpoints
                    panama_arrival_port_id, panama_arrival_port_name, panama_arrival_port_code,
                    pod_id, pod_name, pod_code,
                    ocean_freight, maximum_cbm, carrier_destination_cost_total, panama_to_cr_cost,
-                   bunker_cost, cr_transfer_base_cbm, matrix_version, status, is_active
+                   bunker_cost, cr_transfer_base_cbm, freight_profit_per_cbm, matrix_version, status, is_active
             FROM pricing."OwnLclConsolidations"
             WHERE is_active = TRUE
             ORDER BY consolidation_number DESC;
@@ -137,12 +137,12 @@ public static class OwnLclConsolidationEndpoints
                     (id, consolidation_number, name, booking, etd, carrier_id, carrier_name, carrier_code,
                      container_id, container_name, container_code, pol_id, pol_name, pol_code,
                      ocean_freight, maximum_cbm, carrier_destination_cost_total, panama_to_cr_cost,
-                     bunker_cost, cr_transfer_base_cbm, matrix_version, status, is_active, created_at_utc)
+                     bunker_cost, cr_transfer_base_cbm, freight_profit_per_cbm, matrix_version, status, is_active, created_at_utc)
                 VALUES
                     (@id, @number, @name, @booking, @etd, @carrier_id, @carrier_name, @carrier_code,
                      @container_id, @container_name, @container_code, @pol_id, @pol_name, @pol_code,
                      @ocean_freight, @maximum_cbm, @destination_cost, @panama_to_cr, @bunker,
-                     @cr_base, @version, 'Draft', TRUE, now());
+                     @cr_base, @freight_profit_per_cbm, @version, 'Draft', TRUE, now());
                 """;
             Add(command, "id", id);
             Add(command, "number", nextNumber);
@@ -164,6 +164,7 @@ public static class OwnLclConsolidationEndpoints
             Add(command, "panama_to_cr", request.PanamaToCostaRicaCost ?? 2140m);
             Add(command, "bunker", request.BunkerCost ?? 280m);
             Add(command, "cr_base", request.CostaRicaTransferBaseCbm is > 0 ? request.CostaRicaTransferBaseCbm.Value : 95m);
+            Add(command, "freight_profit_per_cbm", Math.Max(0m, request.FreightProfitPerCbm ?? MinimumCentralAmericaProfitPerCbm));
             Add(command, "version", version);
             await command.ExecuteNonQueryAsync(ct);
         }
@@ -187,6 +188,7 @@ public static class OwnLclConsolidationEndpoints
                 pol_id=@pol_id, pol_name=@pol_name, pol_code=@pol_code, ocean_freight=@ocean_freight,
                 maximum_cbm=@maximum_cbm, carrier_destination_cost_total=@destination_cost,
                 panama_to_cr_cost=@panama_to_cr, bunker_cost=@bunker, cr_transfer_base_cbm=@cr_base,
+                freight_profit_per_cbm=@freight_profit_per_cbm,
                 matrix_version = CASE WHEN matrix_version LIKE '%-v1' THEN replace(matrix_version, '-v1', '-v2') ELSE matrix_version END,
                 updated_at_utc=now()
             WHERE id=@id AND is_active=TRUE;
@@ -209,6 +211,7 @@ public static class OwnLclConsolidationEndpoints
         Add(command, "panama_to_cr", request.PanamaToCostaRicaCost);
         Add(command, "bunker", request.BunkerCost);
         Add(command, "cr_base", request.CostaRicaTransferBaseCbm > 0 ? request.CostaRicaTransferBaseCbm : 95m);
+        Add(command, "freight_profit_per_cbm", Math.Max(0m, request.FreightProfitPerCbm));
 
         return await command.ExecuteNonQueryAsync(ct) == 0 ? Results.NotFound() : Results.NoContent();
     }
@@ -260,11 +263,12 @@ public static class OwnLclConsolidationEndpoints
         var isCentralAmerica = CentralAmericaLandFreight.ContainsKey(destination);
         decimal recommendedSalePerCbm;
         decimal freightSalePerCbm;
+        var centralAmericaFreightProfitPerCbm = Math.Max(0m, consolidation.FreightProfitPerCbm);
 
         if (isCentralAmerica)
         {
-            // Regla obligatoria: venta del flete = costo + USD 5.69/CBM.
-            recommendedSalePerCbm = freightCostPerCbm + MinimumCentralAmericaProfitPerCbm;
+            // La utilidad del flete es configurable por consolidado.
+            recommendedSalePerCbm = freightCostPerCbm + centralAmericaFreightProfitPerCbm;
             freightSalePerCbm = recommendedSalePerCbm;
         }
         else
@@ -301,11 +305,15 @@ public static class OwnLclConsolidationEndpoints
         var profitPercentage = finalSale > 0 ? (profit / finalSale) * 100m : 0m;
 
         var oceanProfitPerCbm = freightSalePerCbm - freightCostPerCbm;
-        var minimumProfit = destination == "PA" ? MinimumPanamaOceanProfitPerCbm : MinimumCentralAmericaProfitPerCbm;
+        var minimumProfit = destination == "PA"
+            ? MinimumPanamaOceanProfitPerCbm
+            : isCentralAmerica
+                ? centralAmericaFreightProfitPerCbm
+                : MinimumCentralAmericaProfitPerCbm;
         var meetsMinimum = destination == "PA"
             ? oceanProfitPerCbm >= MinimumPanamaOceanProfitPerCbm
             : isCentralAmerica
-                ? Math.Abs(oceanProfitPerCbm - MinimumCentralAmericaProfitPerCbm) <= 0.000001m
+                ? Math.Abs(oceanProfitPerCbm - centralAmericaFreightProfitPerCbm) <= 0.000001m
                 : profitPerCbm >= MinimumCentralAmericaProfitPerCbm;
 
         return Results.Ok(new OwnLclQuoteCalculationDto(
@@ -605,7 +613,7 @@ public static class OwnLclConsolidationEndpoints
                    panama_arrival_port_id, panama_arrival_port_name, panama_arrival_port_code,
                    pod_id, pod_name, pod_code,
                    ocean_freight, maximum_cbm, carrier_destination_cost_total, panama_to_cr_cost,
-                   bunker_cost, cr_transfer_base_cbm, matrix_version, status, is_active
+                   bunker_cost, cr_transfer_base_cbm, freight_profit_per_cbm, matrix_version, status, is_active
             FROM pricing."OwnLclConsolidations"
             WHERE id=@id AND is_active=TRUE
             LIMIT 1;
@@ -623,7 +631,7 @@ public static class OwnLclConsolidationEndpoints
         GetNullableGuid(reader, 14), GetNullableString(reader, 15), GetNullableString(reader, 16),
         GetNullableGuid(reader, 17), GetNullableString(reader, 18), GetNullableString(reader, 19),
         reader.GetDecimal(20), reader.GetDecimal(21), reader.GetDecimal(22), reader.GetDecimal(23), reader.GetDecimal(24), reader.GetDecimal(25),
-        reader.GetString(26), reader.GetString(27), reader.GetBoolean(28));
+        reader.GetDecimal(26), reader.GetString(27), reader.GetString(28), reader.GetBoolean(29));
 
     private static object? Validate(string? booking, string? polCode, decimal oceanFreight, decimal? maximumCbm)
     {
@@ -702,7 +710,8 @@ public sealed record CreateOwnLclConsolidationRequest(
     decimal? CarrierDestinationCostTotal = 912m,
     decimal? PanamaToCostaRicaCost = 2140m,
     decimal? BunkerCost = 280m,
-    decimal? CostaRicaTransferBaseCbm = 95m);
+    decimal? CostaRicaTransferBaseCbm = 95m,
+    decimal? FreightProfitPerCbm = 5.69m);
 
 public sealed record UpdateOwnLclConsolidationRequest(
     string? Booking,
@@ -721,7 +730,8 @@ public sealed record UpdateOwnLclConsolidationRequest(
     decimal CarrierDestinationCostTotal,
     decimal PanamaToCostaRicaCost,
     decimal BunkerCost,
-    decimal CostaRicaTransferBaseCbm);
+    decimal CostaRicaTransferBaseCbm,
+    decimal FreightProfitPerCbm);
 
 public sealed record CalculateOwnLclQuoteRequest(
     string DestinationCode,
@@ -773,6 +783,7 @@ public sealed record OwnLclConsolidationDto(
     decimal PanamaToCostaRicaCost,
     decimal BunkerCost,
     decimal CostaRicaTransferBaseCbm,
+    decimal FreightProfitPerCbm,
     string MatrixVersion,
     string Status,
     bool IsActive,
