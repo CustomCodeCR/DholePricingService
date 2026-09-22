@@ -79,13 +79,15 @@ public static class OwnLclFobScenarioEndpoints
         decimal bunker;
         decimal crBase;
         decimal freightProfitPerCbm;
+        string polCode;
+        string? polName;
 
         await using (var command = connection.CreateCommand())
         {
             command.CommandText = """
                 SELECT consolidation_number, matrix_version, etd, ocean_freight, maximum_cbm,
                        carrier_destination_cost_total, panama_to_cr_cost, bunker_cost, cr_transfer_base_cbm,
-                       freight_profit_per_cbm
+                       freight_profit_per_cbm, pol_code, pol_name
                 FROM pricing."OwnLclConsolidations"
                 WHERE id=@id AND is_active=TRUE
                 LIMIT 1;
@@ -104,6 +106,24 @@ public static class OwnLclFobScenarioEndpoints
             bunker = reader.GetDecimal(7);
             crBase = Math.Max(0.01m, reader.GetDecimal(8));
             freightProfitPerCbm = Math.Max(0m, reader.GetDecimal(9));
+            polCode = reader.GetString(10);
+            polName = reader.IsDBNull(11) ? null : reader.GetString(11);
+        }
+
+        if (OwnLclPricingLineCatalog.IsMiamiOrigin(polCode, polName))
+        {
+            return Results.Ok(new OwnLclFobScenarioMatrixDto(
+                id,
+                consolidationNumber,
+                matrixVersion,
+                validTo,
+                oceanFreight,
+                maximumCbm,
+                destinationCost,
+                panamaToCr,
+                bunker,
+                crBase,
+                Array.Empty<OwnLclFobScenarioCountryDto>()));
         }
 
         var sales = new Dictionary<(string Destination, string Pol), decimal>();
@@ -197,9 +217,11 @@ public static class OwnLclFobScenarioEndpoints
         decimal oceanFreight;
         decimal maximumCbm;
         decimal freightProfitPerCbm;
+        string polCode;
+        string? polName;
         await using (var lookup = connection.CreateCommand())
         {
-            lookup.CommandText = "SELECT consolidation_number, matrix_version, etd, ocean_freight, maximum_cbm, freight_profit_per_cbm FROM pricing.\"OwnLclConsolidations\" WHERE id=@id AND is_active=TRUE LIMIT 1;";
+            lookup.CommandText = "SELECT consolidation_number, matrix_version, etd, ocean_freight, maximum_cbm, freight_profit_per_cbm, pol_code, pol_name FROM pricing.\"OwnLclConsolidations\" WHERE id=@id AND is_active=TRUE LIMIT 1;";
             Add(lookup, "id", id);
             await using var reader = await lookup.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct)) return Results.NotFound();
@@ -209,6 +231,17 @@ public static class OwnLclFobScenarioEndpoints
             oceanFreight = reader.GetDecimal(3);
             maximumCbm = Math.Max(0.01m, reader.GetDecimal(4));
             freightProfitPerCbm = Math.Max(0m, reader.GetDecimal(5));
+            polCode = reader.GetString(6);
+            polName = reader.IsDBNull(7) ? null : reader.GetString(7);
+        }
+
+        if (OwnLclPricingLineCatalog.IsMiamiOrigin(polCode, polName))
+        {
+            return Results.BadRequest(new
+            {
+                code = "Pricing.OwnLclMiamiDoesNotUseChinaFobScenarios",
+                message = "La matriz Miami es independiente y no utiliza escenarios FOB por puertos de China.",
+            });
         }
 
         await using var tx = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
@@ -295,10 +328,12 @@ public static class OwnLclFobScenarioEndpoints
         await EnsureOpenAsync(connection, ct);
 
         decimal destinationCostPerCbm;
+        string polCode;
+        string? polName;
         await using (var lookup = connection.CreateCommand())
         {
             lookup.CommandText = """
-                SELECT carrier_destination_cost_total, maximum_cbm
+                SELECT carrier_destination_cost_total, maximum_cbm, pol_code, pol_name
                 FROM pricing."OwnLclConsolidations"
                 WHERE id=@id AND is_active=TRUE
                 LIMIT 1;
@@ -307,15 +342,18 @@ public static class OwnLclFobScenarioEndpoints
             await using var reader = await lookup.ExecuteReaderAsync(ct);
             if (!await reader.ReadAsync(ct)) return Results.NotFound();
             destinationCostPerCbm = reader.GetDecimal(0) / Math.Max(0.01m, reader.GetDecimal(1));
+            polCode = reader.GetString(2);
+            polName = reader.IsDBNull(3) ? null : reader.GetString(3);
         }
 
+        var definitions = OwnLclPricingLineCatalog.ForOrigin(polCode, polName);
+        var isMiami = OwnLclPricingLineCatalog.IsMiamiOrigin(polCode, polName);
         var overrides = await LoadPricingLineOverridesAsync(connection, id, ct);
-        var panamaDestination = ResolvePricingLine(
-            overrides,
-            "PA_DESTINATION_CHARGE",
-            destinationCostPerCbm);
+        var panamaDestination = isMiami
+            ? (Cost: 0m, Sale: 0m, CalculationBaseCbm: (decimal?)null)
+            : ResolvePricingLine(overrides, "PA_DESTINATION_CHARGE", destinationCostPerCbm);
 
-        var rows = OwnLclPricingLineCatalog.All.Select(definition =>
+        var rows = definitions.Select(definition =>
         {
             if (overrides.TryGetValue(definition.LineKey, out var stored))
             {
@@ -329,17 +367,18 @@ public static class OwnLclFobScenarioEndpoints
                     stored.CalculationBaseCbm);
             }
 
-            var defaultCost = definition.LineKey switch
-            {
-                "PA_DESTINATION_CHARGE" => destinationCostPerCbm,
-                "CA_TRANSSHIPMENT" => panamaDestination.Cost + 9m,
-                _ => definition.DefaultCostUnit ?? 0m,
-            };
-            var defaultSale = definition.LineKey switch
-            {
-                "CA_TRANSSHIPMENT" => panamaDestination.Sale + 9m,
-                _ => definition.DefaultSaleUnit,
-            };
+            var defaultCost = !isMiami
+                ? definition.LineKey switch
+                {
+                    "PA_DESTINATION_CHARGE" => destinationCostPerCbm,
+                    "CA_TRANSSHIPMENT" => panamaDestination.Cost + 9m,
+                    _ => definition.DefaultCostUnit ?? 0m,
+                }
+                : definition.DefaultCostUnit ?? 0m;
+
+            var defaultSale = !isMiami && definition.LineKey == "CA_TRANSSHIPMENT"
+                ? panamaDestination.Sale + 9m
+                : definition.DefaultSaleUnit;
             var defaultBase = IsCentralAmericaInlandLine(definition.LineKey) ? 70m : (decimal?)null;
 
             return new OwnLclPricingLineDto(
@@ -364,12 +403,37 @@ public static class OwnLclFobScenarioEndpoints
         if (request.Rows.Count == 0)
             return Results.BadRequest(new { code = "Pricing.OwnLclPricingLinesRequired", message = "Agregue al menos una línea de costo/venta." });
 
+        await using var connection = db.Database.GetDbConnection();
+        await EnsureOpenAsync(connection, ct);
+
+        string polCode;
+        string? polName;
+        await using (var lookup = connection.CreateCommand())
+        {
+            lookup.CommandText = """
+                SELECT pol_code, pol_name
+                FROM pricing."OwnLclConsolidations"
+                WHERE id=@id AND is_active=TRUE
+                LIMIT 1;
+                """;
+            Add(lookup, "id", id);
+            await using var reader = await lookup.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct)) return Results.NotFound();
+            polCode = reader.GetString(0);
+            polName = reader.IsDBNull(1) ? null : reader.GetString(1);
+        }
+
+        var allowedDefinitions = OwnLclPricingLineCatalog.ForOrigin(polCode, polName);
+        var allowedKeys = allowedDefinitions
+            .Select(definition => definition.LineKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         var normalized = request.Rows
             .Select(row => row with { LineKey = Normalize(row.LineKey) })
             .ToArray();
         if (normalized.Select(row => row.LineKey).Distinct(StringComparer.OrdinalIgnoreCase).Count() != normalized.Length
             || normalized.Any(row =>
-                OwnLclPricingLineCatalog.Find(row.LineKey) is null
+                !allowedKeys.Contains(row.LineKey)
                 || row.CostUnit < 0m
                 || row.SaleUnit < 0m
                 || (IsCentralAmericaInlandLine(row.LineKey) && (!row.CalculationBaseCbm.HasValue || row.CalculationBaseCbm.Value <= 0m))))
@@ -377,18 +441,10 @@ public static class OwnLclFobScenarioEndpoints
             return Results.BadRequest(new
             {
                 code = "Pricing.OwnLclPricingLineInvalid",
-                message = "Las líneas deben ser válidas. Los fletes terrestres de Centroamérica requieren costo total, CBM base mayor a cero y venta por CBM.",
+                message = OwnLclPricingLineCatalog.IsMiamiOrigin(polCode, polName)
+                    ? "Las líneas no pertenecen a la matriz Miami o contienen valores inválidos."
+                    : "Las líneas no pertenecen a la matriz China. Los fletes terrestres de Centroamérica requieren costo total, CBM base mayor a cero y venta por CBM.",
             });
-        }
-
-        await using var connection = db.Database.GetDbConnection();
-        await EnsureOpenAsync(connection, ct);
-
-        await using (var lookup = connection.CreateCommand())
-        {
-            lookup.CommandText = """SELECT 1 FROM pricing."OwnLclConsolidations" WHERE id=@id AND is_active=TRUE LIMIT 1;""";
-            Add(lookup, "id", id);
-            if (await lookup.ExecuteScalarAsync(ct) is null) return Results.NotFound();
         }
 
         await using var tx = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
