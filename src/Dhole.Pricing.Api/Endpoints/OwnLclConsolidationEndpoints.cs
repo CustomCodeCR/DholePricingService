@@ -75,11 +75,8 @@ public static class OwnLclConsolidationEndpoints
                    bunker_cost, cr_transfer_base_cbm, matrix_version, status, is_active
             FROM pricing."OwnLclConsolidations"
             WHERE is_active = TRUE
-              AND (etd IS NULL OR etd > @today)
             ORDER BY consolidation_number DESC;
             """;
-
-        Add(command, "today", CurrentBusinessDate());
 
         var result = new List<OwnLclConsolidationDto>();
         await using (var reader = await command.ExecuteReaderAsync(ct))
