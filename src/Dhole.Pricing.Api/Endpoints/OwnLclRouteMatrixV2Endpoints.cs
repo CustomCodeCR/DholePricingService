@@ -348,9 +348,23 @@ public static class OwnLclRouteMatrixV2Endpoints
             return;
         }
 
+        AddConfiguredLine(lines, pricingLines, "CA_TRANSSHIPMENT", cbm);
+        AddConfiguredLine(
+            lines,
+            pricingLines,
+            destination switch
+            {
+                "NI" => "CA_INLAND_NI",
+                "HN" => "CA_INLAND_HN",
+                "GT" => "CA_INLAND_GT",
+                "SV" => "CA_INLAND_SV",
+                _ => throw new InvalidOperationException($"Destino centroamericano no soportado: {destination}."),
+            },
+            cbm);
+        AddConfiguredLine(lines, pricingLines, "CA_STUFFING", cbm);
         AddConfiguredLine(lines, pricingLines, "CA_DOCUMENTATION", 1);
-        AddConfiguredLine(lines, pricingLines, "CA_ZONE", 1);
         AddConfiguredLine(lines, pricingLines, "CA_HANDLING", 1);
+        AddConfiguredLine(lines, pricingLines, "CA_DESTINATION_HANDLING", 1);
     }
 
     private static void AddOriginLines(
