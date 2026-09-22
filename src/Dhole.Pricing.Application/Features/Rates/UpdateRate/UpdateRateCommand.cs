@@ -95,6 +95,8 @@ public sealed record UpdateRateCommand(
     Guid? UpdatedBy
 ) : ICommand<Result>
 {
+    public IReadOnlyCollection<Guid> FinalBackupStorageIds { get; init; } = [];
+
     // La vigencia seleccionada por Pricing forma parte explícita de la revisión.
     // No la sustituimos por la fecha actual porque al duplicar/renovar una tarifa
     // el usuario puede necesitar una ventana futura definida por la nueva oferta.
