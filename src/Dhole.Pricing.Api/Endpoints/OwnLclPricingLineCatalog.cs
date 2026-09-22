@@ -21,12 +21,15 @@ internal static class OwnLclPricingLineCatalog
         // Centroamérica según la matriz CNCA: Transbordo, Flete Terrestre,
         // Stuffing, Documentación, Manejos y Manejos en Destino. El flete terrestre
         // varía por país, por eso cada destino conserva su propia línea editable.
-        new("CA_TRANSSHIPMENT", "CA", "Transbordo", "CBM", 0m, 29m),
-        new("CA_INLAND_NI", "CA", "Flete Terrestre · Nicaragua", "CBM", 0m, 40m),
-        new("CA_INLAND_HN", "CA", "Flete Terrestre · Honduras", "CBM", 0m, 50m),
-        new("CA_INLAND_GT", "CA", "Flete Terrestre · Guatemala", "CBM", 0m, 48m),
-        new("CA_INLAND_SV", "CA", "Flete Terrestre · El Salvador", "CBM", 0m, 40m),
-        new("CA_STUFFING", "CA", "Stuffing", "CBM", 0m, 10m),
+        // Costos CNCA-024/#049: el flete marítimo se maneja igual que Panamá.
+        // Los componentes adicionales de Centroamérica quedan separados como cargos
+        // de destino, exactamente como el HTML de Pricing.
+        new("CA_TRANSSHIPMENT", "CA", "Transbordo", "CBM", 39.719736842105264m, 29m),
+        new("CA_INLAND_NI", "CA", "Flete Terrestre · Nicaragua", "CBM", 16.428571428571429m, 40m),
+        new("CA_INLAND_HN", "CA", "Flete Terrestre · Honduras", "CBM", 26.071428571428573m, 50m),
+        new("CA_INLAND_GT", "CA", "Flete Terrestre · Guatemala", "CBM", 35m, 48m),
+        new("CA_INLAND_SV", "CA", "Flete Terrestre · El Salvador", "CBM", 31.428571428571429m, 40m),
+        new("CA_STUFFING", "CA", "Stuffing", "CBM", 5.928571428571429m, 10m),
         new("CA_DOCUMENTATION", "CA", "Documentación", "HBL", 0m, 140m),
         new("CA_HANDLING", "CA", "Manejos", "HBL", 0m, 45m),
         new("CA_DESTINATION_HANDLING", "CA", "Manejos en Destino", "HBL", 0m, 70m),
