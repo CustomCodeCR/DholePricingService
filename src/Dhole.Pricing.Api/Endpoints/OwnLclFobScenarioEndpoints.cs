@@ -11,6 +11,8 @@ public static class OwnLclFobScenarioEndpoints
 {
     private const decimal MinimumCentralAmericaProfitPerCbm = 5.70m;
     private const decimal MinimumPanamaProfitPerCbm = 3.40m;
+    private const decimal PanamaAndCentralAmericaFreightSalePerCbm = 164m;
+    private const decimal CostaRicaFreightSalePerCbm = 210m;
     private const decimal CentralAmericaOperationBaseCbm = 70m;
     private const decimal CostaRicaWarehouseOperation = 415m;
 
@@ -128,16 +130,19 @@ public static class OwnLclFobScenarioEndpoints
         var countries = Destinations.Select(destination =>
         {
             var code = destination.Key;
-            var inlandPerCbm = destination.Value.Inland / CentralAmericaOperationBaseCbm;
-            var routeDestinationCost = code == "PA"
-                ? paDestinationLine.Cost
-                : destinationPerCbm + crTransferPerCbm + (code is "NI" or "HN" or "SV" or "GT" ? warehousePerCbm + inlandPerCbm : 0m);
 
             var ports = OriginSurcharges.Select(origin =>
             {
-                var cost = CeilingCent(baseOcean + origin.Value + routeDestinationCost);
-                var minimum = code == "PA" ? MinimumPanamaProfitPerCbm : MinimumCentralAmericaProfitPerCbm;
-                var recommended = CeilingCent(cost + minimum);
+                // El escenario FOB representa únicamente el flete que se vende en la
+                // línea "Flete Internacional Marítimo". Panamá y Centroamérica usan
+                // el mismo O/F base; sus cargos de destino se cotizan aparte.
+                var cost = code == "CR"
+                    ? CeilingCent(baseOcean + origin.Value + destinationPerCbm + crTransferPerCbm)
+                    : CeilingCent(baseOcean + origin.Value);
+                var htmlBaseSale = code == "CR"
+                    ? CostaRicaFreightSalePerCbm
+                    : PanamaAndCentralAmericaFreightSalePerCbm;
+                var recommended = htmlBaseSale + origin.Value;
                 var sale = sales.TryGetValue((code, origin.Key), out var stored) ? stored : recommended;
                 return new OwnLclFobScenarioPortDto(origin.Key, cost, sale, recommended, origin.Value);
             }).ToArray();
