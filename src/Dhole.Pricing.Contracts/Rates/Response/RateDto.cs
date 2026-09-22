@@ -89,6 +89,7 @@ public sealed record RateDto(
     public string? CreatedByUserId { get; init; }
     public string? CreatedByUserName { get; init; }
     public string? CreatedByDisplayName { get; init; }
+    public IReadOnlyCollection<Guid> FinalBackupStorageIds { get; init; } = [];
 
     public int? TransitDays
     {
