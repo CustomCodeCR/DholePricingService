@@ -353,7 +353,7 @@ public static class OwnLclConsolidationEndpoints
         string destination,
         decimal cbm,
         decimal destinationCostPerCbm,
-        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)> pricingLines)
+        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit, decimal? CalculationBaseCbm)> pricingLines)
     {
         switch (destination)
         {
@@ -377,19 +377,8 @@ public static class OwnLclConsolidationEndpoints
                 break;
 
             default:
-                var panamaDestinationSale = pricingLines.TryGetValue("PA_DESTINATION_CHARGE", out var panamaDestination)
-                    ? panamaDestination.SaleUnit
-                    : 20m;
-
-                AddFormulaManagedDestinationLine(
-                    lines,
-                    pricingLines,
-                    "CA_TRANSSHIPMENT",
-                    "Transbordo",
-                    "CBM",
-                    cbm,
-                    panamaDestinationSale + 9m);
-                AddConfiguredDestinationLine(
+                AddConfiguredDestinationLine(lines, pricingLines, "CA_TRANSSHIPMENT", "Transbordo", "CBM", cbm);
+                AddConfiguredCalculatedInlandDestinationLine(
                     lines,
                     pricingLines,
                     destination switch
@@ -401,35 +390,31 @@ public static class OwnLclConsolidationEndpoints
                         _ => throw new InvalidOperationException($"Destino centroamericano no soportado: {destination}."),
                     },
                     "Flete Terrestre",
-                    "CBM",
                     cbm);
-                AddFormulaManagedDestinationLine(lines, pricingLines, "CA_STUFFING", "Stuffing", "CBM", cbm, 550m / 60m);
-                AddFormulaManagedDestinationLine(lines, pricingLines, "CA_DOCUMENTATION", "Documentación", "HBL", 1m, 185m);
+                AddConfiguredDestinationLine(lines, pricingLines, "CA_STUFFING", "Stuffing", "CBM", cbm);
+                AddConfiguredDestinationLine(lines, pricingLines, "CA_DOCUMENTATION", "Documentación", "HBL", 1m);
                 AddConfiguredDestinationLine(lines, pricingLines, "CA_HANDLING", "Manejos", "HBL", 1m);
                 AddConfiguredDestinationLine(lines, pricingLines, "CA_DESTINATION_HANDLING", "Manejos en Destino", "HBL", 1m);
                 break;
         }
     }
 
-    private static void AddFormulaManagedDestinationLine(
+    private static void AddConfiguredCalculatedInlandDestinationLine(
         List<OwnLclQuoteLine> lines,
-        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)> pricingLines,
+        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit, decimal? CalculationBaseCbm)> pricingLines,
         string lineKey,
         string name,
-        string basis,
-        decimal quantity,
-        decimal forcedSaleUnit)
+        decimal quantity)
     {
-        var cost = pricingLines.TryGetValue(lineKey, out var values)
-            ? Math.Max(0m, values.CostUnit)
-            : 0m;
-
-        AddLine(lines, name, basis, quantity, cost, forcedSaleUnit);
+        if (!pricingLines.TryGetValue(lineKey, out var values)) return;
+        var baseCbm = values.CalculationBaseCbm is > 0m ? values.CalculationBaseCbm.Value : 70m;
+        var costPerCbm = Math.Max(0m, values.CostUnit) / baseCbm;
+        AddLine(lines, name, "CBM", quantity, costPerCbm, Math.Max(0m, values.SaleUnit));
     }
 
     private static void AddConfiguredDestinationLine(
         List<OwnLclQuoteLine> lines,
-        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)> pricingLines,
+        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit, decimal? CalculationBaseCbm)> pricingLines,
         string lineKey,
         string name,
         string basis,
@@ -463,7 +448,7 @@ public static class OwnLclConsolidationEndpoints
         decimal cbm,
         int sets,
         int hbl,
-        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)> pricingLines)
+        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit, decimal? CalculationBaseCbm)> pricingLines)
     {
         if (incoterm == "FOB") return;
 
@@ -485,7 +470,7 @@ public static class OwnLclConsolidationEndpoints
 
     private static void AddConfiguredOriginLine(
         List<OwnLclQuoteLine> lines,
-        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)> pricingLines,
+        IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit, decimal? CalculationBaseCbm)> pricingLines,
         string lineKey,
         string name,
         string basis,
@@ -500,21 +485,24 @@ public static class OwnLclConsolidationEndpoints
         lines.Add(new OwnLclQuoteLine(name, basis, quantity, costUnit, saleUnit, quantity * costUnit, quantity * saleUnit, quantity * (saleUnit - costUnit)));
     }
 
-    private static async Task<IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit)>> LoadConsolidationPricingLinesAsync(
+    private static async Task<IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit, decimal? CalculationBaseCbm)>> LoadConsolidationPricingLinesAsync(
         Guid consolidationId,
         ServiceDbContext db,
         CancellationToken ct)
     {
         var values = OwnLclPricingLineCatalog.All.ToDictionary(
             definition => definition.LineKey,
-            definition => (definition.DefaultCostUnit ?? 0m, definition.DefaultSaleUnit),
+            definition => (
+                definition.DefaultCostUnit ?? 0m,
+                definition.DefaultSaleUnit,
+                definition.LineKey.StartsWith("CA_INLAND_", StringComparison.OrdinalIgnoreCase) ? (decimal?)70m : null),
             StringComparer.OrdinalIgnoreCase);
 
         await using var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT line_key, cost_unit, sale_unit
+            SELECT line_key, cost_unit, sale_unit, calculation_base_cbm
             FROM pricing."OwnLclConsolidationPricingLines"
             WHERE consolidation_id=@consolidation_id;
             """;
@@ -525,7 +513,10 @@ public static class OwnLclConsolidationEndpoints
         {
             var key = reader.GetString(0);
             if (!values.ContainsKey(key)) continue;
-            values[key] = (reader.GetDecimal(1), reader.GetDecimal(2));
+            values[key] = (
+                reader.GetDecimal(1),
+                reader.GetDecimal(2),
+                reader.IsDBNull(3) ? null : reader.GetDecimal(3));
         }
 
         return values;
