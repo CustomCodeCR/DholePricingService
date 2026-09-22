@@ -34,8 +34,13 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         CancellationToken cancellationToken = default
     )
     {
-        var idMarker = BuildOwnLclIdMarker(consolidationId);
-        var numberMarker = BuildOwnLclNumberMarker(consolidationNumber);
+        var target = await LoadOwnLclConsolidationAsync(
+            consolidationId,
+            consolidationNumber,
+            cancellationToken
+        );
+        if (target is null)
+            return 0m;
 
         var acceptedRates = await dbContext
             .RateHeaders.AsNoTracking()
@@ -45,16 +50,39 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 !x.IsDeleted
                 && x.ShipmentMode == ShipmentMode.Lcl
                 && x.Status == RateStatus.AcceptedByClient
-                && x.RateDetails.Any(detail =>
-                    detail.Notes != null
-                    && (detail.Notes.Contains(idMarker) || detail.Notes.Contains(numberMarker))
-                )
             )
             .ToListAsync(cancellationToken);
 
-        return acceptedRates.Sum(rate =>
-            ResolveOwnLclBillableCbm(rate, idMarker, numberMarker)
-        );
+        decimal approvedCbm = 0m;
+
+        foreach (var rate in acceptedRates)
+        {
+            var explicitSource = ResolveOwnLclSource(rate);
+            if (explicitSource is not null)
+            {
+                var matchesById = explicitSource.Value.ConsolidationId == target.Value.Id;
+                var matchesByNumber =
+                    explicitSource.Value.ConsolidationNumber == target.Value.Number;
+
+                if (matchesById || matchesByNumber)
+                    approvedCbm += ResolveOwnLclBillableCbm(rate);
+
+                continue;
+            }
+
+            if (!IsLegacyOwnLclRate(rate))
+                continue;
+
+            var inferredSource = await ResolveUniqueLegacyOwnLclConsolidationAsync(
+                rate,
+                cancellationToken
+            );
+
+            if (inferredSource?.Id == target.Value.Id)
+                approvedCbm += ResolveOwnLclBillableCbm(rate);
+        }
+
+        return approvedCbm;
     }
 
     public async Task<OwnLclCapacitySnapshot?> GetOwnLclCapacityForRateAsync(
@@ -72,14 +100,15 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             return null;
 
         var source = ResolveOwnLclSource(rate);
-        if (source is null)
-            return null;
-
-        var consolidation = await LoadOwnLclConsolidationAsync(
-            source.Value.ConsolidationId,
-            source.Value.ConsolidationNumber,
-            cancellationToken
-        );
+        var consolidation = source is not null
+            ? await LoadOwnLclConsolidationAsync(
+                source.Value.ConsolidationId,
+                source.Value.ConsolidationNumber,
+                cancellationToken
+            )
+            : IsLegacyOwnLclRate(rate)
+                ? await ResolveUniqueLegacyOwnLclConsolidationAsync(rate, cancellationToken)
+                : null;
         if (consolidation is null)
             return null;
 
@@ -89,11 +118,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             cancellationToken
         );
         var remainingCbm = Math.Max(0m, consolidation.Value.MaximumCbm - approvedCbm);
-        var requestedCbm = ResolveOwnLclBillableCbm(
-            rate,
-            BuildOwnLclIdMarker(consolidation.Value.Id),
-            BuildOwnLclNumberMarker(consolidation.Value.Number)
-        );
+        var requestedCbm = ResolveOwnLclBillableCbm(rate);
 
         return new OwnLclCapacitySnapshot(
             consolidation.Value.Id,
@@ -885,25 +910,30 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
     private static string BuildOwnLclNumberMarker(int consolidationNumber) =>
         $"Consolidado: #{consolidationNumber} ·";
 
-    private static decimal ResolveOwnLclBillableCbm(
-        RateHeader rate,
-        string idMarker,
-        string numberMarker
-    )
+    private static decimal ResolveOwnLclBillableCbm(RateHeader rate)
     {
         var quantity = rate.RateDetails
             .Where(detail =>
                 detail.CostDetailType == CostDetailType.Freight
                 && detail.ChargeBasis is ChargeBasis.PerCbm or ChargeBasis.PerChargeableCbm
-                && detail.Notes != null
-                && (detail.Notes.Contains(idMarker, StringComparison.OrdinalIgnoreCase)
-                    || detail.Notes.Contains(numberMarker, StringComparison.OrdinalIgnoreCase))
             )
             .Select(detail => detail.Quantity)
             .DefaultIfEmpty(0m)
             .Max();
 
         return quantity > 0m ? quantity : Math.Max(0m, rate.ChargeableQuantity);
+    }
+
+    private static bool IsLegacyOwnLclRate(RateHeader rate)
+    {
+        if (rate.ShipmentMode != ShipmentMode.Lcl)
+            return false;
+
+        if (string.Equals(rate.AgentCode, "GCF", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return (rate.AgentName ?? string.Empty)
+            .Contains("Grupo Castro Fallas", StringComparison.OrdinalIgnoreCase);
     }
 
     private static (Guid? ConsolidationId, int? ConsolidationNumber)? ResolveOwnLclSource(
@@ -932,7 +962,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         return null;
     }
 
-    private async Task<(Guid Id, int Number, decimal MaximumCbm)?> LoadOwnLclConsolidationAsync(
+    private async Task<(Guid Id, int Number, decimal MaximumCbm, Guid? CarrierId, string? CarrierCode, DateOnly? Etd)?> LoadOwnLclConsolidationAsync(
         Guid? consolidationId,
         int? consolidationNumber,
         CancellationToken cancellationToken
@@ -952,7 +982,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             if (consolidationId.HasValue)
             {
                 command.CommandText = """
-                    SELECT id, consolidation_number, maximum_cbm
+                    SELECT id, consolidation_number, maximum_cbm, carrier_id, carrier_code, etd
                     FROM pricing."OwnLclConsolidations"
                     WHERE id = @source AND is_active = TRUE
                     LIMIT 1;
@@ -962,7 +992,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             else
             {
                 command.CommandText = """
-                    SELECT id, consolidation_number, maximum_cbm
+                    SELECT id, consolidation_number, maximum_cbm, carrier_id, carrier_code, etd
                     FROM pricing."OwnLclConsolidations"
                     WHERE consolidation_number = @source AND is_active = TRUE
                     LIMIT 1;
@@ -974,7 +1004,70 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             if (!await reader.ReadAsync(cancellationToken))
                 return null;
 
-            return (reader.GetGuid(0), reader.GetInt32(1), reader.GetDecimal(2));
+            return (
+                reader.GetGuid(0),
+                reader.GetInt32(1),
+                reader.GetDecimal(2),
+                reader.IsDBNull(3) ? null : reader.GetGuid(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetFieldValue<DateOnly>(5)
+            );
+        }
+        finally
+        {
+            if (shouldClose)
+                await connection.CloseAsync();
+        }
+    }
+
+    private async Task<(Guid Id, int Number, decimal MaximumCbm, Guid? CarrierId, string? CarrierCode, DateOnly? Etd)?> ResolveUniqueLegacyOwnLclConsolidationAsync(
+        RateHeader rate,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!IsLegacyOwnLclRate(rate))
+            return null;
+
+        var connection = dbContext.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose)
+            await connection.OpenAsync(cancellationToken);
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT id, consolidation_number, maximum_cbm, carrier_id, carrier_code, etd
+                FROM pricing."OwnLclConsolidations"
+                WHERE is_active = TRUE
+                  AND LOWER(status) <> 'closed'
+                  AND (
+                        (@carrier_id IS NOT NULL AND carrier_id = @carrier_id)
+                     OR (@carrier_code <> '' AND UPPER(COALESCE(carrier_code, '')) = UPPER(@carrier_code))
+                  )
+                  AND (etd IS NULL OR etd > @quote_date)
+                ORDER BY etd NULLS LAST, consolidation_number;
+                """;
+
+            AddDbParameter(command, "carrier_id", (object?)rate.CarrierId ?? DBNull.Value);
+            AddDbParameter(command, "carrier_code", rate.CarrierCode?.Trim() ?? string.Empty);
+            AddDbParameter(command, "quote_date", DateOnly.FromDateTime(rate.ValidFrom));
+
+            var matches = new List<(Guid Id, int Number, decimal MaximumCbm, Guid? CarrierId, string? CarrierCode, DateOnly? Etd)>();
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                matches.Add((
+                    reader.GetGuid(0),
+                    reader.GetInt32(1),
+                    reader.GetDecimal(2),
+                    reader.IsDBNull(3) ? null : reader.GetGuid(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4),
+                    reader.IsDBNull(5) ? null : reader.GetFieldValue<DateOnly>(5)
+                ));
+            }
+
+            return matches.Count == 1 ? matches[0] : null;
         }
         finally
         {
