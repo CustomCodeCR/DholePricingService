@@ -201,6 +201,8 @@ public sealed class ReviewImportRateCommandHandler(
             importRate.ImportProfileName,
             importRate.ImportProfileCode,
             importRate.ImportProfileSlug,
+            importRate.Commodity,
+            importRate.SpaceComment,
             importRate.RawDataJson,
         }.Any(ContainsLclMarker);
     }
@@ -211,7 +213,11 @@ public sealed class ReviewImportRateCommandHandler(
         var normalized = value.Trim().ToLowerInvariant();
         return normalized.Contains("lcl", StringComparison.Ordinal)
             || normalized.Contains("less than container load", StringComparison.Ordinal)
-            || normalized.Contains("less-than-container-load", StringComparison.Ordinal);
+            || normalized.Contains("less-than-container-load", StringComparison.Ordinal)
+            || normalized.Contains("coloader", StringComparison.Ordinal)
+            || normalized.Contains("co-loader", StringComparison.Ordinal)
+            || normalized.Contains("coloading", StringComparison.Ordinal)
+            || normalized.Contains("groupage", StringComparison.Ordinal);
     }
 
     private static CatalogSnapshot LclContainerSnapshot() =>
