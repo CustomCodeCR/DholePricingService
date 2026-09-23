@@ -28,6 +28,7 @@ public static class FtlTariffEndpoints
 
     private static async Task<IResult> BrowseAsync(
         string? shipmentMode,
+        string? commercialProfile,
         ServiceDbContext db,
         CancellationToken cancellationToken
     )
@@ -37,8 +38,10 @@ public static class FtlTariffEndpoints
         await using var command = connection.CreateCommand();
 
         var mode = NormalizeShipmentMode(shipmentMode, allowEmpty: true);
+        var profile = NormalizeCommercialProfile(commercialProfile, mode, allowEmpty: true);
         command.CommandText = SelectColumns + """
             WHERE (@shipment_mode = '' OR lower(shipment_mode) = lower(@shipment_mode))
+              AND (@commercial_profile = '' OR lower(commercial_profile) = lower(@commercial_profile))
             ORDER BY
                 CASE lower(shipment_mode) WHEN 'ftl' THEN 0 WHEN 'ltl' THEN 1 ELSE 2 END,
                 CASE equipment_class WHEN '48_53' THEN 0 WHEN '5_7_TON' THEN 1 WHEN 'LTL_CBM' THEN 2 ELSE 3 END,
@@ -46,6 +49,7 @@ public static class FtlTariffEndpoints
                 destination_name;
             """;
         Add(command, "shipment_mode", mode ?? string.Empty);
+        Add(command, "commercial_profile", profile ?? string.Empty);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         var rows = new List<FtlTariffDto>();
@@ -62,6 +66,7 @@ public static class FtlTariffEndpoints
         Guid? destinationId,
         string? equipmentClass,
         string? shipmentMode,
+        string? commercialProfile,
         string? originName,
         string? destinationName,
         string? originCode,
@@ -76,6 +81,18 @@ public static class FtlTariffEndpoints
         var resolvedEquipmentClass = string.IsNullOrWhiteSpace(equipmentClass)
             ? (string.Equals(mode, "Ltl", StringComparison.OrdinalIgnoreCase) ? "LTL_CBM" : string.Empty)
             : equipmentClass.Trim();
+        var profile = NormalizeCommercialProfile(commercialProfile, mode, allowEmpty: false);
+
+        if (profile is null)
+        {
+            return Results.BadRequest(
+                new
+                {
+                    code = "Pricing.LandCommercialProfileInvalid",
+                    message = "El perfil comercial terrestre debe ser General, FinalClient o Nvocc según la modalidad.",
+                }
+            );
+        }
 
         if (string.IsNullOrWhiteSpace(resolvedEquipmentClass))
         {
@@ -94,6 +111,7 @@ public static class FtlTariffEndpoints
         command.CommandText = SelectColumns + """
             WHERE is_active = TRUE
               AND lower(shipment_mode) = lower(@shipment_mode)
+              AND lower(commercial_profile) = lower(@commercial_profile)
               AND upper(equipment_class) = upper(@equipment_class)
               AND (valid_from IS NULL OR valid_from <= @quote_date)
               AND (valid_to IS NULL OR valid_to >= @quote_date)
@@ -168,6 +186,7 @@ public static class FtlTariffEndpoints
             """;
 
         Add(command, "shipment_mode", mode);
+        Add(command, "commercial_profile", profile);
         Add(command, "equipment_class", resolvedEquipmentClass);
         Add(command, "origin_id", originId ?? Guid.Empty);
         Add(command, "destination_id", destinationId ?? Guid.Empty);
@@ -208,12 +227,16 @@ public static class FtlTariffEndpoints
         var total = await CountAsync(string.Empty);
         var ftl = await CountAsync("WHERE lower(shipment_mode) = 'ftl'");
         var ltl = await CountAsync("WHERE lower(shipment_mode) = 'ltl'");
+        var ltlFinalClient = await CountAsync("WHERE lower(shipment_mode) = 'ltl' AND lower(commercial_profile) = 'finalclient'");
+        var ltlNvocc = await CountAsync("WHERE lower(shipment_mode) = 'ltl' AND lower(commercial_profile) = 'nvocc'");
 
         return Results.Ok(new
         {
             total,
             ftl,
             ltl,
+            ltlFinalClient,
+            ltlNvocc,
             message = "Se verificaron y cargaron las tarifas base terrestres TIGSA/GCF que faltaban sin sobrescribir cambios manuales.",
         });
     }
@@ -427,6 +450,16 @@ public static class FtlTariffEndpoints
             });
         }
 
+        var profile = NormalizeCommercialProfile(item.CommercialProfile, mode, allowEmpty: false);
+        if (profile is null)
+        {
+            return Results.BadRequest(new
+            {
+                code = "Pricing.LandCommercialProfileInvalid",
+                message = "Para LTL indique FinalClient o Nvocc. Para FTL se utiliza General.",
+            });
+        }
+
         if (string.IsNullOrWhiteSpace(item.EquipmentClass))
         {
             return Results.BadRequest(new
@@ -484,6 +517,7 @@ public static class FtlTariffEndpoints
     {
         var mode = NormalizeShipmentMode(item.ShipmentMode, allowEmpty: false)!;
         var rateBasis = NormalizeRateBasis(item.RateBasis, mode);
+        var commercialProfile = NormalizeCommercialProfile(item.CommercialProfile, mode, allowEmpty: false)!;
         var equipmentClass = item.EquipmentClass.Trim().ToUpperInvariant();
         var equipmentLabel = string.IsNullOrWhiteSpace(item.EquipmentLabel)
             ? (string.Equals(mode, "Ltl", StringComparison.OrdinalIgnoreCase) ? "LTL · USD/CBM" : "Equipo FTL")
@@ -495,6 +529,7 @@ public static class FtlTariffEndpoints
             SELECT id
             FROM pricing."FtlTariffs"
             WHERE lower(shipment_mode) = lower(@shipment_mode)
+              AND lower(commercial_profile) = lower(@commercial_profile)
               AND upper(equipment_class) = upper(@equipment_class)
               AND lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun'))
                   = lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun'))
@@ -503,6 +538,7 @@ public static class FtlTariffEndpoints
             LIMIT 1;
             """;
         Add(lookup, "shipment_mode", mode);
+        Add(lookup, "commercial_profile", commercialProfile);
         Add(lookup, "equipment_class", equipmentClass);
         Add(lookup, "origin_name", item.OriginName.Trim());
         Add(lookup, "destination_name", item.DestinationName.Trim());
@@ -519,7 +555,7 @@ public static class FtlTariffEndpoints
                 (
                     id, origin_id, origin_name, origin_code,
                     destination_id, destination_name, destination_code,
-                    shipment_mode, equipment_class, equipment_label,
+                    shipment_mode, commercial_profile, equipment_class, equipment_label,
                     currency_id, currency_name, currency_code,
                     price_amount, rate_basis, minimum_amount, transit_days,
                     warehouse_name, source, notes, valid_from, valid_to,
@@ -529,7 +565,7 @@ public static class FtlTariffEndpoints
                 (
                     @id, @origin_id, @origin_name, @origin_code,
                     @destination_id, @destination_name, @destination_code,
-                    @shipment_mode, @equipment_class, @equipment_label,
+                    @shipment_mode, @commercial_profile, @equipment_class, @equipment_label,
                     @currency_id, @currency_name, @currency_code,
                     @price_amount, @rate_basis, @minimum_amount, @transit_days,
                     @warehouse_name, @source, @notes, @valid_from, @valid_to,
@@ -542,6 +578,7 @@ public static class FtlTariffEndpoints
                     origin_code = @origin_code,
                     destination_id = @destination_id,
                     destination_code = @destination_code,
+                    commercial_profile = @commercial_profile,
                     equipment_label = @equipment_label,
                     currency_id = @currency_id,
                     currency_name = @currency_name,
@@ -568,6 +605,7 @@ public static class FtlTariffEndpoints
         Add(command, "destination_name", item.DestinationName.Trim());
         Add(command, "destination_code", NullIfBlank(item.DestinationCode));
         Add(command, "shipment_mode", mode);
+        Add(command, "commercial_profile", commercialProfile);
         Add(command, "equipment_class", equipmentClass);
         Add(command, "equipment_label", equipmentLabel);
         Add(command, "currency_id", item.CurrencyId);
@@ -612,7 +650,8 @@ public static class FtlTariffEndpoints
             minimum_amount,
             warehouse_name,
             valid_from,
-            valid_to
+            valid_to,
+            commercial_profile
         FROM pricing."FtlTariffs"
         """;
 
@@ -640,7 +679,8 @@ public static class FtlTariffEndpoints
             reader.IsDBNull(19) ? null : reader.GetDecimal(19),
             reader.IsDBNull(20) ? null : reader.GetString(20),
             reader.IsDBNull(21) ? null : reader.GetDateTime(21),
-            reader.IsDBNull(22) ? null : reader.GetDateTime(22)
+            reader.IsDBNull(22) ? null : reader.GetDateTime(22),
+            reader.IsDBNull(23) ? "General" : reader.GetString(23)
         );
 
     private static string? NormalizeShipmentMode(string? value, bool allowEmpty)
@@ -649,6 +689,23 @@ public static class FtlTariffEndpoints
         if (string.Equals(value.Trim(), "Ftl", StringComparison.OrdinalIgnoreCase)) return "Ftl";
         if (string.Equals(value.Trim(), "Ltl", StringComparison.OrdinalIgnoreCase)) return "Ltl";
         return null;
+    }
+
+    private static string? NormalizeCommercialProfile(string? value, string? shipmentMode, bool allowEmpty)
+    {
+        var isLtl = string.Equals(shipmentMode, "Ltl", StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(value))
+            return allowEmpty ? null : (isLtl ? "FinalClient" : "General");
+
+        var normalized = value.Trim().Replace(" ", string.Empty).Replace("-", string.Empty).ToLowerInvariant();
+        if (isLtl)
+        {
+            if (normalized is "finalclient" or "clientefinal" or "client") return "FinalClient";
+            if (normalized is "nvocc" or "nvo") return "Nvocc";
+            return null;
+        }
+
+        return normalized is "general" or "standard" ? "General" : null;
     }
 
     private static string NormalizeRateBasis(string? value, string shipmentMode)
@@ -701,7 +758,8 @@ public sealed record FtlTariffDto(
     decimal? MinimumAmount,
     string? WarehouseName,
     DateTime? ValidFrom,
-    DateTime? ValidTo
+    DateTime? ValidTo,
+    string CommercialProfile
 );
 
 public sealed record CreateFtlTariffRequest(
@@ -726,7 +784,8 @@ public sealed record CreateFtlTariffRequest(
     string? Notes = null,
     DateTime? ValidFrom = null,
     DateTime? ValidTo = null,
-    bool IsActive = true
+    bool IsActive = true,
+    string? CommercialProfile = null
 );
 
 public sealed record ImportFtlTariffsRequest(IReadOnlyCollection<CreateFtlTariffRequest> Items);
