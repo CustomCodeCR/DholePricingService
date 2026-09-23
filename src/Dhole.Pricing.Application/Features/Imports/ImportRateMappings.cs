@@ -82,6 +82,8 @@ internal static class ImportRateMappings
             importRate.ImportProfileName,
             importRate.ImportProfileCode,
             importRate.ImportProfileSlug,
+            importRate.Commodity,
+            importRate.SpaceComment,
             importRate.RawDataJson,
         });
 
@@ -101,7 +103,11 @@ internal static class ImportRateMappings
         var normalized = value.Trim().ToLowerInvariant();
         return normalized.Contains("lcl", StringComparison.Ordinal)
             || normalized.Contains("less than container load", StringComparison.Ordinal)
-            || normalized.Contains("less-than-container-load", StringComparison.Ordinal);
+            || normalized.Contains("less-than-container-load", StringComparison.Ordinal)
+            || normalized.Contains("coloader", StringComparison.Ordinal)
+            || normalized.Contains("co-loader", StringComparison.Ordinal)
+            || normalized.Contains("coloading", StringComparison.Ordinal)
+            || normalized.Contains("groupage", StringComparison.Ordinal);
     }
 
     public static ImportRateSelectDto ToSelectDto(this ImportFclRates importRate)
