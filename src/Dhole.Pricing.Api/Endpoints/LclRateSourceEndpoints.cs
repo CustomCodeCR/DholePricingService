@@ -299,6 +299,8 @@ public static class LclRateSourceEndpoints
             rate.ImportProfileName,
             rate.ImportProfileCode,
             rate.ImportProfileSlug,
+            rate.Commodity,
+            rate.SpaceComment,
             rate.RawDataJson,
         }.Any(ContainsLclMarker);
     }
@@ -309,7 +311,11 @@ public static class LclRateSourceEndpoints
         var normalized = value.Trim().ToLowerInvariant();
         return normalized.Contains("lcl", StringComparison.Ordinal)
             || normalized.Contains("less than container load", StringComparison.Ordinal)
-            || normalized.Contains("less-than-container-load", StringComparison.Ordinal);
+            || normalized.Contains("less-than-container-load", StringComparison.Ordinal)
+            || normalized.Contains("coloader", StringComparison.Ordinal)
+            || normalized.Contains("co-loader", StringComparison.Ordinal)
+            || normalized.Contains("coloading", StringComparison.Ordinal)
+            || normalized.Contains("groupage", StringComparison.Ordinal);
     }
 
     private static decimal ResolveImportedLclTotalCost(ImportFclRates rate)
