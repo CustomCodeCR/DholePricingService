@@ -114,13 +114,13 @@ public sealed class GetCostsForSelectQueryHandler(
         if (!PartyMatches(selection?.AgentIds, cost.AgentId, query.AgentId, requireConfiguredContext))
             return false;
 
-        if (!RouteRoleMatches(selection?.PolIds, cost.PolId, query.PolId, requireConfiguredContext))
+        if (!RouteRoleMatches(selection?.PolIds, cost.PolId, query.PolId))
             return false;
 
-        if (!RouteRoleMatches(selection?.PoeIds, cost.PoeId, query.PoeId, requireConfiguredContext))
+        if (!RouteRoleMatches(selection?.PoeIds, cost.PoeId, query.PoeId))
             return false;
 
-        if (!RouteRoleMatches(selection?.PodIds, cost.PodId, query.PodId, requireConfiguredContext))
+        if (!RouteRoleMatches(selection?.PodIds, cost.PodId, query.PodId))
             return false;
 
         if (cost.Incoterms.Count > 0)
@@ -161,7 +161,7 @@ public sealed class GetCostsForSelectQueryHandler(
             }
         }
 
-        if (cost.PortId.HasValue && !LegacyPortMatches(cost, query, requireConfiguredContext))
+        if (cost.PortId.HasValue && !LegacyPortMatches(cost, query))
             return false;
 
         return true;
@@ -189,14 +189,15 @@ public sealed class GetCostsForSelectQueryHandler(
     private static bool RouteRoleMatches(
         IReadOnlyCollection<Guid>? selectedPortIds,
         Guid? legacyPortId,
-        Guid? contextPortId,
-        bool requireConfiguredContext
+        Guid? contextPortId
     )
     {
         if (!contextPortId.HasValue)
         {
+            // Route restrictions are hard constraints for every cost type. A POD-specific
+            // cost (for example Honduras) must not apply while the quote has no POD.
             var hasRestriction = selectedPortIds is { Count: > 0 } || legacyPortId.HasValue;
-            return !requireConfiguredContext || !hasRestriction;
+            return !hasRestriction;
         }
 
         if (selectedPortIds is { Count: > 0 })
@@ -207,8 +208,7 @@ public sealed class GetCostsForSelectQueryHandler(
 
     private static bool LegacyPortMatches(
         CostSelectDto cost,
-        GetCostsForSelectQuery query,
-        bool requireConfiguredContext
+        GetCostsForSelectQuery query
     )
     {
         if (!cost.PortId.HasValue)
@@ -216,21 +216,16 @@ public sealed class GetCostsForSelectQueryHandler(
 
         return cost.PortRole?.ToLowerInvariant() switch
         {
-            "pol" => query.PolId.HasValue
-                ? cost.PortId == query.PolId
-                : !requireConfiguredContext,
-            "poe" => query.PoeId.HasValue
-                ? cost.PortId == query.PoeId
-                : !requireConfiguredContext,
-            "pod" => query.PodId.HasValue
-                ? cost.PortId == query.PodId
-                : !requireConfiguredContext,
+            "pol" => query.PolId.HasValue && cost.PortId == query.PolId,
+            "poe" => query.PoeId.HasValue && cost.PortId == query.PoeId,
+            "pod" => query.PodId.HasValue && cost.PortId == query.PodId,
             _ =>
-                query.PolId.HasValue || query.PoeId.HasValue || query.PodId.HasValue
-                    ? cost.PortId == query.PolId
-                        || cost.PortId == query.PoeId
-                        || cost.PortId == query.PodId
-                    : !requireConfiguredContext,
+                (query.PolId.HasValue || query.PoeId.HasValue || query.PodId.HasValue)
+                && (
+                    cost.PortId == query.PolId
+                    || cost.PortId == query.PoeId
+                    || cost.PortId == query.PodId
+                ),
         };
     }
 
