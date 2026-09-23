@@ -35,6 +35,9 @@ public sealed class CreateRateCommandHandler(
     private static readonly Guid OwnLclInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c41");
     private const string OwnLclInternalAgentName = "Grupo Castro Fallas";
     private const string OwnLclInternalAgentCode = "GCF";
+    private static readonly Guid LclInternalCarrierId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c44");
+    private const string LclInternalCarrierName = "No aplica (LCL)";
+    private const string LclInternalCarrierCode = "LCL";
 
     public async Task<Result<Guid>> HandleAsync(
         CreateRateCommand command,
@@ -48,6 +51,9 @@ public sealed class CreateRateCommandHandler(
                 string.Equals(command.AgentCode, OwnLclInternalAgentCode, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(command.AgentName, OwnLclInternalAgentName, StringComparison.OrdinalIgnoreCase)
             );
+        var lclWithoutCarrier =
+            command.ShipmentMode == ShipmentMode.Lcl
+            && (!command.CarrierId.HasValue || command.CarrierId.Value == Guid.Empty);
 
         // Los Id de catálogo son la única entrada confiable. Todos los snapshots usados por
         // Pricing se reconstruyen desde Dhole.Config antes de crear la tarifa.
@@ -67,14 +73,23 @@ public sealed class CreateRateCommandHandler(
                         "El agente", PricingConstants.CatalogSlugs.Agents));
             }
 
-            var carrier = await configCatalog.GetActiveInGroupAsync(
-                command.CarrierId,
-                PricingConstants.CatalogSlugs.Carriers,
-                cancellationToken
-            );
-            if (command.CarrierId.HasValue && command.CarrierId.Value != Guid.Empty && carrier is null)
+            PricingConfigCatalogItem? carrier = null;
+            if (command.CarrierId.HasValue && command.CarrierId.Value != Guid.Empty)
+            {
+                carrier = await configCatalog.GetActiveInGroupAsync(
+                    command.CarrierId,
+                    PricingConstants.CatalogSlugs.Carriers,
+                    cancellationToken
+                );
+                if (carrier is null)
+                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
+                        "La naviera", PricingConstants.CatalogSlugs.Carriers));
+            }
+            else if (!lclWithoutCarrier)
+            {
                 return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
                     "La naviera", PricingConstants.CatalogSlugs.Carriers));
+            }
 
             var pol = await configCatalog.GetActiveInGroupAsync(
                 command.PolId, PricingConstants.CatalogSlugs.Pol, cancellationToken);
@@ -166,9 +181,9 @@ public sealed class CreateRateCommandHandler(
                 AgentId = ownLclWithoutAgent ? OwnLclInternalAgentId : agent?.Id,
                 AgentName = ownLclWithoutAgent ? OwnLclInternalAgentName : agent?.SnapshotName(),
                 AgentCode = ownLclWithoutAgent ? OwnLclInternalAgentCode : agent?.Code,
-                CarrierId = carrier?.Id,
-                CarrierName = carrier?.SnapshotName(),
-                CarrierCode = carrier?.Code,
+                CarrierId = lclWithoutCarrier ? LclInternalCarrierId : carrier?.Id,
+                CarrierName = lclWithoutCarrier ? LclInternalCarrierName : carrier?.SnapshotName(),
+                CarrierCode = lclWithoutCarrier ? LclInternalCarrierCode : carrier?.Code,
                 PolId = pol.Id,
                 PolName = pol.SnapshotName(),
                 PolCode = pol.Code,
