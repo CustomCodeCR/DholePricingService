@@ -56,6 +56,11 @@ public static class DataExtractionPricingImportMapper
             "LCL",
             StringComparison.OrdinalIgnoreCase
         );
+        var isAir = string.Equals(
+            row.ContainerType?.Trim(),
+            "AIR",
+            StringComparison.OrdinalIgnoreCase
+        );
         var validFrom = row.ValidFrom;
         var validTo = row.ValidTo;
         var commodity = FirstText(
@@ -74,7 +79,9 @@ public static class DataExtractionPricingImportMapper
         var spaceComment = row.SpaceComment;
         var carrier = isLcl && !HasText(row.Carrier)
             ? "Por asignar"
-            : row.Carrier;
+            : isAir && !HasText(row.Carrier)
+                ? "Aéreo Consolidado"
+                : row.Carrier;
 
         if (isSpot)
         {
@@ -107,6 +114,27 @@ public static class DataExtractionPricingImportMapper
                 row.Remarks,
                 !HasText(row.Carrier)
                     ? "LCL sin naviera explícita en la fuente; carrier pendiente de asignación."
+                    : null
+            );
+        }
+        else if (isAir)
+        {
+            var serviceMode = ReadRawValue(row.RawJson, "servicemode", "service", "modalidad");
+            var rateBasis = ReadRawValue(row.RawJson, "ratebasis", "basis");
+            var minimumRate = ReadRawValue(row.RawJson, "minimumrate", "minimum", "minimo");
+            var kgPerCbm = ReadRawValue(row.RawJson, "kgpercbm", "density", "densidad");
+            var airlineRoute = ReadRawValue(row.RawJson, "airlineroute", "route", "ruta");
+
+            spaceComment = MergeComments(
+                row.SpaceComment,
+                row.Remarks,
+                HasText(serviceMode) ? $"Servicio aéreo: {serviceMode}" : "Servicio aéreo",
+                HasText(rateBasis) ? $"Base: {rateBasis}" : null,
+                HasText(minimumRate) ? $"Mínimo: {minimumRate}" : null,
+                HasText(kgPerCbm) ? $"Densidad: 1 CBM = {kgPerCbm} KG" : null,
+                HasText(airlineRoute) ? $"Ruta aérea: {airlineRoute}" : null,
+                !HasText(row.Carrier)
+                    ? "Aerolínea no explícita; consolidado aéreo conservado para importación."
                     : null
             );
         }
