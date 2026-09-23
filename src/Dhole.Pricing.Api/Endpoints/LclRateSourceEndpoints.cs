@@ -1,5 +1,6 @@
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -34,6 +35,7 @@ public static class LclRateSourceEndpoints
         string? poe,
         string? pod,
         DateTime? quoteDate,
+        IImportFclRateRepository importRates,
         ServiceDbContext db,
         CancellationToken cancellationToken)
     {
@@ -166,7 +168,7 @@ public static class LclRateSourceEndpoints
             .Take(500)
             .ToListAsync(cancellationToken);
 
-        var importedLclRates = importedLclCandidates
+        var directlyClassifiedLclRates = importedLclCandidates
             .Where(IsImportedLclRate)
             .Where(rate => LocationMatches(polId, pol, rate.PolId, rate.PolName, rate.PolCode))
             .Where(rate => LocationMatches(poeId, poe, rate.PoeId, rate.PoeName, rate.PoeCode))
@@ -176,6 +178,57 @@ public static class LclRateSourceEndpoints
                 rate.PodId,
                 rate.PodName,
                 rate.PodCode))
+            .ToList();
+
+        // Reuse the same imported-rate source queried by Pantalla 5 FCL. Historical
+        // coloader rows were stored in ImportFclRates without an explicit LCL marker,
+        // so they can still be returned by /api/pricing/import-rates/select while the
+        // dedicated LCL endpoint would otherwise return an empty list.
+        var selectorApproved = await importRates.GetForSelectAsync(
+            status: ImportStatus.Approved,
+            pol: pol,
+            poe: poe,
+            pod: pod,
+            quoteDate: effectiveDate,
+            cancellationToken: cancellationToken);
+        var selectorPreAuthorized = await importRates.GetForSelectAsync(
+            status: ImportStatus.PreAuthorized,
+            pol: pol,
+            poe: poe,
+            pod: pod,
+            quoteDate: effectiveDate,
+            cancellationToken: cancellationToken);
+
+        var selectorIds = selectorApproved
+            .Concat(selectorPreAuthorized)
+            .Select(rate => rate.Id)
+            .Distinct()
+            .ToArray();
+
+        var selectorCandidates = selectorIds.Length == 0
+            ? new List<ImportFclRates>()
+            : await db.ImportFclRates
+                .AsNoTracking()
+                .Where(rate => selectorIds.Contains(rate.Id) && !rate.IsDeleted)
+                .ToListAsync(cancellationToken);
+
+        var importedLclRates = directlyClassifiedLclRates
+            .Concat(selectorCandidates
+                .Where(IsImportedLclRate)
+                .Where(rate => rate.ValidTo >= effectiveDate)
+                .Where(rate => LocationMatches(polId, pol, rate.PolId, rate.PolName, rate.PolCode))
+                .Where(rate => LocationMatches(poeId, poe, rate.PoeId, rate.PoeName, rate.PoeCode))
+                .Where(rate => PodMatchesOrIsUnassigned(
+                    podId,
+                    pod,
+                    rate.PodId,
+                    rate.PodName,
+                    rate.PodCode)))
+            .GroupBy(rate => rate.Id)
+            .Select(group => group.First())
+            .OrderBy(rate => rate.ValidFrom)
+            .ThenBy(rate => rate.ValidTo)
+            .ThenBy(rate => rate.TotalSale)
             .Take(100)
             .ToList();
 
@@ -290,7 +343,7 @@ public static class LclRateSourceEndpoints
 
     private static bool IsImportedLclRate(ImportFclRates rate)
     {
-        return new[]
+        var markers = new[]
         {
             rate.ContainerType,
             rate.ContainerTypeName,
@@ -302,7 +355,72 @@ public static class LclRateSourceEndpoints
             rate.Commodity,
             rate.SpaceComment,
             rate.RawDataJson,
-        }.Any(ContainsLclMarker);
+        };
+
+        if (markers.Any(ContainsLclMarker)) return true;
+
+        // Legacy coloader imports often have neither naviera nor equipment resolved.
+        // They were therefore falling through the old FCL selector simply because
+        // they did not contain the literal string "LCL". A real FCL rate must expose
+        // a recognizable full-container equipment; otherwise an unresolved equipment
+        // or carrier snapshot is treated as an LCL/coloader candidate.
+        if (HasExplicitFclEquipment(rate.ContainerTypeName, rate.ContainerTypeSlug, rate.RawDataJson))
+            return false;
+
+        return IsUnassignedCatalogSnapshot(
+                rate.ContainerTypeName,
+                rate.ContainerTypeCode,
+                rate.ContainerTypeSlug)
+            || IsUnassignedCatalogSnapshot(
+                rate.CarrierName,
+                rate.CarrierCode,
+                rate.CarrierSlug);
+    }
+
+    private static bool HasExplicitFclEquipment(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            var normalized = CanonicalText(value);
+            if (normalized.Contains("fcl", StringComparison.Ordinal)) return true;
+
+            var hasSize = normalized.Contains("20", StringComparison.Ordinal)
+                || normalized.Contains("40", StringComparison.Ordinal)
+                || normalized.Contains("45", StringComparison.Ordinal);
+            var hasEquipmentType = normalized.Contains("highcube", StringComparison.Ordinal)
+                || normalized.Contains("dryvan", StringComparison.Ordinal)
+                || normalized.Contains("reefer", StringComparison.Ordinal)
+                || normalized.Contains("opentop", StringComparison.Ordinal)
+                || normalized.Contains("flatrack", StringComparison.Ordinal)
+                || normalized.Contains("standard", StringComparison.Ordinal)
+                || normalized.Contains("hc", StringComparison.Ordinal)
+                || normalized.Contains("hq", StringComparison.Ordinal)
+                || normalized.Contains("dv", StringComparison.Ordinal)
+                || normalized.Contains("std", StringComparison.Ordinal)
+                || normalized.Contains("rf", StringComparison.Ordinal)
+                || normalized.Contains("ot", StringComparison.Ordinal)
+                || normalized.Contains("fr", StringComparison.Ordinal);
+
+            if (hasSize && hasEquipmentType) return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsUnassignedCatalogSnapshot(params string?[] values)
+    {
+        var normalized = values
+            .Select(CanonicalText)
+            .Where(value => !string.IsNullOrEmpty(value))
+            .ToArray();
+
+        if (normalized.Length == 0) return true;
+
+        return normalized.Any(value => value is
+            "porasignar" or "unassigned" or "pending" or "sinasignar"
+            or "na" or "none" or "unknown" or "notapplicable" or "noaplica"
+            or "sincontenedor" or "sincontainer" or "sinnaviera" or "sincarrier");
     }
 
     private static bool ContainsLclMarker(string? value)
