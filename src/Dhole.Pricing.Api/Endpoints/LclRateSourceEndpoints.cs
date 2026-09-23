@@ -157,18 +157,17 @@ public static class LclRateSourceEndpoints
             .AsNoTracking()
             .Where(rate =>
                 !rate.IsDeleted
-                && rate.Status == ImportStatus.Approved
-                && rate.ValidTo >= effectiveDate
-                && (rate.ContainerTypeCode == "LCL"
-                    || rate.ContainerTypeName == "LCL"
-                    || rate.ContainerTypeSlug == "lcl"))
+                && (rate.Status == ImportStatus.Approved
+                    || rate.Status == ImportStatus.PreAuthorized)
+                && rate.ValidTo >= effectiveDate)
             .OrderBy(rate => rate.ValidFrom)
             .ThenBy(rate => rate.ValidTo)
             .ThenBy(rate => rate.TotalSale)
-            .Take(250)
+            .Take(500)
             .ToListAsync(cancellationToken);
 
         var importedLclRates = importedLclCandidates
+            .Where(IsImportedLclRate)
             .Where(rate => LocationMatches(polId, pol, rate.PolId, rate.PolName, rate.PolCode))
             .Where(rate => LocationMatches(poeId, poe, rate.PoeId, rate.PoeName, rate.PoeCode))
             .Where(rate => PodMatchesOrIsUnassigned(
@@ -287,6 +286,30 @@ public static class LclRateSourceEndpoints
 
         var items = tariffItems.Concat(importedItems).ToArray();
         return Results.Ok(new { items });
+    }
+
+    private static bool IsImportedLclRate(ImportFclRates rate)
+    {
+        return new[]
+        {
+            rate.ContainerType,
+            rate.ContainerTypeName,
+            rate.ContainerTypeCode,
+            rate.ContainerTypeSlug,
+            rate.ImportProfileName,
+            rate.ImportProfileCode,
+            rate.ImportProfileSlug,
+            rate.RawDataJson,
+        }.Any(ContainsLclMarker);
+    }
+
+    private static bool ContainsLclMarker(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized.Contains("lcl", StringComparison.Ordinal)
+            || normalized.Contains("less than container load", StringComparison.Ordinal)
+            || normalized.Contains("less-than-container-load", StringComparison.Ordinal);
     }
 
     private static decimal ResolveImportedLclTotalCost(ImportFclRates rate)

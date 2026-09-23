@@ -374,6 +374,7 @@ public static class ImportRateEndpoints
             new ReviewImportRateCommand(
                 importRateId,
                 request.ImportProfileId,
+                request.ShipmentMode,
                 request.PolId,
                 request.PoeId,
                 request.PodId,

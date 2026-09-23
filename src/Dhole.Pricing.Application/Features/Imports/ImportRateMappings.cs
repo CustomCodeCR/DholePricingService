@@ -70,21 +70,38 @@ internal static class ImportRateMappings
 
     private static string ResolveShipmentMode(ImportFclRates importRate)
     {
-        var markers = new[]
+        var containerMarkers = new[]
         {
             importRate.ContainerType,
             importRate.ContainerTypeName,
             importRate.ContainerTypeCode,
             importRate.ContainerTypeSlug,
         };
+        var lclMarkers = containerMarkers.Concat(new[]
+        {
+            importRate.ImportProfileName,
+            importRate.ImportProfileCode,
+            importRate.ImportProfileSlug,
+            importRate.RawDataJson,
+        });
 
-        if (markers.Any(value => string.Equals(value?.Trim(), "LCL", StringComparison.OrdinalIgnoreCase)))
+        if (lclMarkers.Any(ContainsLclMarker))
             return "Lcl";
 
-        if (markers.Any(value => string.Equals(value?.Trim(), "AIR", StringComparison.OrdinalIgnoreCase)))
+        if (containerMarkers.Any(value =>
+            string.Equals(value?.Trim(), "AIR", StringComparison.OrdinalIgnoreCase)))
             return "Air";
 
         return "Fcl";
+    }
+
+    private static bool ContainsLclMarker(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized.Contains("lcl", StringComparison.Ordinal)
+            || normalized.Contains("less than container load", StringComparison.Ordinal)
+            || normalized.Contains("less-than-container-load", StringComparison.Ordinal);
     }
 
     public static ImportRateSelectDto ToSelectDto(this ImportFclRates importRate)

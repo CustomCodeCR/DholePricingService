@@ -6,6 +6,7 @@ namespace Dhole.Pricing.Application.Features.Imports.ReviewImportRate;
 public sealed record ReviewImportRateCommand(
     Guid ImportRateId,
     Guid ImportProfileId,
+    string? ShipmentMode,
     Guid PolId,
     Guid PoeId,
     Guid? PodId,

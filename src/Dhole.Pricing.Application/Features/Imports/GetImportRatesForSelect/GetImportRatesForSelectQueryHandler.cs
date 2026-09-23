@@ -30,6 +30,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         var exact = approvedExact
             .Concat(preAuthorizedExact)
             .Where(IsSelectableStatus)
+            .Where(IsFclRate)
             .GroupBy(x => x.Id)
             .Select(group => group.First())
             .OrderBy(x => StatusPriority(x.Status))
@@ -53,6 +54,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         var fallback = approvedFallback
             .Concat(preAuthorizedFallback)
             .Where(x => IsSelectableStatus(x.Status))
+            .Where(IsFclRate)
             .Where(x => EquipmentMatches(query.ContainerType, x.ContainerType, x.ContainerTypeCode))
             .Where(x => PodMatchesOrIsUnassigned(query.Pod, x.Pod, x.PodCode, x.PodId))
             .Where(x => !requestedDate.HasValue || x.ValidTo.Date >= requestedDate.Value)
@@ -95,6 +97,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         var rates = approved
             .Concat(preAuthorized)
             .Where(x => IsSelectableStatus(x.Status))
+            .Where(IsFclRate)
             .Where(x => EquipmentMatches(query.ContainerType, x.ContainerType, x.ContainerTypeCode))
             .Where(x => PodMatchesOrIsUnassigned(query.Pod, x.Pod, x.PodCode, x.PodId))
             .Where(x => !requestedDate.HasValue || x.ValidTo.Date >= requestedDate.Value)
@@ -303,6 +306,24 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
     }
 
     private static bool IsSelectableStatus(ImportRateSelectDto rate) => IsSelectableStatus(rate.Status);
+
+    private static bool IsFclRate(ImportRateSelectDto rate) =>
+        !IsLclRate(rate.ContainerType, rate.ContainerTypeCode, rate.RawDataJson);
+
+    private static bool IsFclRate(ImportRateDto rate) =>
+        !IsLclRate(rate.ContainerType, rate.ContainerTypeCode, rate.RawDataJson);
+
+    private static bool IsLclRate(string? containerType, string? containerTypeCode, string? rawDataJson)
+    {
+        return new[] { containerType, containerTypeCode, rawDataJson }.Any(value =>
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            var normalized = value.Trim().ToLowerInvariant();
+            return normalized.Contains("lcl", StringComparison.Ordinal)
+                || normalized.Contains("less than container load", StringComparison.Ordinal)
+                || normalized.Contains("less-than-container-load", StringComparison.Ordinal);
+        });
+    }
 
     private static bool IsSelectableStatus(string? status) =>
         string.Equals(status, nameof(ImportStatus.Approved), StringComparison.OrdinalIgnoreCase)

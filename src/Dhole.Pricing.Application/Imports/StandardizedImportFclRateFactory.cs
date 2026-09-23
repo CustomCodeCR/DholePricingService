@@ -113,11 +113,13 @@ public static class StandardizedImportFclRateFactory
                         "PENDING",
                         "Por asignar"
                     ),
-                    ResolveOptionalSnapshot(
-                        row.ContainerTypeReference,
-                        IsAir(row) ? "air-equipment-types" : "container-types",
-                        row.ContainerType
-                    ),
+                    IsLcl(row)
+                        ? CreateFallbackSnapshot("container-types", "LCL", "LCL", "LCL")
+                        : ResolveOptionalSnapshot(
+                            row.ContainerTypeReference,
+                            IsAir(row) ? "air-equipment-types" : "container-types",
+                            row.ContainerType
+                        ),
                     ResolveCurrencySnapshot(row.CurrencyReference, row.Currency),
                     row.Commodity,
                     row.SpaceComment,
@@ -159,8 +161,7 @@ public static class StandardizedImportFclRateFactory
         return !hasNonReviewableBlockingIssue
             && HasText(row.OriginPort)
             && HasText(resolvedPortOfExit)
-            && HasText(row.ContainerType)
-            && HasText(row.Carrier)
+            && (IsLcl(row) || (HasText(row.ContainerType) && HasText(row.Carrier)))
             && row.ValidFrom.HasValue
             && row.ValidTo.HasValue
             && row.ValidTo.Value >= row.ValidFrom.Value
@@ -177,6 +178,37 @@ public static class StandardizedImportFclRateFactory
             && FitsNumeric18Scale4(row.TotalSale)
             && FitsNumeric18Scale4(row.Profit)
             && FitsNumeric18Scale4(row.Margin);
+    }
+
+    private static bool IsLcl(DataExtractionFclPricingRow row)
+    {
+        if (ContainsLclMarker(row.ContainerType)) return true;
+        if (!HasText(row.RawJson)) return false;
+
+        var explicitMode = ReadRawJsonValue(
+            row.RawJson!,
+            "ShipmentMode",
+            "shipmentMode",
+            "Mode",
+            "mode",
+            "Modalidad",
+            "modalidad",
+            "ServiceType",
+            "serviceType",
+            "LoadType",
+            "loadType"
+        );
+
+        return ContainsLclMarker(explicitMode) || ContainsLclMarker(row.RawJson);
+    }
+
+    private static bool ContainsLclMarker(string? value)
+    {
+        if (!HasText(value)) return false;
+        var normalized = value!.Trim().ToLowerInvariant();
+        return normalized.Contains("lcl", StringComparison.Ordinal)
+            || normalized.Contains("less than container load", StringComparison.Ordinal)
+            || normalized.Contains("less-than-container-load", StringComparison.Ordinal);
     }
 
     private static bool IsAir(DataExtractionFclPricingRow row) =>
