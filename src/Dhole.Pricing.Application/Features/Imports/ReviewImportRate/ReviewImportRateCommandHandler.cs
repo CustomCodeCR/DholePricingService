@@ -7,6 +7,7 @@ using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Imports.Entities;
+using Dhole.Pricing.Domain.Imports.Services;
 using Dhole.Pricing.Domain.Shared;
 
 namespace Dhole.Pricing.Application.Features.Imports.ReviewImportRate;
@@ -57,7 +58,13 @@ public sealed class ReviewImportRateCommandHandler(
         {
             pod = await ResolveAsync(command.PodId.Value, ["pod", "ports"], cancellationToken);
         }
-        var isLclImport = IsLclShipmentMode(command.ShipmentMode) || IsLclImport(importRate);
+        var isLclImport = IsLclShipmentMode(command.ShipmentMode)
+            || ImportShipmentModeClassifier.Classify(
+                importRate.ContainerType,
+                importRate.ContainerTypeName,
+                importRate.ContainerTypeCode,
+                importRate.ContainerTypeSlug,
+                importRate.RawDataJson) == ImportedShipmentMode.Lcl;
         var carrierWasProvided = command.CarrierId.HasValue && command.CarrierId.Value != Guid.Empty;
         var containerTypeWasProvided = !isLclImport
             && command.ContainerTypeId.HasValue
@@ -189,36 +196,6 @@ public sealed class ReviewImportRateCommandHandler(
     private static bool IsLclShipmentMode(string? value) =>
         string.Equals(value?.Trim(), "Lcl", StringComparison.OrdinalIgnoreCase)
         || string.Equals(value?.Trim(), "LCL", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsLclImport(ImportFclRates importRate)
-    {
-        return new[]
-        {
-            importRate.ContainerType,
-            importRate.ContainerTypeName,
-            importRate.ContainerTypeCode,
-            importRate.ContainerTypeSlug,
-            importRate.ImportProfileName,
-            importRate.ImportProfileCode,
-            importRate.ImportProfileSlug,
-            importRate.Commodity,
-            importRate.SpaceComment,
-            importRate.RawDataJson,
-        }.Any(ContainsLclMarker);
-    }
-
-    private static bool ContainsLclMarker(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return false;
-        var normalized = value.Trim().ToLowerInvariant();
-        return normalized.Contains("lcl", StringComparison.Ordinal)
-            || normalized.Contains("less than container load", StringComparison.Ordinal)
-            || normalized.Contains("less-than-container-load", StringComparison.Ordinal)
-            || normalized.Contains("coloader", StringComparison.Ordinal)
-            || normalized.Contains("co-loader", StringComparison.Ordinal)
-            || normalized.Contains("coloading", StringComparison.Ordinal)
-            || normalized.Contains("groupage", StringComparison.Ordinal);
-    }
 
     private static CatalogSnapshot LclContainerSnapshot() =>
         new(Guid.Parse("4c434c00-0000-4000-8000-000000000001"), "LCL", "LCL", "lcl");
