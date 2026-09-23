@@ -59,9 +59,17 @@ public sealed class ReviewImportRateCommandHandler(
         {
             pod = await ResolveAsync(command.PodId.Value, ["pod", "ports"], cancellationToken);
         }
-        var carrier = await ResolveAsync(command.CarrierId, ["carriers"], cancellationToken);
+        var isLclImport = IsLclImport(importRate);
+        var carrierWasProvided = command.CarrierId.HasValue && command.CarrierId.Value != Guid.Empty;
+        var containerTypeWasProvided = command.ContainerTypeId.HasValue && command.ContainerTypeId.Value != Guid.Empty;
+
+        var carrier = carrierWasProvided
+            ? await ResolveAsync(command.CarrierId!.Value, ["carriers"], cancellationToken)
+            : null;
         var agent = await ResolveAsync(command.AgentId, ["agents"], cancellationToken);
-        var containerType = await ResolveAsync(command.ContainerTypeId, ["container-types", "containers-types"], cancellationToken);
+        var containerType = containerTypeWasProvided
+            ? await ResolveAsync(command.ContainerTypeId!.Value, ["container-types", "containers-types"], cancellationToken)
+            : null;
         var currency = await ResolveAsync(command.CurrencyId, ["currencies"], cancellationToken);
 
         if (
@@ -69,14 +77,32 @@ public sealed class ReviewImportRateCommandHandler(
             || pol is null
             || poe is null
             || (command.PodId.HasValue && pod is null)
-            || carrier is null
             || agent is null
-            || containerType is null
             || currency is null
+            || (!isLclImport && (carrier is null || containerType is null))
+            || (carrierWasProvided && carrier is null)
+            || (containerTypeWasProvided && containerType is null)
         )
         {
             return Result.Failure(PricingErrors.ImportFclRateCatalogConcordanceRequired);
         }
+
+        var carrierSnapshot = carrier is null
+            ? new CatalogSnapshot(
+                importRate.CarrierId,
+                importRate.CarrierName,
+                importRate.CarrierCode,
+                importRate.CarrierSlug
+            )
+            : Snapshot(carrier);
+        var containerTypeSnapshot = containerType is null
+            ? new CatalogSnapshot(
+                importRate.ContainerTypeId,
+                importRate.ContainerTypeName,
+                importRate.ContainerTypeCode,
+                importRate.ContainerTypeSlug
+            )
+            : Snapshot(containerType);
 
         var before = PricingAuditSnapshots.From(importRate);
         var beforeJson = JsonSerializer.Serialize(before);
@@ -91,9 +117,9 @@ public sealed class ReviewImportRateCommandHandler(
                 Snapshot(pol),
                 Snapshot(poe),
                 podSnapshot,
-                Snapshot(carrier),
+                carrierSnapshot,
                 Snapshot(agent),
-                Snapshot(containerType),
+                containerTypeSnapshot,
                 Snapshot(currency),
                 command.Commodity,
                 command.SpaceComment,
@@ -179,6 +205,17 @@ public sealed class ReviewImportRateCommandHandler(
             && acceptedGroups.Contains(item.CatalogGroupSlug, StringComparer.OrdinalIgnoreCase)
             ? item
             : null;
+    }
+
+    private static bool IsLclImport(ImportFclRates importRate)
+    {
+        return new[]
+        {
+            importRate.ContainerType,
+            importRate.ContainerTypeName,
+            importRate.ContainerTypeCode,
+            importRate.ContainerTypeSlug,
+        }.Any(value => string.Equals(value?.Trim(), "LCL", StringComparison.OrdinalIgnoreCase));
     }
 
     private static CatalogSnapshot Snapshot(PricingConfigCatalogItem item) =>
