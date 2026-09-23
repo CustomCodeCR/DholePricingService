@@ -1,4 +1,5 @@
 using Dhole.Pricing.Contracts.Imports.Response;
+using Dhole.Pricing.Domain.Imports.Services;
 using Dhole.Pricing.Domain.Imports.Entities;
 
 namespace Dhole.Pricing.Application.Features.Imports;
@@ -70,44 +71,18 @@ internal static class ImportRateMappings
 
     private static string ResolveShipmentMode(ImportFclRates importRate)
     {
-        var containerMarkers = new[]
-        {
+        return ImportShipmentModeClassifier.Classify(
             importRate.ContainerType,
             importRate.ContainerTypeName,
             importRate.ContainerTypeCode,
             importRate.ContainerTypeSlug,
-        };
-        var lclMarkers = containerMarkers.Concat(new[]
+            importRate.RawDataJson) switch
         {
-            importRate.ImportProfileName,
-            importRate.ImportProfileCode,
-            importRate.ImportProfileSlug,
-            importRate.Commodity,
-            importRate.SpaceComment,
-            importRate.RawDataJson,
-        });
-
-        if (lclMarkers.Any(ContainsLclMarker))
-            return "Lcl";
-
-        if (containerMarkers.Any(value =>
-            string.Equals(value?.Trim(), "AIR", StringComparison.OrdinalIgnoreCase)))
-            return "Air";
-
-        return "Fcl";
-    }
-
-    private static bool ContainsLclMarker(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return false;
-        var normalized = value.Trim().ToLowerInvariant();
-        return normalized.Contains("lcl", StringComparison.Ordinal)
-            || normalized.Contains("less than container load", StringComparison.Ordinal)
-            || normalized.Contains("less-than-container-load", StringComparison.Ordinal)
-            || normalized.Contains("coloader", StringComparison.Ordinal)
-            || normalized.Contains("co-loader", StringComparison.Ordinal)
-            || normalized.Contains("coloading", StringComparison.Ordinal)
-            || normalized.Contains("groupage", StringComparison.Ordinal);
+            ImportedShipmentMode.Lcl => "Lcl",
+            ImportedShipmentMode.Air => "Air",
+            ImportedShipmentMode.Fcl => "Fcl",
+            _ => "Fcl",
+        };
     }
 
     public static ImportRateSelectDto ToSelectDto(this ImportFclRates importRate)
