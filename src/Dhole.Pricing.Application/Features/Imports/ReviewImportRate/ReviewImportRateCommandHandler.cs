@@ -59,9 +59,11 @@ public sealed class ReviewImportRateCommandHandler(
         {
             pod = await ResolveAsync(command.PodId.Value, ["pod", "ports"], cancellationToken);
         }
-        var isLclImport = IsLclImport(importRate);
+        var isLclImport = IsLclShipmentMode(command.ShipmentMode) || IsLclImport(importRate);
         var carrierWasProvided = command.CarrierId.HasValue && command.CarrierId.Value != Guid.Empty;
-        var containerTypeWasProvided = command.ContainerTypeId.HasValue && command.ContainerTypeId.Value != Guid.Empty;
+        var containerTypeWasProvided = !isLclImport
+            && command.ContainerTypeId.HasValue
+            && command.ContainerTypeId.Value != Guid.Empty;
 
         var carrier = carrierWasProvided
             ? await ResolveAsync(command.CarrierId!.Value, ["carriers"], cancellationToken)
@@ -95,14 +97,16 @@ public sealed class ReviewImportRateCommandHandler(
                 importRate.CarrierSlug
             )
             : Snapshot(carrier);
-        var containerTypeSnapshot = containerType is null
-            ? new CatalogSnapshot(
-                importRate.ContainerTypeId,
-                importRate.ContainerTypeName,
-                importRate.ContainerTypeCode,
-                importRate.ContainerTypeSlug
-            )
-            : Snapshot(containerType);
+        var containerTypeSnapshot = isLclImport
+            ? LclContainerSnapshot()
+            : containerType is null
+                ? new CatalogSnapshot(
+                    importRate.ContainerTypeId,
+                    importRate.ContainerTypeName,
+                    importRate.ContainerTypeCode,
+                    importRate.ContainerTypeSlug
+                )
+                : Snapshot(containerType);
 
         var before = PricingAuditSnapshots.From(importRate);
         var beforeJson = JsonSerializer.Serialize(before);
@@ -207,6 +211,10 @@ public sealed class ReviewImportRateCommandHandler(
             : null;
     }
 
+    private static bool IsLclShipmentMode(string? value) =>
+        string.Equals(value?.Trim(), "Lcl", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(value?.Trim(), "LCL", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsLclImport(ImportFclRates importRate)
     {
         return new[]
@@ -215,8 +223,30 @@ public sealed class ReviewImportRateCommandHandler(
             importRate.ContainerTypeName,
             importRate.ContainerTypeCode,
             importRate.ContainerTypeSlug,
-        }.Any(value => string.Equals(value?.Trim(), "LCL", StringComparison.OrdinalIgnoreCase));
+            importRate.ImportProfileName,
+            importRate.ImportProfileCode,
+            importRate.ImportProfileSlug,
+            importRate.Commodity,
+            importRate.SpaceComment,
+            importRate.RawDataJson,
+        }.Any(ContainsLclMarker);
     }
+
+    private static bool ContainsLclMarker(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized.Contains("lcl", StringComparison.Ordinal)
+            || normalized.Contains("less than container load", StringComparison.Ordinal)
+            || normalized.Contains("less-than-container-load", StringComparison.Ordinal)
+            || normalized.Contains("coloader", StringComparison.Ordinal)
+            || normalized.Contains("co-loader", StringComparison.Ordinal)
+            || normalized.Contains("coloading", StringComparison.Ordinal)
+            || normalized.Contains("groupage", StringComparison.Ordinal);
+    }
+
+    private static CatalogSnapshot LclContainerSnapshot() =>
+        new(Guid.Parse("4c434c00-0000-4000-8000-000000000001"), "LCL", "LCL", "lcl");
 
     private static CatalogSnapshot Snapshot(PricingConfigCatalogItem item) =>
         CatalogSnapshot.Create(item.Id, item.Name, item.Code, item.Slug);
