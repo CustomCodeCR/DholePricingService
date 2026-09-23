@@ -165,6 +165,76 @@ public sealed class DataExtractionPricingImportMapperTests
         Assert.IsTrue(result.Issues.Single().IsBlocking);
     }
 
+    [TestMethod]
+    public void ToApplicationResult_AirConsolidated_PreservesAirMetadataAndFallbackCarrier()
+    {
+        var rowId = Guid.NewGuid();
+        const string rawJson = """
+            {
+              "TariffMode": "AIR",
+              "ServiceMode": "AIR_CONSOLIDATED",
+              "RateBasis": "KG/VOL",
+              "MinimumRate": "150",
+              "KgPerCbm": "167",
+              "AirlineRoute": "PVG-SEA-ATL-SJO"
+            }
+            """;
+
+        var response = new ExtractedPricingDataRequest(
+            true,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "corr-air",
+            new ExtractedPricingSummaryRequest(1, 1, 0, 0, false),
+            [
+                new ExtractedPricingRowRequest(
+                    rowId,
+                    "AIR - normalizado",
+                    1,
+                    "PVG",
+                    "SJO",
+                    null,
+                    "AIR",
+                    null,
+                    null,
+                    "General Cargo",
+                    "USD",
+                    null,
+                    6,
+                    new DateTime(2026, 9, 21),
+                    new DateTime(2026, 9, 28),
+                    6.37m,
+                    null,
+                    null,
+                    null,
+                    6.37m,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "Valid",
+                    rawJson
+                )
+            ],
+            [],
+            null,
+            null
+        );
+
+        var result = response.ToApplicationResult(Guid.NewGuid(), response.PricingImportId);
+        var row = result.Rows.Single();
+
+        Assert.AreEqual("AIR", row.ContainerType);
+        Assert.AreEqual("Aéreo Consolidado", row.Carrier);
+        Assert.AreEqual(6.37m, row.OceanFreight);
+        StringAssert.Contains(row.SpaceComment, "AIR_CONSOLIDATED");
+        StringAssert.Contains(row.SpaceComment, "KG/VOL");
+        StringAssert.Contains(row.SpaceComment, "Mínimo: 150");
+        StringAssert.Contains(row.SpaceComment, "1 CBM = 167 KG");
+        StringAssert.Contains(row.SpaceComment, "PVG-SEA-ATL-SJO");
+    }
+
     private static DateTime GetCostaRicaToday()
     {
         try
