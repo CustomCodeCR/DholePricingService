@@ -367,7 +367,7 @@ public static class LclRateSourceEndpoints
         // they did not contain the literal string "LCL". A real FCL rate must expose
         // a recognizable full-container equipment; otherwise an unresolved equipment
         // or carrier snapshot is treated as an LCL/coloader candidate.
-        if (HasExplicitFclEquipment(rate.ContainerTypeName, rate.ContainerTypeSlug, rate.RawDataJson))
+        if (HasExplicitFclEquipment(rate.ContainerTypeName, rate.ContainerTypeSlug))
             return false;
 
         return IsUnassignedCatalogSnapshot(
@@ -382,30 +382,31 @@ public static class LclRateSourceEndpoints
 
     private static bool HasExplicitFclEquipment(params string?[] values)
     {
+        string[] sizes = ["20", "40", "45"];
+        string[] shortCodes = ["hc", "hq", "dv", "std", "rf", "ot", "fr"];
+
         foreach (var value in values)
         {
             if (string.IsNullOrWhiteSpace(value)) continue;
             var normalized = CanonicalText(value);
             if (normalized.Contains("fcl", StringComparison.Ordinal)) return true;
 
-            var hasSize = normalized.Contains("20", StringComparison.Ordinal)
-                || normalized.Contains("40", StringComparison.Ordinal)
-                || normalized.Contains("45", StringComparison.Ordinal);
-            var hasEquipmentType = normalized.Contains("highcube", StringComparison.Ordinal)
+            var hasSize = sizes.Any(size => normalized.Contains(size, StringComparison.Ordinal));
+            var hasLongEquipmentType = normalized.Contains("highcube", StringComparison.Ordinal)
                 || normalized.Contains("dryvan", StringComparison.Ordinal)
                 || normalized.Contains("reefer", StringComparison.Ordinal)
                 || normalized.Contains("opentop", StringComparison.Ordinal)
                 || normalized.Contains("flatrack", StringComparison.Ordinal)
-                || normalized.Contains("standard", StringComparison.Ordinal)
-                || normalized.Contains("hc", StringComparison.Ordinal)
-                || normalized.Contains("hq", StringComparison.Ordinal)
-                || normalized.Contains("dv", StringComparison.Ordinal)
-                || normalized.Contains("std", StringComparison.Ordinal)
-                || normalized.Contains("rf", StringComparison.Ordinal)
-                || normalized.Contains("ot", StringComparison.Ordinal)
-                || normalized.Contains("fr", StringComparison.Ordinal);
+                || normalized.Contains("standard", StringComparison.Ordinal);
 
-            if (hasSize && hasEquipmentType) return true;
+            if (hasSize && hasLongEquipmentType) return true;
+
+            if (sizes.Any(size => shortCodes.Any(code =>
+                normalized.Contains(size + code, StringComparison.Ordinal)
+                || normalized.Contains(code + size, StringComparison.Ordinal))))
+            {
+                return true;
+            }
         }
 
         return false;
