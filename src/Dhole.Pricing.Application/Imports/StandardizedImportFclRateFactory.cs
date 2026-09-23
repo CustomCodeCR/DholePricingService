@@ -115,7 +115,7 @@ public static class StandardizedImportFclRateFactory
                     ),
                     ResolveOptionalSnapshot(
                         row.ContainerTypeReference,
-                        "container-types",
+                        IsAir(row) ? "air-equipment-types" : "container-types",
                         row.ContainerType
                     ),
                     ResolveCurrencySnapshot(row.CurrencyReference, row.Currency),
@@ -179,6 +179,13 @@ public static class StandardizedImportFclRateFactory
             && FitsNumeric18Scale4(row.Margin);
     }
 
+    private static bool IsAir(DataExtractionFclPricingRow row) =>
+        string.Equals(
+            row.ContainerType?.Trim(),
+            "AIR",
+            StringComparison.OrdinalIgnoreCase
+        );
+
     private static bool ShouldPromoteEmailDestinationToPoe(
         DataExtractionFclPricingRow row,
         ImportSourceType sourceType
@@ -236,13 +243,26 @@ public static class StandardizedImportFclRateFactory
 
         var originPort = FirstText(
             row.OriginPort,
-            ReadRawJsonValue(row.RawJson, "OriginPort", "POL", "pol", "PortOfLoading")
+            ReadRawJsonValue(
+                row.RawJson,
+                "OriginPort",
+                "OriginAirport",
+                "POL",
+                "pol",
+                "PortOfLoading"
+            )
         );
         var portOfExit = FirstText(
             row.PortOfExit,
             ReadRawJsonValue(row.RawJson, "PortOfExit", "POE", "poe", "PortOfDischarge"),
             sourceType == ImportSourceType.Email
-                ? ReadRawJsonValue(row.RawJson, "POD", "pod", "DestinationPort")
+                ? ReadRawJsonValue(
+                    row.RawJson,
+                    "POD",
+                    "pod",
+                    "DestinationPort",
+                    "DestinationAirport"
+                )
                 : null
         );
         var destinationPort = FirstText(
@@ -268,7 +288,15 @@ public static class StandardizedImportFclRateFactory
         );
         var carrier = FirstText(
             row.Carrier,
-            ReadRawJsonValue(row.RawJson, "Carrier", "ShippingLine", "Naviera")
+            ReadRawJsonValue(
+                row.RawJson,
+                "Carrier",
+                "ShippingLine",
+                "Naviera",
+                "Airline",
+                "Aerolinea",
+                "Aerolínea"
+            )
         );
 
         return row with
