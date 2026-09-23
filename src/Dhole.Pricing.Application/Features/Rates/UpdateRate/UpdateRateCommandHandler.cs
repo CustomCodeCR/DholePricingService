@@ -28,6 +28,9 @@ public sealed class UpdateRateCommandHandler(
     private static readonly Guid OwnLclInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c41");
     private const string OwnLclInternalAgentName = "Grupo Castro Fallas";
     private const string OwnLclInternalAgentCode = "GCF";
+    private static readonly Guid LclInternalCarrierId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c44");
+    private const string LclInternalCarrierName = "No aplica (LCL)";
+    private const string LclInternalCarrierCode = "LCL";
     private static readonly Guid LandInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c42");
     private const string LandInternalAgentName = "No aplica (terrestre)";
     private const string LandInternalAgentCode = "LAND";
@@ -74,6 +77,9 @@ public sealed class UpdateRateCommandHandler(
                 )
             )
         );
+        var lclWithoutCarrier =
+            command.ShipmentMode == ShipmentMode.Lcl
+            && command.CarrierId == Guid.Empty;
         var landWithoutProvider = command.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
 
         // Rehidratamos todos los selectores desde Config. De esta manera cambiar naviera,
@@ -99,17 +105,18 @@ public sealed class UpdateRateCommandHandler(
             }
 
             PricingConfigCatalogItem? carrier = null;
-            if (!landWithoutProvider)
+            if (!landWithoutProvider && command.CarrierId != Guid.Empty)
             {
-                if (command.CarrierId == Guid.Empty)
-                    return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
-                        "La naviera", PricingConstants.CatalogSlugs.Carriers));
-
                 carrier = await configCatalog.GetActiveInGroupAsync(
                     command.CarrierId, PricingConstants.CatalogSlugs.Carriers, cancellationToken);
                 if (carrier is null)
                     return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
                         "La naviera", PricingConstants.CatalogSlugs.Carriers));
+            }
+            else if (!landWithoutProvider && !lclWithoutCarrier)
+            {
+                return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                    "La naviera", PricingConstants.CatalogSlugs.Carriers));
             }
 
             var pol = await configCatalog.GetActiveInGroupAsync(
@@ -208,9 +215,15 @@ public sealed class UpdateRateCommandHandler(
                 AgentCode = landWithoutProvider
                     ? LandInternalAgentCode
                     : agent?.Code ?? OwnLclInternalAgentCode,
-                CarrierId = landWithoutProvider ? LandInternalCarrierId : carrier!.Id,
-                CarrierName = landWithoutProvider ? LandInternalCarrierName : carrier!.SnapshotName(),
-                CarrierCode = landWithoutProvider ? LandInternalCarrierCode : carrier!.Code,
+                CarrierId = landWithoutProvider
+                    ? LandInternalCarrierId
+                    : lclWithoutCarrier ? LclInternalCarrierId : carrier!.Id,
+                CarrierName = landWithoutProvider
+                    ? LandInternalCarrierName
+                    : lclWithoutCarrier ? LclInternalCarrierName : carrier!.SnapshotName(),
+                CarrierCode = landWithoutProvider
+                    ? LandInternalCarrierCode
+                    : lclWithoutCarrier ? LclInternalCarrierCode : carrier!.Code,
                 PolId = pol.Id,
                 PolName = pol.SnapshotName(),
                 PolCode = pol.Code,
