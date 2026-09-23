@@ -13,6 +13,7 @@ internal static class ImportRateMappings
             ImportBatchId = importRate.ImportBatchId,
             ExtractionRecordId = importRate.ExtractionRecordId,
             SourceType = importRate.SourceType.ToString(),
+            ShipmentMode = ResolveShipmentMode(importRate),
             ImportProfileId = importRate.ImportProfileId,
             ImportProfileName = importRate.ImportProfileName,
             ImportProfileCode = importRate.ImportProfileCode,
@@ -65,6 +66,25 @@ internal static class ImportRateMappings
             UsedAsRateCount = importRate.UsedAsRateCount,
             CreatedAsRateHeaderId = importRate.CreatedAsRateHeaderId,
         };
+    }
+
+    private static string ResolveShipmentMode(ImportFclRates importRate)
+    {
+        var markers = new[]
+        {
+            importRate.ContainerType,
+            importRate.ContainerTypeName,
+            importRate.ContainerTypeCode,
+            importRate.ContainerTypeSlug,
+        };
+
+        if (markers.Any(value => string.Equals(value?.Trim(), "LCL", StringComparison.OrdinalIgnoreCase)))
+            return "Lcl";
+
+        if (markers.Any(value => string.Equals(value?.Trim(), "AIR", StringComparison.OrdinalIgnoreCase)))
+            return "Air";
+
+        return "Fcl";
     }
 
     public static ImportRateSelectDto ToSelectDto(this ImportFclRates importRate)
