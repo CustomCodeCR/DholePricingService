@@ -759,7 +759,7 @@ public sealed record FtlTariffDto(
     string? WarehouseName,
     DateTime? ValidFrom,
     DateTime? ValidTo,
-    string CommercialProfile
+    string CommercialProfile = "General"
 );
 
 public sealed record CreateFtlTariffRequest(
