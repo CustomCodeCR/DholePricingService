@@ -4,6 +4,7 @@ using CustomCodeFramework.Cqrs.Queries;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Contracts.Imports.Response;
 using Dhole.Pricing.Domain.Imports.Enums;
+using Dhole.Pricing.Domain.Imports.Services;
 
 namespace Dhole.Pricing.Application.Features.Imports.GetImportRatesForSelect;
 
@@ -308,63 +309,20 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
     private static bool IsSelectableStatus(ImportRateSelectDto rate) => IsSelectableStatus(rate.Status);
 
     private static bool IsFclRate(ImportRateSelectDto rate) =>
-        IsExplicitFclRate(rate.ContainerType, rate.ContainerTypeCode, rate.RawDataJson);
+        ImportShipmentModeClassifier.Classify(
+            rate.ContainerType,
+            rate.ContainerType,
+            rate.ContainerTypeCode,
+            null,
+            rate.RawDataJson) == ImportedShipmentMode.Fcl;
 
     private static bool IsFclRate(ImportRateDto rate) =>
-        IsExplicitFclRate(rate.ContainerType, rate.ContainerTypeCode, rate.RawDataJson);
-
-    private static bool IsExplicitFclRate(string? containerType, string? containerTypeCode, string? rawDataJson)
-    {
-        if (new[] { containerType, containerTypeCode, rawDataJson }.Any(ContainsLclMarker))
-            return false;
-
-        return HasExplicitFclEquipment(containerType, containerTypeCode);
-    }
-
-    private static bool ContainsLclMarker(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return false;
-        var normalized = value.Trim().ToLowerInvariant();
-        return normalized.Contains("lcl", StringComparison.Ordinal)
-            || normalized.Contains("less than container load", StringComparison.Ordinal)
-            || normalized.Contains("less-than-container-load", StringComparison.Ordinal)
-            || normalized.Contains("coloader", StringComparison.Ordinal)
-            || normalized.Contains("co-loader", StringComparison.Ordinal)
-            || normalized.Contains("coloading", StringComparison.Ordinal)
-            || normalized.Contains("groupage", StringComparison.Ordinal);
-    }
-
-    private static bool HasExplicitFclEquipment(params string?[] values)
-    {
-        string[] sizes = ["20", "40", "45"];
-        string[] shortCodes = ["hc", "hq", "dv", "std", "rf", "ot", "fr"];
-
-        foreach (var value in values)
-        {
-            if (string.IsNullOrWhiteSpace(value)) continue;
-            var normalized = CanonicalText(value);
-            if (normalized.Contains("fcl", StringComparison.Ordinal)) return true;
-
-            var hasSize = sizes.Any(size => normalized.Contains(size, StringComparison.Ordinal));
-            var hasLongEquipmentType = normalized.Contains("highcube", StringComparison.Ordinal)
-                || normalized.Contains("dryvan", StringComparison.Ordinal)
-                || normalized.Contains("reefer", StringComparison.Ordinal)
-                || normalized.Contains("opentop", StringComparison.Ordinal)
-                || normalized.Contains("flatrack", StringComparison.Ordinal)
-                || normalized.Contains("standard", StringComparison.Ordinal);
-
-            if (hasSize && hasLongEquipmentType) return true;
-
-            if (sizes.Any(size => shortCodes.Any(code =>
-                normalized.Contains(size + code, StringComparison.Ordinal)
-                || normalized.Contains(code + size, StringComparison.Ordinal))))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+        ImportShipmentModeClassifier.Classify(
+            rate.ContainerType,
+            rate.ContainerType,
+            rate.ContainerTypeCode,
+            null,
+            rate.RawDataJson) == ImportedShipmentMode.Fcl;
 
     private static bool IsSelectableStatus(string? status) =>
         string.Equals(status, nameof(ImportStatus.Approved), StringComparison.OrdinalIgnoreCase)
