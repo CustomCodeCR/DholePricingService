@@ -2,6 +2,7 @@ namespace Dhole.Pricing.Contracts.Imports.Request;
 
 public sealed record ReviewImportRateRequest(
     Guid ImportProfileId,
+    string? ShipmentMode,
     Guid PolId,
     Guid PoeId,
     Guid? PodId,
