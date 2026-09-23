@@ -240,13 +240,12 @@ public static class OwnLclDestinationAutomationEndpoints
         await using var tx = await connection.BeginTransactionAsync(IsolationLevel.Serializable, ct);
 
         int currentNumber;
-        string currentName;
         string currentVersion;
         await using (var lookup = connection.CreateCommand())
         {
             lookup.Transaction = tx;
             lookup.CommandText = """
-                SELECT consolidation_number, name, matrix_version
+                SELECT consolidation_number, matrix_version
                 FROM pricing."OwnLclConsolidations"
                 WHERE id=@id AND is_active=TRUE
                 LIMIT 1;
@@ -260,8 +259,7 @@ public static class OwnLclDestinationAutomationEndpoints
             }
 
             currentNumber = reader.GetInt32(0);
-            currentName = reader.GetString(1);
-            currentVersion = reader.GetString(2);
+            currentVersion = reader.GetString(1);
         }
 
         var newNumber = request.ConsolidationNumber is > 0
@@ -277,7 +275,6 @@ public static class OwnLclDestinationAutomationEndpoints
             });
         }
 
-        var newName = string.IsNullOrWhiteSpace(request.Name) ? currentName : request.Name.Trim();
         var newVersion = BuildMatrixVersion(
             OwnLclPricingLineCatalog.MatrixVersionPrefix(request.PolCode, request.PolName),
             newNumber,
@@ -289,7 +286,6 @@ public static class OwnLclDestinationAutomationEndpoints
             command.CommandText = """
                 UPDATE pricing."OwnLclConsolidations"
                 SET consolidation_number=@number,
-                    name=@name,
                     booking=@booking,
                     etd=@etd,
                     carrier_id=@carrier_id,
@@ -322,7 +318,6 @@ public static class OwnLclDestinationAutomationEndpoints
 
             Add(command, "id", id);
             Add(command, "number", newNumber);
-            Add(command, "name", newName);
             Add(command, "booking", NullIfBlank(request.Booking));
             Add(command, "etd", request.Etd);
             Add(command, "carrier_id", request.CarrierId);
