@@ -395,10 +395,12 @@ public static class LclRateSourceEndpoints
 
     private static bool IsUnassignedLocation(string? name, string? code, string? slug)
     {
-        var values = new[] { CanonicalText(name), CanonicalText(code), CanonicalText(slug) };
-        return values.Any(value =>
-            string.IsNullOrEmpty(value)
-            || value is "porasignar" or "unassigned" or "pending");
+        var values = new[] { CanonicalText(name), CanonicalText(code), CanonicalText(slug) }
+            .Where(value => !string.IsNullOrEmpty(value))
+            .ToArray();
+
+        return values.Length == 0
+            || values.Any(value => value is "porasignar" or "unassigned" or "pending");
     }
 
     private static bool LocationMatches(
