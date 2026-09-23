@@ -52,6 +52,9 @@ public static class OwnLclConsolidationEndpoints
 
         group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/{id:guid}", GetAsync).RequireScope(PricingConstants.Scopes.RateView);
+        // El nombre es metadata operativa del consolidado y puede renombrarse
+        // directamente por cualquier usuario autenticado con acceso al sistema.
+        group.MapPatch("/{id:guid}/name", RenameAsync);
         group.MapPost("/", CreateAsync).RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPut("/{id:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapPost("/{id:guid}/calculate", CalculateAsync).RequireScope(PricingConstants.Scopes.RateCreate);
@@ -106,6 +109,49 @@ public static class OwnLclConsolidationEndpoints
             return Results.NotFound();
 
         return Results.Ok(await WithCapacityAsync(row, rateHeaders, ct));
+    }
+
+    private static async Task<IResult> RenameAsync(
+        Guid id,
+        RenameOwnLclConsolidationRequest request,
+        ServiceDbContext db,
+        CancellationToken ct)
+    {
+        var name = request.Name?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return Results.BadRequest(new
+            {
+                code = "Pricing.OwnLclConsolidationNameRequired",
+                message = "El nombre del consolidado es obligatorio.",
+            });
+        }
+
+        if (name.Length > 200)
+        {
+            return Results.BadRequest(new
+            {
+                code = "Pricing.OwnLclConsolidationNameTooLong",
+                message = "El nombre del consolidado no puede superar 200 caracteres.",
+            });
+        }
+
+        await using var connection = db.Database.GetDbConnection();
+        await EnsureOpenAsync(connection, ct);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE pricing."OwnLclConsolidations"
+            SET name=@name,
+                updated_at_utc=now()
+            WHERE id=@id AND is_active=TRUE;
+            """;
+        Add(command, "id", id);
+        Add(command, "name", name);
+
+        if (await command.ExecuteNonQueryAsync(ct) == 0)
+            return Results.NotFound();
+
+        return Results.Ok(new { id, name });
     }
 
     private static async Task<IResult> CreateAsync(CreateOwnLclConsolidationRequest request, ServiceDbContext db, CancellationToken ct)
@@ -692,6 +738,8 @@ public static class OwnLclConsolidationEndpoints
         command.Parameters.Add(parameter);
     }
 }
+
+public sealed record RenameOwnLclConsolidationRequest(string Name);
 
 public sealed record CreateOwnLclConsolidationRequest(
     string? Booking,
