@@ -30,6 +30,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         var exact = approvedExact
             .Concat(preAuthorizedExact)
             .Where(IsSelectableStatus)
+            .Where(IsFclRate)
             .GroupBy(x => x.Id)
             .Select(group => group.First())
             .OrderBy(x => StatusPriority(x.Status))
@@ -53,6 +54,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         var fallback = approvedFallback
             .Concat(preAuthorizedFallback)
             .Where(x => IsSelectableStatus(x.Status))
+            .Where(IsFclRate)
             .Where(x => EquipmentMatches(query.ContainerType, x.ContainerType, x.ContainerTypeCode))
             .Where(x => PodMatchesOrIsUnassigned(query.Pod, x.Pod, x.PodCode, x.PodId))
             .Where(x => !requestedDate.HasValue || x.ValidTo.Date >= requestedDate.Value)
@@ -95,6 +97,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         var rates = approved
             .Concat(preAuthorized)
             .Where(x => IsSelectableStatus(x.Status))
+            .Where(IsFclRate)
             .Where(x => EquipmentMatches(query.ContainerType, x.ContainerType, x.ContainerTypeCode))
             .Where(x => PodMatchesOrIsUnassigned(query.Pod, x.Pod, x.PodCode, x.PodId))
             .Where(x => !requestedDate.HasValue || x.ValidTo.Date >= requestedDate.Value)
@@ -303,6 +306,64 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
     }
 
     private static bool IsSelectableStatus(ImportRateSelectDto rate) => IsSelectableStatus(rate.Status);
+
+    private static bool IsFclRate(ImportRateSelectDto rate) =>
+        IsExplicitFclRate(rate.ContainerType, rate.ContainerTypeCode, rate.RawDataJson);
+
+    private static bool IsFclRate(ImportRateDto rate) =>
+        IsExplicitFclRate(rate.ContainerType, rate.ContainerTypeCode, rate.RawDataJson);
+
+    private static bool IsExplicitFclRate(string? containerType, string? containerTypeCode, string? rawDataJson)
+    {
+        if (new[] { containerType, containerTypeCode, rawDataJson }.Any(ContainsLclMarker))
+            return false;
+
+        return HasExplicitFclEquipment(containerType, containerTypeCode, rawDataJson);
+    }
+
+    private static bool ContainsLclMarker(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized.Contains("lcl", StringComparison.Ordinal)
+            || normalized.Contains("less than container load", StringComparison.Ordinal)
+            || normalized.Contains("less-than-container-load", StringComparison.Ordinal)
+            || normalized.Contains("coloader", StringComparison.Ordinal)
+            || normalized.Contains("co-loader", StringComparison.Ordinal)
+            || normalized.Contains("coloading", StringComparison.Ordinal)
+            || normalized.Contains("groupage", StringComparison.Ordinal);
+    }
+
+    private static bool HasExplicitFclEquipment(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (string.IsNullOrWhiteSpace(value)) continue;
+            var normalized = CanonicalText(value);
+            if (normalized.Contains("fcl", StringComparison.Ordinal)) return true;
+
+            var hasSize = normalized.Contains("20", StringComparison.Ordinal)
+                || normalized.Contains("40", StringComparison.Ordinal)
+                || normalized.Contains("45", StringComparison.Ordinal);
+            var hasEquipmentType = normalized.Contains("highcube", StringComparison.Ordinal)
+                || normalized.Contains("dryvan", StringComparison.Ordinal)
+                || normalized.Contains("reefer", StringComparison.Ordinal)
+                || normalized.Contains("opentop", StringComparison.Ordinal)
+                || normalized.Contains("flatrack", StringComparison.Ordinal)
+                || normalized.Contains("standard", StringComparison.Ordinal)
+                || normalized.Contains("hc", StringComparison.Ordinal)
+                || normalized.Contains("hq", StringComparison.Ordinal)
+                || normalized.Contains("dv", StringComparison.Ordinal)
+                || normalized.Contains("std", StringComparison.Ordinal)
+                || normalized.Contains("rf", StringComparison.Ordinal)
+                || normalized.Contains("ot", StringComparison.Ordinal)
+                || normalized.Contains("fr", StringComparison.Ordinal);
+
+            if (hasSize && hasEquipmentType) return true;
+        }
+
+        return false;
+    }
 
     private static bool IsSelectableStatus(string? status) =>
         string.Equals(status, nameof(ImportStatus.Approved), StringComparison.OrdinalIgnoreCase)
