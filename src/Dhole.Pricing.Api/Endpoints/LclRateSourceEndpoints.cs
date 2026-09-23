@@ -1,6 +1,6 @@
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
-using Dhole.Pricing.Application.Abstractions.Repositories;
+using Dhole.Pricing.Domain.Imports.Services;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -35,7 +35,6 @@ public static class LclRateSourceEndpoints
         string? poe,
         string? pod,
         DateTime? quoteDate,
-        IImportFclRateRepository importRates,
         ServiceDbContext db,
         CancellationToken cancellationToken)
     {
@@ -152,12 +151,10 @@ public static class LclRateSourceEndpoints
             .GroupBy(detail => detail.RateHeaderId)
             .ToDictionary(group => group.Key, group => group.ToArray());
 
-        // Imported LCL rows intentionally share the legacy ImportFclRates storage with
-        // FCL for backward compatibility. They must nevertheless be exposed only as
-        // LCL/coloader sources in Pantalla 5, never through the FCL selector.
-        // Imported LCL rows intentionally share the legacy ImportFclRates storage with
-        // FCL for backward compatibility. They must nevertheless be exposed only as
-        // LCL/coloader sources in Pantalla 5, never through the FCL selector.
+        // FCL and LCL imports share ImportFclRates. Classify every still-valid
+        // imported row by its equipment snapshot before applying the route filter.
+        // Do not truncate the mixed table before classification: an LCL row can be
+        // physically located after hundreds of FCL rows in the same source table.
         var importedLclCandidates = await db.ImportFclRates
             .AsNoTracking()
             .Where(rate =>
@@ -165,13 +162,9 @@ public static class LclRateSourceEndpoints
                 && (rate.Status == ImportStatus.Approved
                     || rate.Status == ImportStatus.PreAuthorized)
                 && rate.ValidTo >= effectiveDate)
-            .OrderBy(rate => rate.ValidFrom)
-            .ThenBy(rate => rate.ValidTo)
-            .ThenBy(rate => rate.TotalSale)
-            .Take(500)
             .ToListAsync(cancellationToken);
 
-        var directlyClassifiedLclRates = importedLclCandidates
+        var importedLclRates = importedLclCandidates
             .Where(IsImportedLclRate)
             .Where(rate => LocationMatches(polId, pol, rate.PolId, rate.PolName, rate.PolCode))
             .Where(rate => LocationMatches(poeId, poe, rate.PoeId, rate.PoeName, rate.PoeCode))
@@ -181,54 +174,6 @@ public static class LclRateSourceEndpoints
                 rate.PodId,
                 rate.PodName,
                 rate.PodCode))
-            .ToList();
-
-        // Reuse the same imported-rate source queried by Pantalla 5 FCL. Historical
-        // coloader rows were stored in ImportFclRates without an explicit LCL marker,
-        // so they can still be returned by /api/pricing/import-rates/select while the
-        // dedicated LCL endpoint would otherwise return an empty list.
-        var selectorApproved = await importRates.GetForSelectAsync(
-            status: ImportStatus.Approved,
-            pol: pol,
-            poe: poe,
-            pod: pod,
-            quoteDate: effectiveDate,
-            cancellationToken: cancellationToken);
-        var selectorPreAuthorized = await importRates.GetForSelectAsync(
-            status: ImportStatus.PreAuthorized,
-            pol: pol,
-            poe: poe,
-            pod: pod,
-            quoteDate: effectiveDate,
-            cancellationToken: cancellationToken);
-
-        var selectorIds = selectorApproved
-            .Concat(selectorPreAuthorized)
-            .Select(rate => rate.Id)
-            .Distinct()
-            .ToArray();
-
-        var selectorCandidates = selectorIds.Length == 0
-            ? new List<ImportFclRates>()
-            : await db.ImportFclRates
-                .AsNoTracking()
-                .Where(rate => selectorIds.Contains(rate.Id) && !rate.IsDeleted)
-                .ToListAsync(cancellationToken);
-
-        var importedLclRates = directlyClassifiedLclRates
-            .Concat(selectorCandidates
-                .Where(IsImportedLclRate)
-                .Where(rate => rate.ValidTo >= effectiveDate)
-                .Where(rate => LocationMatches(polId, pol, rate.PolId, rate.PolName, rate.PolCode))
-                .Where(rate => LocationMatches(poeId, poe, rate.PoeId, rate.PoeName, rate.PoeCode))
-                .Where(rate => PodMatchesOrIsUnassigned(
-                    podId,
-                    pod,
-                    rate.PodId,
-                    rate.PodName,
-                    rate.PodCode)))
-            .GroupBy(rate => rate.Id)
-            .Select(group => group.First())
             .OrderBy(rate => rate.ValidFrom)
             .ThenBy(rate => rate.ValidTo)
             .ThenBy(rate => rate.TotalSale)
@@ -344,101 +289,13 @@ public static class LclRateSourceEndpoints
         return Results.Ok(new { items });
     }
 
-    private static bool IsImportedLclRate(ImportFclRates rate)
-    {
-        var markers = new[]
-        {
+    private static bool IsImportedLclRate(ImportFclRates rate) =>
+        ImportShipmentModeClassifier.Classify(
             rate.ContainerType,
             rate.ContainerTypeName,
             rate.ContainerTypeCode,
             rate.ContainerTypeSlug,
-            rate.ImportProfileName,
-            rate.ImportProfileCode,
-            rate.ImportProfileSlug,
-            rate.Commodity,
-            rate.SpaceComment,
-            rate.RawDataJson,
-        };
-
-        if (markers.Any(ContainsLclMarker)) return true;
-
-        // Legacy coloader imports often have neither naviera nor equipment resolved.
-        // They were therefore falling through the old FCL selector simply because
-        // they did not contain the literal string "LCL". A real FCL rate must expose
-        // a recognizable full-container equipment; otherwise an unresolved equipment
-        // or carrier snapshot is treated as an LCL/coloader candidate.
-        if (HasExplicitFclEquipment(rate.ContainerTypeName, rate.ContainerTypeSlug))
-            return false;
-
-        return IsUnassignedCatalogSnapshot(
-                rate.ContainerTypeName,
-                rate.ContainerTypeCode,
-                rate.ContainerTypeSlug)
-            || IsUnassignedCatalogSnapshot(
-                rate.CarrierName,
-                rate.CarrierCode,
-                rate.CarrierSlug);
-    }
-
-    private static bool HasExplicitFclEquipment(params string?[] values)
-    {
-        string[] sizes = ["20", "40", "45"];
-        string[] shortCodes = ["hc", "hq", "dv", "std", "rf", "ot", "fr"];
-
-        foreach (var value in values)
-        {
-            if (string.IsNullOrWhiteSpace(value)) continue;
-            var normalized = CanonicalText(value);
-            if (normalized.Contains("fcl", StringComparison.Ordinal)) return true;
-
-            var hasSize = sizes.Any(size => normalized.Contains(size, StringComparison.Ordinal));
-            var hasLongEquipmentType = normalized.Contains("highcube", StringComparison.Ordinal)
-                || normalized.Contains("dryvan", StringComparison.Ordinal)
-                || normalized.Contains("reefer", StringComparison.Ordinal)
-                || normalized.Contains("opentop", StringComparison.Ordinal)
-                || normalized.Contains("flatrack", StringComparison.Ordinal)
-                || normalized.Contains("standard", StringComparison.Ordinal);
-
-            if (hasSize && hasLongEquipmentType) return true;
-
-            if (sizes.Any(size => shortCodes.Any(code =>
-                normalized.Contains(size + code, StringComparison.Ordinal)
-                || normalized.Contains(code + size, StringComparison.Ordinal))))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool IsUnassignedCatalogSnapshot(params string?[] values)
-    {
-        var normalized = values
-            .Select(CanonicalText)
-            .Where(value => !string.IsNullOrEmpty(value))
-            .ToArray();
-
-        if (normalized.Length == 0) return true;
-
-        return normalized.Any(value => value is
-            "porasignar" or "unassigned" or "pending" or "sinasignar"
-            or "na" or "none" or "unknown" or "notapplicable" or "noaplica"
-            or "sincontenedor" or "sincontainer" or "sinnaviera" or "sincarrier");
-    }
-
-    private static bool ContainsLclMarker(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return false;
-        var normalized = value.Trim().ToLowerInvariant();
-        return normalized.Contains("lcl", StringComparison.Ordinal)
-            || normalized.Contains("less than container load", StringComparison.Ordinal)
-            || normalized.Contains("less-than-container-load", StringComparison.Ordinal)
-            || normalized.Contains("coloader", StringComparison.Ordinal)
-            || normalized.Contains("co-loader", StringComparison.Ordinal)
-            || normalized.Contains("coloading", StringComparison.Ordinal)
-            || normalized.Contains("groupage", StringComparison.Ordinal);
-    }
+            rate.RawDataJson) == ImportedShipmentMode.Lcl;
 
     private static decimal ResolveImportedLclTotalCost(ImportFclRates rate)
     {
