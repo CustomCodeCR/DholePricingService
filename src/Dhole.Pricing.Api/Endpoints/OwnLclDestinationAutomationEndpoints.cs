@@ -28,7 +28,7 @@ public static class OwnLclDestinationAutomationEndpoints
         group.MapPost("/consolidations", CreateAsync)
             .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPut("/consolidations/{id:guid}", UpdateAsync)
-            .RequireScope(PricingConstants.Scopes.RateUpdate);
+            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapGet("/consolidations/{id:guid}", GetAutomationAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
 
