@@ -52,11 +52,10 @@ public static class OwnLclConsolidationEndpoints
 
         group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/{id:guid}", GetAsync).RequireScope(PricingConstants.Scopes.RateView);
-        // El nombre es metadata operativa del consolidado y puede renombrarse
-        // directamente por cualquier usuario autenticado con acceso al sistema.
-        group.MapPatch("/{id:guid}/name", RenameAsync);
+        group.MapPatch("/{id:guid}/name", RenameAsync)
+            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPost("/", CreateAsync).RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
-        group.MapPut("/{id:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.RateUpdate);
+        group.MapPut("/{id:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPost("/{id:guid}/calculate", CalculateAsync).RequireScope(PricingConstants.Scopes.RateCreate);
 
         return app;
