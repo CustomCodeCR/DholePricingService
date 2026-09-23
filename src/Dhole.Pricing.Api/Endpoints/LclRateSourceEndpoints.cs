@@ -1,5 +1,7 @@
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Domain.Imports.Entities;
+using Dhole.Pricing.Domain.Imports.Enums;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
@@ -148,7 +150,37 @@ public static class LclRateSourceEndpoints
             .GroupBy(detail => detail.RateHeaderId)
             .ToDictionary(group => group.Key, group => group.ToArray());
 
-        var items = headers.Select(header =>
+        // Imported LCL rows intentionally share the legacy ImportFclRates storage with
+        // FCL for backward compatibility. They must nevertheless be exposed only as
+        // LCL/coloader sources in Pantalla 5, never through the FCL selector.
+        var importedLclCandidates = await db.ImportFclRates
+            .AsNoTracking()
+            .Where(rate =>
+                !rate.IsDeleted
+                && rate.Status == ImportStatus.Approved
+                && rate.ValidTo >= effectiveDate
+                && (rate.ContainerTypeCode == "LCL"
+                    || rate.ContainerTypeName == "LCL"
+                    || rate.ContainerTypeSlug == "lcl"))
+            .OrderBy(rate => rate.ValidFrom)
+            .ThenBy(rate => rate.ValidTo)
+            .ThenBy(rate => rate.TotalSale)
+            .Take(250)
+            .ToListAsync(cancellationToken);
+
+        var importedLclRates = importedLclCandidates
+            .Where(rate => LocationMatches(polId, pol, rate.PolId, rate.PolName, rate.PolCode))
+            .Where(rate => LocationMatches(poeId, poe, rate.PoeId, rate.PoeName, rate.PoeCode))
+            .Where(rate => PodMatchesOrIsUnassigned(
+                podId,
+                pod,
+                rate.PodId,
+                rate.PodName,
+                rate.PodCode))
+            .Take(100)
+            .ToList();
+
+        var tariffItems = headers.Select(header =>
         {
             var lines = linesByRate.TryGetValue(header.Id, out var rateLines)
                 ? rateLines
@@ -196,9 +228,177 @@ public static class LclRateSourceEndpoints
                 status = header.Status.ToString(),
                 lines,
             };
-        });
+        }).Cast<object>();
 
+        var importedItems = importedLclRates.Select(rate =>
+        {
+            var totalCost = ResolveImportedLclTotalCost(rate);
+            var totalSale = Math.Max(0m, rate.TotalSale ?? totalCost);
+            var profit = totalSale - totalCost;
+            var margin = totalSale > 0m
+                ? decimal.Round((profit / totalSale) * 100m, 4)
+                : 0m;
+            var hasAssignedPod = !IsUnassignedLocation(rate.PodName, rate.PodCode, rate.PodSlug);
+            var lines = BuildImportedLclLines(rate, totalCost, totalSale);
+
+            return new
+            {
+                sourceType = "Coloader",
+                id = rate.Id,
+                rateCode = $"IMP-LCL-{rate.Id.ToString("N")[..8].ToUpperInvariant()}",
+                rateName = $"{rate.AgentName} LCL · {rate.PolName} → {(hasAssignedPod ? rate.PodName : rate.PoeName)}",
+                providerId = (Guid?)rate.AgentId,
+                providerName = rate.AgentName,
+                providerCode = rate.AgentCode,
+                carrierId = (Guid?)rate.CarrierId,
+                carrierName = rate.CarrierName,
+                carrierCode = rate.CarrierCode,
+                polId = rate.PolId,
+                polName = rate.PolName,
+                polCode = rate.PolCode,
+                poeId = rate.PoeId,
+                poeName = rate.PoeName,
+                poeCode = rate.PoeCode,
+                podId = hasAssignedPod ? rate.PodId : (Guid?)null,
+                podName = hasAssignedPod ? rate.PodName : null,
+                podCode = hasAssignedPod ? rate.PodCode : null,
+                incotermId = (Guid?)null,
+                incotermName = (string?)null,
+                incotermCode = (string?)null,
+                currencyId = rate.CurrencyId,
+                currencyName = rate.CurrencyName,
+                currencyCode = rate.CurrencyCode,
+                freeDays = rate.FreeDays,
+                transitTime = rate.TransitDays?.ToString(),
+                validFrom = rate.ValidFrom,
+                validTo = rate.ValidTo,
+                chargeableQuantity = 1m,
+                totalCostAmount = totalCost,
+                totalSaleAmount = totalSale,
+                totalUtilityAmount = profit,
+                marginPercentage = margin,
+                includes = (string?)null,
+                subjectTo = (string?)null,
+                excludes = (string?)null,
+                status = rate.Status.ToString(),
+                lines,
+            };
+        }).Cast<object>();
+
+        var items = tariffItems.Concat(importedItems).ToArray();
         return Results.Ok(new { items });
+    }
+
+    private static decimal ResolveImportedLclTotalCost(ImportFclRates rate)
+    {
+        return Math.Max(
+            0m,
+            rate.TotalCost
+                ?? (rate.OceanFreight ?? rate.Freight)
+                    + (rate.OriginCharges ?? 0m)
+                    + (rate.DestinationCharges ?? 0m)
+                    + (rate.Surcharges ?? 0m));
+    }
+
+    private static ColoaderLine[] BuildImportedLclLines(
+        ImportFclRates rate,
+        decimal totalCost,
+        decimal totalSale)
+    {
+        var lines = new List<ColoaderLine>();
+        var freight = Math.Max(0m, rate.OceanFreight ?? rate.Freight);
+
+        void AddLine(
+            byte discriminator,
+            string name,
+            string detailType,
+            string chargeBasis,
+            decimal amount)
+        {
+            if (amount <= 0m) return;
+
+            lines.Add(new ColoaderLine(
+                rate.Id,
+                SyntheticLineId(rate.Id, discriminator),
+                null,
+                name,
+                detailType,
+                "Fixed",
+                chargeBasis,
+                rate.CurrencyId,
+                rate.CurrencyName,
+                rate.CurrencyCode,
+                amount,
+                amount,
+                1m,
+                0m,
+                "Fuente LCL importada y preaprobada.",
+                false,
+                0m));
+        }
+
+        AddLine(1, "Flete internacional LCL", "Freight", "PerChargeableCbm", freight);
+        AddLine(2, "Cargos de origen", "OriginCharge", "PerShipment", Math.Max(0m, rate.OriginCharges ?? 0m));
+        AddLine(3, "Cargos de destino", "DestinationCharge", "PerShipment", Math.Max(0m, rate.DestinationCharges ?? 0m));
+        AddLine(4, "Recargos", "Other", "PerShipment", Math.Max(0m, rate.Surcharges ?? 0m));
+
+        if (lines.Count == 0 && totalSale > 0m)
+        {
+            lines.Add(new ColoaderLine(
+                rate.Id,
+                SyntheticLineId(rate.Id, 5),
+                null,
+                "Flete internacional LCL",
+                "Freight",
+                "Fixed",
+                "PerChargeableCbm",
+                rate.CurrencyId,
+                rate.CurrencyName,
+                rate.CurrencyCode,
+                totalCost,
+                totalSale,
+                1m,
+                totalSale - totalCost,
+                "Fuente LCL importada y preaprobada.",
+                false,
+                0m));
+            return lines.ToArray();
+        }
+
+        // The import format stores one optional commercial total instead of a
+        // sale amount per concept. Keep every extracted cost intact and place
+        // the commercial difference on the freight line (or first line).
+        var commercialDelta = totalSale - totalCost;
+        if (lines.Count > 0 && commercialDelta != 0m)
+        {
+            var index = lines.FindIndex(line => line.CostDetailType == "Freight");
+            if (index < 0) index = 0;
+
+            var current = lines[index];
+            var adjustedSale = Math.Max(0m, current.SaleAmount + commercialDelta);
+            lines[index] = current with
+            {
+                SaleAmount = adjustedSale,
+                UtilityAmount = adjustedSale - current.CostAmount,
+            };
+        }
+
+        return lines.ToArray();
+    }
+
+    private static Guid SyntheticLineId(Guid sourceId, byte discriminator)
+    {
+        var bytes = sourceId.ToByteArray();
+        bytes[^1] ^= discriminator;
+        return new Guid(bytes);
+    }
+
+    private static bool IsUnassignedLocation(string? name, string? code, string? slug)
+    {
+        var values = new[] { CanonicalText(name), CanonicalText(code), CanonicalText(slug) };
+        return values.Any(value =>
+            string.IsNullOrEmpty(value)
+            || value is "porasignar" or "unassigned" or "pending");
     }
 
     private static bool LocationMatches(
