@@ -49,19 +49,27 @@ public static class TigsaFtlTariffSeeder
         { 1900m, 1600m, 1600m, 1700m, 1300m, 900m, 2900m, null },
     };
 
-    // Tarifario maestro LTL entregado por GCF. La tarifa es USD/CBM y se aplica
-    // el mínimo indicado por ruta. TransitDays conserva el extremo superior del
-    // rango operativo y Notes mantiene el rango original.
+    // Tarifarios LTL entregados por GCF. Cliente final y NVOCC son matrices
+    // comerciales distintas y deben coexistir para la misma ruta.
     private static readonly LtlSeedRow[] LtlTariffs =
     [
-        new("San José, Costa Rica", "Managua, Nicaragua", 40m, 55m, 3, "2 - 3 días", "Almacén Fiscal Premier 6117"),
-        new("San José, Costa Rica", "San Pedro Sula, Honduras", 50m, 55m, 6, "4 - 6 días", "Sicarga"),
-        new("San José, Costa Rica", "San Salvador, El Salvador", 40m, 55m, 5, "4 - 5 días", "Central Logistics SA De C.V."),
-        new("San José, Costa Rica", "Ciudad Guatemala, Guatemala", 48m, 75m, 7, "5 - 7 días", "Almacenadora Integrada"),
-        new("CFZ Panamá", "Managua, Nicaragua", 50m, 65m, 4, "3 - 4 días", "Almacén Fiscal Premier 6117"),
-        new("CFZ Panamá", "San Pedro Sula, Honduras", 60m, 65m, 5, "4 - 5 días", "Sicarga"),
-        new("CFZ Panamá", "San Salvador, El Salvador", 50m, 60m, 5, "4 - 5 días", "Central Logistics SA De C.V."),
-        new("CFZ Panamá", "Ciudad Guatemala, Guatemala", 58m, 80m, 6, "5 - 6 días", "Almacenadora Integrada"),
+        new("San José, Costa Rica", "Managua, Nicaragua", 40m, 55m, 3, "2 - 3 días", "Almacén Fiscal Premier 6117", "FinalClient", "GCF Centroamérica LTL Pricing Engine v2.4"),
+        new("San José, Costa Rica", "San Pedro Sula, Honduras", 50m, 55m, 6, "4 - 6 días", "Sicarga", "FinalClient", "GCF Centroamérica LTL Pricing Engine v2.4"),
+        new("San José, Costa Rica", "San Salvador, El Salvador", 40m, 55m, 5, "4 - 5 días", "Central Logistics SA De C.V.", "FinalClient", "GCF Centroamérica LTL Pricing Engine v2.4"),
+        new("San José, Costa Rica", "Ciudad Guatemala, Guatemala", 48m, 75m, 7, "5 - 7 días", "Almacenadora Integrada", "FinalClient", "GCF Centroamérica LTL Pricing Engine v2.4"),
+        new("CFZ Panamá", "Managua, Nicaragua", 50m, 65m, 4, "3 - 4 días", "Almacén Fiscal Premier 6117", "FinalClient", "GCF Centroamérica LTL Pricing Engine v2.4"),
+        new("CFZ Panamá", "San Pedro Sula, Honduras", 60m, 65m, 5, "4 - 5 días", "Sicarga", "FinalClient", "GCF Centroamérica LTL Pricing Engine v2.4"),
+        new("CFZ Panamá", "San Salvador, El Salvador", 50m, 60m, 5, "4 - 5 días", "Central Logistics SA De C.V.", "FinalClient", "GCF Centroamérica LTL Pricing Engine v2.4"),
+        new("CFZ Panamá", "Ciudad Guatemala, Guatemala", 58m, 80m, 6, "5 - 6 días", "Almacenadora Integrada", "FinalClient", "GCF Centroamérica LTL Pricing Engine v2.4"),
+
+        new("San José, Costa Rica", "Managua, Nicaragua", 35m, 50m, 3, "2 - 3 días", "Almacén Fiscal Premier 6117", "Nvocc", "LTL GFC NVOCC CENTROAMERICA v1.3"),
+        new("San José, Costa Rica", "San Pedro Sula, Honduras", 45m, 50m, 6, "4 - 6 días", "Sicarga", "Nvocc", "LTL GFC NVOCC CENTROAMERICA v1.3"),
+        new("San José, Costa Rica", "San Salvador, El Salvador", 35m, 50m, 5, "4 - 5 días", "Central Logistics SA De C.V.", "Nvocc", "LTL GFC NVOCC CENTROAMERICA v1.3"),
+        new("San José, Costa Rica", "Ciudad Guatemala, Guatemala", 45m, 50m, 7, "5 - 7 días", "Almacenadora Integrada", "Nvocc", "LTL GFC NVOCC CENTROAMERICA v1.3"),
+        new("CFZ Panamá", "Managua, Nicaragua", 45m, 60m, 4, "3 - 4 días", "Almacén Fiscal Premier 6117", "Nvocc", "LTL GFC NVOCC CENTROAMERICA v1.3"),
+        new("CFZ Panamá", "San Pedro Sula, Honduras", 55m, 60m, 5, "4 - 5 días", "Sicarga", "Nvocc", "LTL GFC NVOCC CENTROAMERICA v1.3"),
+        new("CFZ Panamá", "San Salvador, El Salvador", 45m, 60m, 5, "4 - 5 días", "Central Logistics SA De C.V.", "Nvocc", "LTL GFC NVOCC CENTROAMERICA v1.3"),
+        new("CFZ Panamá", "Ciudad Guatemala, Guatemala", 55m, 60m, 6, "5 - 6 días", "Almacenadora Integrada", "Nvocc", "LTL GFC NVOCC CENTROAMERICA v1.3"),
     ];
 
     private static readonly IReadOnlyDictionary<string, string[]> LocationAliases =
@@ -460,6 +468,7 @@ public static class TigsaFtlTariffSeeder
                     destination_name,
                     destination_code,
                     shipment_mode,
+                    commercial_profile,
                     equipment_class,
                     equipment_label,
                     currency_id,
@@ -486,6 +495,7 @@ public static class TigsaFtlTariffSeeder
                     @destination_name,
                     @destination_code,
                     'Ltl',
+                    @commercial_profile,
                     'LTL_CBM',
                     'LTL · USD/CBM',
                     @currency_id,
@@ -496,7 +506,7 @@ public static class TigsaFtlTariffSeeder
                     @minimum_amount,
                     @transit_days,
                     @warehouse_name,
-                    'GCF Centroamérica LTL Pricing Engine v2.4',
+                    @source,
                     @notes,
                     NULL,
                     NULL,
@@ -507,6 +517,7 @@ public static class TigsaFtlTariffSeeder
                     SELECT 1
                     FROM pricing."FtlTariffs" existing
                     WHERE lower(existing.shipment_mode) = 'ltl'
+                      AND lower(existing.commercial_profile) = lower(@commercial_profile)
                       AND upper(existing.equipment_class) = 'LTL_CBM'
                       AND lower(translate(trim(existing.origin_name), 'áéíóúüñ', 'aeiouun'))
                           = lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun'))
@@ -522,6 +533,7 @@ public static class TigsaFtlTariffSeeder
             Add(command, "destination_id", destination?.Id);
             Add(command, "destination_name", destination is null ? row.Destination : SnapshotName(destination));
             Add(command, "destination_code", destination?.Code);
+            Add(command, "commercial_profile", row.CommercialProfile);
             Add(command, "currency_id", usd.Id);
             Add(command, "currency_name", SnapshotName(usd));
             Add(command, "currency_code", usd.Code);
@@ -529,7 +541,8 @@ public static class TigsaFtlTariffSeeder
             Add(command, "minimum_amount", row.MinimumAmount);
             Add(command, "transit_days", row.TransitDays);
             Add(command, "warehouse_name", row.Warehouse);
-            Add(command, "notes", $"Servicio LTL consolidado terrestre. Tránsito estimado original: {row.TransitRange}. Tarifa USD/CBM con mínimo por ruta.");
+            Add(command, "source", row.Source);
+            Add(command, "notes", $"Servicio LTL consolidado terrestre · perfil {row.CommercialProfile}. Tránsito estimado original: {row.TransitRange}. Tarifa USD/CBM con mínimo por ruta. Relación operativa de peso volumétrico: 1 CBM = 333.33 kg.");
 
             created += await command.ExecuteNonQueryAsync(cancellationToken);
         }
@@ -694,6 +707,8 @@ public static class TigsaFtlTariffSeeder
         decimal MinimumAmount,
         int TransitDays,
         string TransitRange,
-        string Warehouse
+        string Warehouse,
+        string CommercialProfile,
+        string Source
     );
 }
