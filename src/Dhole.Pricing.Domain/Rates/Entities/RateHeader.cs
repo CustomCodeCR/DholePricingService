@@ -713,9 +713,16 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         TotalVolumeCbm = totalVolumeCbm;
         KgPerCbm = kgPerCbm > 0m ? kgPerCbm : 500m;
         CargoLinesJson = Normalize(cargoLinesJson);
+
+        var cargoChargeableQuantity = Math.Max(TotalVolumeCbm, TotalWeightKg / KgPerCbm);
         ChargeableQuantity = shipmentMode switch
         {
-            ShipmentMode.Lcl or ShipmentMode.Ltl => Math.Max(TotalVolumeCbm, TotalWeightKg / KgPerCbm),
+            // LCL has a commercial minimum of 1 CBM. Keep zero as zero so the
+            // validation below still rejects a shipment without weight or volume.
+            ShipmentMode.Lcl => cargoChargeableQuantity > 0m
+                ? Math.Max(1m, cargoChargeableQuantity)
+                : 0m,
+            ShipmentMode.Ltl => cargoChargeableQuantity,
             ShipmentMode.Ftl or ShipmentMode.Fcl => Math.Max(ContainerQuantity, 1),
             _ => 1m,
         };
@@ -756,8 +763,12 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             ChargeBasis.PerContainer => requestedQuantity > 0m ? requestedQuantity : Math.Max(ContainerQuantity, 1),
             ChargeBasis.PerTruck => requestedQuantity > 0m ? requestedQuantity : Math.Max(ContainerQuantity, 1),
             ChargeBasis.PerTeu => ResolveTeuQuantity(requestedQuantity),
-            ChargeBasis.PerCbm => Math.Max(TotalVolumeCbm, 0.001m),
-            ChargeBasis.PerChargeableCbm => Math.Max(chargeableCbm, 0.001m),
+            ChargeBasis.PerCbm => ShipmentMode == ShipmentMode.Lcl
+                ? Math.Max(TotalVolumeCbm, 1m)
+                : Math.Max(TotalVolumeCbm, 0.001m),
+            ChargeBasis.PerChargeableCbm => ShipmentMode == ShipmentMode.Lcl
+                ? Math.Max(chargeableCbm, 1m)
+                : Math.Max(chargeableCbm, 0.001m),
             ChargeBasis.PerKg => Math.Max(TotalWeightKg, 0.001m),
             ChargeBasis.Per100Kg => Math.Max(TotalWeightKg / 100m, 0.001m),
             ChargeBasis.PerTon => Math.Max(TotalWeightKg / 1000m, 0.001m),
