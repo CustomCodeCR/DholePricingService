@@ -130,8 +130,11 @@ public static class PricingAuditSnapshots
             rateHeader.Id,
             rateHeader.RateCode,
             rateHeader.RateName,
+            rateHeader.RevisionNumber,
 
             rateHeader.SourceImportFclRateId,
+            rateHeader.SourceTariffRateId,
+            rateHeader.SourceTariffRevisionNumber,
 
             rateHeader.AgentId,
             rateHeader.AgentName,
@@ -190,13 +193,22 @@ public static class PricingAuditSnapshots
             rateHeader.ValidFrom,
             rateHeader.ValidTo,
             rateHeader.ClientName,
+            rateHeader.ExecutiveName,
             rateHeader.IdtraNumber,
             rateHeader.QuoNumber,
             rateHeader.Includes,
             rateHeader.SubjectTo,
             rateHeader.Excludes,
             rateHeader.TransitTime,
+            rateHeader.UseAllInPresentation,
             RateType = rateHeader.RateType.ToString(),
+            OperationType = rateHeader.OperationType.ToString(),
+            Services = rateHeader.RateServices.Select(x => new
+            {
+                x.ServiceId,
+                x.ServiceName,
+                x.ServiceCode,
+            }).ToList(),
 
             rateHeader.TotalCostAmount,
             rateHeader.TotalSaleAmount,
@@ -240,5 +252,9 @@ public static class PricingAuditSnapshots
             detail.Quantity,
 
             detail.Notes,
+            detail.ApplyDestinationTax,
+            detail.DestinationTaxRate,
+            detail.DestinationTaxAmount,
+            detail.BillToClient,
         };
 }
