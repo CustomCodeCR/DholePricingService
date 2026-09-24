@@ -249,6 +249,38 @@ public sealed class RateFreightQuantityTests
     }
 
     [TestMethod]
+    public void ConfigureShipment_Lcl_RemovesLegacyContainerAllocations()
+    {
+        var rate = CreateRate(containerQuantity: 1);
+        var legacyContainer = Guid.NewGuid();
+
+        rate.ReplaceContainerAllocations(
+            [new RateContainerAllocationSpec(legacyContainer, "20 Dry Van", "20DV", 1)],
+            updatedBy: null
+        );
+
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 50m,
+            totalVolumeCbm: 0.2m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+
+        Assert.AreEqual(0, rate.RateContainers.Count);
+        Assert.AreEqual("LCL", rate.ContainerTypeName);
+        Assert.AreEqual("LCL", rate.ContainerTypeCode);
+        Assert.AreEqual(0, rate.ContainerQuantity);
+        Assert.AreEqual(0, rate.FreeDays);
+        Assert.AreEqual(1m, rate.ChargeableQuantity);
+        StringAssert.Contains(rate.RateName, "LCL");
+        Assert.IsFalse(rate.RateName.Contains("20 Dry Van", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
     public void RateName_UsesIncotermDisplayValueBeforeCatalogCode()
     {
         var today = DateTime.UtcNow.Date;
