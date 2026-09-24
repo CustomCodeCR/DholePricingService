@@ -19,8 +19,8 @@ internal static class OwnLclPricingLineCatalog
         new("PA_DMCE", "PA", "DMCE", "HBL", 65m, 65m),
         new("PA_HANDLING", "PA", "Handling", "HBL", 25m, 25m),
         new("PA_ZONE", "PA", "Zone Charge", "HBL", 30m, 30m),
-        new("CR_HANDLING", "CR", "Manejos", "HBL", 65m, 65m),
-        new("CR_ZONE", "CR", "Zone Charge", "HBL", 50m, 50m),
+        new("CR_HANDLING", "CR", "Manejos", "HBL", 0m, 65m),
+        new("CR_ZONE", "CR", "Zone Charge", "HBL", 0m, 50m),
 
         // Matriz China / Centroamérica. Cada valor sigue siendo editable por consolidado.
         new("CA_TRANSSHIPMENT", "CA", "Transbordo", "CBM", 9m, 29m),
