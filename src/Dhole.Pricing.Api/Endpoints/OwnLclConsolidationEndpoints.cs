@@ -456,7 +456,12 @@ public static class OwnLclConsolidationEndpoints
             return;
 
         var cost = values.CostUnit;
-        if (lineKey.Equals("PA_DESTINATION_CHARGE", StringComparison.OrdinalIgnoreCase)
+        if (lineKey.Equals("CR_HANDLING", StringComparison.OrdinalIgnoreCase)
+            || lineKey.Equals("CR_ZONE", StringComparison.OrdinalIgnoreCase))
+        {
+            cost = 0m;
+        }
+        else if (lineKey.Equals("PA_DESTINATION_CHARGE", StringComparison.OrdinalIgnoreCase)
             && cost <= 0m
             && fallbackCost.HasValue)
         {
