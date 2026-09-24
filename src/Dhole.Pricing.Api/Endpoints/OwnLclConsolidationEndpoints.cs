@@ -11,6 +11,7 @@ namespace Dhole.Pricing.Api.Endpoints;
 public static class OwnLclConsolidationEndpoints
 {
     private const decimal DefaultMaximumCbm = 50m;
+    private const decimal DefaultFreightProfitPerCbm = 5.69m;
     private const decimal CentralAmericaOperationBaseCbm = 70m;
     private const decimal CostaRicaWarehouseOperation = 415m;
 
@@ -205,7 +206,7 @@ public static class OwnLclConsolidationEndpoints
             Add(command, "panama_to_cr", request.PanamaToCostaRicaCost ?? 2140m);
             Add(command, "bunker", request.BunkerCost ?? 280m);
             Add(command, "cr_base", request.CostaRicaTransferBaseCbm is > 0 ? request.CostaRicaTransferBaseCbm.Value : 95m);
-            Add(command, "freight_profit_per_cbm", Math.Max(0m, request.FreightProfitPerCbm ?? MinimumCentralAmericaProfitPerCbm));
+            Add(command, "freight_profit_per_cbm", Math.Max(0m, request.FreightProfitPerCbm ?? DefaultFreightProfitPerCbm));
             Add(command, "version", version);
             await command.ExecuteNonQueryAsync(ct);
         }
