@@ -11,4 +11,11 @@ public interface IPricingReportsClient
         string fileName,
         string? sheetName = null,
         CancellationToken cancellationToken = default);
+
+    Task<GeneratedRateDocumentDto> GenerateTabularAsync(
+        string format,
+        string dataJson,
+        string fileName,
+        string? sheetName = null,
+        CancellationToken cancellationToken = default);
 }

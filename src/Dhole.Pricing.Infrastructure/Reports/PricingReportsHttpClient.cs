@@ -6,13 +6,42 @@ namespace Dhole.Pricing.Infrastructure.Reports;
 
 public sealed class PricingReportsHttpClient(HttpClient httpClient) : IPricingReportsClient
 {
-    public async Task<GeneratedRateDocumentDto> GenerateAsync(
+    public Task<GeneratedRateDocumentDto> GenerateAsync(
         string templateCode,
         string format,
         string dataJson,
         string fileName,
         string? sheetName = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        GenerateCoreAsync(
+            $"/api/internal/reports/templates/{Uri.EscapeDataString(templateCode)}/generate",
+            format,
+            dataJson,
+            fileName,
+            sheetName,
+            cancellationToken);
+
+    public Task<GeneratedRateDocumentDto> GenerateTabularAsync(
+        string format,
+        string dataJson,
+        string fileName,
+        string? sheetName = null,
+        CancellationToken cancellationToken = default) =>
+        GenerateCoreAsync(
+            "/api/internal/reports/tabular/generate",
+            format,
+            dataJson,
+            fileName,
+            sheetName,
+            cancellationToken);
+
+    private async Task<GeneratedRateDocumentDto> GenerateCoreAsync(
+        string path,
+        string format,
+        string dataJson,
+        string fileName,
+        string? sheetName,
+        CancellationToken cancellationToken)
     {
         var request = new
         {
@@ -23,7 +52,7 @@ public sealed class PricingReportsHttpClient(HttpClient httpClient) : IPricingRe
         };
 
         using var response = await httpClient.PostAsJsonAsync(
-            $"/api/internal/reports/templates/{Uri.EscapeDataString(templateCode)}/generate",
+            path,
             request,
             cancellationToken);
 
