@@ -365,9 +365,16 @@ public sealed class CreateRateCommandHandler(
                 ? CreateManualRate(command, rateCode)
                 : CreateFromImportedRate(command, importedRate, rateCode);
 
+            var pickupAddress = ResolvePickupAddress(
+                command.ShipmentMode,
+                command.IncotermName,
+                command.IncotermCode,
+                command.PickupAddress,
+                command.CargoLines
+            );
             rate.ConfigurePickupLocation(
                 command.WarehouseId,
-                command.PickupAddress,
+                pickupAddress,
                 command.PickupLatitude,
                 command.PickupLongitude
             );
@@ -722,6 +729,72 @@ public sealed class CreateRateCommandHandler(
             command.RateType,
             command.CreatedBy
         );
+    }
+
+    private static string? ResolvePickupAddress(
+        ShipmentMode shipmentMode,
+        string? incotermName,
+        string? incotermCode,
+        string? requestedPickupAddress,
+        IReadOnlyCollection<RateCargoLineCommandItem> cargoLines
+    )
+    {
+        if (!IsPickupIncoterm(incotermName, incotermCode))
+            return null;
+
+        if (!string.IsNullOrWhiteSpace(requestedPickupAddress))
+            return requestedPickupAddress.Trim();
+
+        // Legacy/current LCL clients may have carried the EXW pickup only inside
+        // the cargo observation. Promote it to the dedicated pickup fields so a
+        // later hydration does not lose the collection location.
+        if (shipmentMode != ShipmentMode.Lcl)
+            return null;
+
+        foreach (var line in cargoLines)
+        {
+            var extracted = ExtractPickupAddress(line.Description);
+            if (!string.IsNullOrWhiteSpace(extracted))
+                return extracted;
+        }
+
+        return null;
+    }
+
+    private static bool IsPickupIncoterm(string? incotermName, string? incotermCode)
+    {
+        var value = $"{incotermName} {incotermCode}";
+        return value.Contains("EXW", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("FCA", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ExtractPickupAddress(string? description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+            return null;
+
+        var markers = new[] { "Recolecta:", "Recolección:", "Recoleccion:", "Pickup:" };
+        foreach (var marker in markers)
+        {
+            var markerIndex = description.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (markerIndex < 0)
+                continue;
+
+            var value = description[(markerIndex + marker.Length)..].Trim();
+            var stop = value.Length;
+            foreach (var separator in new[] { "\r", "\n", " · ", " | " })
+            {
+                var separatorIndex = value.IndexOf(separator, StringComparison.Ordinal);
+                if (separatorIndex >= 0 && separatorIndex < stop)
+                    stop = separatorIndex;
+            }
+
+            value = value[..stop].Trim();
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        return null;
     }
 
     private static ChargeBasis DefaultChargeBasis(ShipmentMode shipmentMode, CostDetailType detailType)
