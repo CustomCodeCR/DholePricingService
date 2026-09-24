@@ -511,11 +511,29 @@ public sealed class UpdateRateCommandHandler(
                 rate.ConfigureFinalBackupStorageIds(command.FinalBackupStorageIds);
             rate.SetOperationType(command.OperationType, command.UpdatedBy);
             rate.ConfigureServices(command.Services, command.UpdatedBy);
-            rate.ConfigurePickupLocation(
-                command.WarehouseId,
+            var pickupAddress = ResolvePickupAddress(
+                command.ShipmentMode,
+                command.IncotermName,
+                command.IncotermCode,
                 command.PickupAddress,
-                command.PickupLatitude,
+                command.CargoLines,
+                rate.PickupAddress
+            );
+            var preserveExistingPickupLocation =
+                command.ShipmentMode == ShipmentMode.Lcl
+                && !string.IsNullOrWhiteSpace(pickupAddress)
+                && string.Equals(pickupAddress, rate.PickupAddress, StringComparison.OrdinalIgnoreCase);
+
+            rate.ConfigurePickupLocation(
+                command.WarehouseId
+                    ?? (preserveExistingPickupLocation && IsIncoterm(command.IncotermName, command.IncotermCode, "FCA")
+                        ? rate.WarehouseId
+                        : null),
+                pickupAddress,
+                command.PickupLatitude
+                    ?? (preserveExistingPickupLocation ? rate.PickupLatitude : null),
                 command.PickupLongitude
+                    ?? (preserveExistingPickupLocation ? rate.PickupLongitude : null)
             );
 
             if (command.ExchangeRateApplied is > 0m || command.ExchangeRateSale is > 0m)
@@ -863,6 +881,77 @@ public sealed class UpdateRateCommandHandler(
         await cache.RemoveRateHeaderCacheAsync(rate.Id, cancellationToken);
 
         return Result.Success();
+    }
+
+    private static string? ResolvePickupAddress(
+        ShipmentMode shipmentMode,
+        string? incotermName,
+        string? incotermCode,
+        string? requestedPickupAddress,
+        IReadOnlyCollection<RateCargoLineCommandItem> cargoLines,
+        string? existingPickupAddress
+    )
+    {
+        if (!IsPickupIncoterm(incotermName, incotermCode))
+            return null;
+
+        if (!string.IsNullOrWhiteSpace(requestedPickupAddress))
+            return requestedPickupAddress.Trim();
+
+        if (shipmentMode != ShipmentMode.Lcl)
+            return null;
+
+        foreach (var line in cargoLines)
+        {
+            var extracted = ExtractPickupAddress(line.Description);
+            if (!string.IsNullOrWhiteSpace(extracted))
+                return extracted;
+        }
+
+        // LCL edits must be lossless. If the current UI did not send the pickup
+        // again, keep the dedicated value already persisted on the quotation.
+        return string.IsNullOrWhiteSpace(existingPickupAddress)
+            ? null
+            : existingPickupAddress.Trim();
+    }
+
+    private static bool IsPickupIncoterm(string? incotermName, string? incotermCode) =>
+        IsIncoterm(incotermName, incotermCode, "EXW")
+        || IsIncoterm(incotermName, incotermCode, "FCA");
+
+    private static bool IsIncoterm(string? incotermName, string? incotermCode, string expected)
+    {
+        var value = $"{incotermName} {incotermCode}";
+        return value.Contains(expected, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? ExtractPickupAddress(string? description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+            return null;
+
+        var markers = new[] { "Recolecta:", "Recolección:", "Recoleccion:", "Pickup:" };
+        foreach (var marker in markers)
+        {
+            var markerIndex = description.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (markerIndex < 0)
+                continue;
+
+            var value = description[(markerIndex + marker.Length)..].Trim();
+            var stop = value.Length;
+            foreach (var separator in new[] { "\r", "\n", " · ", " | " })
+            {
+                var separatorIndex = value.IndexOf(separator, StringComparison.Ordinal);
+                if (separatorIndex >= 0 && separatorIndex < stop)
+                    stop = separatorIndex;
+            }
+
+            value = value[..stop].Trim();
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+
+        return null;
     }
 
     private static ChargeBasis DefaultChargeBasis(ShipmentMode shipmentMode, CostDetailType detailType)
