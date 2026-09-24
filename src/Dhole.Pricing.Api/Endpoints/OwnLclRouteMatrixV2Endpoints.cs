@@ -153,9 +153,7 @@ public static class OwnLclRouteMatrixV2Endpoints
             + costaRicaTransferCostPerCbm;
 
         var isCentralAmerica = CentralAmericaInland.ContainsKey(destination);
-        var centralAmericaFreightProfitPerCbm = isCentralAmerica
-            ? await LoadFreightProfitPerCbmAsync(consolidation.Id, db, ct)
-            : MinimumCentralAmericaProfitPerCbm;
+        var configuredFreightProfitPerCbm = await LoadFreightProfitPerCbmAsync(consolidation.Id, db, ct);
         // El HTML usa exactamente el mismo diferencial de origen que Panamá
         // para Nicaragua, Honduras, Guatemala y El Salvador.
         var originSurchargePerCbm = OriginSurcharges.GetValueOrDefault(requestedPol);
@@ -215,42 +213,14 @@ public static class OwnLclRouteMatrixV2Endpoints
                 + routeInlandCostPerCbm;
         }
 
-        decimal? historicalSale = null;
-        if (!isCentralAmerica)
-        {
-            historicalSale = await LoadHistoricalSaleAsync(
-                consolidation.ConsolidationNumber,
-                destination,
-                requestedPol,
-                db,
-                ct);
-        }
-
-        // Panamá es la referencia para separar el O/F de los cargos de destino.
-        // En Centroamérica la venta del flete usa la utilidad configurada en el consolidado.
-        // No se admite un override de la cotización que cambie ese diferencial.
+        // La utilidad/CBM configurada pertenece al consolidado y se aplica al
+        // flete internacional por igual para Panamá, Costa Rica y Centroamérica.
+        // La venta deja de depender de valores históricos o bases hardcodeadas.
         var freightCostPerCbm = destination == "CR"
             ? routeCostPerCbm
             : oceanCostPerCbm + originSurchargePerCbm;
-
-        decimal recommendedSalePerCbm;
-        decimal freightSalePerCbm;
-        if (isCentralAmerica)
-        {
-            recommendedSalePerCbm = freightCostPerCbm + centralAmericaFreightProfitPerCbm;
-            freightSalePerCbm = recommendedSalePerCbm;
-        }
-        else
-        {
-            var htmlBaseSalePerCbm = destination == "CR"
-                ? CostaRicaFreightSalePerCbm
-                : PanamaAndCentralAmericaFreightSalePerCbm;
-            var defaultFreightSalePerCbm = htmlBaseSalePerCbm + originSurchargePerCbm;
-            recommendedSalePerCbm = historicalSale ?? defaultFreightSalePerCbm;
-            freightSalePerCbm = request.SalePerCbm is > 0
-                ? request.SalePerCbm.Value
-                : recommendedSalePerCbm;
-        }
+        var recommendedSalePerCbm = freightCostPerCbm + configuredFreightProfitPerCbm;
+        var freightSalePerCbm = recommendedSalePerCbm;
 
         var lines = new List<OwnLclQuoteLine>();
         AddLine(lines, "Flete Internacional Marítimo LCL", "CBM", billableCbm, freightCostPerCbm, freightSalePerCbm);
@@ -279,16 +249,9 @@ public static class OwnLclRouteMatrixV2Endpoints
         var profitPerCbm = profit / billableCbm;
         var profitPercentage = finalSale > 0 ? profit / finalSale * 100m : 0m;
         var oceanProfitPerCbm = freightSalePerCbm - freightCostPerCbm;
-        var minimumProfit = destination == "PA"
-            ? MinimumPanamaOceanProfitPerCbm
-            : isCentralAmerica
-                ? centralAmericaFreightProfitPerCbm
-                : MinimumCentralAmericaProfitPerCbm;
-        var meetsMinimum = destination == "PA"
-            ? oceanProfitPerCbm >= MinimumPanamaOceanProfitPerCbm
-            : isCentralAmerica
-                ? Math.Abs(oceanProfitPerCbm - centralAmericaFreightProfitPerCbm) <= 0.000001m
-                : profitPerCbm >= MinimumCentralAmericaProfitPerCbm;
+        var minimumProfit = configuredFreightProfitPerCbm;
+        var meetsMinimum =
+            Math.Abs(oceanProfitPerCbm - configuredFreightProfitPerCbm) <= 0.000001m;
 
         return Results.Ok(new OwnLclRouteMatrixQuoteDto(
             consolidation.Id,
