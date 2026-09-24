@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Text.Json;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Domain.Shared;
@@ -19,6 +20,7 @@ public static class FtlTariffEndpoints
         group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.CostView);
         group.MapGet("/resolve", ResolveAsync).RequireScope(PricingConstants.Scopes.CostSelect);
         group.MapPost("/", CreateAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
+        group.MapPut("/{id:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
         group.MapPost("/import", ImportAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
         group.MapPost("/seed-defaults", SeedDefaultsAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
         group.MapPut("/batch", UpdateBatchAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
@@ -112,7 +114,23 @@ public static class FtlTariffEndpoints
             WHERE is_active = TRUE
               AND lower(shipment_mode) = lower(@shipment_mode)
               AND lower(commercial_profile) = lower(@commercial_profile)
-              AND upper(equipment_class) = upper(@equipment_class)
+              AND
+              (
+                  (
+                      NULLIF(trim(COALESCE(applicable_equipment_classes, '')), '') IS NOT NULL
+                      AND EXISTS
+                      (
+                          SELECT 1
+                          FROM jsonb_array_elements_text(applicable_equipment_classes::jsonb) AS applicable(value)
+                          WHERE upper(trim(applicable.value)) = upper(@equipment_class)
+                      )
+                  )
+                  OR
+                  (
+                      NULLIF(trim(COALESCE(applicable_equipment_classes, '')), '') IS NULL
+                      AND upper(equipment_class) = upper(@equipment_class)
+                  )
+              )
               AND (valid_from IS NULL OR valid_from <= @quote_date)
               AND (valid_to IS NULL OR valid_to >= @quote_date)
               AND
@@ -263,6 +281,111 @@ public static class FtlTariffEndpoints
             created = result.Created,
             message = result.Created ? "Tarifa terrestre creada." : "Tarifa terrestre actualizada.",
         });
+    }
+
+
+    private static async Task<IResult> UpdateAsync(
+        Guid id,
+        CreateFtlTariffRequest request,
+        ServiceDbContext db,
+        CancellationToken cancellationToken
+    )
+    {
+        if (id == Guid.Empty)
+        {
+            return Results.BadRequest(new
+            {
+                code = "Pricing.LandTariffIdRequired",
+                message = "La tarifa terrestre requiere un identificador válido.",
+            });
+        }
+
+        var validation = Validate(request);
+        if (validation is not null) return validation;
+
+        var mode = NormalizeShipmentMode(request.ShipmentMode, allowEmpty: false)!;
+        var rateBasis = NormalizeRateBasis(request.RateBasis, mode);
+        var commercialProfile = NormalizeCommercialProfile(request.CommercialProfile, mode, allowEmpty: false)!;
+        var applicableEquipmentClasses = NormalizeApplicableEquipmentClasses(
+            request.ApplicableEquipmentClasses,
+            mode,
+            request.EquipmentClass
+        );
+        var equipmentClass = string.Equals(mode, "Ltl", StringComparison.OrdinalIgnoreCase)
+            ? "LTL_CBM"
+            : applicableEquipmentClasses.First();
+        var equipmentLabel = string.IsNullOrWhiteSpace(request.EquipmentLabel)
+            ? (string.Equals(mode, "Ltl", StringComparison.OrdinalIgnoreCase)
+                ? "LTL · USD/CBM"
+                : $"{applicableEquipmentClasses.Count} equipo{(applicableEquipmentClasses.Count == 1 ? string.Empty : "s")} aplicable{(applicableEquipmentClasses.Count == 1 ? string.Empty : "s")}")
+            : request.EquipmentLabel.Trim();
+
+        await using var connection = db.Database.GetDbConnection();
+        await EnsureOpenAsync(connection, cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE pricing."FtlTariffs"
+            SET origin_id = @origin_id,
+                origin_name = @origin_name,
+                origin_code = @origin_code,
+                destination_id = @destination_id,
+                destination_name = @destination_name,
+                destination_code = @destination_code,
+                shipment_mode = @shipment_mode,
+                commercial_profile = @commercial_profile,
+                equipment_class = @equipment_class,
+                equipment_label = @equipment_label,
+                applicable_equipment_classes = @applicable_equipment_classes,
+                currency_id = @currency_id,
+                currency_name = @currency_name,
+                currency_code = @currency_code,
+                price_amount = @price_amount,
+                rate_basis = @rate_basis,
+                minimum_amount = @minimum_amount,
+                transit_days = @transit_days,
+                warehouse_name = @warehouse_name,
+                source = @source,
+                notes = @notes,
+                valid_from = @valid_from,
+                valid_to = @valid_to,
+                is_active = @is_active,
+                updated_at_utc = now()
+            WHERE id = @id;
+            """;
+
+        Add(command, "id", id);
+        Add(command, "origin_id", request.OriginId);
+        Add(command, "origin_name", request.OriginName.Trim());
+        Add(command, "origin_code", NullIfBlank(request.OriginCode));
+        Add(command, "destination_id", request.DestinationId);
+        Add(command, "destination_name", request.DestinationName.Trim());
+        Add(command, "destination_code", NullIfBlank(request.DestinationCode));
+        Add(command, "shipment_mode", mode);
+        Add(command, "commercial_profile", commercialProfile);
+        Add(command, "equipment_class", equipmentClass);
+        Add(command, "equipment_label", equipmentLabel);
+        Add(command, "applicable_equipment_classes", JsonSerializer.Serialize(applicableEquipmentClasses));
+        Add(command, "currency_id", request.CurrencyId);
+        Add(command, "currency_name", string.IsNullOrWhiteSpace(request.CurrencyName) ? request.CurrencyCode.Trim() : request.CurrencyName.Trim());
+        Add(command, "currency_code", request.CurrencyCode.Trim().ToUpperInvariant());
+        Add(command, "price_amount", request.PriceAmount);
+        Add(command, "rate_basis", rateBasis);
+        Add(command, "minimum_amount", request.MinimumAmount);
+        Add(command, "transit_days", request.TransitDays);
+        Add(command, "warehouse_name", NullIfBlank(request.WarehouseName));
+        Add(command, "source", NullIfBlank(request.Source));
+        Add(command, "notes", NullIfBlank(request.Notes));
+        Add(command, "valid_from", request.ValidFrom?.Date);
+        Add(command, "valid_to", request.ValidTo?.Date);
+        Add(command, "is_active", request.IsActive);
+
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 0
+            ? Results.NotFound(new
+            {
+                code = "Pricing.LandTariffNotFound",
+                message = $"No se encontró la tarifa terrestre {id}.",
+            })
+            : Results.NoContent();
     }
 
     private static async Task<IResult> ImportAsync(
@@ -460,12 +583,19 @@ public static class FtlTariffEndpoints
             });
         }
 
-        if (string.IsNullOrWhiteSpace(item.EquipmentClass))
+        var applicableEquipmentClasses = NormalizeApplicableEquipmentClasses(
+            item.ApplicableEquipmentClasses,
+            mode,
+            item.EquipmentClass
+        );
+        if (applicableEquipmentClasses.Count == 0)
         {
             return Results.BadRequest(new
             {
                 code = "Pricing.LandTariffEquipmentRequired",
-                message = "La clase de equipo o base tarifaria es obligatoria.",
+                message = mode == "Ltl"
+                    ? "La tarifa consolidada requiere la base LTL."
+                    : "Seleccione al menos un equipo o contenedor aplicable a la tarifa completa.",
             });
         }
 
@@ -518,7 +648,14 @@ public static class FtlTariffEndpoints
         var mode = NormalizeShipmentMode(item.ShipmentMode, allowEmpty: false)!;
         var rateBasis = NormalizeRateBasis(item.RateBasis, mode);
         var commercialProfile = NormalizeCommercialProfile(item.CommercialProfile, mode, allowEmpty: false)!;
-        var equipmentClass = item.EquipmentClass.Trim().ToUpperInvariant();
+        var applicableEquipmentClasses = NormalizeApplicableEquipmentClasses(
+            item.ApplicableEquipmentClasses,
+            mode,
+            item.EquipmentClass
+        );
+        var equipmentClass = string.Equals(mode, "Ltl", StringComparison.OrdinalIgnoreCase)
+            ? "LTL_CBM"
+            : applicableEquipmentClasses.First();
         var equipmentLabel = string.IsNullOrWhiteSpace(item.EquipmentLabel)
             ? (string.Equals(mode, "Ltl", StringComparison.OrdinalIgnoreCase) ? "LTL · USD/CBM" : "Equipo FTL")
             : item.EquipmentLabel.Trim();
@@ -556,6 +693,7 @@ public static class FtlTariffEndpoints
                     id, origin_id, origin_name, origin_code,
                     destination_id, destination_name, destination_code,
                     shipment_mode, commercial_profile, equipment_class, equipment_label,
+                    applicable_equipment_classes,
                     currency_id, currency_name, currency_code,
                     price_amount, rate_basis, minimum_amount, transit_days,
                     warehouse_name, source, notes, valid_from, valid_to,
@@ -566,6 +704,7 @@ public static class FtlTariffEndpoints
                     @id, @origin_id, @origin_name, @origin_code,
                     @destination_id, @destination_name, @destination_code,
                     @shipment_mode, @commercial_profile, @equipment_class, @equipment_label,
+                    @applicable_equipment_classes,
                     @currency_id, @currency_name, @currency_code,
                     @price_amount, @rate_basis, @minimum_amount, @transit_days,
                     @warehouse_name, @source, @notes, @valid_from, @valid_to,
@@ -579,7 +718,9 @@ public static class FtlTariffEndpoints
                     destination_id = @destination_id,
                     destination_code = @destination_code,
                     commercial_profile = @commercial_profile,
+                    equipment_class = @equipment_class,
                     equipment_label = @equipment_label,
+                    applicable_equipment_classes = @applicable_equipment_classes,
                     currency_id = @currency_id,
                     currency_name = @currency_name,
                     currency_code = @currency_code,
@@ -608,6 +749,7 @@ public static class FtlTariffEndpoints
         Add(command, "commercial_profile", commercialProfile);
         Add(command, "equipment_class", equipmentClass);
         Add(command, "equipment_label", equipmentLabel);
+        Add(command, "applicable_equipment_classes", JsonSerializer.Serialize(applicableEquipmentClasses));
         Add(command, "currency_id", item.CurrencyId);
         Add(command, "currency_name", string.IsNullOrWhiteSpace(item.CurrencyName) ? item.CurrencyCode.Trim() : item.CurrencyName.Trim());
         Add(command, "currency_code", item.CurrencyCode.Trim().ToUpperInvariant());
@@ -651,7 +793,8 @@ public static class FtlTariffEndpoints
             warehouse_name,
             valid_from,
             valid_to,
-            commercial_profile
+            commercial_profile,
+            applicable_equipment_classes
         FROM pricing."FtlTariffs"
         """;
 
@@ -680,7 +823,8 @@ public static class FtlTariffEndpoints
             reader.IsDBNull(20) ? null : reader.GetString(20),
             reader.IsDBNull(21) ? null : reader.GetDateTime(21),
             reader.IsDBNull(22) ? null : reader.GetDateTime(22),
-            reader.IsDBNull(23) ? "General" : reader.GetString(23)
+            reader.IsDBNull(23) ? "General" : reader.GetString(23),
+            ReadApplicableEquipmentClasses(reader, 24, reader.GetString(7))
         );
 
     private static string? NormalizeShipmentMode(string? value, bool allowEmpty)
@@ -713,6 +857,56 @@ public static class FtlTariffEndpoints
         if (string.Equals(value?.Trim(), "PerCbm", StringComparison.OrdinalIgnoreCase)) return "PerCbm";
         if (string.Equals(value?.Trim(), "PerTruck", StringComparison.OrdinalIgnoreCase)) return "PerTruck";
         return string.Equals(shipmentMode, "Ltl", StringComparison.OrdinalIgnoreCase) ? "PerCbm" : "PerTruck";
+    }
+
+
+    private static IReadOnlyCollection<string> NormalizeApplicableEquipmentClasses(
+        IReadOnlyCollection<string>? values,
+        string shipmentMode,
+        string? legacyEquipmentClass
+    )
+    {
+        if (string.Equals(shipmentMode, "Ltl", StringComparison.OrdinalIgnoreCase))
+            return new[] { "LTL_CBM" };
+
+        var source = values is null
+            ? new[] { legacyEquipmentClass ?? string.Empty }
+            : values;
+
+        return source
+            .Select(value => value?.Trim().ToUpperInvariant() ?? string.Empty)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static IReadOnlyCollection<string> ReadApplicableEquipmentClasses(
+        DbDataReader reader,
+        int index,
+        string legacyEquipmentClass
+    )
+    {
+        if (!reader.IsDBNull(index))
+        {
+            try
+            {
+                var values = JsonSerializer.Deserialize<string[]>(reader.GetString(index));
+                var normalized = values?
+                    .Select(value => value?.Trim().ToUpperInvariant() ?? string.Empty)
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                if (normalized is { Length: > 0 }) return normalized;
+            }
+            catch (JsonException)
+            {
+                // Rows created before equipment applicability use the legacy class below.
+            }
+        }
+
+        var fallback = legacyEquipmentClass.Trim().ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(fallback) ? Array.Empty<string>() : new[] { fallback };
     }
 
     private static string? NullIfBlank(string? value) =>
@@ -759,7 +953,8 @@ public sealed record FtlTariffDto(
     string? WarehouseName,
     DateTime? ValidFrom,
     DateTime? ValidTo,
-    string CommercialProfile = "General"
+    string CommercialProfile = "General",
+    IReadOnlyCollection<string>? ApplicableEquipmentClasses = null
 );
 
 public sealed record CreateFtlTariffRequest(
@@ -785,7 +980,8 @@ public sealed record CreateFtlTariffRequest(
     DateTime? ValidFrom = null,
     DateTime? ValidTo = null,
     bool IsActive = true,
-    string? CommercialProfile = null
+    string? CommercialProfile = null,
+    IReadOnlyCollection<string>? ApplicableEquipmentClasses = null
 );
 
 public sealed record ImportFtlTariffsRequest(IReadOnlyCollection<CreateFtlTariffRequest> Items);
