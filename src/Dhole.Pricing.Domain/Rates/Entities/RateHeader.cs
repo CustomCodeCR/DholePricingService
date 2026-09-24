@@ -714,14 +714,15 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         KgPerCbm = kgPerCbm > 0m ? kgPerCbm : 500m;
         CargoLinesJson = Normalize(cargoLinesJson);
 
-        // LCL is a consolidated shipment, not a physical FCL container selection.
-        // The UI keeps a legacy container id for contract compatibility, but that
-        // placeholder must never survive as commercial equipment metadata.
-        if (shipmentMode == ShipmentMode.Lcl)
+        // LCL/LTL are consolidated shipments, not physical container/trailer selections.
+        // The UI may keep a legacy equipment id only to satisfy the create contract, but
+        // that placeholder must never survive as commercial equipment metadata.
+        if (shipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl)
         {
             _rateContainers.Clear();
-            ContainerTypeName = "LCL";
-            ContainerTypeCode = "LCL";
+            var consolidatedLabel = shipmentMode == ShipmentMode.Ltl ? "LTL" : "LCL";
+            ContainerTypeName = consolidatedLabel;
+            ContainerTypeCode = consolidatedLabel;
             ContainerQuantity = 0;
             FreeDays = 0;
         }
