@@ -221,6 +221,11 @@ public static class PricingErrors
         "La cantidad de un detalle de tarifa no puede ser negativa."
     );
 
+    public static readonly Error RateUpdateReasonIsRequired = new(
+        "Pricing.RateUpdateReasonIsRequired",
+        "Debe indicar el motivo de la modificación antes de editar la cotización."
+    );
+
     public static Error RateUpdateValidationFailed(string? message) => new(
         "Pricing.RateUpdateValidationFailed",
         string.IsNullOrWhiteSpace(message)
