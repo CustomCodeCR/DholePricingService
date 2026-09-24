@@ -1,7 +1,10 @@
+using System.Text.Json;
 using CustomCodeFramework.Core.Pagination;
 using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Application.Abstractions.Repositories;
+using Dhole.Pricing.Application.Abstractions.Reports;
 using Dhole.Pricing.Application.Features.Costs.Create;
 using Dhole.Pricing.Application.Features.Costs.Delete;
 using Dhole.Pricing.Application.Features.Costs.GetCostById;
@@ -28,6 +31,10 @@ public static class CostEndpoints
         group
             .MapGet("/select", GetCostsForSelectAsync)
             .RequireScope(PricingConstants.Scopes.CostSelect);
+
+        group
+            .MapGet("/export.xlsx", ExportActiveCostsAsync)
+            .RequireScope(PricingConstants.Scopes.CostView);
 
         group
             .MapGet("/{costId:guid}", GetCostByIdAsync)
@@ -386,6 +393,123 @@ public static class CostEndpoints
 
         return EndpointResults.FromResult(result, httpContext);
     }
+
+
+    private static async Task<IResult> ExportActiveCostsAsync(
+        ICostRepository costs,
+        IPricingReportsClient reports,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var activeCosts = await costs.GetActiveCostsAsync(
+                cancellationToken: cancellationToken
+            );
+
+            var exportRows = activeCosts
+                .Select(cost => new Dictionary<string, object?>
+                {
+                    ["ID"] = cost.Id,
+                    ["Nombre del costo"] = cost.Name,
+                    ["Aplicación"] = CostTypeLabel(cost.CostType),
+                    ["Rubro"] = CostDetailTypeLabel(cost.CostDetailType),
+                    ["Naviera"] = cost.CarrierName ?? string.Empty,
+                    ["Agente"] = cost.AgentName ?? string.Empty,
+                    ["POL"] = cost.PolName ?? string.Empty,
+                    ["POE"] = cost.PoeName ?? string.Empty,
+                    ["POD"] = cost.PodName ?? string.Empty,
+                    ["Puerto"] = cost.PortName ?? string.Empty,
+                    ["Rol puerto"] = cost.PortRole?.ToString() ?? string.Empty,
+                    ["Incoterms"] = string.Join(
+                        ", ",
+                        cost.Incoterms.Select(x => x.IncotermCode)
+                    ),
+                    ["Servicios"] = string.Join(
+                        ", ",
+                        cost.Services.Select(x => x.ServiceName)
+                    ),
+                    ["Modalidad"] = cost.ShipmentMode?.ToString() ?? "Todas",
+                    ["Moneda"] = cost.CurrencyCode,
+                    ["Monto costo"] = cost.CostAmount,
+                    ["Venta"] = cost.SaleAmount,
+                    ["Utilidad"] = cost.UtilityAmount,
+                    ["Base de cobro"] = ChargeBasisLabel(cost.ChargeBasis),
+                    ["Mínimo costo"] = cost.MinimumCostAmount,
+                    ["Mínimo venta"] = cost.MinimumSaleAmount,
+                    ["KG por CBM"] = cost.KgPerCbm,
+                    ["Contable"] = cost.IsAccountant ? "Sí" : "No",
+                    ["Estado"] = "Activo",
+                    ["Notas"] = cost.Notes ?? string.Empty,
+                })
+                .ToArray();
+
+            var generated = await reports.GenerateTabularAsync(
+                "xlsx",
+                JsonSerializer.Serialize(exportRows),
+                $"costos-pricing-activos-{DateTime.UtcNow:yyyyMMdd}",
+                "Costos activos",
+                cancellationToken
+            );
+
+            return Results.File(
+                generated.Content,
+                generated.ContentType,
+                generated.FileName
+            );
+        }
+        catch (HttpRequestException exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Results.Problem(
+                title: "Pricing cost export error",
+                detail: $"DholeReports no pudo generar el Excel: {exception.Message}",
+                statusCode: StatusCodes.Status502BadGateway,
+                instance: httpContext.Request.Path.Value
+            );
+        }
+    }
+
+    private static string CostTypeLabel(CostType value) => value switch
+    {
+        CostType.Fixed => "Fijo",
+        CostType.Optional => "Opcional",
+        CostType.Variable => "Variable",
+        _ => value.ToString(),
+    };
+
+    private static string CostDetailTypeLabel(CostDetailType value) => value switch
+    {
+        CostDetailType.Freight => "Flete internacional",
+        CostDetailType.AgentCharge => "Costo de agente",
+        CostDetailType.OriginCharge => "Origen",
+        CostDetailType.DestinationCharge => "Destino",
+        CostDetailType.PortCharge => "Puerto",
+        CostDetailType.CustomsCharge => "Aduana",
+        CostDetailType.InlandTransport => "Transporte interno",
+        CostDetailType.Documentation => "Documentación",
+        CostDetailType.Insurance => "Seguro",
+        CostDetailType.Other => "Otro",
+        _ => value.ToString(),
+    };
+
+    private static string ChargeBasisLabel(ChargeBasis value) => value switch
+    {
+        ChargeBasis.PerShipment => "Por embarque",
+        ChargeBasis.PerService => "Por servicio",
+        ChargeBasis.PerContainer => "Por contenedor",
+        ChargeBasis.PerTeu => "Por TEU",
+        ChargeBasis.PerTruck => "Por camión",
+        ChargeBasis.PerCbm => "Por CBM",
+        ChargeBasis.PerChargeableCbm => "Por CBM cobrable",
+        ChargeBasis.PerKg => "Por KG",
+        ChargeBasis.Per100Kg => "Por 100 KG",
+        ChargeBasis.PerTon => "Por tonelada",
+        ChargeBasis.PerPallet => "Por pallet",
+        ChargeBasis.PerPackage => "Por bulto",
+        ChargeBasis.PerDocument => "Por BL / documento",
+        _ => value.ToString(),
+    };
 
     private static IReadOnlyCollection<Guid> ParseGuidList(string? value) =>
         ParseGuidList(value is null ? null : [value]);
