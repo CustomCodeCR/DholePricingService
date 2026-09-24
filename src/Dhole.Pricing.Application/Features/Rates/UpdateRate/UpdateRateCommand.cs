@@ -102,6 +102,10 @@ public sealed record UpdateRateCommand(
     // contexto de sincronización para no perder los cargos fijos explícitos de la importación.
     public Guid? SourceImportFclRateId { get; init; }
 
+    // Motivo ingresado por el usuario antes de editar. Se conserva en auditoría
+    // para explicar por qué se realizó cada modificación de la cotización.
+    public string? UpdateReason { get; init; }
+
     // La vigencia seleccionada por Pricing forma parte explícita de la revisión.
     // No la sustituimos por la fecha actual porque al duplicar/renovar una tarifa
     // el usuario puede necesitar una ventana futura definida por la nueva oferta.
