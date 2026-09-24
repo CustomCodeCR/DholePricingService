@@ -497,7 +497,8 @@ public sealed class UpdateRateCommandHandler(
                 command.IncotermCode,
                 command.PickupAddress,
                 command.CargoLines,
-                rate.PickupAddress
+                rate.PickupAddress,
+                rate.CargoLinesJson
             );
             var preserveExistingPickupLocation =
                 command.ShipmentMode == ShipmentMode.Lcl
@@ -869,7 +870,8 @@ public sealed class UpdateRateCommandHandler(
         string? incotermCode,
         string? requestedPickupAddress,
         IReadOnlyCollection<RateCargoLineCommandItem> cargoLines,
-        string? existingPickupAddress
+        string? existingPickupAddress,
+        string? existingCargoLinesJson
     )
     {
         if (!IsPickupIncoterm(incotermName, incotermCode))
@@ -882,6 +884,13 @@ public sealed class UpdateRateCommandHandler(
             return null;
 
         foreach (var line in cargoLines)
+        {
+            var extracted = ExtractPickupAddress(line.Description);
+            if (!string.IsNullOrWhiteSpace(extracted))
+                return extracted;
+        }
+
+        foreach (var line in RateCargoProfileFactory.Deserialize(existingCargoLinesJson))
         {
             var extracted = ExtractPickupAddress(line.Description);
             if (!string.IsNullOrWhiteSpace(extracted))
