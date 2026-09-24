@@ -37,6 +37,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var route = !string.IsNullOrWhiteSpace(rate.PodName)
             ? $"{rate.PolName} → {rate.PodName} vía {rate.PoeName}"
             : $"{rate.PolName} → {rate.PoeName}";
+        var cargoDetails = CreateCargoDetails(rate.CargoLinesJson);
 
         // LCL must never leak the legacy container placeholder (for example 20 DV)
         // into the commercial document. For consolidated cargo the shipment itself is
@@ -282,6 +283,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 totalVolumeCbm = rate.TotalVolumeCbm,
                 kgPerCbm = rate.KgPerCbm,
                 chargeableQuantity = rate.ChargeableQuantity,
+                cargoDetails,
                 currency = currencyValue,
                 currencyCode = rate.CurrencyCode,
                 hasSingleCurrency,
@@ -309,6 +311,61 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         };
 
         return JsonSerializer.Serialize(data, JsonOptions);
+    }
+
+    private static string CreateCargoDetails(string? cargoLinesJson)
+    {
+        if (string.IsNullOrWhiteSpace(cargoLinesJson))
+            return string.Empty;
+
+        try
+        {
+            using var document = JsonDocument.Parse(cargoLinesJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+                return string.Empty;
+
+            var details = new List<string>();
+
+            foreach (var line in document.RootElement.EnumerateArray())
+            {
+                if (line.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                JsonElement descriptionElement;
+                if (!line.TryGetProperty("Description", out descriptionElement)
+                    && !line.TryGetProperty("description", out descriptionElement))
+                {
+                    continue;
+                }
+
+                var description = descriptionElement.ValueKind == JsonValueKind.String
+                    ? descriptionElement.GetString()
+                    : null;
+
+                if (string.IsNullOrWhiteSpace(description))
+                    continue;
+
+                var visibleSegments = Regex.Split(description.Trim(), @"\s+·\s+")
+                    .Select(segment => segment.Trim())
+                    .Where(segment => !string.IsNullOrWhiteSpace(segment))
+                    .Where(segment => !segment.StartsWith("Soportes Pricing ", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+
+                if (visibleSegments.Length == 0)
+                    continue;
+
+                details.Add(string.Join(" · ", visibleSegments));
+            }
+
+            return string.Join(
+                Environment.NewLine,
+                details.Distinct(StringComparer.OrdinalIgnoreCase)
+            );
+        }
+        catch (JsonException)
+        {
+            return string.Empty;
+        }
     }
 
     private static decimal CalculateAllInAmount(RateHeader rate, IReadOnlyCollection<RateDetail> details)
