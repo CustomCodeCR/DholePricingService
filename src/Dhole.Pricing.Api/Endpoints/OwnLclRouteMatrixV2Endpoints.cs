@@ -542,6 +542,12 @@ if (string.Equals(originPol, "SHANGHAI", StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Línea LCL propia desconocida: {lineKey}.");
         var hasStored = pricingLines.TryGetValue(lineKey, out var stored);
         var cost = hasStored ? stored.Cost : definition.DefaultCostUnit ?? fallbackCost ?? 0m;
+        if (lineKey.Equals("CR_HANDLING", StringComparison.OrdinalIgnoreCase)
+            || lineKey.Equals("CR_ZONE", StringComparison.OrdinalIgnoreCase))
+        {
+            cost = 0m;
+        }
+
         var sale = hasStored ? stored.Sale : definition.DefaultSaleUnit;
         AddLine(lines, definition.Name, definition.ChargeBasis, quantity, cost, sale);
     }
