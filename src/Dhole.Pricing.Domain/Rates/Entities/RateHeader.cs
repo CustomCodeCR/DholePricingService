@@ -714,6 +714,18 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         KgPerCbm = kgPerCbm > 0m ? kgPerCbm : 500m;
         CargoLinesJson = Normalize(cargoLinesJson);
 
+        // LCL is a consolidated shipment, not a physical FCL container selection.
+        // The UI keeps a legacy container id for contract compatibility, but that
+        // placeholder must never survive as commercial equipment metadata.
+        if (shipmentMode == ShipmentMode.Lcl)
+        {
+            _rateContainers.Clear();
+            ContainerTypeName = "LCL";
+            ContainerTypeCode = "LCL";
+            ContainerQuantity = 0;
+            FreeDays = 0;
+        }
+
         var cargoChargeableQuantity = Math.Max(TotalVolumeCbm, TotalWeightKg / KgPerCbm);
         ChargeableQuantity = shipmentMode switch
         {
