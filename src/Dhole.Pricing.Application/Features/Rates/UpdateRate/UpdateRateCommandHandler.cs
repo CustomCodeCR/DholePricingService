@@ -276,14 +276,14 @@ public sealed class UpdateRateCommandHandler(
         {
             var id = requestedDetail.Id!.Value;
 
-            if (!existingDetails.TryGetValue(id, out var detail))
+            // During an edit, Pantalla 7 is authoritative for the persisted line snapshot.
+            // Automatic fixed details can legitimately receive a different CostId after
+            // catalog rehydration/synchronization, so do not lock the line by its old CostId.
+            // The resolver and fixed-cost synchronizer still validate/reconcile the requested
+            // catalog data; here we only need to ensure that the persisted detail exists.
+            if (!existingDetails.ContainsKey(id))
             {
                 return Result.Failure(PricingErrors.RateCostDetailNotFound);
-            }
-
-            if (IsAutomaticFixed(detail) && detail.CostId != requestedDetail.CostId)
-            {
-                return Result.Failure(PricingErrors.RateCostDetailFixedLocked);
             }
         }
 
