@@ -453,20 +453,24 @@ public sealed class UpdateRateCommandHandler(
             .Select(x => x.Id).OrderBy(x => x).ToArray();
         var servicesChanged = !currentServiceIds.SequenceEqual(requestedServiceIds);
         var operationTypeChanged = rate.OperationType != command.OperationType;
-        var fixedDetailsTouched = resolvedDetails.Any(x =>
-            x.CostId.HasValue && x.CostType == CostType.Fixed);
 
-        var selectorsChanged =
+        // La aplicabilidad de Cargos y Recargos depende del contexto comercial del costo,
+        // no del tipo/cantidad de contenedor. Cambiar 40NOR -> 40HC, moneda o vigencia
+        // no debe reconstruir ni podar RateDetails ya persistidos.
+        var costSelectorsChanged =
             rate.AgentId != agentId
             || rate.CarrierId != carrierId
             || rate.PolId != polId
             || rate.PoeId != poeId
             || rate.PodId != podId
-            || containersChanged
             || rate.IncotermId != incotermId
-            || rate.CurrencyId != currencyId
             || rate.ShipmentMode != command.ShipmentMode
-            || servicesChanged
+            || servicesChanged;
+
+        var selectorsChanged =
+            costSelectorsChanged
+            || containersChanged
+            || rate.CurrencyId != currencyId
             || operationTypeChanged;
 
         var headerBefore = PricingAuditSnapshots.From(rate);
@@ -673,7 +677,7 @@ public sealed class UpdateRateCommandHandler(
             // resincronizamos. De lo contrario SynchronizeAsync elimina los detalles fijos antiguos
             // y el bucle anterior intenta actualizar sus IDs ya eliminados, produciendo
             // "El detalle de la tarifa no existe" al cambiar, por ejemplo, la naviera.
-            if (selectorsChanged || fixedDetailsTouched || command.ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl)
+            if (costSelectorsChanged || command.ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl)
             {
                 await fixedCostSynchronizer.SynchronizeAsync(
                     rate,
@@ -692,7 +696,7 @@ public sealed class UpdateRateCommandHandler(
                     .ToHashSet();
 
                 HashSet<Guid> disallowedAutomaticFixedCostIds;
-                if (selectorsChanged)
+                if (costSelectorsChanged)
                 {
                     disallowedAutomaticFixedCostIds = explicitlyRemovedAutomaticFixedCostIds;
                 }
@@ -790,6 +794,7 @@ public sealed class UpdateRateCommandHandler(
                 Payload: new
                 {
                     SelectorsChanged = selectorsChanged,
+                    CostSelectorsChanged = costSelectorsChanged,
                     AddedDetailIds = addedDetails.Select(x => x.Id).ToArray(),
                     UpdatedDetailIds = modifiedDetails.Select(x => x.Id).ToArray(),
                     RemovedDetailIds = removedIds.ToArray(),
