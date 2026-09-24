@@ -921,7 +921,12 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             .DefaultIfEmpty(0m)
             .Max();
 
-        return quantity > 0m ? quantity : Math.Max(0m, rate.ChargeableQuantity);
+        var billableCbm = quantity > 0m ? quantity : Math.Max(0m, rate.ChargeableQuantity);
+
+        // Legacy LCL rates may have persisted the physical CBM (for example 0.20)
+        // instead of the commercial minimum. Capacity consumption follows the same
+        // 1 CBM minimum used by current LCL quotations.
+        return billableCbm > 0m ? Math.Max(1m, billableCbm) : 0m;
     }
 
     private static bool IsLegacyOwnLclRate(RateHeader rate)
