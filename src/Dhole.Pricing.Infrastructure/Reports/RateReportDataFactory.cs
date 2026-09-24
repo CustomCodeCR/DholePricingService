@@ -38,32 +38,48 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             ? $"{rate.PolName} → {rate.PodName} vía {rate.PoeName}"
             : $"{rate.PolName} → {rate.PoeName}";
 
-        var containers = (rate.RateContainers.Count > 0
-                ? rate.RateContainers
-                    .OrderBy(x => x.ContainerTypeName)
-                    .ThenBy(x => x.ContainerTypeCode)
-                    .Select(x => new
-                    {
-                        containerTypeId = x.ContainerTypeId,
-                        containerType = x.ContainerTypeName,
-                        containerTypeName = x.ContainerTypeName,
-                        containerTypeCode = x.ContainerTypeCode,
-                        quantity = x.Quantity,
-                        label = $"{x.Quantity} x {x.ContainerTypeName}"
-                    })
-                : new[]
+        // LCL must never leak the legacy container placeholder (for example 20 DV)
+        // into the commercial document. For consolidated cargo the shipment itself is
+        // the equipment row and its real commercial measure is the chargeable CBM.
+        var containers = rate.ShipmentMode == ShipmentMode.Lcl
+            ? new[]
+            {
+                new
                 {
-                    new
+                    containerTypeId = rate.ContainerTypeId,
+                    containerType = "LCL",
+                    containerTypeName = $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable",
+                    containerTypeCode = "LCL",
+                    quantity = 1,
+                    label = $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable"
+                }
+            }
+            : (rate.RateContainers.Count > 0
+                    ? rate.RateContainers
+                        .OrderBy(x => x.ContainerTypeName)
+                        .ThenBy(x => x.ContainerTypeCode)
+                        .Select(x => new
+                        {
+                            containerTypeId = x.ContainerTypeId,
+                            containerType = x.ContainerTypeName,
+                            containerTypeName = x.ContainerTypeName,
+                            containerTypeCode = x.ContainerTypeCode,
+                            quantity = x.Quantity,
+                            label = $"{x.Quantity} x {x.ContainerTypeName}"
+                        })
+                    : new[]
                     {
-                        containerTypeId = rate.ContainerTypeId,
-                        containerType = rate.ContainerTypeName,
-                        containerTypeName = rate.ContainerTypeName,
-                        containerTypeCode = rate.ContainerTypeCode,
-                        quantity = rate.ContainerQuantity,
-                        label = $"{rate.ContainerQuantity} x {rate.ContainerTypeName}"
-                    }
-                })
-            .ToArray();
+                        new
+                        {
+                            containerTypeId = rate.ContainerTypeId,
+                            containerType = rate.ContainerTypeName,
+                            containerTypeName = rate.ContainerTypeName,
+                            containerTypeCode = rate.ContainerTypeCode,
+                            quantity = rate.ContainerQuantity,
+                            label = $"{rate.ContainerQuantity} x {rate.ContainerTypeName}"
+                        }
+                    })
+                .ToArray();
         var equipmentSummary = string.Join(" + ", containers.Select(x => x.label));
         var shipmentSummary = rate.ShipmentMode switch
         {
