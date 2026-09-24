@@ -317,7 +317,15 @@ public static class OwnLclConsolidationEndpoints
             billableCbm,
             destinationCostPerCbm,
             consolidationPricingLines);
-        AddOriginLines(lines, incoterm, originPort, billableCbm, Math.Max(1, request.Sets), Math.Max(1, request.Hbl), consolidationPricingLines);
+        AddOriginLines(
+            lines,
+            incoterm,
+            originPort,
+            billableCbm,
+            chargeableCbm,
+            Math.Max(1, request.Sets),
+            Math.Max(1, request.Hbl),
+            consolidationPricingLines);
 
         var subtotalCost = lines.Sum(x => x.CostTotal);
         var subtotalSale = lines.Sum(x => x.SaleTotal);
@@ -468,14 +476,16 @@ public static class OwnLclConsolidationEndpoints
         List<OwnLclQuoteLine> lines,
         string incoterm,
         string originPort,
-        decimal cbm,
+        decimal billableCbm,
+        decimal actualChargeableCbm,
         int sets,
         int hbl,
         IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit, decimal? CalculationBaseCbm)> pricingLines)
     {
         if (incoterm == "FOB") return;
 
-        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_CFS", "CFS", "CBM", cbm);
+        // CFS is charged on the actual CBM and has no 1-CBM minimum.
+        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_CFS", "CFS", "CBM", actualChargeableCbm);
         AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_CUSTOMS", "CUSTOMS", "SET", sets);
         AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_DOC", "DOC FEE", "HBL", hbl);
         AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_VGM", "VGM", "HBL", hbl);
@@ -485,7 +495,7 @@ public static class OwnLclConsolidationEndpoints
         // de la matriz China -> Shanghai, el componente de warehouse ya está incluido
         // dentro del diferencial de origen para evitar cobrarlo dos veces.
         if (string.Equals(originPort, "SHANGHAI", StringComparison.OrdinalIgnoreCase))
-            AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_WHSE", "WHSE FEE", "CBM", cbm);
+            AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_WHSE", "WHSE FEE", "CBM", billableCbm);
 
         if (incoterm == "EXW")
             AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_PICK_UP", "PICK UP", "Flat", 1m);
