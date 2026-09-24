@@ -618,6 +618,14 @@ public sealed class UpdateRateCommandHandler(
                 if (detail.Id.HasValue)
                 {
                     var chargeBasis = detail.ChargeBasis ?? DefaultChargeBasis(command.ShipmentMode, detail.CostDetailType);
+                    var current = rate.RateDetails.First(x => x.Id == detail.Id.Value);
+
+                    // The wizard sends the complete detail snapshot, but only the line that
+                    // actually changed should be mutated/audited. This keeps edits lossless
+                    // when a single Costos y recargos item changed in the catalog.
+                    if (!HasResolvedDetailChanged(current, detail, chargeBasis))
+                        continue;
+
                     rate.UpdateRateDetail(
                         detail.Id.Value,
                         detail.CostId,
@@ -1055,6 +1063,41 @@ public sealed class UpdateRateCommandHandler(
             .Replace("-", " ", StringComparison.Ordinal)
             .Replace("_", " ", StringComparison.Ordinal);
     }
+
+    private static bool HasResolvedDetailChanged(
+        RateDetail current,
+        ResolvedRateExtraDetail requested,
+        ChargeBasis chargeBasis
+    )
+    {
+        var requestedApplyDestinationTax =
+            requested.ApplyDestinationTax && requested.DestinationTaxRate > 0m;
+        var requestedDestinationTaxRate =
+            requestedApplyDestinationTax ? requested.DestinationTaxRate : 0m;
+
+        return current.CostId != requested.CostId
+            || !string.Equals(current.Name, requested.Name.Trim(), StringComparison.Ordinal)
+            || current.CostDetailType != requested.CostDetailType
+            || current.CostType != requested.CostType
+            || current.ChargeBasis != chargeBasis
+            || current.CurrencyId != requested.CurrencyId
+            || !string.Equals(current.CurrencyName, requested.CurrencyName.Trim(), StringComparison.Ordinal)
+            || !string.Equals(current.CurrencyCode, requested.CurrencyCode.Trim(), StringComparison.OrdinalIgnoreCase)
+            || current.CostAmount != requested.CostAmount
+            || current.SaleAmount != requested.SaleAmount
+            || current.Quantity != requested.Quantity.GetValueOrDefault(1m)
+            || !string.Equals(NormalizeDetailText(current.Notes), NormalizeDetailText(requested.Notes), StringComparison.Ordinal)
+            || current.ApplyDestinationTax != requestedApplyDestinationTax
+            || current.DestinationTaxRate != requestedDestinationTaxRate
+            || !string.Equals(
+                NormalizeDetailText(current.BillToClient),
+                NormalizeDetailText(requested.BillToClient),
+                StringComparison.Ordinal
+            );
+    }
+
+    private static string? NormalizeDetailText(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static ChargeBasis DefaultChargeBasis(ShipmentMode shipmentMode, CostDetailType detailType)
     {
