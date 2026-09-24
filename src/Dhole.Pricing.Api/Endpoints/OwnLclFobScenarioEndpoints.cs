@@ -154,7 +154,6 @@ public static class OwnLclFobScenarioEndpoints
         {
             var code = destination.Key;
 
-            var isCentralAmerica = IsCentralAmericaDestination(code);
             var ports = OriginSurcharges.Select(origin =>
             {
                 // El escenario FOB representa únicamente el flete marítimo.
@@ -162,22 +161,10 @@ public static class OwnLclFobScenarioEndpoints
                     ? CeilingCent(baseOcean + origin.Value + destinationPerCbm + crTransferPerCbm)
                     : CeilingCent(baseOcean + origin.Value);
 
-                decimal recommended;
-                decimal sale;
-                if (isCentralAmerica)
-                {
-                    // La utilidad del flete se define por consolidado.
-                    recommended = cost + freightProfitPerCbm;
-                    sale = recommended;
-                }
-                else
-                {
-                    var htmlBaseSale = code == "CR"
-                        ? CostaRicaFreightSalePerCbm
-                        : PanamaAndCentralAmericaFreightSalePerCbm;
-                    recommended = htmlBaseSale + origin.Value;
-                    sale = sales.TryGetValue((code, origin.Key), out var stored) ? stored : recommended;
-                }
+                // La utilidad configurada en el consolidado se suma al costo/CBM
+                // para Panamá, Costa Rica y Centroamérica sin excepciones.
+                var recommended = cost + freightProfitPerCbm;
+                var sale = recommended;
 
                 return new OwnLclFobScenarioPortDto(origin.Key, cost, sale, recommended, origin.Value);
             }).ToArray();
