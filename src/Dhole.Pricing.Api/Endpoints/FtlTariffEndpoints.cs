@@ -255,7 +255,7 @@ public static class FtlTariffEndpoints
             ltl,
             ltlFinalClient,
             ltlNvocc,
-            message = "Se verificaron y cargaron las tarifas base terrestres TIGSA/GCF que faltaban sin sobrescribir cambios manuales.",
+            message = "Se verificó la matriz LTL GCF (Cliente final y NVOCC). Las tarifas FTL se administran únicamente de forma manual.",
         });
     }
 
