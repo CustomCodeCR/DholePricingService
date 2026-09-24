@@ -251,12 +251,29 @@ public sealed class CreateRateCommandHandler(
             )
         )
         {
+            var normalizedDetailType = NormalizeLclDetailType(
+                command.ShipmentMode,
+                detail.Name,
+                detail.CostDetailType
+            );
+            var normalizedChargeBasis = NormalizeLclChargeBasis(
+                command.ShipmentMode,
+                detail.Name,
+                detail.ChargeBasis
+            );
+            var normalizedQuantity = NormalizeLclDetailQuantity(
+                command.ShipmentMode,
+                detail.Name,
+                detail.Quantity,
+                command.TotalVolumeCbm
+            );
+
             var resolution = await extraDetailResolver.ResolveAsync(
                 new RateExtraDetailInput(
                     Id: null,
                     detail.CostId,
                     detail.Name,
-                    detail.CostDetailType,
+                    normalizedDetailType,
                     detail.CostType,
                     detail.CurrencyId,
                     detail.CurrencyName,
@@ -264,8 +281,8 @@ public sealed class CreateRateCommandHandler(
                     detail.CostAmount,
                     detail.SaleAmount,
                     detail.Notes,
-                    detail.Quantity,
-                    detail.ChargeBasis,
+                    normalizedQuantity,
+                    normalizedChargeBasis,
                     detail.ApplyDestinationTax,
                     detail.DestinationTaxRate,
                     detail.BillToClient
@@ -795,6 +812,77 @@ public sealed class CreateRateCommandHandler(
         }
 
         return null;
+    }
+
+
+    private static CostDetailType NormalizeLclDetailType(
+        ShipmentMode shipmentMode,
+        string? name,
+        CostDetailType detailType
+    )
+    {
+        if (shipmentMode != ShipmentMode.Lcl)
+            return detailType;
+
+        var normalizedName = NormalizeLclDetailName(name);
+        return normalizedName is "PICK UP" or "PICKUP" or "RECOLECTA" or "RECOLECCION"
+            ? CostDetailType.OriginCharge
+            : detailType;
+    }
+
+    private static ChargeBasis? NormalizeLclChargeBasis(
+        ShipmentMode shipmentMode,
+        string? name,
+        ChargeBasis? chargeBasis
+    )
+    {
+        if (shipmentMode != ShipmentMode.Lcl)
+            return chargeBasis;
+
+        var normalizedName = NormalizeLclDetailName(name);
+        if (normalizedName == "CFS")
+            return ChargeBasis.PerCbm;
+
+        if (normalizedName is "PICK UP" or "PICKUP" or "RECOLECTA" or "RECOLECCION")
+            return ChargeBasis.PerShipment;
+
+        return chargeBasis;
+    }
+
+    private static decimal? NormalizeLclDetailQuantity(
+        ShipmentMode shipmentMode,
+        string? name,
+        decimal? quantity,
+        decimal totalVolumeCbm
+    )
+    {
+        if (shipmentMode != ShipmentMode.Lcl)
+            return quantity;
+
+        var normalizedName = NormalizeLclDetailName(name);
+        if (normalizedName == "CFS")
+            return totalVolumeCbm > 0m ? totalVolumeCbm : quantity;
+
+        if (normalizedName is "PICK UP" or "PICKUP" or "RECOLECTA" or "RECOLECCION")
+            return 1m;
+
+        return quantity;
+    }
+
+    private static string NormalizeLclDetailName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return string.Empty;
+
+        return name.Trim()
+            .ToUpperInvariant()
+            .Replace("Ó", "O", StringComparison.Ordinal)
+            .Replace("Í", "I", StringComparison.Ordinal)
+            .Replace("Á", "A", StringComparison.Ordinal)
+            .Replace("É", "E", StringComparison.Ordinal)
+            .Replace("Ú", "U", StringComparison.Ordinal)
+            .Replace("-", " ", StringComparison.Ordinal)
+            .Replace("_", " ", StringComparison.Ordinal);
     }
 
     private static ChargeBasis DefaultChargeBasis(ShipmentMode shipmentMode, CostDetailType detailType)
