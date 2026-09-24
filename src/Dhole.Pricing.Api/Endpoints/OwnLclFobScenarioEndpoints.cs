@@ -349,7 +349,7 @@ public static class OwnLclFobScenarioEndpoints
                     definition.Scope,
                     definition.Name,
                     definition.ChargeBasis,
-                    stored.Cost,
+                    IsCostaRicaSaleOnlyLine(definition.LineKey) ? 0m : stored.Cost,
                     stored.Sale,
                     stored.CalculationBaseCbm);
             }
@@ -416,7 +416,15 @@ public static class OwnLclFobScenarioEndpoints
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var normalized = request.Rows
-            .Select(row => row with { LineKey = Normalize(row.LineKey) })
+            .Select(row =>
+            {
+                var lineKey = Normalize(row.LineKey);
+                return row with
+                {
+                    LineKey = lineKey,
+                    CostUnit = IsCostaRicaSaleOnlyLine(lineKey) ? 0m : row.CostUnit,
+                };
+            })
             .ToArray();
         if (normalized.Select(row => row.LineKey).Distinct(StringComparer.OrdinalIgnoreCase).Count() != normalized.Length
             || normalized.Any(row =>
@@ -491,11 +499,23 @@ public static class OwnLclFobScenarioEndpoints
         string lineKey,
         decimal fallbackCost)
     {
-        if (overrides.TryGetValue(lineKey, out var stored)) return stored;
+        if (overrides.TryGetValue(lineKey, out var stored))
+        {
+            return IsCostaRicaSaleOnlyLine(lineKey)
+                ? (0m, stored.Sale, stored.CalculationBaseCbm)
+                : stored;
+        }
+
         var definition = OwnLclPricingLineCatalog.Find(lineKey)
             ?? throw new InvalidOperationException($"Línea LCL propia desconocida: {lineKey}.");
-        return (definition.DefaultCostUnit ?? fallbackCost, definition.DefaultSaleUnit, IsCentralAmericaInlandLine(lineKey) ? 70m : null);
+        return (
+            IsCostaRicaSaleOnlyLine(lineKey) ? 0m : definition.DefaultCostUnit ?? fallbackCost,
+            definition.DefaultSaleUnit,
+            IsCentralAmericaInlandLine(lineKey) ? 70m : null);
     }
+
+    private static bool IsCostaRicaSaleOnlyLine(string? lineKey) =>
+        lineKey is "CR_HANDLING" or "CR_ZONE";
 
     private static bool IsCentralAmericaInlandLine(string? lineKey) =>
         lineKey is "CA_INLAND_NI" or "CA_INLAND_HN" or "CA_INLAND_GT" or "CA_INLAND_SV";
