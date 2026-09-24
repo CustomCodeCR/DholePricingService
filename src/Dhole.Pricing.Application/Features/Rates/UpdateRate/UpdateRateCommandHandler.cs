@@ -50,6 +50,11 @@ public sealed class UpdateRateCommandHandler(
             return Result.Failure(PricingErrors.RateHeaderNotFound);
         }
 
+        if (string.IsNullOrWhiteSpace(command.UpdateReason))
+        {
+            return Result.Failure(PricingErrors.RateUpdateReasonIsRequired);
+        }
+
         // Una tarifa cerrada es inmutable porque representa una decisión comercial final.
         // Una tarifa vencida sí se puede editar para renovar su vigencia; al recalcularla
         // se volverá a marcar como vencida si ValidTo continúa en el pasado.
@@ -759,6 +764,7 @@ public sealed class UpdateRateCommandHandler(
                     rate.RequiredApproval,
                     Status = rate.Status.ToString(),
                     AutomaticallyApprovedLowMargin = automaticallyApprovedLowMargin,
+                    UpdateReason = command.UpdateReason.Trim(),
                 }
             ),
             cancellationToken
