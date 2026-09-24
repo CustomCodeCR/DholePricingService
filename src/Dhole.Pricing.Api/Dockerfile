@@ -2,9 +2,28 @@
 
 # Base image
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-RUN apt-get update && \
-  apt-get install -y tzdata apt-utils libgdiplus libc6-dev curl && \
-  ln -s /usr/lib/libgdiplus.so /usr/lib/gdiplus.dll && \
+# Ubuntu mirrors can briefly publish an index that references a package version
+# already rotated from security. Refresh package lists and retry the complete
+# update/install sequence so a transient 404 does not break the deployment.
+RUN set -eux; \
+  attempt=1; \
+  while true; do \
+    rm -rf /var/lib/apt/lists/*; \
+    if apt-get -o Acquire::Retries=5 update && \
+       DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=5 install -y --no-install-recommends tzdata libgdiplus curl; then \
+      break; \
+    fi; \
+    if [ "$attempt" -ge 4 ]; then \
+      echo "APT dependency installation failed after ${attempt} attempts." >&2; \
+      exit 1; \
+    fi; \
+    delay=$((attempt * 5)); \
+    echo "APT mirror was not ready; retrying in ${delay}s..." >&2; \
+    sleep "$delay"; \
+    attempt=$((attempt + 1)); \
+  done; \
+  ln -sf /usr/lib/libgdiplus.so /usr/lib/gdiplus.dll; \
+  apt-get clean; \
   rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
