@@ -11,10 +11,6 @@ namespace Dhole.Pricing.Api.Endpoints;
 public static class OwnLclConsolidationEndpoints
 {
     private const decimal DefaultMaximumCbm = 50m;
-    private const decimal MinimumCentralAmericaProfitPerCbm = 5.69m;
-    private const decimal MinimumPanamaOceanProfitPerCbm = 3.40m;
-    private const decimal PanamaAndCentralAmericaFreightSalePerCbm = 164m;
-    private const decimal CostaRicaFreightSalePerCbm = 210m;
     private const decimal CentralAmericaOperationBaseCbm = 70m;
     private const decimal CostaRicaWarehouseOperation = 415m;
 
@@ -305,31 +301,12 @@ public static class OwnLclConsolidationEndpoints
             ? oceanCostWithOrigin + destinationCostPerCbm + crTransferCostPerCbm
             : oceanCostWithOrigin;
 
-        var isCentralAmerica = CentralAmericaLandFreight.ContainsKey(destination);
-        decimal recommendedSalePerCbm;
-        decimal freightSalePerCbm;
-        var centralAmericaFreightProfitPerCbm = Math.Max(0m, consolidation.FreightProfitPerCbm);
-
-        if (isCentralAmerica)
-        {
-            // La utilidad del flete es configurable por consolidado.
-            recommendedSalePerCbm = freightCostPerCbm + centralAmericaFreightProfitPerCbm;
-            freightSalePerCbm = recommendedSalePerCbm;
-        }
-        else
-        {
-            var historicalSale = await LoadHistoricalSaleAsync(
-                consolidation.ConsolidationNumber,
-                destination,
-                originPort,
-                db,
-                ct);
-            var htmlBaseSalePerCbm = destination == "CR"
-                ? CostaRicaFreightSalePerCbm
-                : PanamaAndCentralAmericaFreightSalePerCbm;
-            recommendedSalePerCbm = historicalSale ?? (htmlBaseSalePerCbm + originSurcharge);
-            freightSalePerCbm = request.SalePerCbm is > 0 ? request.SalePerCbm.Value : recommendedSalePerCbm;
-        }
+        // La utilidad/CBM configurada pertenece al consolidado, no al destino.
+        // Se aplica al Flete Internacional Marítimo para Panamá, Costa Rica y
+        // el resto de Centroamérica de la misma manera.
+        var configuredFreightProfitPerCbm = Math.Max(0m, consolidation.FreightProfitPerCbm);
+        var recommendedSalePerCbm = freightCostPerCbm + configuredFreightProfitPerCbm;
+        var freightSalePerCbm = recommendedSalePerCbm;
 
         var lines = new List<OwnLclQuoteLine>();
         AddLine(lines, "Flete Internacional Marítimo", "CBM", billableCbm, freightCostPerCbm, freightSalePerCbm);
@@ -350,16 +327,8 @@ public static class OwnLclConsolidationEndpoints
         var profitPercentage = finalSale > 0 ? (profit / finalSale) * 100m : 0m;
 
         var oceanProfitPerCbm = freightSalePerCbm - freightCostPerCbm;
-        var minimumProfit = destination == "PA"
-            ? MinimumPanamaOceanProfitPerCbm
-            : isCentralAmerica
-                ? centralAmericaFreightProfitPerCbm
-                : MinimumCentralAmericaProfitPerCbm;
-        var meetsMinimum = destination == "PA"
-            ? oceanProfitPerCbm >= MinimumPanamaOceanProfitPerCbm
-            : isCentralAmerica
-                ? Math.Abs(oceanProfitPerCbm - centralAmericaFreightProfitPerCbm) <= 0.000001m
-                : profitPerCbm >= MinimumCentralAmericaProfitPerCbm;
+        var minimumProfit = configuredFreightProfitPerCbm;
+        var meetsMinimum = Math.Abs(oceanProfitPerCbm - configuredFreightProfitPerCbm) <= 0.000001m;
 
         return Results.Ok(new OwnLclQuoteCalculationDto(
             consolidation.Id,
