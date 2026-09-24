@@ -763,9 +763,10 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             ChargeBasis.PerContainer => requestedQuantity > 0m ? requestedQuantity : Math.Max(ContainerQuantity, 1),
             ChargeBasis.PerTruck => requestedQuantity > 0m ? requestedQuantity : Math.Max(ContainerQuantity, 1),
             ChargeBasis.PerTeu => ResolveTeuQuantity(requestedQuantity),
-            ChargeBasis.PerCbm => ShipmentMode == ShipmentMode.Lcl
-                ? Math.Max(TotalVolumeCbm, 1m)
-                : Math.Max(TotalVolumeCbm, 0.001m),
+            // Per CBM charges use the real shipment volume. The 1 CBM commercial
+            // minimum belongs to PerChargeableCbm (ocean freight), not raw-CBM fees
+            // such as CFS.
+            ChargeBasis.PerCbm => Math.Max(TotalVolumeCbm, 0.001m),
             ChargeBasis.PerChargeableCbm => ShipmentMode == ShipmentMode.Lcl
                 ? Math.Max(chargeableCbm, 1m)
                 : Math.Max(chargeableCbm, 0.001m),
