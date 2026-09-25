@@ -208,7 +208,7 @@ public static class TigsaFtlTariffSeeder
             Add(command, "commercial_profile", row.CommercialProfile);
             Add(command, "currency_id", usd.Id);
             Add(command, "currency_name", SnapshotName(usd));
-            Add(command, "currency_code", usd.Code);
+            Add(command, "currency_code", CurrencyBusinessValue(usd));
             Add(command, "price_amount", row.PricePerCbm);
             Add(command, "minimum_amount", row.MinimumAmount);
             Add(command, "transit_days", row.TransitDays);
@@ -280,6 +280,22 @@ public static class TigsaFtlTariffSeeder
 
     private static string SnapshotName(PricingConfigCatalogItem item) =>
         string.IsNullOrWhiteSpace(item.Value) ? item.Name.Trim() : item.Value.Trim();
+
+    private static string CurrencyBusinessValue(PricingConfigCatalogItem item)
+    {
+        foreach (var candidate in new[] { item.Value, item.Name, item.Code })
+        {
+            var value = candidate?.Trim();
+            if (!string.IsNullOrWhiteSpace(value)
+                && value.Length == 3
+                && value.All(char.IsLetter))
+            {
+                return value.ToUpperInvariant();
+            }
+        }
+
+        return SnapshotName(item);
+    }
 
     private static bool IsExact(string? value, string expected) =>
         string.Equals(value?.Trim(), expected, StringComparison.OrdinalIgnoreCase);
