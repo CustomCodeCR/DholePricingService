@@ -107,9 +107,9 @@ app.UseMiddleware<RateCreationApprovalMiddleware>();
 app.UseMiddleware<SellerRateVisibilityMiddleware>();
 app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
-app.UseMiddleware<IdempotencyMiddleware>();
 app.UseMiddleware<RateCommercialIdentityGuardMiddleware>();
 app.UseMiddleware<RateEditCreateParityMiddleware>();
+app.UseMiddleware<IdempotencyMiddleware>();
 app.UseMiddleware<AuditEndpointMiddleware>();
 
 // Own-LCL supports automatic defaults from naviera + POE and explicit per-consolidation
