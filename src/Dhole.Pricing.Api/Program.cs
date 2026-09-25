@@ -107,6 +107,7 @@ app.UseMiddleware<RateCreationApprovalMiddleware>();
 app.UseMiddleware<SellerRateVisibilityMiddleware>();
 app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
+app.UseMiddleware<IdempotencyMiddleware>();
 app.UseMiddleware<RateCommercialIdentityGuardMiddleware>();
 app.UseMiddleware<RateEditCreateParityMiddleware>();
 app.UseMiddleware<AuditEndpointMiddleware>();
