@@ -3,6 +3,7 @@ namespace Dhole.Pricing.Api.Authorization;
 internal static class PricingScopeNames
 {
     public const string WorkspaceAccess = "pricing.workspace.access";
+    public const string ManualOceanFreightCreate = "pricing.manual-ocean-freight.create";
 
     // Costs
     public const string CostCreate = "pricing.cost.create";
