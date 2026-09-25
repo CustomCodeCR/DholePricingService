@@ -29,6 +29,7 @@ public static class PricingConstants
     public static class Scopes
     {
         public const string WorkspaceAccess = "pricing.workspace.access";
+        public const string ManualOceanFreightCreate = "pricing.manual-ocean-freight.create";
         public const string CostCreate = "pricing.cost.create";
         public const string CostView = "pricing.cost.view";
         public const string CostUpdate = "pricing.cost.update";
