@@ -11,6 +11,7 @@ public static class DataExtractionImportEndpoints
     public static IEndpointRouteBuilder MapDataExtractionImportEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/pricing/rate-import-batches/from-extraction", ImportFromExtractionAsync)
+            .RequireIdempotency()
             .WithTags("Imported FCL Rates").AllowAnonymous();
         app.MapGet("/api/pricing/rate-import-batches/learning-context", GetLearningContextAsync)
             .WithTags("Imported FCL Rates").AllowAnonymous();
