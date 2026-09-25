@@ -25,6 +25,7 @@ public static class RateRequestEndpoints
             .RequireAuthorization();
 
         group.MapPost("/", CreateAsync)
+            .RequireIdempotency()
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
         group.MapGet("/open", GetOpenAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
