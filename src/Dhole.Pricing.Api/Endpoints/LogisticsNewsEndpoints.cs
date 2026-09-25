@@ -49,6 +49,7 @@ public static class LogisticsNewsEndpoints
 
         group
             .MapPost("/", CreateAsync)
+            .RequireIdempotency()
             .RequireScope(PricingConstants.Scopes.ImportFclRateReview);
 
         group
