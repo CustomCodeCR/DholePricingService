@@ -33,6 +33,7 @@ builder.Services.AddScoped<SellerVisibilityService>();
 builder.Services.AddScoped<AuthSellerDirectoryService>();
 builder.Services.AddScoped<RateCreatorIdentityService>();
 builder.Services.AddScoped<AcceptedRateOpeningsNotificationService>();
+builder.Services.AddScoped<LowMarginApprovedNotificationService>();
 builder.Services.AddHttpClient("DholeAI", client =>
 {
     var baseAddress = builder.Configuration["AI:Client:BaseAddress"] ?? "http://ai-api:5206/";
