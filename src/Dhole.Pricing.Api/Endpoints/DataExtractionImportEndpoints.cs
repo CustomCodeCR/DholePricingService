@@ -15,6 +15,7 @@ public static class DataExtractionImportEndpoints
     )
     {
         app.MapPost("/api/pricing/rate-import-batches/from-extraction", ImportFromExtractionAsync)
+            .RequireIdempotency()
             .WithTags("Imported FCL Rates")
             .AllowAnonymous();
 
