@@ -63,7 +63,7 @@ public static class RateEndpoints
             .MapGet("/exchange-rate/usd-crc", GetUsdCrcExchangeRateAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
 
-        group.MapPost("/", CreateRateAsync).RequireScope(PricingConstants.Scopes.RateCreate);
+        group.MapPost("/", CreateRateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateCreate);
 
         group
             .MapPut("/{rateId:guid}", UpdateRateAsync)
@@ -71,6 +71,7 @@ public static class RateEndpoints
 
         group
             .MapPost("/{rateId:guid}/duplicate", DuplicateRateAsync)
+            .RequireIdempotency()
             .RequireScope(PricingConstants.Scopes.RateCreate);
 
         group
