@@ -15,7 +15,7 @@ public static class RateTermItemEndpoints
         var group = app.MapGroup("/api/pricing/rate-term-items").WithTags("Rate terms").RequireAuthorization();
         group.MapGet("/", GetAsync).RequireScope(PricingConstants.Scopes.RateTermView);
         group.MapGet("/select", GetSelectAsync).RequireScope(PricingConstants.Scopes.RateTermSelect);
-        group.MapPost("/", CreateAsync).RequireScope(PricingConstants.Scopes.RateTermCreate);
+        group.MapPost("/", CreateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateTermCreate);
         group.MapPut("/{id:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.RateTermUpdate);
         group.MapPatch("/{id:guid}/set-active", SetActiveAsync).RequireScope(PricingConstants.Scopes.RateTermSetActive);
         group.MapDelete("/{id:guid}", DeleteAsync).RequireScope(PricingConstants.Scopes.RateTermDelete);
