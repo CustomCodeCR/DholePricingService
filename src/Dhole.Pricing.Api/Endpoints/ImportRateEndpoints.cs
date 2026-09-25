@@ -47,6 +47,7 @@ public static class ImportRateEndpoints
 
         group
             .MapPost("/", CreateImportRateAsync)
+            .RequireIdempotency()
             .RequireScope(PricingConstants.Scopes.ImportFclRateCreate);
 
         group
