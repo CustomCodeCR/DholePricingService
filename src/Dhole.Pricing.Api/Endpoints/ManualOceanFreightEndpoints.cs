@@ -17,6 +17,7 @@ public static class ManualOceanFreightEndpoints
     public static IEndpointRouteBuilder MapManualOceanFreightEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/pricing/import-rates/manual-ocean-freight", SaveManualOceanFreightAsync)
+            .RequireIdempotency()
             .WithTags("Imported FCL Rates")
             .RequireAuthorization()
             .RequireScope(PricingConstants.Scopes.WorkspaceAccess);
