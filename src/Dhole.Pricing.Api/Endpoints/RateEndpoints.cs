@@ -842,14 +842,25 @@ public static class RateEndpoints
     private static async Task<IResult> ApproveRateMarginAsync(
         Guid rateId,
         ICommandDispatcher dispatcher,
+        LowMarginApprovedNotificationService lowMarginApprovedNotificationService,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
     {
+        var approvedBy = httpContext.GetCurrentUserId();
         var result = await dispatcher.DispatchAsync(
-            new ApproveRateMarginCommand(rateId, httpContext.GetCurrentUserId()),
+            new ApproveRateMarginCommand(rateId, approvedBy),
             cancellationToken
         );
+
+        if (result.IsSuccess)
+        {
+            await lowMarginApprovedNotificationService.QueueAsync(
+                rateId,
+                approvedBy,
+                cancellationToken
+            );
+        }
 
         return EndpointResults.FromResult(result, httpContext);
     }
