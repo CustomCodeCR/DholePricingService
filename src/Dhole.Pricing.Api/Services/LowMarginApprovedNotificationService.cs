@@ -202,26 +202,41 @@ public sealed class LowMarginApprovedNotificationService(
         if (!Guid.TryParse(createdBy, out var creatorUserId) || creatorUserId == Guid.Empty)
             return null;
 
-        SellerDirectoryUser? creator = null;
-        try
-        {
-            var users = await authDirectory.GetPricingUsersAsync(cancellationToken);
-            creator = users.FirstOrDefault(x => x.UserId == creatorUserId);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            logger.LogWarning(
-                exception,
-                "No se pudieron resolver los datos del creador {UserId} desde Auth.",
-                creatorUserId
-            );
-        }
+        var creator = await ResolveDirectoryUserAsync(creatorUserId, cancellationToken);
 
         return new NotificationRecipient(
             creatorUserId,
             Normalize(creator?.Email),
             DisplayName(creator)
         );
+    }
+
+    private async Task<SellerDirectoryUser?> ResolveDirectoryUserAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var pricingUsers = await authDirectory.GetPricingUsersAsync(cancellationToken);
+            var user = pricingUsers.FirstOrDefault(x => x.UserId == userId);
+            if (user is not null) return user;
+
+            var sellers = await authDirectory.GetSellersAsync(cancellationToken);
+            user = sellers.FirstOrDefault(x => x.UserId == userId);
+            if (user is not null) return user;
+
+            var executives = await authDirectory.GetSalesExecutivesAsync(cancellationToken);
+            return executives.FirstOrDefault(x => x.UserId == userId);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                exception,
+                "No se pudieron resolver los datos del usuario {UserId} desde Auth.",
+                userId
+            );
+            return null;
+        }
     }
 
     private Task QueueAsync(
