@@ -52,6 +52,7 @@ public static class ImportRateEndpoints
 
         group
             .MapPost("/extract", ExtractImportRateFromFileAsync)
+            .RequireIdempotency()
             .DisableAntiforgery()
             .RequireScope(PricingConstants.Scopes.ImportFclRateCreate);
 
