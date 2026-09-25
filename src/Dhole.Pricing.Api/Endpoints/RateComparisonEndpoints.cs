@@ -27,6 +27,7 @@ public static class RateComparisonEndpoints
         group.MapGet("/{id:guid}", GetByIdAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
         group.MapPost("/{id:guid}/create-rate", CreateRateAsync)
+            .RequireIdempotency()
             .RequireScope(PricingConstants.Scopes.RateCreate)
             .RequireScope(PricingConstants.Scopes.ImportFclRateCreateAsRate);
         group.MapPost("/{id:guid}/dismiss", DismissAsync)
