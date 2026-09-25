@@ -752,7 +752,7 @@ public static class FtlTariffEndpoints
         Add(command, "applicable_equipment_classes", JsonSerializer.Serialize(applicableEquipmentClasses));
         Add(command, "currency_id", item.CurrencyId);
         Add(command, "currency_name", string.IsNullOrWhiteSpace(item.CurrencyName) ? item.CurrencyCode.Trim() : item.CurrencyName.Trim());
-        Add(command, "currency_code", item.CurrencyCode.Trim().ToUpperInvariant());
+        Add(command, "currency_code", NormalizeCurrencyBusinessCode(item.CurrencyCode, item.CurrencyName));
         Add(command, "price_amount", item.PriceAmount);
         Add(command, "rate_basis", rateBasis);
         Add(command, "minimum_amount", item.MinimumAmount);
@@ -907,6 +907,22 @@ public static class FtlTariffEndpoints
 
         var fallback = legacyEquipmentClass.Trim().ToUpperInvariant();
         return string.IsNullOrWhiteSpace(fallback) ? Array.Empty<string>() : new[] { fallback };
+    }
+
+    private static string NormalizeCurrencyBusinessCode(string? code, string? name)
+    {
+        foreach (var candidate in new[] { code, name })
+        {
+            var value = candidate?.Trim();
+            if (!string.IsNullOrWhiteSpace(value)
+                && value.Length == 3
+                && value.All(char.IsLetter))
+            {
+                return value.ToUpperInvariant();
+            }
+        }
+
+        return (name ?? code ?? "USD").Trim();
     }
 
     private static string? NullIfBlank(string? value) =>
