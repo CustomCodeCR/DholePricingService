@@ -21,7 +21,7 @@ public static class CompetitorTariffEndpoints
         group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/matching", GetMatchingAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/{competitorTariffId:guid}", GetByIdAsync).RequireScope(PricingConstants.Scopes.RateView);
-        group.MapPost("/", CreateAsync).RequireScope(PricingConstants.Scopes.RateCreate);
+        group.MapPost("/", CreateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateCreate);
         group.MapPut("/{competitorTariffId:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapDelete("/{competitorTariffId:guid}", DeleteAsync).RequireScope(PricingConstants.Scopes.RateDelete);
 
