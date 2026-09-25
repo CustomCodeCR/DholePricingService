@@ -20,7 +20,7 @@ public static class ManualOceanFreightEndpoints
             .RequireIdempotency()
             .WithTags("Imported FCL Rates")
             .RequireAuthorization()
-            .RequireScope(PricingConstants.Scopes.WorkspaceAccess);
+            .RequireScope(PricingConstants.Scopes.ManualOceanFreightCreate);
 
         return app;
     }
