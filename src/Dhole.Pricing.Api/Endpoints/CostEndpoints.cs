@@ -40,7 +40,7 @@ public static class CostEndpoints
             .MapGet("/{costId:guid}", GetCostByIdAsync)
             .RequireScope(PricingConstants.Scopes.CostView);
 
-        group.MapPost("/", CreateCostAsync).RequireScope(PricingConstants.Scopes.CostCreate);
+        group.MapPost("/", CreateCostAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.CostCreate);
 
         group
             .MapPut("/{costId:guid}", UpdateCostAsync)
