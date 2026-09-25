@@ -17,14 +17,14 @@ public static class PricingRuleConfigurationEndpoints
         var freeDays = app.MapGroup("/api/pricing/carrier-free-day-rules").WithTags("Pricing rules").RequireAuthorization();
         freeDays.MapGet("/", BrowseCarrierFreeDaysAsync).RequireScope(PricingConstants.Scopes.RateTermView);
         freeDays.MapGet("/resolve/{carrierId:guid}", ResolveCarrierFreeDaysAsync).RequireScope(PricingConstants.Scopes.RateTermSelect);
-        freeDays.MapPost("/", CreateCarrierFreeDaysAsync).RequireScope(PricingConstants.Scopes.RateTermCreate);
+        freeDays.MapPost("/", CreateCarrierFreeDaysAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateTermCreate);
         freeDays.MapPut("/{id:guid}", UpdateCarrierFreeDaysAsync).RequireScope(PricingConstants.Scopes.RateTermUpdate);
         freeDays.MapDelete("/{id:guid}", DeleteCarrierFreeDaysAsync).RequireScope(PricingConstants.Scopes.RateTermDelete);
 
         var blocks = app.MapGroup("/api/pricing/rate-term-blocks").WithTags("Pricing rules").RequireAuthorization();
         blocks.MapGet("/", BrowseBlocksAsync).RequireScope(PricingConstants.Scopes.RateTermView);
         blocks.MapGet("/resolve", ResolveBlocksAsync).RequireScope(PricingConstants.Scopes.RateTermSelect);
-        blocks.MapPost("/", CreateBlockAsync).RequireScope(PricingConstants.Scopes.RateTermCreate);
+        blocks.MapPost("/", CreateBlockAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateTermCreate);
         blocks.MapPut("/{id:guid}", UpdateBlockAsync).RequireScope(PricingConstants.Scopes.RateTermUpdate);
         blocks.MapDelete("/{id:guid}", DeleteBlockAsync).RequireScope(PricingConstants.Scopes.RateTermDelete);
         return app;
