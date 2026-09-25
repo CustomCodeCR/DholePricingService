@@ -108,7 +108,7 @@ public sealed class IdempotencyMiddleware
             await Task.Delay(PollInterval, context.RequestAborted);
         }
 
-        context.Response.Headers.RetryAfter = "1";
+        context.Response.Headers["Retry-After"] = "1";
         await WriteErrorAsync(
             context,
             StatusCodes.Status409Conflict,
@@ -127,36 +127,11 @@ public sealed class IdempotencyMiddleware
         var originalBody = context.Response.Body;
         await using var responseBuffer = new MemoryStream();
         context.Response.Body = responseBuffer;
+        context.Response.Headers[ReplayHeaderName] = "false";
 
         try
         {
             await _next(context);
-
-            responseBuffer.Position = 0;
-            var responseBytes = responseBuffer.ToArray();
-
-            if (context.Response.StatusCode < StatusCodes.Status500InternalServerError)
-            {
-                await CompleteAsync(
-                    keyHash,
-                    requestHash,
-                    context.Response.StatusCode,
-                    responseBytes,
-                    context.Response.ContentType,
-                    context.Response.Headers.Location.ToString(),
-                    explicitKey ? ExplicitRetention : AutomaticRetention,
-                    context.RequestAborted
-                );
-            }
-            else
-            {
-                await AbandonAsync(keyHash, requestHash, context.RequestAborted);
-            }
-
-            context.Response.Headers[ReplayHeaderName] = "false";
-            context.Response.Body = originalBody;
-            context.Response.ContentLength = responseBytes.LongLength;
-            await context.Response.Body.WriteAsync(responseBytes.AsMemory(), context.RequestAborted);
         }
         catch
         {
@@ -175,6 +150,46 @@ public sealed class IdempotencyMiddleware
             }
 
             throw;
+        }
+
+        try
+        {
+            responseBuffer.Position = 0;
+            var responseBytes = responseBuffer.ToArray();
+
+            if (context.Response.StatusCode < StatusCodes.Status500InternalServerError)
+            {
+                try
+                {
+                    await CompleteAsync(
+                        keyHash,
+                        requestHash,
+                        context.Response.StatusCode,
+                        responseBytes,
+                        context.Response.ContentType,
+                        context.Response.Headers["Location"].ToString(),
+                        explicitKey ? ExplicitRetention : AutomaticRetention,
+                        CancellationToken.None
+                    );
+                }
+                catch (Exception persistenceError)
+                {
+                    // Never remove a Processing key after the business operation succeeded.
+                    // Keeping it blocks a duplicate create until its processing TTL expires.
+                    _logger.LogError(
+                        persistenceError,
+                        "La creación finalizó, pero no se pudo persistir su respuesta idempotente para {KeyHash}.",
+                        keyHash
+                    );
+                }
+            }
+            else
+            {
+                await AbandonAsync(keyHash, requestHash, CancellationToken.None);
+            }
+
+            context.Response.Body = originalBody;
+            await context.Response.Body.WriteAsync(responseBytes.AsMemory(), context.RequestAborted);
         }
         finally
         {
@@ -392,7 +407,7 @@ public sealed class IdempotencyMiddleware
         if (!string.IsNullOrWhiteSpace(record.ResponseContentType))
             context.Response.ContentType = record.ResponseContentType;
         if (!string.IsNullOrWhiteSpace(record.ResponseLocation))
-            context.Response.Headers.Location = record.ResponseLocation;
+            context.Response.Headers["Location"] = record.ResponseLocation;
 
         context.Response.Headers[ReplayHeaderName] = "true";
         context.Response.ContentLength = body.LongLength;
