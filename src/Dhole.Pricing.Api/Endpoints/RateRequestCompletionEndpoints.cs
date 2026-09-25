@@ -19,6 +19,7 @@ public static class RateRequestCompletionEndpoints
     public static IEndpointRouteBuilder MapRateRequestCompletionEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/pricing/rate-requests/{requestId:guid}/complete-rate", CompleteAsync)
+            .RequireIdempotency()
             .WithTags("Rate requests")
             .RequireAuthorization()
             .RequireScope(PricingConstants.Scopes.RateUpdate);
