@@ -51,7 +51,7 @@ public static class OwnLclConsolidationEndpoints
         group.MapGet("/{id:guid}", GetAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapPatch("/{id:guid}/name", RenameAsync)
             .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
-        group.MapPost("/", CreateAsync).RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
+        group.MapPost("/", CreateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPut("/{id:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPost("/{id:guid}/calculate", CalculateAsync).RequireScope(PricingConstants.Scopes.RateCreate);
 
