@@ -19,10 +19,10 @@ public static class FtlTariffEndpoints
 
         group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.CostView);
         group.MapGet("/resolve", ResolveAsync).RequireScope(PricingConstants.Scopes.CostSelect);
-        group.MapPost("/", CreateAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
+        group.MapPost("/", CreateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.CostUpdate);
         group.MapPut("/{id:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
-        group.MapPost("/import", ImportAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
-        group.MapPost("/seed-defaults", SeedDefaultsAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
+        group.MapPost("/import", ImportAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.CostUpdate);
+        group.MapPost("/seed-defaults", SeedDefaultsAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.CostUpdate);
         group.MapPut("/batch", UpdateBatchAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
 
         return app;
