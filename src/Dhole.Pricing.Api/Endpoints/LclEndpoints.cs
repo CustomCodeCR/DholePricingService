@@ -29,8 +29,8 @@ public static class LclEndpoints
         var group = endpoints.MapGroup("/api/pricing/lcl").RequireAuthorization();
 
         group.MapGet("/rate-sources", ListRateSourcesAsync);
-        group.MapPost("/own-consolidations", CreateOwnConsolidationAsync);
-        group.MapPost("/coloader-rates", CreateColoaderRateAsync);
+        group.MapPost("/own-consolidations", CreateOwnConsolidationAsync).RequireIdempotency();
+        group.MapPost("/coloader-rates", CreateColoaderRateAsync).RequireIdempotency();
         group.MapPost("/coloader-rates/{id:guid}/approve", ApproveColoaderRateAsync);
         group.MapGet("/route-rules", GetRouteRules);
         group.MapPost("/calculate-cargo", CalculateCargo);
