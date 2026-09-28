@@ -74,7 +74,13 @@ public sealed class GetCostByIdQueryHandler(ICostRepository costs, ICostCacheSer
             cost.Services
                 .OrderBy(x => x.ServiceName)
                 .Select(x => new CostServiceDto(x.ServiceId, x.ServiceName, x.ServiceCode))
-                .ToArray()
+                .ToArray(),
+            null,
+            null,
+            null,
+            null,
+            null,
+            cost.OperationalConditions
         );
 
         await cache.SetCostByIdAsync(cost.Id, dto, cancellationToken: cancellationToken);
