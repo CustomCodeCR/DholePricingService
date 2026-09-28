@@ -352,6 +352,11 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("notes");
 
+                    b.Property<string[]>("OperationalConditions")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("operational_conditions");
+
                     b.Property<string>("PodCode")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")
