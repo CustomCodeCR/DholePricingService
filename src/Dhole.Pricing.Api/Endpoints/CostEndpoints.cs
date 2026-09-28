@@ -432,6 +432,7 @@ public static class CostEndpoints
                         ", ",
                         cost.Services.Select(x => x.ServiceName)
                     ),
+                    ["Botones / condiciones"] = string.Join(", ", cost.OperationalConditions),
                     ["Modalidad"] = cost.ShipmentMode?.ToString() ?? "Todas",
                     ["Moneda"] = cost.CurrencyCode,
                     ["Monto costo"] = cost.CostAmount,
