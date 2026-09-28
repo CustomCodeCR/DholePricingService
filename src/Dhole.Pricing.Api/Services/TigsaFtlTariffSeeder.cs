@@ -148,6 +148,13 @@ public static class TigsaFtlTariffSeeder
                     price_amount,
                     rate_basis,
                     minimum_amount,
+                    cost_per_cbm,
+                    weight_kg_per_cbm,
+                    dua_cost,
+                    duca_t_cost,
+                    stuffing_cost_per_cbm,
+                    stuffing_sale_per_cbm,
+                    panama_cost_surcharge_per_cbm,
                     transit_days,
                     warehouse_name,
                     source,
@@ -176,6 +183,13 @@ public static class TigsaFtlTariffSeeder
                     @price_amount,
                     'PerCbm',
                     @minimum_amount,
+                    @cost_per_cbm,
+                    330,
+                    50,
+                    30,
+                    550.0 / 60.0,
+                    10,
+                    9,
                     @transit_days,
                     @warehouse_name,
                     @source,
@@ -211,6 +225,7 @@ public static class TigsaFtlTariffSeeder
             Add(command, "currency_code", CurrencyBusinessValue(usd));
             Add(command, "price_amount", row.PricePerCbm);
             Add(command, "minimum_amount", row.MinimumAmount);
+            Add(command, "cost_per_cbm", BaseCostPerCbm(row.Destination));
             Add(command, "transit_days", row.TransitDays);
             Add(command, "warehouse_name", row.Warehouse);
             Add(command, "source", row.Source);
@@ -219,13 +234,25 @@ public static class TigsaFtlTariffSeeder
                 "notes",
                 $"Servicio LTL consolidado terrestre · perfil {row.CommercialProfile}. " +
                 $"Tránsito estimado original: {row.TransitRange}. " +
-                "Tarifa USD/CBM con mínimo por ruta. Relación operativa de peso volumétrico: 1 CBM = 333.33 kg."
+                "Tarifa USD/CBM con mínimo por ruta. Relación operativa de peso volumétrico LTL: 1 CBM = 330 kg. " +
+                "DUA costo USD 50; DUCA-T costo USD 30; Stuffing costo USD 550/60 CBM y venta USD 10/CBM; " +
+                "las salidas desde Panamá suman USD 9/CBM al costo base."
             );
 
             created += await command.ExecuteNonQueryAsync(cancellationToken);
         }
 
         return created;
+    }
+
+    private static decimal BaseCostPerCbm(string destination)
+    {
+        var normalized = Normalize(destination);
+        if (normalized.Contains("managua", StringComparison.Ordinal)) return 2035m / 60m;
+        if (normalized.Contains("san pedro sula", StringComparison.Ordinal)) return 2560m / 60m;
+        if (normalized.Contains("san salvador", StringComparison.Ordinal)) return 2035m / 60m;
+        if (normalized.Contains("guatemala", StringComparison.Ordinal)) return 1800m / 60m;
+        return 0m;
     }
 
     private static PricingConfigCatalogItem? ResolveFreeformRouteItem(
