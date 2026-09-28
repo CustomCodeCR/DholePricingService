@@ -251,6 +251,7 @@ public static class CostEndpoints
                 request.MinimumCostAmount,
                 request.MinimumSaleAmount,
                 request.KgPerCbm,
+                (request.OperationalConditions ?? []).ToArray(),
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken
@@ -355,6 +356,7 @@ public static class CostEndpoints
                 request.MinimumCostAmount,
                 request.MinimumSaleAmount,
                 request.KgPerCbm,
+                (request.OperationalConditions ?? []).ToArray(),
                 httpContext.GetCurrentUserId()
             ),
             cancellationToken
