@@ -2,6 +2,7 @@ using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Queries;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
+using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Contracts.Costs.Response;
 
 namespace Dhole.Pricing.Application.Features.Costs.GetCostsForSelect;
@@ -10,7 +11,8 @@ public sealed class GetCostsForSelectQueryHandler(
     ICostRepository costs,
     ICostCacheService cache,
     ICostRoutePortSelectionStore routePorts,
-    IImportFclRateRepository importRates
+    IImportFclRateRepository importRates,
+    IPricingConfigCatalogClient configCatalog
 ) : IQueryHandler<GetCostsForSelectQuery, Result<IReadOnlyCollection<CostSelectDto>>>
 {
     public async Task<Result<IReadOnlyCollection<CostSelectDto>>> HandleAsync(
@@ -44,7 +46,17 @@ public sealed class GetCostsForSelectQueryHandler(
 
             if (cached is not null)
             {
-                return Result.Success(cached);
+                var cachedSelections = await routePorts.GetManyAsync(
+                    cached.Select(item => item.Id).ToArray(),
+                    cancellationToken
+                );
+                var hydratedCached = await HydrateRelationListsAsync(
+                    cached,
+                    cachedSelections,
+                    configCatalog,
+                    cancellationToken
+                );
+                return Result.Success(hydratedCached);
             }
         }
 
@@ -64,13 +76,13 @@ public sealed class GetCostsForSelectQueryHandler(
             cancellationToken
         );
 
+        var selections = await routePorts.GetManyAsync(
+            items.Select(item => item.Id).ToArray(),
+            cancellationToken
+        );
+
         if (query.ApplicableToContext)
         {
-            var selections = await routePorts.GetManyAsync(
-                items.Select(item => item.Id).ToArray(),
-                cancellationToken
-            );
-
             items = items
                 .Where(item =>
                 {
@@ -83,6 +95,13 @@ public sealed class GetCostsForSelectQueryHandler(
                 .ThenBy(item => item.Name)
                 .ToArray();
         }
+
+        items = await HydrateRelationListsAsync(
+            items,
+            selections,
+            configCatalog,
+            cancellationToken
+        );
 
         if (canUseGeneralCache)
         {
@@ -244,6 +263,99 @@ public sealed class GetCostsForSelectQueryHandler(
         if (!string.IsNullOrWhiteSpace(cost.PortRole) && !cost.PortRole.Equals("Any", StringComparison.OrdinalIgnoreCase))
             score += 1;
         return score;
+    }
+
+    private static async Task<IReadOnlyCollection<CostSelectDto>> HydrateRelationListsAsync(
+        IReadOnlyCollection<CostSelectDto> items,
+        IReadOnlyDictionary<Guid, CostRoutePortSelectionSet> selections,
+        IPricingConfigCatalogClient configCatalog,
+        CancellationToken cancellationToken
+    )
+    {
+        if (items.Count == 0)
+            return items;
+
+        var catalogTasks = new[]
+        {
+            configCatalog.GetActiveByGroupAsync("pol", cancellationToken),
+            configCatalog.GetActiveByGroupAsync("poe", cancellationToken),
+            configCatalog.GetActiveByGroupAsync("pod", cancellationToken),
+            configCatalog.GetActiveByGroupAsync("carriers", cancellationToken),
+            configCatalog.GetActiveByGroupAsync("agents", cancellationToken),
+        };
+        var catalogs = await Task.WhenAll(catalogTasks);
+
+        var pol = catalogs[0].ToDictionary(x => x.Id);
+        var poe = catalogs[1].ToDictionary(x => x.Id);
+        var pod = catalogs[2].ToDictionary(x => x.Id);
+        var carriers = catalogs[3].ToDictionary(x => x.Id);
+        var agents = catalogs[4].ToDictionary(x => x.Id);
+
+        return items.Select(item =>
+        {
+            selections.TryGetValue(item.Id, out var selection);
+
+            return item with
+            {
+                Pols = BuildRelations(selection?.PolIds, item.PolId, item.PolName, item.PolCode, pol),
+                Poes = BuildRelations(selection?.PoeIds, item.PoeId, item.PoeName, item.PoeCode, poe),
+                Pods = BuildRelations(selection?.PodIds, item.PodId, item.PodName, item.PodCode, pod),
+                Carriers = BuildRelations(
+                    selection?.CarrierIds,
+                    item.CarrierId,
+                    item.CarrierName,
+                    item.CarrierCode,
+                    carriers
+                ),
+                Agents = BuildRelations(
+                    selection?.AgentIds,
+                    item.AgentId,
+                    item.AgentName,
+                    item.AgentCode,
+                    agents
+                ),
+            };
+        }).ToArray();
+    }
+
+    private static IReadOnlyCollection<CostRelationDto> BuildRelations(
+        IReadOnlyCollection<Guid>? selectedIds,
+        Guid? legacyId,
+        string? legacyName,
+        string? legacyCode,
+        IReadOnlyDictionary<Guid, PricingConfigCatalogItem> catalog
+    )
+    {
+        var ids = selectedIds is { Count: > 0 }
+            ? selectedIds.Where(id => id != Guid.Empty).Distinct().ToArray()
+            : legacyId.HasValue && legacyId.Value != Guid.Empty
+                ? [legacyId.Value]
+                : [];
+
+        return ids
+            .Select(id =>
+            {
+                if (catalog.TryGetValue(id, out var item))
+                {
+                    var name = string.IsNullOrWhiteSpace(item.Value)
+                        ? item.Name
+                        : item.Value.Trim();
+                    return new CostRelationDto(id, name, item.Code);
+                }
+
+                if (legacyId == id)
+                {
+                    return new CostRelationDto(
+                        id,
+                        string.IsNullOrWhiteSpace(legacyName) ? id.ToString() : legacyName.Trim(),
+                        legacyCode?.Trim() ?? string.Empty
+                    );
+                }
+
+                return new CostRelationDto(id, id.ToString(), string.Empty);
+            })
+            .OrderBy(item => item.Name)
+            .ToArray();
     }
 
     private static bool CanUseGeneralCache(GetCostsForSelectQuery query)
