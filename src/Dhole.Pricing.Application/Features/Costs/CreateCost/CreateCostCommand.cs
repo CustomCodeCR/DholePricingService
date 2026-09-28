@@ -43,5 +43,6 @@ public sealed record CreateCostCommand(
     decimal? MinimumCostAmount,
     decimal? MinimumSaleAmount,
     decimal? KgPerCbm,
+    IReadOnlyCollection<string> OperationalConditions,
     Guid? CreatedBy
 ) : ICommand<Result<Guid>>;
