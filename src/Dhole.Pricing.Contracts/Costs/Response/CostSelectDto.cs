@@ -41,5 +41,10 @@ public sealed record CostSelectDto(
     decimal? MinimumCostAmount = null,
     decimal? MinimumSaleAmount = null,
     decimal? KgPerCbm = null,
-    IReadOnlyCollection<CostServiceDto>? Services = null
+    IReadOnlyCollection<CostServiceDto>? Services = null,
+    IReadOnlyCollection<CostRelationDto>? Pols = null,
+    IReadOnlyCollection<CostRelationDto>? Poes = null,
+    IReadOnlyCollection<CostRelationDto>? Pods = null,
+    IReadOnlyCollection<CostRelationDto>? Carriers = null,
+    IReadOnlyCollection<CostRelationDto>? Agents = null
 );
