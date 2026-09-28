@@ -342,6 +342,13 @@ public static class FtlTariffEndpoints
                 price_amount = @price_amount,
                 rate_basis = @rate_basis,
                 minimum_amount = @minimum_amount,
+                cost_per_cbm = @cost_per_cbm,
+                weight_kg_per_cbm = @weight_kg_per_cbm,
+                dua_cost = @dua_cost,
+                duca_t_cost = @duca_t_cost,
+                stuffing_cost_per_cbm = @stuffing_cost_per_cbm,
+                stuffing_sale_per_cbm = @stuffing_sale_per_cbm,
+                panama_cost_surcharge_per_cbm = @panama_cost_surcharge_per_cbm,
                 transit_days = @transit_days,
                 warehouse_name = @warehouse_name,
                 source = @source,
@@ -371,6 +378,13 @@ public static class FtlTariffEndpoints
         Add(command, "price_amount", request.PriceAmount);
         Add(command, "rate_basis", rateBasis);
         Add(command, "minimum_amount", request.MinimumAmount);
+        Add(command, "cost_per_cbm", mode == "Ltl" ? Math.Max(0m, request.CostPerCbm ?? 0m) : null);
+        Add(command, "weight_kg_per_cbm", mode == "Ltl" ? (request.WeightKgPerCbm is > 0m ? request.WeightKgPerCbm : 330m) : null);
+        Add(command, "dua_cost", mode == "Ltl" ? Math.Max(0m, request.DuaCost ?? 50m) : null);
+        Add(command, "duca_t_cost", mode == "Ltl" ? Math.Max(0m, request.DucaTCost ?? 30m) : null);
+        Add(command, "stuffing_cost_per_cbm", mode == "Ltl" ? Math.Max(0m, request.StuffingCostPerCbm ?? (550m / 60m)) : null);
+        Add(command, "stuffing_sale_per_cbm", mode == "Ltl" ? Math.Max(0m, request.StuffingSalePerCbm ?? 10m) : null);
+        Add(command, "panama_cost_surcharge_per_cbm", mode == "Ltl" ? Math.Max(0m, request.PanamaCostSurchargePerCbm ?? 9m) : null);
         Add(command, "transit_days", request.TransitDays);
         Add(command, "warehouse_name", NullIfBlank(request.WarehouseName));
         Add(command, "source", NullIfBlank(request.Source));
@@ -617,6 +631,32 @@ public static class FtlTariffEndpoints
             });
         }
 
+        if (mode == "Ltl")
+        {
+            if (item.CostPerCbm is < 0m
+                || item.DuaCost is < 0m
+                || item.DucaTCost is < 0m
+                || item.StuffingCostPerCbm is < 0m
+                || item.StuffingSalePerCbm is < 0m
+                || item.PanamaCostSurchargePerCbm is < 0m)
+            {
+                return Results.BadRequest(new
+                {
+                    code = "Pricing.LtlAmountInvalid",
+                    message = "Los montos de costo y venta LTL no pueden ser negativos.",
+                });
+            }
+
+            if (item.WeightKgPerCbm.HasValue && item.WeightKgPerCbm.Value <= 0m)
+            {
+                return Results.BadRequest(new
+                {
+                    code = "Pricing.LtlWeightFactorInvalid",
+                    message = "El factor de peso LTL debe ser mayor a cero.",
+                });
+            }
+        }
+
         if (item.TransitDays is < 0)
         {
             return Results.BadRequest(new
@@ -695,8 +735,10 @@ public static class FtlTariffEndpoints
                     shipment_mode, commercial_profile, equipment_class, equipment_label,
                     applicable_equipment_classes,
                     currency_id, currency_name, currency_code,
-                    price_amount, rate_basis, minimum_amount, transit_days,
-                    warehouse_name, source, notes, valid_from, valid_to,
+                    price_amount, rate_basis, minimum_amount,
+                    cost_per_cbm, weight_kg_per_cbm, dua_cost, duca_t_cost,
+                    stuffing_cost_per_cbm, stuffing_sale_per_cbm, panama_cost_surcharge_per_cbm,
+                    transit_days, warehouse_name, source, notes, valid_from, valid_to,
                     is_active, created_at_utc
                 )
                 VALUES
@@ -706,8 +748,10 @@ public static class FtlTariffEndpoints
                     @shipment_mode, @commercial_profile, @equipment_class, @equipment_label,
                     @applicable_equipment_classes,
                     @currency_id, @currency_name, @currency_code,
-                    @price_amount, @rate_basis, @minimum_amount, @transit_days,
-                    @warehouse_name, @source, @notes, @valid_from, @valid_to,
+                    @price_amount, @rate_basis, @minimum_amount,
+                    @cost_per_cbm, @weight_kg_per_cbm, @dua_cost, @duca_t_cost,
+                    @stuffing_cost_per_cbm, @stuffing_sale_per_cbm, @panama_cost_surcharge_per_cbm,
+                    @transit_days, @warehouse_name, @source, @notes, @valid_from, @valid_to,
                     @is_active, now()
                 );
                 """
@@ -756,6 +800,13 @@ public static class FtlTariffEndpoints
         Add(command, "price_amount", item.PriceAmount);
         Add(command, "rate_basis", rateBasis);
         Add(command, "minimum_amount", item.MinimumAmount);
+        Add(command, "cost_per_cbm", mode == "Ltl" ? Math.Max(0m, item.CostPerCbm ?? 0m) : null);
+        Add(command, "weight_kg_per_cbm", mode == "Ltl" ? (item.WeightKgPerCbm is > 0m ? item.WeightKgPerCbm : 330m) : null);
+        Add(command, "dua_cost", mode == "Ltl" ? Math.Max(0m, item.DuaCost ?? 50m) : null);
+        Add(command, "duca_t_cost", mode == "Ltl" ? Math.Max(0m, item.DucaTCost ?? 30m) : null);
+        Add(command, "stuffing_cost_per_cbm", mode == "Ltl" ? Math.Max(0m, item.StuffingCostPerCbm ?? (550m / 60m)) : null);
+        Add(command, "stuffing_sale_per_cbm", mode == "Ltl" ? Math.Max(0m, item.StuffingSalePerCbm ?? 10m) : null);
+        Add(command, "panama_cost_surcharge_per_cbm", mode == "Ltl" ? Math.Max(0m, item.PanamaCostSurchargePerCbm ?? 9m) : null);
         Add(command, "transit_days", item.TransitDays);
         Add(command, "warehouse_name", NullIfBlank(item.WarehouseName));
         Add(command, "source", NullIfBlank(item.Source));
@@ -794,7 +845,14 @@ public static class FtlTariffEndpoints
             valid_from,
             valid_to,
             commercial_profile,
-            applicable_equipment_classes
+            applicable_equipment_classes,
+            cost_per_cbm,
+            weight_kg_per_cbm,
+            dua_cost,
+            duca_t_cost,
+            stuffing_cost_per_cbm,
+            stuffing_sale_per_cbm,
+            panama_cost_surcharge_per_cbm
         FROM pricing."FtlTariffs"
         """;
 
@@ -824,7 +882,14 @@ public static class FtlTariffEndpoints
             reader.IsDBNull(21) ? null : reader.GetDateTime(21),
             reader.IsDBNull(22) ? null : reader.GetDateTime(22),
             reader.IsDBNull(23) ? "General" : reader.GetString(23),
-            ReadApplicableEquipmentClasses(reader, 24, reader.GetString(7))
+            ReadApplicableEquipmentClasses(reader, 24, reader.GetString(7)),
+            reader.IsDBNull(25) ? null : reader.GetDecimal(25),
+            reader.IsDBNull(26) ? null : reader.GetDecimal(26),
+            reader.IsDBNull(27) ? null : reader.GetDecimal(27),
+            reader.IsDBNull(28) ? null : reader.GetDecimal(28),
+            reader.IsDBNull(29) ? null : reader.GetDecimal(29),
+            reader.IsDBNull(30) ? null : reader.GetDecimal(30),
+            reader.IsDBNull(31) ? null : reader.GetDecimal(31)
         );
 
     private static string? NormalizeShipmentMode(string? value, bool allowEmpty)
@@ -970,7 +1035,14 @@ public sealed record FtlTariffDto(
     DateTime? ValidFrom,
     DateTime? ValidTo,
     string CommercialProfile = "General",
-    IReadOnlyCollection<string>? ApplicableEquipmentClasses = null
+    IReadOnlyCollection<string>? ApplicableEquipmentClasses = null,
+    decimal? CostPerCbm = null,
+    decimal? WeightKgPerCbm = null,
+    decimal? DuaCost = null,
+    decimal? DucaTCost = null,
+    decimal? StuffingCostPerCbm = null,
+    decimal? StuffingSalePerCbm = null,
+    decimal? PanamaCostSurchargePerCbm = null
 );
 
 public sealed record CreateFtlTariffRequest(
@@ -997,7 +1069,14 @@ public sealed record CreateFtlTariffRequest(
     DateTime? ValidTo = null,
     bool IsActive = true,
     string? CommercialProfile = null,
-    IReadOnlyCollection<string>? ApplicableEquipmentClasses = null
+    IReadOnlyCollection<string>? ApplicableEquipmentClasses = null,
+    decimal? CostPerCbm = null,
+    decimal? WeightKgPerCbm = null,
+    decimal? DuaCost = null,
+    decimal? DucaTCost = null,
+    decimal? StuffingCostPerCbm = null,
+    decimal? StuffingSalePerCbm = null,
+    decimal? PanamaCostSurchargePerCbm = null
 );
 
 public sealed record ImportFtlTariffsRequest(IReadOnlyCollection<CreateFtlTariffRequest> Items);
