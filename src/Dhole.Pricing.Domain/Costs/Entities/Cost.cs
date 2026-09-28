@@ -133,6 +133,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
     public decimal? MinimumCostAmount { get; private set; }
     public decimal? MinimumSaleAmount { get; private set; }
     public decimal? KgPerCbm { get; private set; }
+    public string[] OperationalConditions { get; private set; } = [];
     public string? Notes { get; private set; }
     private bool _isAccountant;
     public bool IsAccountant
@@ -470,6 +471,33 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
             }
             existing.UpdateSnapshot(service.Name, service.Code);
         }
+    }
+
+    public void ConfigureOperationalConditions(IReadOnlyCollection<string>? operationalConditions)
+    {
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "DangerousCargo",
+            "Overweight",
+            "MerchantHaulage",
+            "CarrierHaulage",
+            "EmptyReturn",
+            "ElectronicSeal",
+            "Anticipado",
+            "Redestino",
+        };
+
+        var normalized = (operationalConditions ?? [])
+            .Select(value => value?.Trim())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (normalized.Any(value => !allowed.Contains(value)))
+            throw new InvalidOperationException("La condición operativa del costo no es válida.");
+
+        OperationalConditions = normalized;
     }
 
     public void Delete(Guid? deletedBy)
