@@ -74,7 +74,7 @@ public sealed class DataExtractionPricingImportMapperTests
             null
         );
 
-        var result = response.ToApplicationResult(
+        var result = DataExtractionPricingImportMapper.ToApplicationResult(response, 
             Guid.NewGuid(),
             response.PricingImportId
         );
@@ -153,7 +153,7 @@ public sealed class DataExtractionPricingImportMapperTests
             null
         );
 
-        var result = response.ToApplicationResult(
+        var result = DataExtractionPricingImportMapper.ToApplicationResult(response, 
             Guid.NewGuid(),
             response.PricingImportId
         );
@@ -222,7 +222,7 @@ public sealed class DataExtractionPricingImportMapperTests
             null
         );
 
-        var result = response.ToApplicationResult(Guid.NewGuid(), response.PricingImportId);
+        var result = DataExtractionPricingImportMapper.ToApplicationResult(response, Guid.NewGuid(), response.PricingImportId);
         var row = result.Rows.Single();
 
         Assert.AreEqual("AIR", row.ContainerType);

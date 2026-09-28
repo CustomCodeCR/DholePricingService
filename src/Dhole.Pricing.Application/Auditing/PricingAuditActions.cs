@@ -14,4 +14,8 @@ public static class PricingAuditActions
     public const string AmountsChanged = "amounts-changed";
     public const string Added = "added";
     public const string Removed = "removed";
+
+    public const string Calculated = "calculated";
+    public const string Applied = "applied";
+    public const string ManualOverride = "manual-override";
 }

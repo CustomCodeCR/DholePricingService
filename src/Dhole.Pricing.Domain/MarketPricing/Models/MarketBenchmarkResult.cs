@@ -1,0 +1,31 @@
+namespace Dhole.Pricing.Domain.MarketPricing.Models;
+
+public sealed record MarketBenchmarkResult(
+    int ObservationCount,
+    int CompetitorCount,
+    int CandidateCount,
+    int OutlierCount,
+    decimal? Average,
+    decimal? WeightedAverage,
+    decimal? Median,
+    decimal? Minimum,
+    decimal? Maximum,
+    decimal? StandardDeviation,
+    decimal? Percentile25,
+    decimal? Percentile40,
+    decimal? Percentile50,
+    decimal? Percentile60,
+    decimal? Percentile65,
+    decimal? Percentile75,
+    decimal? LowerMarket,
+    decimal? UpperMarket,
+    decimal TargetPercentile,
+    decimal CompetitiveCeilingPercentile,
+    decimal? TargetMarketPrice,
+    decimal? CompetitiveCeiling,
+    decimal ConfidenceScore,
+    bool HasSufficientMarketData,
+    bool CarrierFallbackUsed,
+    string AlgorithmVersion,
+    IReadOnlyCollection<MarketObservationResult> Observations
+);

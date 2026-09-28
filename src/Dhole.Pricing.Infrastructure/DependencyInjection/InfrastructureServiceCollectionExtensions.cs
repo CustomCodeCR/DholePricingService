@@ -5,6 +5,7 @@ using CustomCodeFramework.Redis.DependencyInjection;
 using Dhole.Config.Contracts.Grpc;
 using Dhole.DataExtraction.Contracts.Grpc;
 using Dhole.Pricing.Application.Abstractions.Cache;
+using Dhole.Pricing.Application.Abstractions.MarketPricing;
 using Dhole.Pricing.Application.Abstractions.Mongo;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Imports;
@@ -49,12 +50,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddPricingDataExtractionGrpcClient(configuration);
         services.AddPricingReportsClient(configuration);
         services.AddPricingAuthRecipientClient(configuration);
-        services.AddHttpClient<IPricingExchangeRateProvider, HaciendaExchangeRateProvider>(client =>
-        {
-            client.BaseAddress = new Uri("https://api.hacienda.go.cr/");
-            client.Timeout = TimeSpan.FromSeconds(10);
-            client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
-        });
+        services.AddPricingExchangeRateServices();
 
         services.AddScoped<ExtractAndPersistFclPricingImportService>();
 
@@ -74,8 +70,24 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddPricingConfigGrpcClient(configuration);
         services.AddPricingDataExtractionGrpcClient(configuration);
         services.AddPricingAuthRecipientClient(configuration);
+        services.AddPricingExchangeRateServices();
 
         services.AddScoped<ExtractAndPersistFclPricingImportService>();
+
+        return services;
+    }
+
+    private static IServiceCollection AddPricingExchangeRateServices(
+        this IServiceCollection services
+    )
+    {
+        services.AddHttpClient<IPricingExchangeRateProvider, HaciendaExchangeRateProvider>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.hacienda.go.cr/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        });
+        services.AddScoped<IMarketCurrencyExchangeRateProvider, PricingMarketCurrencyExchangeRateProvider>();
 
         return services;
     }

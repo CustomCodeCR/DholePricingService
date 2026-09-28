@@ -73,6 +73,13 @@ public static class PricingConstants
         public const string FclDecisionCreate = "pricing.fcl-decisions.create";
         public const string FclDecisionView = "pricing.fcl-decisions.view";
         public const string FclDecisionDelete = "pricing.fcl-decisions.delete";
+        public const string MarketBenchmarkView = "pricing.market-benchmark.view";
+        public const string MarketBenchmarkCalculate = "pricing.market-benchmark.calculate";
+        public const string AutoPricingView = "pricing.auto-pricing.view";
+        public const string AutoPricingCalculate = "pricing.auto-pricing.calculate";
+        public const string AutoPricingApply = "pricing.auto-pricing.apply";
+        public const string AutoPricingOverride = "pricing.auto-pricing.override";
+        public const string AutoPricingApprove = "pricing.auto-pricing.approve";
     }
 
     public static class Audit

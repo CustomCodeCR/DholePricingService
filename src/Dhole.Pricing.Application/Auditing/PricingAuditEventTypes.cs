@@ -27,4 +27,11 @@ public static class PricingAuditEventTypes
 
     public const string FclDecisionCreated = "pricing.fcl-decision.created";
     public const string FclDecisionDeleted = "pricing.fcl-decision.deleted";
+
+    public const string MarketBenchmarkCalculated = "pricing.market-benchmark.calculated";
+    public const string AutoPricingCalculated = "pricing.auto-pricing.calculated";
+    public const string AutoPricingApplied = "pricing.auto-pricing.applied";
+    public const string AutoPricingManualOverride = "pricing.auto-pricing.manual-override";
+    public const string AutoPricingApproved = "pricing.auto-pricing.approved";
+    public const string AutoPricingRejected = "pricing.auto-pricing.rejected";
 }

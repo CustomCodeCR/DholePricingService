@@ -98,6 +98,7 @@ public sealed class RateStatusWorkflowTests
         );
 
         rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+        rate.SetIdtraNumber("IDTRA-2026-00125", updatedBy: null);
         rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
 
         Assert.AreEqual(RateStatus.AcceptedByClient, rate.Status);
@@ -126,6 +127,7 @@ public sealed class RateStatusWorkflowTests
         rate.SetAmounts(updatedBy: null);
         rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
         rate.SetCommercialStatus(RateStatus.RequestedByClient, reason: null, updatedBy: null);
+        rate.SetIdtraNumber("IDTRA-2026-00126", updatedBy: null);
 
         rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
 
@@ -165,15 +167,15 @@ public sealed class RateStatusWorkflowTests
     }
 
     [TestMethod]
-    public void SetAmounts_WithIdtraAndQuo_AutomaticallyAcceptsRate()
+    public void SetAmounts_WithIdtraAndQuo_DoesNotBypassMarginApproval()
     {
         var rate = CreateRate(idtraNumber: "IDTRA-2026-00125", quoNumber: "QUO-2026-00458");
         AddFreight(rate, cost: 95m, sale: 100m);
 
         rate.SetAmounts(updatedBy: null);
 
-        Assert.AreEqual(RateStatus.AcceptedByClient, rate.Status);
-        Assert.IsFalse(rate.RequiredApproval);
+        Assert.AreEqual(RateStatus.PendingApproval, rate.Status);
+        Assert.IsTrue(rate.RequiredApproval);
     }
 
     [TestMethod]
@@ -213,6 +215,7 @@ public sealed class RateStatusWorkflowTests
         var rate = CreateRate(validTo: today.AddDays(-1));
         AddFreight(rate, cost: 80m, sale: 100m);
         rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
 
         var changed = rate.MarkExpired(today);
 
@@ -270,6 +273,11 @@ public sealed class RateStatusWorkflowTests
     )
     {
         var today = DateTime.UtcNow.Date;
+        var resolvedValidTo = validTo ?? today.AddDays(30);
+        var resolvedValidFrom = resolvedValidTo < today
+            ? resolvedValidTo.AddDays(-30)
+            : today;
+
         return RateHeader.Create(
             rateCode,
             sourceImportFclRateId: null,
@@ -298,8 +306,8 @@ public sealed class RateStatusWorkflowTests
             currencyName: "Dólar",
             currencyCode: "USD",
             freeDays: 7,
-            validFrom: today,
-            validTo: validTo ?? today.AddDays(30),
+            validFrom: resolvedValidFrom,
+            validTo: resolvedValidTo,
             containerQuantity: 1,
             clientName: "Cliente",
             idtraNumber,

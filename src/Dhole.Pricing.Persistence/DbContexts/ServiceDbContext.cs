@@ -7,6 +7,7 @@ using CustomCodeFramework.Postgres.EntityFramework.DbContexts;
 using Dhole.Pricing.Domain.Competitors.Entities;
 using Dhole.Pricing.Domain.Costs.Entities;
 using Dhole.Pricing.Domain.Imports.Entities;
+using Dhole.Pricing.Domain.MarketPricing.Entities;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Persistence.Auditing;
 using Dhole.Pricing.Persistence.Messaging;
@@ -20,6 +21,17 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
     private const string SourceService = "DholePricingService";
 
     public DbSet<CompetitorTariff> CompetitorTariffs => Set<CompetitorTariff>();
+
+    public DbSet<CompetitorRateObservation> CompetitorRateObservations => Set<CompetitorRateObservation>();
+
+    public DbSet<PricingMarketDecision> PricingMarketDecisions => Set<PricingMarketDecision>();
+
+    public DbSet<PricingMarketDecisionObservation> PricingMarketDecisionObservations =>
+        Set<PricingMarketDecisionObservation>();
+
+    public DbSet<AutoPricingProfile> AutoPricingProfiles => Set<AutoPricingProfile>();
+
+    public DbSet<ChargePricingRule> ChargePricingRules => Set<ChargePricingRule>();
 
     public DbSet<Cost> Costs => Set<Cost>();
     public DbSet<CostIncoterm> CostIncoterms => Set<CostIncoterm>();
