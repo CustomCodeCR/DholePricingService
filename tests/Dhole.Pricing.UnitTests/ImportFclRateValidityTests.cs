@@ -104,7 +104,7 @@ public sealed class ImportFclRateValidityTests
         rate.Approve();
         rate.Inactivate();
 
-        Assert.ThrowsException<InvalidOperationException>(() => rate.CreatedAsRate(Guid.NewGuid()));
+        AssertThrowsInvalidOperation(() => rate.CreatedAsRate(Guid.NewGuid()));
     }
 
     [TestMethod]
@@ -127,7 +127,20 @@ public sealed class ImportFclRateValidityTests
         var rate = CreateRate(new DateTime(2026, 9, 15), new DateTime(2026, 9, 21));
         rate.CreatedAsRate(Guid.NewGuid());
 
-        Assert.ThrowsException<InvalidOperationException>(() => ApplyReview(rate, 7300m, 65m));
+        AssertThrowsInvalidOperation(() => ApplyReview(rate, 7300m, 65m));
+    }
+
+    private static void AssertThrowsInvalidOperation(Action action)
+    {
+        try
+        {
+            action();
+            Assert.Fail("Se esperaba InvalidOperationException.");
+        }
+        catch (InvalidOperationException)
+        {
+            // Expected.
+        }
     }
 
     private static void ApplyReview(ImportFclRates rate, decimal oceanFreight, decimal surcharges)

@@ -991,6 +991,26 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
     }
 
+    public void SetRateDetailSaleAmount(
+        Guid rateDetailId,
+        decimal saleAmount,
+        Guid? updatedBy
+    )
+    {
+        var detail = _rateDetails.FirstOrDefault(x => x.Id == rateDetailId)
+            ?? throw new InvalidOperationException("El detalle de la tarifa no existe.");
+
+        if (detail.CostType == CostType.Fixed)
+        {
+            throw new InvalidOperationException(
+                "Un rubro fijo no puede ser modificado por auto pricing."
+            );
+        }
+
+        detail.SetSaleAmount(saleAmount);
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+    }
+
     public void RemoveRateDetail(Guid rateDetailId, Guid? updatedBy)
     {
         var detail = _rateDetails.FirstOrDefault(x => x.Id == rateDetailId);

@@ -6,4 +6,6 @@ public enum ShipmentMode
     Lcl = 2,
     Ftl = 3,
     Ltl = 4,
+    Air = 5,
+    AirConsol = 6,
 }

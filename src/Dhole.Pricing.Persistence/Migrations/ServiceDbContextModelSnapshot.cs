@@ -220,6 +220,611 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.ToTable("CompetitorTariffs", "pricing");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.AutoPricingProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<decimal>("CompetitiveCeilingPercentile")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("competitive_ceiling_percentile");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<decimal>("MaximumMarketDeviation")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("maximum_market_deviation");
+
+                    b.Property<decimal>("MinimumConfidenceForAutoApply")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("minimum_confidence_for_auto_apply");
+
+                    b.Property<decimal>("MinimumConfidenceForSuggestion")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("minimum_confidence_for_suggestion");
+
+                    b.Property<int>("MinimumCompetitorCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("minimum_competitor_count");
+
+                    b.Property<int>("MinimumObservationCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("minimum_observation_count");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("TargetPercentile")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("target_percentile");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AutoPricingProfiles");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AutoPricingProfiles_Code");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("IX_AutoPricingProfiles_IsActive");
+
+                    b.ToTable("AutoPricingProfiles", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.ChargePricingRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AdjustmentPriority")
+                        .HasColumnType("integer")
+                        .HasColumnName("adjustment_priority");
+
+                    b.Property<string>("AdjustmentStrategy")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("adjustment_strategy");
+
+                    b.Property<bool>("CanAutoAdjust")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_auto_adjust");
+
+                    b.Property<string>("ChargeCode")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("charge_code");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<decimal?>("MaximumAdjustmentAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("maximum_adjustment_amount");
+
+                    b.Property<decimal?>("MaximumMarkup")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("maximum_markup");
+
+                    b.Property<decimal>("MinimumMarkup")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("minimum_markup");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ChargePricingRules");
+
+                    b.HasIndex("ChargeCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ChargePricingRules_ChargeCode");
+
+                    b.HasIndex("IsActive", "AdjustmentPriority")
+                        .HasDatabaseName("IX_ChargePricingRules_Active_Priority");
+
+                    b.ToTable("ChargePricingRules", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.CompetitorRateObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("CarrierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("carrier_id");
+
+                    b.Property<string>("CarrierCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("carrier_code");
+
+                    b.Property<string>("CarrierName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("carrier_name");
+
+                    b.Property<Guid?>("CompetitorCompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("competitor_company_id");
+
+                    b.Property<string>("CompetitorCompanyName")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("competitor_company_name");
+
+                    b.Property<Guid?>("CompetitorTariffId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("competitor_tariff_id");
+
+                    b.Property<Guid?>("ContainerTypeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("container_type_id");
+
+                    b.Property<string>("ContainerTypeCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("container_type_code");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("currency");
+
+                    b.Property<decimal?>("DestinationCharges")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("destination_charges");
+
+                    b.Property<DateTime?>("ExchangeRateDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("exchange_rate_date");
+
+                    b.Property<decimal?>("ExchangeRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("exchange_rate");
+
+                    b.Property<decimal>("ExtractionConfidence")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("extraction_confidence");
+
+                    b.Property<Guid?>("IncotermId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("incoterm_id");
+
+                    b.Property<string>("IncotermCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("incoterm_code");
+
+                    b.Property<decimal?>("InlandCharges")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("inland_charges");
+
+                    b.Property<DateTime>("ImportedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("imported_at_utc");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("mode");
+
+                    b.Property<decimal?>("NormalizedAllIn")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("normalized_all_in");
+
+                    b.Property<decimal?>("NormalizedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("normalized_amount");
+
+                    b.Property<string>("NormalizedCurrency")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("normalized_currency");
+
+                    b.Property<decimal>("NormalizationConfidence")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("normalization_confidence");
+
+                    b.Property<decimal?>("NormalizedOceanFreight")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("normalized_ocean_freight");
+
+                    b.Property<decimal?>("OceanFreight")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("ocean_freight");
+
+                    b.Property<decimal?>("OriginCharges")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("origin_charges");
+
+                    b.Property<decimal?>("OriginalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("original_amount");
+
+                    b.Property<decimal?>("OtherCharges")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("other_charges");
+
+                    b.Property<Guid?>("PodId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pod_id");
+
+                    b.Property<string>("PodCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("pod_code");
+
+                    b.Property<string>("PodName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pod_name");
+
+                    b.Property<Guid?>("PoeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("poe_id");
+
+                    b.Property<string>("PoeCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("poe_code");
+
+                    b.Property<string>("PoeName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("poe_name");
+
+                    b.Property<Guid?>("PolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pol_id");
+
+                    b.Property<string>("PolCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("pol_code");
+
+                    b.Property<string>("PolName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pol_name");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("RateBasis")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("rate_basis");
+
+                    b.Property<string>("RawPayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("raw_payload_json");
+
+                    b.Property<Guid?>("SourceDocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_document_id");
+
+                    b.Property<Guid?>("SourceImportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_import_id");
+
+                    b.Property<DateTime>("ValidFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_from");
+
+                    b.Property<DateTime>("ValidTo")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_to");
+
+                    b.HasKey("Id")
+                        .HasName("PK_CompetitorRateObservations");
+
+                    b.HasIndex("CompetitorCompanyId")
+                        .HasDatabaseName("IX_CompetitorRateObservations_CompetitorCompanyId");
+
+                    b.HasIndex("CompetitorTariffId")
+                        .HasDatabaseName("IX_CompetitorRateObservations_CompetitorTariffId");
+
+                    b.HasIndex("ValidFrom", "ValidTo")
+                        .HasDatabaseName("IX_CompetitorRateObservations_Validity");
+
+                    b.HasIndex("Mode", "IncotermId", "PolId", "PoeId", "PodId", "ContainerTypeId", "CarrierId")
+                        .HasDatabaseName("IX_CompetitorRateObservations_MarketKey");
+
+                    b.ToTable("CompetitorRateObservations", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.PricingMarketDecision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AlgorithmVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("algorithm_version");
+
+                    b.Property<decimal?>("Average")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("average");
+
+                    b.Property<DateTime>("CalculatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("calculated_at_utc");
+
+                    b.Property<Guid?>("ComparisonCarrierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparison_carrier_id");
+
+                    b.Property<Guid?>("ComparisonContainerTypeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparison_container_type_id");
+
+                    b.Property<Guid?>("ComparisonIncotermId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparison_incoterm_id");
+
+                    b.Property<string>("ComparisonMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("comparison_mode");
+
+                    b.Property<Guid?>("ComparisonPodId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparison_pod_id");
+
+                    b.Property<Guid?>("ComparisonPoeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparison_poe_id");
+
+                    b.Property<Guid>("ComparisonPolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparison_pol_id");
+
+                    b.Property<int>("CompetitorCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("competitor_count");
+
+                    b.Property<decimal?>("CompetitiveCeiling")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("competitive_ceiling");
+
+                    b.Property<decimal>("ConfidenceScore")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("confidence_score");
+
+                    b.Property<decimal>("CostTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("cost_total");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<decimal>("FinalSaleTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("final_sale_total");
+
+                    b.Property<decimal?>("Median")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("median");
+
+                    b.Property<int>("ObservationCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("observation_count");
+
+                    b.Property<decimal>("OriginalSaleTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("original_sale_total");
+
+                    b.Property<decimal?>("P25")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("p25");
+
+                    b.Property<decimal?>("P40")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("p40");
+
+                    b.Property<decimal?>("P50")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("p50");
+
+                    b.Property<decimal?>("P60")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("p60");
+
+                    b.Property<decimal?>("P65")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("p65");
+
+                    b.Property<decimal?>("P75")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("p75");
+
+                    b.Property<Guid>("RateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rate_id");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at_utc");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
+
+                    b.Property<decimal>("SuggestedSaleTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("suggested_sale_total");
+
+                    b.Property<decimal?>("TargetMarketPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("target_market_price");
+
+                    b.Property<bool>("WasAutoApplied")
+                        .HasColumnType("boolean")
+                        .HasColumnName("was_auto_applied");
+
+                    b.Property<bool>("WasManuallyModified")
+                        .HasColumnType("boolean")
+                        .HasColumnName("was_manually_modified");
+
+                    b.Property<decimal?>("WeightedAverage")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("weighted_average");
+
+                    b.HasKey("Id")
+                        .HasName("PK_PricingMarketDecisions");
+
+                    b.HasIndex("RateId", "CalculatedAtUtc")
+                        .HasDatabaseName("IX_PricingMarketDecisions_Rate_CalculatedAt");
+
+                    b.HasIndex("ComparisonMode", "ComparisonIncotermId", "ComparisonPolId", "ComparisonPoeId", "ComparisonPodId", "ComparisonContainerTypeId", "ComparisonCarrierId")
+                        .HasDatabaseName("IX_PricingMarketDecisions_MarketKey");
+
+                    b.ToTable("PricingMarketDecisions", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.PricingMarketDecisionObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("ComparabilityScore")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("comparability_score");
+
+                    b.Property<Guid?>("CompetitorCompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("competitor_company_id");
+
+                    b.Property<Guid>("CompetitorRateObservationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("competitor_rate_observation_id");
+
+                    b.Property<string>("ExclusionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("exclusion_reason");
+
+                    b.Property<decimal>("FinalWeight")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("final_weight");
+
+                    b.Property<bool>("IsOutlier")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_outlier");
+
+                    b.Property<decimal?>("NormalizedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("normalized_amount");
+
+                    b.Property<decimal?>("OriginalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("original_amount");
+
+                    b.Property<Guid>("PricingMarketDecisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pricing_market_decision_id");
+
+                    b.Property<decimal>("RecencyWeight")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("recency_weight");
+
+                    b.Property<bool>("WasIncluded")
+                        .HasColumnType("boolean")
+                        .HasColumnName("was_included");
+
+                    b.HasKey("Id")
+                        .HasName("PK_PricingMarketDecisionObservations");
+
+                    b.HasIndex("CompetitorRateObservationId")
+                        .HasDatabaseName("IX_PricingMarketDecisionObservations_ObservationId");
+
+                    b.HasIndex("PricingMarketDecisionId", "CompetitorRateObservationId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_PricingMarketDecisionObservations_Decision_Observation");
+
+                    b.ToTable("PricingMarketDecisionObservations", "pricing");
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Costs.Entities.Cost", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2312,6 +2917,32 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.HasIndex("IsActive", "SortOrder");
 
                     b.ToTable("RateTermItems", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.CompetitorRateObservation", b =>
+                {
+                    b.HasOne("Dhole.Pricing.Domain.Competitors.Entities.CompetitorTariff", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitorTariffId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_CompetitorRateObservations_CompetitorTariffs");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.PricingMarketDecisionObservation", b =>
+                {
+                    b.HasOne("Dhole.Pricing.Domain.MarketPricing.Entities.CompetitorRateObservation", null)
+                        .WithMany()
+                        .HasForeignKey("CompetitorRateObservationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_PricingMarketDecisionObservations_Observations");
+
+                    b.HasOne("Dhole.Pricing.Domain.MarketPricing.Entities.PricingMarketDecision", null)
+                        .WithMany()
+                        .HasForeignKey("PricingMarketDecisionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FK_PricingMarketDecisionObservations_Decisions");
                 });
 
             modelBuilder.Entity("Dhole.Pricing.Domain.Costs.Entities.CostIncoterm", b =>

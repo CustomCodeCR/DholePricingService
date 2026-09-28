@@ -119,6 +119,15 @@ public sealed class RateDetail : Entity<Guid>
         UtilityAmount = (SaleAmount - CostAmount) * quantity;
     }
 
+    internal void SetSaleAmount(decimal saleAmount)
+    {
+        if (saleAmount < 0m)
+            throw new InvalidOperationException("El monto de venta del detalle no puede ser negativo.");
+
+        SaleAmount = saleAmount;
+        UtilityAmount = (SaleAmount - CostAmount) * Quantity;
+    }
+
     internal void Update(
         Guid? costId,
         string name,

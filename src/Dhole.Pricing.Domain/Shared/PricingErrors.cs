@@ -440,5 +440,52 @@ public static class PricingErrors
     public static readonly Error ReportGenerationTimedOut = new(
         "Pricing.Reports.GenerationTimedOut",
         "Reports Service superó el tiempo máximo para generar el documento."
+    );    public static readonly Error MarketPricingProfileNotFound = new(
+        "Pricing.MarketPricingProfileNotFound",
+        "No existe un perfil activo de auto pricing para realizar el cálculo."
     );
+
+    public static readonly Error MarketPricingDecisionNotFound = new(
+        "Pricing.MarketPricingDecisionNotFound",
+        "No existe una decisión de auto pricing para la tarifa indicada."
+    );
+
+    public static readonly Error MarketPricingIncotermRequired = new(
+        "Pricing.MarketPricingIncotermRequired",
+        "La tarifa necesita un Incoterm válido para calcular mercado comparable."
+    );
+
+    public static readonly Error MarketPricingMultipleEquipmentRequiresSelection = new(
+        "Pricing.MarketPricingMultipleEquipmentRequiresSelection",
+        "La tarifa contiene más de un tipo de equipo. Indique containerTypeId para calcular el benchmark de la línea correcta."
+    );
+
+    public static readonly Error MarketPricingEquipmentNotInRate = new(
+        "Pricing.MarketPricingEquipmentNotInRate",
+        "El equipo solicitado no pertenece a la tarifa."
+    );
+
+    public static readonly Error MarketPricingDecisionStale = new(
+        "Pricing.MarketPricingDecisionStale",
+        "La decisión de auto pricing ya no coincide con la estructura o el cálculo actual de la tarifa. Recalcule antes de aplicar."
+    );
+
+    public static readonly Error MarketPricingActorRequired = new(
+        "Pricing.MarketPricingActorRequired",
+        "La operación requiere un usuario autenticado identificable."
+    );
+
+    public static Error MarketPricingUnsupportedCurrency(string currency) => new(
+        "Pricing.MarketPricingUnsupportedCurrency",
+        $"Auto pricing no puede convertir la moneda '{currency}' a USD con la información disponible en la tarifa."
+    );
+
+    public static Error MarketPricingInvalidRequest(string? message) => new(
+        "Pricing.MarketPricingInvalidRequest",
+        string.IsNullOrWhiteSpace(message)
+            ? "La solicitud de market pricing no es válida."
+            : message.Trim()
+    );
+
+
 }

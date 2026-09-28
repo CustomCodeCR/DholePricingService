@@ -10,4 +10,5 @@ public static class PricingAuditEntityTypes
     public const string RateDetail = "RateDetail";
 
     public const string FclDecision = "FclDecision";
+    public const string PricingMarketDecision = "PricingMarketDecision";
 }
