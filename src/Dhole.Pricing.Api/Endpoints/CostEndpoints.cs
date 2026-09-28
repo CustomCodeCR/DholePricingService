@@ -251,8 +251,8 @@ public static class CostEndpoints
                 request.MinimumCostAmount,
                 request.MinimumSaleAmount,
                 request.KgPerCbm,
-                (request.OperationalConditions ?? []).ToArray(),
-                httpContext.GetCurrentUserId()
+                httpContext.GetCurrentUserId(),
+                (request.OperationalConditions ?? []).ToArray()
             ),
             cancellationToken
         );
@@ -356,8 +356,8 @@ public static class CostEndpoints
                 request.MinimumCostAmount,
                 request.MinimumSaleAmount,
                 request.KgPerCbm,
-                (request.OperationalConditions ?? []).ToArray(),
-                httpContext.GetCurrentUserId()
+                httpContext.GetCurrentUserId(),
+                (request.OperationalConditions ?? []).ToArray()
             ),
             cancellationToken
         );
