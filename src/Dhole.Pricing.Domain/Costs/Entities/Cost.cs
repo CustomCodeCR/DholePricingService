@@ -497,6 +497,11 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         if (normalized.Any(value => !allowed.Contains(value)))
             throw new InvalidOperationException("La condición operativa del costo no es válida.");
 
+        if (CostType != CostType.Optional && normalized.Length > 0)
+            throw new InvalidOperationException(
+                "Las condiciones operativas solo aplican a costos opcionales."
+            );
+
         OperationalConditions = normalized;
     }
 
