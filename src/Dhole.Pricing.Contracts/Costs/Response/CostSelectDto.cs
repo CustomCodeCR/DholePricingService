@@ -46,5 +46,6 @@ public sealed record CostSelectDto(
     IReadOnlyCollection<CostRelationDto>? Poes = null,
     IReadOnlyCollection<CostRelationDto>? Pods = null,
     IReadOnlyCollection<CostRelationDto>? Carriers = null,
-    IReadOnlyCollection<CostRelationDto>? Agents = null
+    IReadOnlyCollection<CostRelationDto>? Agents = null,
+    IReadOnlyCollection<string>? OperationalConditions = null
 );
