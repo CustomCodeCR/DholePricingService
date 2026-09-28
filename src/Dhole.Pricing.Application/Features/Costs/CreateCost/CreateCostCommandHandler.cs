@@ -202,6 +202,7 @@ public sealed class CreateCostCommandHandler(
                 command.CreatedBy
             );
             cost.ConfigureServices(command.Services);
+            cost.ConfigureOperationalConditions(command.OperationalConditions);
         }
         catch (InvalidOperationException)
         {
