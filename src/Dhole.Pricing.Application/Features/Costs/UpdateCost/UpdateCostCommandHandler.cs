@@ -209,6 +209,7 @@ public sealed class UpdateCostCommandHandler(
                 command.UpdatedBy
             );
             cost.ConfigureServices(command.Services);
+            cost.ConfigureOperationalConditions(command.OperationalConditions);
         }
         catch (InvalidOperationException)
         {
