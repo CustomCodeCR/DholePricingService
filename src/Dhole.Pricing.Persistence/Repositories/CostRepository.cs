@@ -192,7 +192,13 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.Services
                     .OrderBy(s => s.ServiceName)
                     .Select(s => new CostServiceDto(s.ServiceId, s.ServiceName, s.ServiceCode))
-                    .ToList()
+                    .ToList(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                x.OperationalConditions
             ))
             .ToListAsync(cancellationToken);
 
@@ -277,7 +283,13 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.Services
                     .OrderBy(s => s.ServiceName)
                     .Select(s => new CostServiceDto(s.ServiceId, s.ServiceName, s.ServiceCode))
-                    .ToList()
+                    .ToList(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                x.OperationalConditions
             ))
             .ToListAsync(cancellationToken);
     }
