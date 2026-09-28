@@ -528,6 +528,13 @@ public static class FtlTariffEndpoints
                 UPDATE pricing."FtlTariffs"
                 SET price_amount = @price_amount,
                     minimum_amount = @minimum_amount,
+                    cost_per_cbm = @cost_per_cbm,
+                    weight_kg_per_cbm = @weight_kg_per_cbm,
+                    dua_cost = @dua_cost,
+                    duca_t_cost = @duca_t_cost,
+                    stuffing_cost_per_cbm = @stuffing_cost_per_cbm,
+                    stuffing_sale_per_cbm = @stuffing_sale_per_cbm,
+                    panama_cost_surcharge_per_cbm = @panama_cost_surcharge_per_cbm,
                     transit_days = @transit_days,
                     warehouse_name = @warehouse_name,
                     source = @source,
