@@ -40,5 +40,6 @@ public sealed record CreateCostRequest(
     decimal? MinimumSaleAmount = null,
     decimal? KgPerCbm = null,
     IReadOnlyCollection<CostServiceRequest>? Services = null,
-    IReadOnlyCollection<string>? OperationalConditions = null
+    IReadOnlyCollection<string>? OperationalConditions = null,
+    IReadOnlyCollection<string>? ShipmentModes = null
 );

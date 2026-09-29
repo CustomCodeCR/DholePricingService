@@ -74,6 +74,7 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
         builder.Property(x => x.UtilityAmount).HasPrecision(18, 2).IsRequired();
 
         builder.Property(x => x.ShipmentMode).HasConversion<string>().HasMaxLength(20).IsRequired(false);
+        builder.Property(x => x.ShipmentModeMask).IsRequired().HasDefaultValue(0);
         builder.Property(x => x.ChargeBasis).HasConversion<string>().HasMaxLength(40).IsRequired().HasDefaultValue(Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerShipment);
         builder.Property(x => x.MinimumCostAmount).HasPrecision(18, 2).IsRequired(false);
         builder.Property(x => x.MinimumSaleAmount).HasPrecision(18, 2).IsRequired(false);
@@ -112,6 +113,7 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
         builder.HasIndex(x => x.PodId);
         builder.HasIndex(x => x.CurrencyId);
         builder.HasIndex(x => x.ShipmentMode);
+        builder.HasIndex(x => x.ShipmentModeMask);
         builder.HasIndex(x => x.ChargeBasis);
         builder.HasIndex(x => x.IsAccountant);
         builder.HasIndex(x => x.IsActive);
@@ -128,7 +130,7 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
                 x.PolId,
                 x.PoeId,
                 x.PodId,
-                x.ShipmentMode,
+                x.ShipmentModeMask,
                 x.ChargeBasis,
                 x.IsAccountant,
                 x.Name,
