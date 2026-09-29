@@ -129,6 +129,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
     public decimal SaleAmount { get; private set; }
     public decimal UtilityAmount { get; private set; }
     public ShipmentMode? ShipmentMode { get; private set; }
+    public int ShipmentModeMask { get; private set; }
     public ChargeBasis ChargeBasis { get; private set; } = ChargeBasis.PerShipment;
     public decimal? MinimumCostAmount { get; private set; }
     public decimal? MinimumSaleAmount { get; private set; }
@@ -406,7 +407,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
         CostAmount = costAmount;
         SaleAmount = saleAmount;
         UtilityAmount = saleAmount - costAmount;
-        ShipmentMode = shipmentMode;
+        ConfigureShipmentModes(shipmentMode.HasValue ? [shipmentMode.Value] : []);
         ChargeBasis = chargeBasis;
         MinimumCostAmount = minimumCostAmount;
         MinimumSaleAmount = minimumSaleAmount;
@@ -442,6 +443,55 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
             existing.UpdateSnapshot(incoterm.Name, incoterm.Code);
         }
     }
+
+    public void ConfigureShipmentModes(IReadOnlyCollection<ShipmentMode>? shipmentModes)
+    {
+        var normalized = (shipmentModes ?? Array.Empty<ShipmentMode>())
+            .Distinct()
+            .OrderBy(mode => (int)mode)
+            .ToArray();
+
+        if (normalized.Any(mode => !Enum.IsDefined(mode)))
+            throw new InvalidOperationException("La modalidad del costo no es válida.");
+
+        ShipmentModeMask = BuildShipmentModeMask(normalized);
+        ShipmentMode = normalized.Length == 1 ? normalized[0] : null;
+    }
+
+    public bool AppliesToShipmentMode(ShipmentMode shipmentMode)
+    {
+        if (ShipmentModeMask == 0)
+            return !ShipmentMode.HasValue || ShipmentMode.Value == shipmentMode;
+
+        return (ShipmentModeMask & ShipmentModeBit(shipmentMode)) != 0;
+    }
+
+    public IReadOnlyCollection<ShipmentMode> GetShipmentModes()
+    {
+        if (ShipmentModeMask == 0)
+            return ShipmentMode.HasValue ? [ShipmentMode.Value] : [];
+
+        return Enum.GetValues<ShipmentMode>()
+            .Where(mode => (ShipmentModeMask & ShipmentModeBit(mode)) != 0)
+            .ToArray();
+    }
+
+    public static int BuildShipmentModeMask(IEnumerable<ShipmentMode>? shipmentModes)
+    {
+        var mask = 0;
+        foreach (var mode in (shipmentModes ?? Array.Empty<ShipmentMode>()).Distinct())
+        {
+            if (!Enum.IsDefined(mode))
+                throw new InvalidOperationException("La modalidad del costo no es válida.");
+
+            mask |= ShipmentModeBit(mode);
+        }
+
+        return mask;
+    }
+
+    private static int ShipmentModeBit(ShipmentMode shipmentMode) =>
+        1 << ((int)shipmentMode - 1);
 
     public void ConfigureServices(IReadOnlyCollection<CostServiceSelection>? services)
     {
