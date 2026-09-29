@@ -163,17 +163,17 @@ public sealed class GetCostsForSelectQueryHandler(
                 return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(cost.ShipmentMode))
+        var configuredShipmentModes = ConfiguredShipmentModes(cost);
+        if (configuredShipmentModes.Count > 0)
         {
             if (!query.ShipmentMode.HasValue)
             {
                 if (requireConfiguredContext)
                     return false;
             }
-            else if (!string.Equals(
-                cost.ShipmentMode,
+            else if (!configuredShipmentModes.Contains(
                 query.ShipmentMode.Value.ToString(),
-                StringComparison.OrdinalIgnoreCase
+                StringComparer.OrdinalIgnoreCase
             ))
             {
                 return false;
@@ -251,7 +251,7 @@ public sealed class GetCostsForSelectQueryHandler(
     private static int CostSpecificity(CostSelectDto cost)
     {
         var score = 0;
-        if (!string.IsNullOrWhiteSpace(cost.ShipmentMode)) score += 2;
+        if (ConfiguredShipmentModes(cost).Count > 0) score += 2;
         if (cost.Incoterms.Count > 0) score += 2;
         if (cost.Services?.Count > 0) score += 2;
         if (cost.CarrierId.HasValue) score += 3;
@@ -356,6 +356,16 @@ public sealed class GetCostsForSelectQueryHandler(
             })
             .OrderBy(item => item.Name)
             .ToArray();
+    }
+
+    private static IReadOnlyCollection<string> ConfiguredShipmentModes(CostSelectDto cost)
+    {
+        if (cost.ShipmentModes is { Count: > 0 })
+            return cost.ShipmentModes;
+
+        return string.IsNullOrWhiteSpace(cost.ShipmentMode)
+            ? Array.Empty<string>()
+            : new[] { cost.ShipmentMode! };
     }
 
     private static bool CanUseGeneralCache(GetCostsForSelectQuery query)

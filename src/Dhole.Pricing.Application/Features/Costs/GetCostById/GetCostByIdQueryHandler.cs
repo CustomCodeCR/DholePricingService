@@ -80,7 +80,8 @@ public sealed class GetCostByIdQueryHandler(ICostRepository costs, ICostCacheSer
             null,
             null,
             null,
-            cost.OperationalConditions
+            cost.OperationalConditions,
+            cost.GetShipmentModes().Select(mode => mode.ToString()).ToArray()
         );
 
         await cache.SetCostByIdAsync(cost.Id, dto, cancellationToken: cancellationToken);

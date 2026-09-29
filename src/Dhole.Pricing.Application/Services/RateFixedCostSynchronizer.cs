@@ -153,16 +153,8 @@ public sealed class RateFixedCostSynchronizer(
 
             // El costo contable de un fijo siempre parte del maestro y se convierte a la moneda
             // de la línea. La venta puede conservar el override de Pricing, convirtiéndolo si hace falta.
-            // Config usa identificadores como CUR-2026-001/MON-2026-001 como Code; CurrencyName
-            // conserva la identidad financiera real (USD/CRC) y se usa como fallback semántico.
             var costAmount = CostaRicaServiceCurrencyRules.ConvertUsdCrc(
-                cost.CostAmount,
-                cost.CurrencyCode,
-                targetCurrencyCode,
-                exchangeRateSale,
-                cost.CurrencyName,
-                targetCurrencyName
-            );
+                cost.CostAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
             var saleAmount = suppressAgentSale
                 ? 0m
                 : hasExistingAmount && !hasMinimumRule
@@ -170,38 +162,17 @@ public sealed class RateFixedCostSynchronizer(
                         existingAmount.SaleAmount,
                         existingAmount.CurrencyCode,
                         targetCurrencyCode,
-                        exchangeRateSale,
-                        existingAmount.CurrencyName,
-                        targetCurrencyName
-                    )
+                        exchangeRateSale)
                     : CostaRicaServiceCurrencyRules.ConvertUsdCrc(
-                        cost.SaleAmount,
-                        cost.CurrencyCode,
-                        targetCurrencyCode,
-                        exchangeRateSale,
-                        cost.CurrencyName,
-                        targetCurrencyName
-                    );
+                        cost.SaleAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
 
             var minimumCostAmount = cost.MinimumCostAmount.HasValue
                 ? CostaRicaServiceCurrencyRules.ConvertUsdCrc(
-                    cost.MinimumCostAmount.Value,
-                    cost.CurrencyCode,
-                    targetCurrencyCode,
-                    exchangeRateSale,
-                    cost.CurrencyName,
-                    targetCurrencyName
-                )
+                    cost.MinimumCostAmount.Value, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale)
                 : 0m;
             var minimumSaleAmount = cost.MinimumSaleAmount.HasValue
                 ? CostaRicaServiceCurrencyRules.ConvertUsdCrc(
-                    cost.MinimumSaleAmount.Value,
-                    cost.CurrencyCode,
-                    targetCurrencyCode,
-                    exchangeRateSale,
-                    cost.CurrencyName,
-                    targetCurrencyName
-                )
+                    cost.MinimumSaleAmount.Value, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale)
                 : 0m;
 
             var quantity = rate.ResolveChargeQuantity(cost.ChargeBasis, kgPerCbmOverride: cost.KgPerCbm);
@@ -336,7 +307,7 @@ public sealed class RateFixedCostSynchronizer(
     {
         var matchesAgent = SelectionMatches(selection?.AgentIds, cost.AgentId, rate.AgentId);
         var matchesCarrier = SelectionMatches(selection?.CarrierIds, cost.CarrierId, rate.CarrierId);
-        var matchesMode = !cost.ShipmentMode.HasValue || cost.ShipmentMode.Value == rate.ShipmentMode;
+        var matchesMode = cost.AppliesToShipmentMode(rate.ShipmentMode);
         var matchesIncoterm =
             cost.Incoterms.Count == 0
             || (

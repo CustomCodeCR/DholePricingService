@@ -1033,6 +1033,12 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("shipment_mode");
 
+                    b.Property<int>("ShipmentModeMask")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("shipment_mode_mask");
+
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at_utc");
@@ -1079,7 +1085,9 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasIndex("ShipmentMode");
 
-                    b.HasIndex("CostType", "CostDetailType", "CarrierId", "AgentId", "PortId", "PortRole", "PolId", "PoeId", "PodId", "ShipmentMode", "ChargeBasis", "IsAccountant", "Name", "CurrencyId")
+                    b.HasIndex("ShipmentModeMask");
+
+                    b.HasIndex("CostType", "CostDetailType", "CarrierId", "AgentId", "PortId", "PortRole", "PolId", "PoeId", "PodId", "ShipmentModeMask", "ChargeBasis", "IsAccountant", "Name", "CurrencyId")
                         .IsUnique()
                         .HasDatabaseName("ix_costs_template_unique")
                         .HasFilter("is_deleted = false");

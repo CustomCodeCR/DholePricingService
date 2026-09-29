@@ -144,6 +144,12 @@ public sealed class UpdateCostCommandHandler(
             return Result.Failure(PricingErrors.ConfigServiceUnavailable);
         }
 
+        var resolvedShipmentModes = (command.ShipmentModes
+            ?? (command.ShipmentMode.HasValue ? [command.ShipmentMode.Value] : []))
+            .Distinct()
+            .ToArray();
+        var shipmentModeMask = Cost.BuildShipmentModeMask(resolvedShipmentModes);
+
         var alreadyExists = await costs.ExistsByNameAsync(
             command.Name,
             command.CostType,
@@ -155,7 +161,7 @@ public sealed class UpdateCostCommandHandler(
             command.PodId,
             command.CarrierId,
             command.AgentId,
-            command.ShipmentMode,
+            shipmentModeMask,
             command.ChargeBasis,
             command.Id,
             cancellationToken
@@ -209,6 +215,7 @@ public sealed class UpdateCostCommandHandler(
                 command.UpdatedBy
             );
             cost.ConfigureServices(command.Services);
+            cost.ConfigureShipmentModes(resolvedShipmentModes);
             cost.ConfigureOperationalConditions(command.OperationalConditions);
         }
         catch (InvalidOperationException)
