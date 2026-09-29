@@ -213,7 +213,7 @@ public static class TigsaFtlCostSeeder
                     podId: null,
                     carrierId: null,
                     agentId: null,
-                    shipmentMode: ShipmentMode.Ftl,
+                    shipmentModeMask: Cost.BuildShipmentModeMask([ShipmentMode.Ftl]),
                     chargeBasis: ChargeBasis.PerTruck,
                     excludeId: null,
                     cancellationToken: cancellationToken
