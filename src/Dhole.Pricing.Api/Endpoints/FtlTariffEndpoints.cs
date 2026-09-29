@@ -387,6 +387,11 @@ public static class FtlTariffEndpoints
             ?? (applicableOriginIds.Count > 0 ? applicableOriginIds.First() : (Guid?)null);
         var primaryDestinationId = request.DestinationId
             ?? (applicableDestinationIds.Count > 0 ? applicableDestinationIds.First() : (Guid?)null);
+        var ltlChargeItems = NormalizeLtlChargeItems(
+            request.LtlChargeItems,
+            mode,
+            commercialProfile
+        );
 
         await using var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, cancellationToken);
@@ -401,6 +406,7 @@ public static class FtlTariffEndpoints
                 destination_name = @destination_name,
                 destination_code = @destination_code,
                 applicable_destination_ids = @applicable_destination_ids,
+                ltl_charge_items = @ltl_charge_items,
                 shipment_mode = @shipment_mode,
                 commercial_profile = @commercial_profile,
                 equipment_class = @equipment_class,
@@ -439,6 +445,7 @@ public static class FtlTariffEndpoints
         Add(command, "destination_name", request.DestinationName.Trim());
         Add(command, "destination_code", NullIfBlank(request.DestinationCode));
         Add(command, "applicable_destination_ids", JsonSerializer.Serialize(applicableDestinationIds));
+        Add(command, "ltl_charge_items", mode == "Ltl" ? JsonSerializer.Serialize(ltlChargeItems) : null);
         Add(command, "shipment_mode", mode);
         Add(command, "commercial_profile", commercialProfile);
         Add(command, "equipment_class", equipmentClass);
@@ -712,6 +719,30 @@ public static class FtlTariffEndpoints
 
         if (mode == "Ltl")
         {
+            if (item.LtlChargeItems is not null)
+            {
+                foreach (var charge in item.LtlChargeItems)
+                {
+                    if (string.IsNullOrWhiteSpace(charge.Key) || string.IsNullOrWhiteSpace(charge.Name))
+                    {
+                        return Results.BadRequest(new
+                        {
+                            code = "Pricing.LtlChargeInvalid",
+                            message = "Cada cargo LTL requiere clave y nombre.",
+                        });
+                    }
+
+                    if (charge.CostAmount is < 0m || charge.SaleAmount is < 0m)
+                    {
+                        return Results.BadRequest(new
+                        {
+                            code = "Pricing.LtlChargeAmountInvalid",
+                            message = "Los montos de los cargos LTL no pueden ser negativos.",
+                        });
+                    }
+                }
+            }
+
             if (item.CostPerCbm is < 0m
                 || item.DuaCost is < 0m
                 || item.DucaTCost is < 0m
@@ -784,6 +815,11 @@ public static class FtlTariffEndpoints
             ?? (applicableOriginIds.Count > 0 ? applicableOriginIds.First() : (Guid?)null);
         var primaryDestinationId = item.DestinationId
             ?? (applicableDestinationIds.Count > 0 ? applicableDestinationIds.First() : (Guid?)null);
+        var ltlChargeItems = NormalizeLtlChargeItems(
+            item.LtlChargeItems,
+            mode,
+            commercialProfile
+        );
 
         await using var lookup = connection.CreateCommand();
         lookup.Transaction = transaction;
@@ -817,6 +853,7 @@ public static class FtlTariffEndpoints
                 (
                     id, origin_id, origin_name, origin_code, applicable_origin_ids,
                     destination_id, destination_name, destination_code, applicable_destination_ids,
+                    ltl_charge_items,
                     shipment_mode, commercial_profile, equipment_class, equipment_label,
                     applicable_equipment_classes,
                     currency_id, currency_name, currency_code,
@@ -830,6 +867,7 @@ public static class FtlTariffEndpoints
                 (
                     @id, @origin_id, @origin_name, @origin_code, @applicable_origin_ids,
                     @destination_id, @destination_name, @destination_code, @applicable_destination_ids,
+                    @ltl_charge_items,
                     @shipment_mode, @commercial_profile, @equipment_class, @equipment_label,
                     @applicable_equipment_classes,
                     @currency_id, @currency_name, @currency_code,
@@ -850,6 +888,7 @@ public static class FtlTariffEndpoints
                     destination_name = @destination_name,
                     destination_code = @destination_code,
                     applicable_destination_ids = @applicable_destination_ids,
+                    ltl_charge_items = @ltl_charge_items,
                     commercial_profile = @commercial_profile,
                     equipment_class = @equipment_class,
                     equipment_label = @equipment_label,
@@ -887,6 +926,7 @@ public static class FtlTariffEndpoints
         Add(command, "destination_name", item.DestinationName.Trim());
         Add(command, "destination_code", NullIfBlank(item.DestinationCode));
         Add(command, "applicable_destination_ids", JsonSerializer.Serialize(applicableDestinationIds));
+        Add(command, "ltl_charge_items", mode == "Ltl" ? JsonSerializer.Serialize(ltlChargeItems) : null);
         Add(command, "shipment_mode", mode);
         Add(command, "commercial_profile", commercialProfile);
         Add(command, "equipment_class", equipmentClass);
@@ -952,7 +992,8 @@ public static class FtlTariffEndpoints
             stuffing_sale_per_cbm,
             panama_cost_surcharge_per_cbm,
             applicable_origin_ids,
-            applicable_destination_ids
+            applicable_destination_ids,
+            ltl_charge_items
         FROM pricing."FtlTariffs"
         """;
 
@@ -991,7 +1032,13 @@ public static class FtlTariffEndpoints
             reader.IsDBNull(30) ? null : reader.GetDecimal(30),
             reader.IsDBNull(31) ? null : reader.GetDecimal(31),
             ReadApplicableRouteIds(reader, 32, reader.IsDBNull(1) ? null : reader.GetGuid(1)),
-            ReadApplicableRouteIds(reader, 33, reader.IsDBNull(4) ? null : reader.GetGuid(4))
+            ReadApplicableRouteIds(reader, 33, reader.IsDBNull(4) ? null : reader.GetGuid(4)),
+            ReadLtlChargeItems(
+                reader,
+                34,
+                reader.IsDBNull(17) ? "Ftl" : reader.GetString(17),
+                reader.IsDBNull(23) ? "General" : reader.GetString(23)
+            )
         );
 
     private static string? NormalizeShipmentMode(string? value, bool allowEmpty)
@@ -1121,6 +1168,88 @@ public static class FtlTariffEndpoints
             : Array.Empty<Guid>();
     }
 
+    private static IReadOnlyCollection<LtlChargeItemDto> NormalizeLtlChargeItems(
+        IReadOnlyCollection<LtlChargeItemDto>? values,
+        string shipmentMode,
+        string commercialProfile
+    )
+    {
+        if (!string.Equals(shipmentMode, "Ltl", StringComparison.OrdinalIgnoreCase))
+            return Array.Empty<LtlChargeItemDto>();
+
+        var defaults = DefaultLtlChargeItems(commercialProfile).ToList();
+        if (values is null || values.Count == 0) return defaults;
+
+        var supplied = values
+            .Where(item => !string.IsNullOrWhiteSpace(item.Key))
+            .GroupBy(item => item.Key.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Last(), StringComparer.OrdinalIgnoreCase);
+
+        for (var index = 0; index < defaults.Count; index++)
+        {
+            var current = defaults[index];
+            if (current.IsFlat || !supplied.TryGetValue(current.Key, out var incoming)) continue;
+
+            defaults[index] = current with
+            {
+                CostAmount = incoming.CostAmount,
+                SaleAmount = incoming.SaleAmount,
+            };
+        }
+
+        return defaults;
+    }
+
+    private static IReadOnlyCollection<LtlChargeItemDto> DefaultLtlChargeItems(string commercialProfile)
+    {
+        var isNvocc = string.Equals(commercialProfile, "Nvocc", StringComparison.OrdinalIgnoreCase);
+        return new LtlChargeItemDto[]
+        {
+            new("dua", "DUA", "CustomsCharge", "PerDocument", "origin_charges", 50m, 60m, true),
+            new("duca-t", "DUCA-T", "Documentation", "PerDocument", "international_freight", 30m, isNvocc ? 30m : 35m, true),
+            new("stuffing", "Stuffing", "OriginCharge", "PerChargeableCbm", "origin_charges", 550m / 60m, 10m, true),
+            new("carta-porte", "Carta Porte", "Documentation", "PerDocument", "international_freight", 0m, isNvocc ? 35m : 45m, true),
+            new("manejos", "Manejos", "AgentCharge", "PerShipment", "origin_charges", 0m, isNvocc ? 25m : 45m, true),
+            new("seguro", "Seguro", "Insurance", "PerShipment", "origin_charges", null, null, false),
+            new("recolecta", "Recolecta", "OriginCharge", "PerShipment", "pickup_origin", null, null, false),
+            new("reembarque", "Reembarque", "Other", "PerShipment", "origin_charges", null, null, false),
+            new("inspeccion", "Inspección", "CustomsCharge", "PerShipment", "origin_charges", null, null, false),
+            new("tramite-aduanas-destino", "Trámite Aduanas Destino", "CustomsCharge", "PerShipment", "destination_charges", null, null, false),
+            new("entrega-destino", "Entrega en Destino", "InlandTransport", "PerShipment", "delivery_destination", null, null, false),
+            new("otros", "Otros", "Other", "PerShipment", "destination_charges", null, null, false),
+            new("duca-f", "DUCA-F", "Documentation", "PerDocument", "international_freight", null, null, false),
+            new("impuesto-exportacion", "Impuesto Exportación", "CustomsCharge", "PerShipment", "origin_charges", null, null, false),
+            new("recepcion-destino", "Recepción en Destino", "DestinationCharge", "PerShipment", "destination_charges", null, null, false),
+        };
+    }
+
+    private static IReadOnlyCollection<LtlChargeItemDto> ReadLtlChargeItems(
+        DbDataReader reader,
+        int index,
+        string shipmentMode,
+        string commercialProfile
+    )
+    {
+        if (!string.Equals(shipmentMode, "Ltl", StringComparison.OrdinalIgnoreCase))
+            return Array.Empty<LtlChargeItemDto>();
+
+        if (!reader.IsDBNull(index))
+        {
+            try
+            {
+                var values = JsonSerializer.Deserialize<LtlChargeItemDto[]>(reader.GetString(index));
+                if (values is { Length: > 0 })
+                    return NormalizeLtlChargeItems(values, shipmentMode, commercialProfile);
+            }
+            catch (JsonException)
+            {
+                // Fall back to the canonical LTL matrix below.
+            }
+        }
+
+        return DefaultLtlChargeItems(commercialProfile);
+    }
+
     private static string NormalizeCurrencyBusinessCode(string? code, string? name)
     {
         foreach (var candidate in new[] { code, name })
@@ -1191,7 +1320,8 @@ public sealed record FtlTariffDto(
     decimal? StuffingSalePerCbm = null,
     decimal? PanamaCostSurchargePerCbm = null,
     IReadOnlyCollection<Guid>? ApplicableOriginIds = null,
-    IReadOnlyCollection<Guid>? ApplicableDestinationIds = null
+    IReadOnlyCollection<Guid>? ApplicableDestinationIds = null,
+    IReadOnlyCollection<LtlChargeItemDto>? LtlChargeItems = null
 );
 
 public sealed record CreateFtlTariffRequest(
@@ -1227,7 +1357,19 @@ public sealed record CreateFtlTariffRequest(
     decimal? StuffingSalePerCbm = null,
     decimal? PanamaCostSurchargePerCbm = null,
     IReadOnlyCollection<Guid>? ApplicableOriginIds = null,
-    IReadOnlyCollection<Guid>? ApplicableDestinationIds = null
+    IReadOnlyCollection<Guid>? ApplicableDestinationIds = null,
+    IReadOnlyCollection<LtlChargeItemDto>? LtlChargeItems = null
+);
+
+public sealed record LtlChargeItemDto(
+    string Key,
+    string Name,
+    string CostDetailType,
+    string ChargeBasis,
+    string Section,
+    decimal? CostAmount,
+    decimal? SaleAmount,
+    bool IsFlat
 );
 
 public sealed record ImportFtlTariffsRequest(IReadOnlyCollection<CreateFtlTariffRequest> Items);
