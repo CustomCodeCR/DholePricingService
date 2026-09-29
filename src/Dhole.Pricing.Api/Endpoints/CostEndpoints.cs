@@ -198,13 +198,10 @@ public static class CostEndpoints
             portRole = parsedPortRole;
         }
 
-        ShipmentMode? shipmentMode = null;
-        if (!string.IsNullOrWhiteSpace(request.ShipmentMode))
-        {
-            if (!TryParseDefinedEnum(request.ShipmentMode, out ShipmentMode parsedShipmentMode))
-                return EndpointResults.BadRequest("Pricing.InvalidShipmentMode", "La modalidad no es válida.", httpContext);
-            shipmentMode = parsedShipmentMode;
-        }
+        if (!TryParseShipmentModes(request.ShipmentModes, request.ShipmentMode, out var shipmentModes))
+            return EndpointResults.BadRequest("Pricing.InvalidShipmentMode", "La modalidad no es válida.", httpContext);
+
+        ShipmentMode? shipmentMode = shipmentModes.Length == 1 ? shipmentModes[0] : null;
 
         if (!TryParseDefinedEnum(request.ChargeBasis, out ChargeBasis chargeBasis))
             return EndpointResults.BadRequest("Pricing.InvalidChargeBasis", "La base de cobro no es válida.", httpContext);
@@ -252,7 +249,8 @@ public static class CostEndpoints
                 request.MinimumSaleAmount,
                 request.KgPerCbm,
                 httpContext.GetCurrentUserId(),
-                (request.OperationalConditions ?? []).ToArray()
+                (request.OperationalConditions ?? []).ToArray(),
+                shipmentModes
             ),
             cancellationToken
         );
@@ -302,13 +300,10 @@ public static class CostEndpoints
             portRole = parsedPortRole;
         }
 
-        ShipmentMode? shipmentMode = null;
-        if (!string.IsNullOrWhiteSpace(request.ShipmentMode))
-        {
-            if (!TryParseDefinedEnum(request.ShipmentMode, out ShipmentMode parsedShipmentMode))
-                return EndpointResults.BadRequest("Pricing.InvalidShipmentMode", "La modalidad no es válida.", httpContext);
-            shipmentMode = parsedShipmentMode;
-        }
+        if (!TryParseShipmentModes(request.ShipmentModes, request.ShipmentMode, out var shipmentModes))
+            return EndpointResults.BadRequest("Pricing.InvalidShipmentMode", "La modalidad no es válida.", httpContext);
+
+        ShipmentMode? shipmentMode = shipmentModes.Length == 1 ? shipmentModes[0] : null;
 
         if (!TryParseDefinedEnum(request.ChargeBasis, out ChargeBasis chargeBasis))
             return EndpointResults.BadRequest("Pricing.InvalidChargeBasis", "La base de cobro no es válida.", httpContext);
@@ -357,7 +352,8 @@ public static class CostEndpoints
                 request.MinimumSaleAmount,
                 request.KgPerCbm,
                 httpContext.GetCurrentUserId(),
-                (request.OperationalConditions ?? []).ToArray()
+                (request.OperationalConditions ?? []).ToArray(),
+                shipmentModes
             ),
             cancellationToken
         );
@@ -433,7 +429,9 @@ public static class CostEndpoints
                         cost.Services.Select(x => x.ServiceName)
                     ),
                     ["Botones / condiciones"] = string.Join(", ", cost.OperationalConditions),
-                    ["Modalidad"] = cost.ShipmentMode?.ToString() ?? "Todas",
+                    ["Modalidad"] = cost.GetShipmentModes().Count == 0
+                        ? "Todas"
+                        : string.Join(", ", cost.GetShipmentModes().Select(mode => mode.ToString())),
                     ["Moneda"] = cost.CurrencyCode,
                     ["Monto costo"] = cost.CostAmount,
                     ["Venta"] = cost.SaleAmount,
@@ -513,6 +511,39 @@ public static class CostEndpoints
         ChargeBasis.PerDocument => "Por BL / documento",
         _ => value.ToString(),
     };
+
+    private static bool TryParseShipmentModes(
+        IReadOnlyCollection<string>? values,
+        string? legacyValue,
+        out ShipmentMode[] shipmentModes
+    )
+    {
+        var requested = (values ?? Array.Empty<string>())
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .ToArray();
+
+        if (requested.Length == 0 && !string.IsNullOrWhiteSpace(legacyValue))
+            requested = [legacyValue.Trim()];
+
+        var parsed = new List<ShipmentMode>();
+        foreach (var value in requested)
+        {
+            if (!TryParseDefinedEnum(value, out ShipmentMode mode))
+            {
+                shipmentModes = [];
+                return false;
+            }
+
+            parsed.Add(mode);
+        }
+
+        shipmentModes = parsed
+            .Distinct()
+            .OrderBy(mode => (int)mode)
+            .ToArray();
+        return true;
+    }
 
     private static IReadOnlyCollection<Guid> ParseGuidList(string? value) =>
         ParseGuidList(value is null ? null : [value]);

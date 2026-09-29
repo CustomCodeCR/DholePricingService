@@ -307,7 +307,7 @@ public sealed class RateFixedCostSynchronizer(
     {
         var matchesAgent = SelectionMatches(selection?.AgentIds, cost.AgentId, rate.AgentId);
         var matchesCarrier = SelectionMatches(selection?.CarrierIds, cost.CarrierId, rate.CarrierId);
-        var matchesMode = !cost.ShipmentMode.HasValue || cost.ShipmentMode.Value == rate.ShipmentMode;
+        var matchesMode = cost.AppliesToShipmentMode(rate.ShipmentMode);
         var matchesIncoterm =
             cost.Incoterms.Count == 0
             || (

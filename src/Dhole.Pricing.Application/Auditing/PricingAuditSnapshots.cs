@@ -51,6 +51,7 @@ public static class PricingAuditSnapshots
             cost.SaleAmount,
             cost.UtilityAmount,
             ShipmentMode = cost.ShipmentMode?.ToString(),
+            ShipmentModes = cost.GetShipmentModes().Select(mode => mode.ToString()).ToArray(),
             ChargeBasis = cost.ChargeBasis.ToString(),
             cost.MinimumCostAmount,
             cost.MinimumSaleAmount,

@@ -33,7 +33,7 @@ public sealed class CostRepository(ServiceDbContext dbContext)
         Guid? podId,
         Guid? carrierId = null,
         Guid? agentId = null,
-        ShipmentMode? shipmentMode = null,
+        int shipmentModeMask = 0,
         ChargeBasis chargeBasis = ChargeBasis.PerShipment,
         Guid? excludeId = null,
         CancellationToken cancellationToken = default
@@ -53,7 +53,7 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 && x.PodId == podId
                 && x.CarrierId == carrierId
                 && x.AgentId == agentId
-                && x.ShipmentMode == shipmentMode
+                && x.ShipmentModeMask == shipmentModeMask
                 && x.ChargeBasis == chargeBasis
                 && !x.IsDeleted
                 && (!excludeId.HasValue || x.Id != excludeId.Value),
@@ -202,6 +202,8 @@ public sealed class CostRepository(ServiceDbContext dbContext)
             ))
             .ToListAsync(cancellationToken);
 
+        items = await AttachShipmentModesAsync(items, cancellationToken);
+
         return PagedResult<CostDto>.Create(items, page.PageNumber, page.PageSize, total);
     }
 
@@ -231,7 +233,7 @@ public sealed class CostRepository(ServiceDbContext dbContext)
             isActive
         );
 
-        return await query
+        var items = await query
             .OrderBy(x => x.CostType)
             .ThenBy(x => x.CostDetailType)
             .ThenBy(x => x.CarrierName)
@@ -292,6 +294,66 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.OperationalConditions
             ))
             .ToListAsync(cancellationToken);
+
+        return await AttachShipmentModesAsync(items, cancellationToken);
+    }
+
+    private async Task<List<CostDto>> AttachShipmentModesAsync(
+        List<CostDto> items,
+        CancellationToken cancellationToken
+    )
+    {
+        if (items.Count == 0)
+            return items;
+
+        var ids = items.Select(item => item.Id).ToArray();
+        var states = await dbContext.Costs
+            .AsNoTracking()
+            .Where(cost => ids.Contains(cost.Id))
+            .Select(cost => new { cost.Id, cost.ShipmentModeMask, cost.ShipmentMode })
+            .ToDictionaryAsync(cost => cost.Id, cancellationToken);
+
+        return items
+            .Select(item => states.TryGetValue(item.Id, out var state)
+                ? item with { ShipmentModes = ResolveShipmentModes(state.ShipmentModeMask, state.ShipmentMode) }
+                : item)
+            .ToList();
+    }
+
+    private async Task<IReadOnlyCollection<CostSelectDto>> AttachShipmentModesAsync(
+        List<CostSelectDto> items,
+        CancellationToken cancellationToken
+    )
+    {
+        if (items.Count == 0)
+            return items;
+
+        var ids = items.Select(item => item.Id).ToArray();
+        var states = await dbContext.Costs
+            .AsNoTracking()
+            .Where(cost => ids.Contains(cost.Id))
+            .Select(cost => new { cost.Id, cost.ShipmentModeMask, cost.ShipmentMode })
+            .ToDictionaryAsync(cost => cost.Id, cancellationToken);
+
+        return items
+            .Select(item => states.TryGetValue(item.Id, out var state)
+                ? item with { ShipmentModes = ResolveShipmentModes(state.ShipmentModeMask, state.ShipmentMode) }
+                : item)
+            .ToArray();
+    }
+
+    private static IReadOnlyCollection<string> ResolveShipmentModes(
+        int shipmentModeMask,
+        ShipmentMode? legacyShipmentMode
+    )
+    {
+        if (shipmentModeMask == 0)
+            return legacyShipmentMode.HasValue ? [legacyShipmentMode.Value.ToString()] : [];
+
+        return Enum.GetValues<ShipmentMode>()
+            .Where(mode => (shipmentModeMask & (1 << ((int)mode - 1))) != 0)
+            .Select(mode => mode.ToString())
+            .ToArray();
     }
 
     private static IQueryable<Cost> ApplyFilters(
