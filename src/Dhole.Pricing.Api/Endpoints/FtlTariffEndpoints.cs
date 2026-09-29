@@ -175,15 +175,6 @@ public static class FtlTariffEndpoints
                   )
                   OR
                   (
-                      @origin_code <> ''
-                      AND @destination_code <> ''
-                      AND length(trim(COALESCE(origin_code, ''))) >= 2
-                      AND length(trim(COALESCE(destination_code, ''))) >= 2
-                      AND left(upper(trim(origin_code)), 2) = left(upper(trim(@origin_code)), 2)
-                      AND left(upper(trim(destination_code)), 2) = left(upper(trim(@destination_code)), 2)
-                  )
-                  OR
-                  (
                       lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun'))
                           = lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun'))
                       AND lower(translate(trim(destination_name), 'áéíóúüñ', 'aeiouun'))
@@ -244,20 +235,12 @@ public static class FtlTariffEndpoints
                         AND lower(trim(COALESCE(destination_code, ''))) = lower(trim(@destination_code))
                     THEN 1
                     WHEN
-                        @origin_code <> ''
-                        AND @destination_code <> ''
-                        AND length(trim(COALESCE(origin_code, ''))) >= 2
-                        AND length(trim(COALESCE(destination_code, ''))) >= 2
-                        AND left(upper(trim(origin_code)), 2) = left(upper(trim(@origin_code)), 2)
-                        AND left(upper(trim(destination_code)), 2) = left(upper(trim(@destination_code)), 2)
-                    THEN 2
-                    WHEN
                         lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun'))
                             = lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun'))
                         AND lower(translate(trim(destination_name), 'áéíóúüñ', 'aeiouun'))
                             = lower(translate(trim(@destination_name), 'áéíóúüñ', 'aeiouun'))
-                    THEN 3
-                    ELSE 4
+                    THEN 2
+                    ELSE 3
                 END,
                 COALESCE(updated_at_utc, created_at_utc) DESC
             LIMIT 1;
