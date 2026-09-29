@@ -135,7 +135,37 @@ public static class FtlTariffEndpoints
               AND (valid_to IS NULL OR valid_to >= @quote_date)
               AND
               (
-                  (origin_id = @origin_id AND destination_id = @destination_id)
+                  (
+                      (
+                          origin_id = @origin_id
+                          OR
+                          (
+                              @origin_id_text <> ''
+                              AND NULLIF(trim(COALESCE(applicable_origin_ids, '')), '') IS NOT NULL
+                              AND EXISTS
+                              (
+                                  SELECT 1
+                                  FROM jsonb_array_elements_text(applicable_origin_ids::jsonb) AS applicable_origin(value)
+                                  WHERE lower(trim(applicable_origin.value)) = lower(@origin_id_text)
+                              )
+                          )
+                      )
+                      AND
+                      (
+                          destination_id = @destination_id
+                          OR
+                          (
+                              @destination_id_text <> ''
+                              AND NULLIF(trim(COALESCE(applicable_destination_ids, '')), '') IS NOT NULL
+                              AND EXISTS
+                              (
+                                  SELECT 1
+                                  FROM jsonb_array_elements_text(applicable_destination_ids::jsonb) AS applicable_destination(value)
+                                  WHERE lower(trim(applicable_destination.value)) = lower(@destination_id_text)
+                              )
+                          )
+                      )
+                  )
                   OR
                   (
                       @origin_code <> ''
@@ -176,7 +206,37 @@ public static class FtlTariffEndpoints
               )
             ORDER BY
                 CASE
-                    WHEN origin_id = @origin_id AND destination_id = @destination_id THEN 0
+                    WHEN
+                        (
+                            origin_id = @origin_id
+                            OR
+                            (
+                                @origin_id_text <> ''
+                                AND NULLIF(trim(COALESCE(applicable_origin_ids, '')), '') IS NOT NULL
+                                AND EXISTS
+                                (
+                                    SELECT 1
+                                    FROM jsonb_array_elements_text(applicable_origin_ids::jsonb) AS applicable_origin(value)
+                                    WHERE lower(trim(applicable_origin.value)) = lower(@origin_id_text)
+                                )
+                            )
+                        )
+                        AND
+                        (
+                            destination_id = @destination_id
+                            OR
+                            (
+                                @destination_id_text <> ''
+                                AND NULLIF(trim(COALESCE(applicable_destination_ids, '')), '') IS NOT NULL
+                                AND EXISTS
+                                (
+                                    SELECT 1
+                                    FROM jsonb_array_elements_text(applicable_destination_ids::jsonb) AS applicable_destination(value)
+                                    WHERE lower(trim(applicable_destination.value)) = lower(@destination_id_text)
+                                )
+                            )
+                        )
+                    THEN 0
                     WHEN
                         @origin_code <> ''
                         AND @destination_code <> ''
@@ -208,6 +268,8 @@ public static class FtlTariffEndpoints
         Add(command, "equipment_class", resolvedEquipmentClass);
         Add(command, "origin_id", originId ?? Guid.Empty);
         Add(command, "destination_id", destinationId ?? Guid.Empty);
+        Add(command, "origin_id_text", originId?.ToString() ?? string.Empty);
+        Add(command, "destination_id_text", destinationId?.ToString() ?? string.Empty);
         Add(command, "origin_name", originName?.Trim() ?? string.Empty);
         Add(command, "destination_name", destinationName?.Trim() ?? string.Empty);
         Add(command, "origin_code", originCode?.Trim() ?? string.Empty);
@@ -319,6 +381,12 @@ public static class FtlTariffEndpoints
                 ? "LTL · USD/CBM"
                 : $"{applicableEquipmentClasses.Count} equipo{(applicableEquipmentClasses.Count == 1 ? string.Empty : "s")} aplicable{(applicableEquipmentClasses.Count == 1 ? string.Empty : "s")}")
             : request.EquipmentLabel.Trim();
+        var applicableOriginIds = NormalizeApplicableRouteIds(request.ApplicableOriginIds, request.OriginId);
+        var applicableDestinationIds = NormalizeApplicableRouteIds(request.ApplicableDestinationIds, request.DestinationId);
+        var primaryOriginId = request.OriginId
+            ?? (applicableOriginIds.Count > 0 ? applicableOriginIds.First() : (Guid?)null);
+        var primaryDestinationId = request.DestinationId
+            ?? (applicableDestinationIds.Count > 0 ? applicableDestinationIds.First() : (Guid?)null);
 
         await using var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, cancellationToken);
@@ -328,9 +396,11 @@ public static class FtlTariffEndpoints
             SET origin_id = @origin_id,
                 origin_name = @origin_name,
                 origin_code = @origin_code,
+                applicable_origin_ids = @applicable_origin_ids,
                 destination_id = @destination_id,
                 destination_name = @destination_name,
                 destination_code = @destination_code,
+                applicable_destination_ids = @applicable_destination_ids,
                 shipment_mode = @shipment_mode,
                 commercial_profile = @commercial_profile,
                 equipment_class = @equipment_class,
@@ -361,12 +431,14 @@ public static class FtlTariffEndpoints
             """;
 
         Add(command, "id", id);
-        Add(command, "origin_id", request.OriginId);
+        Add(command, "origin_id", primaryOriginId);
         Add(command, "origin_name", request.OriginName.Trim());
         Add(command, "origin_code", NullIfBlank(request.OriginCode));
-        Add(command, "destination_id", request.DestinationId);
+        Add(command, "applicable_origin_ids", JsonSerializer.Serialize(applicableOriginIds));
+        Add(command, "destination_id", primaryDestinationId);
         Add(command, "destination_name", request.DestinationName.Trim());
         Add(command, "destination_code", NullIfBlank(request.DestinationCode));
+        Add(command, "applicable_destination_ids", JsonSerializer.Serialize(applicableDestinationIds));
         Add(command, "shipment_mode", mode);
         Add(command, "commercial_profile", commercialProfile);
         Add(command, "equipment_class", equipmentClass);
@@ -706,6 +778,12 @@ public static class FtlTariffEndpoints
         var equipmentLabel = string.IsNullOrWhiteSpace(item.EquipmentLabel)
             ? (string.Equals(mode, "Ltl", StringComparison.OrdinalIgnoreCase) ? "LTL · USD/CBM" : "Equipo FTL")
             : item.EquipmentLabel.Trim();
+        var applicableOriginIds = NormalizeApplicableRouteIds(item.ApplicableOriginIds, item.OriginId);
+        var applicableDestinationIds = NormalizeApplicableRouteIds(item.ApplicableDestinationIds, item.DestinationId);
+        var primaryOriginId = item.OriginId
+            ?? (applicableOriginIds.Count > 0 ? applicableOriginIds.First() : (Guid?)null);
+        var primaryDestinationId = item.DestinationId
+            ?? (applicableDestinationIds.Count > 0 ? applicableDestinationIds.First() : (Guid?)null);
 
         await using var lookup = connection.CreateCommand();
         lookup.Transaction = transaction;
@@ -737,8 +815,8 @@ public static class FtlTariffEndpoints
             ? """
                 INSERT INTO pricing."FtlTariffs"
                 (
-                    id, origin_id, origin_name, origin_code,
-                    destination_id, destination_name, destination_code,
+                    id, origin_id, origin_name, origin_code, applicable_origin_ids,
+                    destination_id, destination_name, destination_code, applicable_destination_ids,
                     shipment_mode, commercial_profile, equipment_class, equipment_label,
                     applicable_equipment_classes,
                     currency_id, currency_name, currency_code,
@@ -750,8 +828,8 @@ public static class FtlTariffEndpoints
                 )
                 VALUES
                 (
-                    @id, @origin_id, @origin_name, @origin_code,
-                    @destination_id, @destination_name, @destination_code,
+                    @id, @origin_id, @origin_name, @origin_code, @applicable_origin_ids,
+                    @destination_id, @destination_name, @destination_code, @applicable_destination_ids,
                     @shipment_mode, @commercial_profile, @equipment_class, @equipment_label,
                     @applicable_equipment_classes,
                     @currency_id, @currency_name, @currency_code,
@@ -767,9 +845,11 @@ public static class FtlTariffEndpoints
                 SET origin_id = @origin_id,
                     origin_name = @origin_name,
                     origin_code = @origin_code,
+                    applicable_origin_ids = @applicable_origin_ids,
                     destination_id = @destination_id,
                     destination_name = @destination_name,
                     destination_code = @destination_code,
+                    applicable_destination_ids = @applicable_destination_ids,
                     commercial_profile = @commercial_profile,
                     equipment_class = @equipment_class,
                     equipment_label = @equipment_label,
@@ -799,12 +879,14 @@ public static class FtlTariffEndpoints
                 """;
 
         Add(command, "id", id);
-        Add(command, "origin_id", item.OriginId);
+        Add(command, "origin_id", primaryOriginId);
         Add(command, "origin_name", item.OriginName.Trim());
         Add(command, "origin_code", NullIfBlank(item.OriginCode));
-        Add(command, "destination_id", item.DestinationId);
+        Add(command, "applicable_origin_ids", JsonSerializer.Serialize(applicableOriginIds));
+        Add(command, "destination_id", primaryDestinationId);
         Add(command, "destination_name", item.DestinationName.Trim());
         Add(command, "destination_code", NullIfBlank(item.DestinationCode));
+        Add(command, "applicable_destination_ids", JsonSerializer.Serialize(applicableDestinationIds));
         Add(command, "shipment_mode", mode);
         Add(command, "commercial_profile", commercialProfile);
         Add(command, "equipment_class", equipmentClass);
@@ -868,7 +950,9 @@ public static class FtlTariffEndpoints
             duca_t_cost,
             stuffing_cost_per_cbm,
             stuffing_sale_per_cbm,
-            panama_cost_surcharge_per_cbm
+            panama_cost_surcharge_per_cbm,
+            applicable_origin_ids,
+            applicable_destination_ids
         FROM pricing."FtlTariffs"
         """;
 
@@ -905,7 +989,9 @@ public static class FtlTariffEndpoints
             reader.IsDBNull(28) ? null : reader.GetDecimal(28),
             reader.IsDBNull(29) ? null : reader.GetDecimal(29),
             reader.IsDBNull(30) ? null : reader.GetDecimal(30),
-            reader.IsDBNull(31) ? null : reader.GetDecimal(31)
+            reader.IsDBNull(31) ? null : reader.GetDecimal(31),
+            ReadApplicableRouteIds(reader, 32, reader.IsDBNull(1) ? null : reader.GetGuid(1)),
+            ReadApplicableRouteIds(reader, 33, reader.IsDBNull(4) ? null : reader.GetGuid(4))
         );
 
     private static string? NormalizeShipmentMode(string? value, bool allowEmpty)
@@ -990,6 +1076,51 @@ public static class FtlTariffEndpoints
         return string.IsNullOrWhiteSpace(fallback) ? Array.Empty<string>() : new[] { fallback };
     }
 
+    private static IReadOnlyCollection<Guid> NormalizeApplicableRouteIds(
+        IReadOnlyCollection<Guid>? values,
+        Guid? legacyId
+    )
+    {
+        var normalized = values?
+            .Where(value => value != Guid.Empty)
+            .Distinct()
+            .ToArray();
+
+        if (normalized is { Length: > 0 }) return normalized;
+        return legacyId.HasValue && legacyId.Value != Guid.Empty
+            ? new[] { legacyId.Value }
+            : Array.Empty<Guid>();
+    }
+
+    private static IReadOnlyCollection<Guid> ReadApplicableRouteIds(
+        DbDataReader reader,
+        int index,
+        Guid? legacyId
+    )
+    {
+        if (!reader.IsDBNull(index))
+        {
+            try
+            {
+                var values = JsonSerializer.Deserialize<Guid[]>(reader.GetString(index));
+                var normalized = values?
+                    .Where(value => value != Guid.Empty)
+                    .Distinct()
+                    .ToArray();
+
+                if (normalized is { Length: > 0 }) return normalized;
+            }
+            catch (JsonException)
+            {
+                // Rows created before route applicability use the legacy route id below.
+            }
+        }
+
+        return legacyId.HasValue && legacyId.Value != Guid.Empty
+            ? new[] { legacyId.Value }
+            : Array.Empty<Guid>();
+    }
+
     private static string NormalizeCurrencyBusinessCode(string? code, string? name)
     {
         foreach (var candidate in new[] { code, name })
@@ -1058,7 +1189,9 @@ public sealed record FtlTariffDto(
     decimal? DucaTCost = null,
     decimal? StuffingCostPerCbm = null,
     decimal? StuffingSalePerCbm = null,
-    decimal? PanamaCostSurchargePerCbm = null
+    decimal? PanamaCostSurchargePerCbm = null,
+    IReadOnlyCollection<Guid>? ApplicableOriginIds = null,
+    IReadOnlyCollection<Guid>? ApplicableDestinationIds = null
 );
 
 public sealed record CreateFtlTariffRequest(
@@ -1092,7 +1225,9 @@ public sealed record CreateFtlTariffRequest(
     decimal? DucaTCost = null,
     decimal? StuffingCostPerCbm = null,
     decimal? StuffingSalePerCbm = null,
-    decimal? PanamaCostSurchargePerCbm = null
+    decimal? PanamaCostSurchargePerCbm = null,
+    IReadOnlyCollection<Guid>? ApplicableOriginIds = null,
+    IReadOnlyCollection<Guid>? ApplicableDestinationIds = null
 );
 
 public sealed record ImportFtlTariffsRequest(IReadOnlyCollection<CreateFtlTariffRequest> Items);
