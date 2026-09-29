@@ -182,6 +182,46 @@ public static class FtlTariffEndpoints
                   )
                   OR
                   (
+                      @origin_is_cfz = TRUE
+                      AND
+                      (
+                          lower(translate(trim(COALESCE(origin_name, '')), 'áéíóúüñ', 'aeiouun')) LIKE '%cfz%'
+                          OR lower(translate(trim(COALESCE(origin_name, '')), 'áéíóúüñ', 'aeiouun')) LIKE '%colon free zone%'
+                          OR lower(translate(trim(COALESCE(origin_name, '')), 'áéíóúüñ', 'aeiouun')) LIKE '%zona libre de colon%'
+                          OR lower(trim(COALESCE(origin_code, ''))) = 'cfz'
+                      )
+                      AND
+                      (
+                          lower(translate(trim(destination_name), 'áéíóúüñ', 'aeiouun'))
+                              = lower(translate(trim(@destination_name), 'áéíóúüñ', 'aeiouun'))
+                          OR
+                          (
+                              @destination_is_cfz = TRUE
+                              AND
+                              (
+                                  lower(translate(trim(COALESCE(destination_name, '')), 'áéíóúüñ', 'aeiouun')) LIKE '%cfz%'
+                                  OR lower(translate(trim(COALESCE(destination_name, '')), 'áéíóúüñ', 'aeiouun')) LIKE '%colon free zone%'
+                                  OR lower(translate(trim(COALESCE(destination_name, '')), 'áéíóúüñ', 'aeiouun')) LIKE '%zona libre de colon%'
+                                  OR lower(trim(COALESCE(destination_code, ''))) = 'cfz'
+                              )
+                          )
+                      )
+                  )
+                  OR
+                  (
+                      @destination_is_cfz = TRUE
+                      AND
+                      (
+                          lower(translate(trim(COALESCE(destination_name, '')), 'áéíóúüñ', 'aeiouun')) LIKE '%cfz%'
+                          OR lower(translate(trim(COALESCE(destination_name, '')), 'áéíóúüñ', 'aeiouun')) LIKE '%colon free zone%'
+                          OR lower(translate(trim(COALESCE(destination_name, '')), 'áéíóúüñ', 'aeiouun')) LIKE '%zona libre de colon%'
+                          OR lower(trim(COALESCE(destination_code, ''))) = 'cfz'
+                      )
+                      AND lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun'))
+                          = lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun'))
+                  )
+                  OR
+                  (
                       lower(translate(@origin_name, 'áéíóúüñ', 'aeiouun'))
                           LIKE '%' || lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun')) || '%'
                       AND lower(translate(@destination_name, 'áéíóúüñ', 'aeiouun'))
@@ -257,6 +297,8 @@ public static class FtlTariffEndpoints
         Add(command, "destination_name", destinationName?.Trim() ?? string.Empty);
         Add(command, "origin_code", originCode?.Trim() ?? string.Empty);
         Add(command, "destination_code", destinationCode?.Trim() ?? string.Empty);
+        Add(command, "origin_is_cfz", IsCfzRouteAlias(originName) || IsCfzRouteAlias(originCode));
+        Add(command, "destination_is_cfz", IsCfzRouteAlias(destinationName) || IsCfzRouteAlias(destinationCode));
         Add(command, "quote_date", (quoteDate ?? DateTime.UtcNow).Date);
 
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -1023,6 +1065,24 @@ public static class FtlTariffEndpoints
                 reader.IsDBNull(23) ? "General" : reader.GetString(23)
             )
         );
+
+    private static bool IsCfzRouteAlias(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+
+        var normalized = value.Trim().ToLowerInvariant()
+            .Replace("á", "a", StringComparison.Ordinal)
+            .Replace("é", "e", StringComparison.Ordinal)
+            .Replace("í", "i", StringComparison.Ordinal)
+            .Replace("ó", "o", StringComparison.Ordinal)
+            .Replace("ú", "u", StringComparison.Ordinal)
+            .Replace("ü", "u", StringComparison.Ordinal)
+            .Replace("ñ", "n", StringComparison.Ordinal);
+
+        return normalized.Contains("cfz", StringComparison.Ordinal)
+            || normalized.Contains("colon free zone", StringComparison.Ordinal)
+            || normalized.Contains("zona libre de colon", StringComparison.Ordinal);
+    }
 
     private static string? NormalizeShipmentMode(string? value, bool allowEmpty)
     {
