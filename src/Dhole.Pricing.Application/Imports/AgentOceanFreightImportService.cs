@@ -152,10 +152,6 @@ public sealed class AgentOceanFreightImportService(
                         ? offer.Charges.Sum(x => x.Amount)
                         : offer.OceanFreight.Amount + originCharges + destinationCharges + surcharges);
 
-                var sourceComment =
-                    $"Extracción automática Maersk · realizada {costaRicaTime:dd/MM/yyyy HH:mm:ss} Costa Rica · "
-                    + $"ejecución {executionId}";
-
                 var rawDataJson = JsonSerializer.Serialize(new
                 {
                     _dholeSource = new
@@ -186,7 +182,7 @@ public sealed class AgentOceanFreightImportService(
                     container,
                     currency,
                     payload.Commodity,
-                    sourceComment,
+                    null,
                     offer.OceanFreight.Amount,
                     originCharges,
                     destinationCharges,

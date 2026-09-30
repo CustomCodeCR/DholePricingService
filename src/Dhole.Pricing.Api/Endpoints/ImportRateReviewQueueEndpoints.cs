@@ -137,6 +137,7 @@ public static class ImportRateReviewQueueEndpoints
                 x.ValidTo,
                 x.Status.ToString(),
                 x.SpaceComment,
+                x.RawDataJson,
                 x.CreatedAtUtc
             ))
             .ToListAsync(cancellationToken);
@@ -174,6 +175,7 @@ public static class ImportRateReviewQueueEndpoints
         DateTime ValidTo,
         string Status,
         string? SpaceComment,
+        string? RawDataJson,
         DateTime CreatedAt
     );
 }
