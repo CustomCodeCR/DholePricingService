@@ -97,7 +97,36 @@ public sealed class RefineImportedShipmentModeBusinessTypes : Migration
                 container_type_slug = 'lcl'
             FROM normalized n
             WHERE rates.id = n.id
-              AND rates.shipment_mode <> 'AirLclColoader'
+              AND NOT (
+                    lower(coalesce(rates.container_type, '')) = 'air'
+                 OR lower(coalesce(rates.container_type_name, '')) = 'air'
+                 OR lower(coalesce(rates.container_type_code, '')) = 'air'
+                 OR lower(coalesce(rates.container_type_slug, '')) = 'air'
+                 OR n.raw_text LIKE '%tariffmodeair%'
+                 OR n.raw_text LIKE '%shipmentmodeair%'
+                 OR n.raw_text LIKE '%servicemodeair%'
+                 OR n.raw_text LIKE '%containertypeair%'
+                 OR n.raw_text LIKE '%equipoair%'
+                 OR n.raw_text LIKE '%airconsolidated%'
+                 OR n.raw_text LIKE '%airbacktoback%'
+                 OR n.raw_text LIKE '%airlineroute%'
+                 OR n.raw_text LIKE '%ratebasiskgvol%'
+                 OR n.raw_text LIKE '%kgpercbm167%'
+                 OR n.raw_text LIKE '%1cbm167kg%'
+                 OR n.raw_text LIKE '%167kgcbm%'
+                 OR (
+                        (
+                            n.raw_text LIKE '%airline%'
+                            OR n.raw_text LIKE '%aerolinea%'
+                            OR n.raw_text LIKE '%aerolnea%'
+                        )
+                        AND (
+                            n.raw_text LIKE '%167kg%'
+                            OR n.raw_text LIKE '%kgvol%'
+                            OR n.raw_text LIKE '%volumetric%'
+                        )
+                    )
+              )
               AND (
                     lower(coalesce(rates.container_type, '')) = 'lcl'
                  OR lower(coalesce(rates.container_type_name, '')) = 'lcl'
