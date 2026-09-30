@@ -69,6 +69,7 @@ public static class PricingAuditSnapshots
             importFclRate.ImportBatchId,
 
             SourceType = importFclRate.SourceType.ToString(),
+            ShipmentMode = importFclRate.ShipmentMode.ToString(),
 
             importFclRate.PolId,
             importFclRate.Pol,
