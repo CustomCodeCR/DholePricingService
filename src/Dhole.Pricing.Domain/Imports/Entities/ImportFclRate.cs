@@ -507,12 +507,10 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         if (ShipmentMode == ImportedShipmentMode.Lcl)
         {
             ApplyContainerType(LclContainerSnapshot());
-            FreeDays = 0;
         }
         else if (ShipmentMode == ImportedShipmentMode.Air)
         {
             ApplyContainerType(AirContainerSnapshot());
-            FreeDays = 0;
         }
     }
 
