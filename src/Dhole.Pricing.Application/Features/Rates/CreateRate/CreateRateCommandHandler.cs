@@ -268,6 +268,18 @@ public sealed class CreateRateCommandHandler(
                 command.TotalVolumeCbm
             );
 
+            // Las líneas pueden venir de Costos y recargos, matrices LCL/LTL o rubros manuales.
+            // Si una línea no trae snapshot de moneda propio, hereda la moneda del encabezado,
+            // que ya fue validada contra Config. Así una línea incompleta no invalida toda la tarifa.
+            var detailCurrencyId =
+                detail.CurrencyId == Guid.Empty ? command.CurrencyId : detail.CurrencyId;
+            var detailCurrencyName = string.IsNullOrWhiteSpace(detail.CurrencyName)
+                ? command.CurrencyName
+                : detail.CurrencyName;
+            var detailCurrencyCode = string.IsNullOrWhiteSpace(detail.CurrencyCode)
+                ? command.CurrencyCode
+                : detail.CurrencyCode;
+
             var resolution = await extraDetailResolver.ResolveAsync(
                 new RateExtraDetailInput(
                     Id: null,
@@ -275,9 +287,9 @@ public sealed class CreateRateCommandHandler(
                     detail.Name,
                     normalizedDetailType,
                     detail.CostType,
-                    detail.CurrencyId,
-                    detail.CurrencyName,
-                    detail.CurrencyCode,
+                    detailCurrencyId,
+                    detailCurrencyName,
+                    detailCurrencyCode,
                     detail.CostAmount,
                     detail.SaleAmount,
                     detail.Notes,
@@ -462,10 +474,14 @@ public sealed class CreateRateCommandHandler(
                 addedDetail.ConfigureBillToClient(detail.BillToClient);
             }
 
+            // Al crear, Details representa exactamente la selección explícita hecha por Pricing.
+            // La sincronización puede completar costos fijos faltantes, pero no debe borrar y
+            // volver a filtrar los costos fijos que ya llegaron en el payload.
             await fixedCostSynchronizer.SynchronizeAsync(
                 rate,
                 command.CreatedBy,
-                cancellationToken
+                cancellationToken,
+                preserveExplicitFixedDetails: true
             );
 
             rate.SetAmounts(command.CreatedBy);
