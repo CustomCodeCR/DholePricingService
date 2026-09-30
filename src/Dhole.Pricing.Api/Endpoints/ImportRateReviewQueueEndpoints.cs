@@ -3,6 +3,7 @@ using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
 using Dhole.Pricing.Application.Features.Imports.InactivateImportRate;
 using Dhole.Pricing.Domain.Imports.Enums;
+using Dhole.Pricing.Domain.Imports.Services;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.AspNetCore.Mvc;
@@ -125,6 +126,10 @@ public static class ImportRateReviewQueueEndpoints
                 x.Id,
                 x.ImportBatchId,
                 x.SourceType.ToString(),
+                x.ShipmentMode == ImportedShipmentMode.Lcl ? "Lcl"
+                    : x.ShipmentMode == ImportedShipmentMode.Air ? "Air"
+                    : x.ShipmentMode == ImportedShipmentMode.Fcl ? "Fcl"
+                    : "Unknown",
                 x.CarrierName,
                 x.AgentName,
                 x.PolName,
@@ -164,6 +169,7 @@ public static class ImportRateReviewQueueEndpoints
         Guid Id,
         Guid ImportBatchId,
         string SourceType,
+        string ShipmentMode,
         string Carrier,
         string Agent,
         string Pol,
