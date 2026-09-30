@@ -1531,6 +1531,9 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasIndex("ImportBatchId");
 
+                    b.HasIndex("ShipmentMode")
+                        .HasDatabaseName("IX_ImportFclRates_ShipmentMode");
+
                     b.HasIndex("Status");
 
                     b.HasIndex("CarrierId", "PolId", "PoeId", "PodId", "ContainerTypeId");
