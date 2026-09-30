@@ -4,6 +4,7 @@ using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Contracts.Imports.Response;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
+using Dhole.Pricing.Domain.Imports.Services;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -171,6 +172,11 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext, IConfigu
                 ImportBatchId = x.ImportBatchId,
                 ExtractionRecordId = x.ExtractionRecordId,
                 SourceType = x.SourceType.ToString(),
+                ShipmentMode =
+                    x.ShipmentMode == ImportedShipmentMode.Lcl ? "Lcl"
+                    : x.ShipmentMode == ImportedShipmentMode.Air ? "Air"
+                    : x.ShipmentMode == ImportedShipmentMode.Fcl ? "Fcl"
+                    : "Unknown",
                 ImportProfileId = x.ImportProfileId,
                 ImportProfileName = x.ImportProfileName,
                 ImportProfileCode = x.ImportProfileCode,
