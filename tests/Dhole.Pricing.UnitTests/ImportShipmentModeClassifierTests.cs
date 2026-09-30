@@ -107,4 +107,77 @@ public sealed class ImportShipmentModeClassifierTests
 
         Assert.AreEqual(ImportedShipmentMode.Fcl, mode);
     }
+    [TestMethod]
+    public void Classify_WhenLegacyAirRateUses40HcPlaceholder_ReturnsAir()
+    {
+        const string raw = """
+        {
+          "Raw": {
+            "POL": "Shanghai (PVG)",
+            "POE": "SJO",
+            "Equipo": "40HC",
+            "Naviera": "DELTA",
+            "Space": "Capacidad de las aerolineas limitada. Relación de volúmenes (1 cbm = 167 kg)."
+          }
+        }
+        """;
+
+        var mode = ImportShipmentModeClassifier.Classify(
+            "40HC",
+            "40 High Cube",
+            "40HC",
+            "40-high-cube",
+            raw);
+
+        Assert.AreEqual(ImportedShipmentMode.Air, mode);
+    }
+
+    [TestMethod]
+    public void Classify_WhenAirConsolidatedRawConflictsWith40Hc_ReturnsAir()
+    {
+        const string raw = """
+        {
+          "Raw": {
+            "Equipo": "40HC",
+            "TariffMode": "AIR",
+            "ServiceMode": "AIR_CONSOLIDATED",
+            "RateBasis": "KG/VOL",
+            "KgPerCbm": "167"
+          }
+        }
+        """;
+
+        var mode = ImportShipmentModeClassifier.Classify(
+            "40HC",
+            "40 High Cube",
+            "40HC",
+            "40-high-cube",
+            raw);
+
+        Assert.AreEqual(ImportedShipmentMode.Air, mode);
+    }
+
+    [TestMethod]
+    public void Classify_WhenLclUsesWeightMeasureAndRawSaysFcl_ReturnsLcl()
+    {
+        const string raw = """
+        {
+          "Raw": {
+            "Equipo": "40HC",
+            "TariffMode": "FCL",
+            "Space": "Unit: W/M. Coloader tariff."
+          }
+        }
+        """;
+
+        var mode = ImportShipmentModeClassifier.Classify(
+            "40HC",
+            "40 High Cube",
+            "40HC",
+            "40-high-cube",
+            raw);
+
+        Assert.AreEqual(ImportedShipmentMode.Lcl, mode);
+    }
+
 }
