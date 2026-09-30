@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Contracts.Imports.Request;
+using Dhole.Pricing.Domain.Imports.Services;
 
 namespace Dhole.Pricing.Application.Imports;
 
@@ -51,16 +52,16 @@ public static class DataExtractionPricingImportMapper
     )
     {
         var isSpot = IsSpotRate(row);
-        var isLcl = string.Equals(
-            row.ContainerType?.Trim(),
-            "LCL",
-            StringComparison.OrdinalIgnoreCase
+        var shipmentMode = ImportShipmentModeClassifier.Classify(
+            row.ContainerType,
+            row.ContainerType,
+            row.ContainerType,
+            null,
+            row.RawJson
         );
-        var isAir = string.Equals(
-            row.ContainerType?.Trim(),
-            "AIR",
-            StringComparison.OrdinalIgnoreCase
-        );
+        var isLcl = shipmentMode == ImportedShipmentMode.Lcl;
+        var isAir = shipmentMode == ImportedShipmentMode.Air;
+        var normalizedContainerType = isLcl ? "LCL" : isAir ? "AIR" : row.ContainerType;
         var validFrom = row.ValidFrom;
         var validTo = row.ValidTo;
         var commodity = FirstText(
@@ -146,7 +147,7 @@ public static class DataExtractionPricingImportMapper
             row.OriginPort,
             row.PortOfExit,
             row.DestinationPort,
-            row.ContainerType,
+            normalizedContainerType,
             carrier,
             row.Agent,
             commodity,
