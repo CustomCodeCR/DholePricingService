@@ -193,10 +193,10 @@ public static class StandardizedImportFclRateFactory
         );
 
     private static bool IsLcl(DataExtractionFclPricingRow row) =>
-        ShipmentMode(row) == ImportedShipmentMode.LclColoader;
+        ShipmentMode(row) == ImportedShipmentMode.LclColoaderColoader;
 
     private static bool IsAir(DataExtractionFclPricingRow row) =>
-        ShipmentMode(row) == ImportedShipmentMode.AirLclColoader;
+        ShipmentMode(row) == ImportedShipmentMode.AirLclColoaderLclColoader;
 
     private static bool ShouldPromoteEmailDestinationToPoe(
         DataExtractionFclPricingRow row,
