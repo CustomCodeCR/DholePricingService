@@ -102,7 +102,7 @@ jobs:
           # Docker health metadata can remain in "starting" for a while after the
           # API is already serving traffic. Validate the real endpoint as the
           # source of truth and keep Docker state only for hard failures.
-          for attempt in $(seq 1 24); do
+          for attempt in $(seq 1 72); do
             STATUS="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$CONTAINER_ID")"
 
             if [ "$STATUS" = "healthy" ]; then
