@@ -343,6 +343,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
     }
 
     public void ApplyManualReview(
+        ImportedShipmentMode shipmentMode,
         CatalogSnapshot profile,
         CatalogSnapshot pol,
         CatalogSnapshot poe,
@@ -412,7 +413,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         TransitDays = transitDays;
         ValidFrom = validFrom;
         ValidTo = validTo;
-        NormalizeShipmentModeAndEquipment();
+        NormalizeShipmentModeAndEquipment(shipmentMode);
 
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
     }
@@ -494,9 +495,12 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         ContainerTypeSlug = value.Slug;
     }
 
-    private void NormalizeShipmentModeAndEquipment()
+    private void NormalizeShipmentModeAndEquipment(
+        ImportedShipmentMode? forcedMode = null)
     {
-        ShipmentMode = ImportShipmentModeClassifier.Classify(
+        ShipmentMode = forcedMode is { } mode && mode != ImportedShipmentMode.Unknown
+            ? mode
+            : ImportShipmentModeClassifier.Classify(
             ContainerType,
             ContainerTypeName,
             ContainerTypeCode,
