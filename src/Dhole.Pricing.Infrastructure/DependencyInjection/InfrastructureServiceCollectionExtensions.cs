@@ -53,6 +53,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddPricingExchangeRateServices();
 
         services.AddScoped<ExtractAndPersistFclPricingImportService>();
+        services.AddScoped<AgentOceanFreightImportService>();
 
         return services;
     }
@@ -73,6 +74,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddPricingExchangeRateServices();
 
         services.AddScoped<ExtractAndPersistFclPricingImportService>();
+        services.AddScoped<AgentOceanFreightImportService>();
 
         return services;
     }
