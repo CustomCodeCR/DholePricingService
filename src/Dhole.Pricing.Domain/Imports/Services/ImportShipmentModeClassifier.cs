@@ -6,8 +6,8 @@ public enum ImportedShipmentMode
 {
     Unknown = 0,
     Fcl = 1,
-    Lcl = 2,
-    Air = 3,
+    LclColoader = 2,
+    AirLclColoader = 3,
 }
 
 public static class ImportShipmentModeClassifier
@@ -48,7 +48,7 @@ public static class ImportShipmentModeClassifier
         // LCL/AIR canonical equipment is authoritative. Historical air/LCL rows
         // may still carry a legacy FCL placeholder (for example 40HC), so FCL
         // must be validated against the extraction evidence before returning it.
-        if (explicitContainerMode is ImportedShipmentMode.Lcl or ImportedShipmentMode.Air)
+        if (explicitContainerMode is ImportedShipmentMode.LclColoader or ImportedShipmentMode.AirLclColoader)
             return explicitContainerMode;
 
         if (string.IsNullOrWhiteSpace(rawDataJson))
@@ -62,7 +62,7 @@ public static class ImportShipmentModeClassifier
             CollectRawValues(document.RootElement, equipmentValues, modeValues);
 
             var rawEquipmentMode = ClassifyEquipmentValues(equipmentValues.ToArray());
-            if (rawEquipmentMode is ImportedShipmentMode.Lcl or ImportedShipmentMode.Air)
+            if (rawEquipmentMode is ImportedShipmentMode.LclColoader or ImportedShipmentMode.AirLclColoader)
                 return rawEquipmentMode;
 
             var rawCanonical = CanonicalText(document.RootElement.GetRawText());
@@ -70,10 +70,10 @@ public static class ImportShipmentModeClassifier
             // Air evidence takes precedence over a historical 20/40/45 container
             // placeholder because old email extractions used those placeholders.
             if (HasStrongAirEvidence(rawCanonical, modeValues))
-                return ImportedShipmentMode.Air;
+                return ImportedShipmentMode.AirLclColoader;
 
             if (HasStrongLclEvidence(rawCanonical, modeValues))
-                return ImportedShipmentMode.Lcl;
+                return ImportedShipmentMode.LclColoader;
 
             if (explicitContainerMode == ImportedShipmentMode.Fcl)
                 return ImportedShipmentMode.Fcl;
@@ -102,8 +102,8 @@ public static class ImportShipmentModeClassifier
             var normalized = CanonicalText(value);
             if (string.IsNullOrEmpty(normalized)) continue;
 
-            if (IsLclMarker(normalized)) return ImportedShipmentMode.Lcl;
-            if (IsAirMarker(normalized)) return ImportedShipmentMode.Air;
+            if (IsLclMarker(normalized)) return ImportedShipmentMode.LclColoader;
+            if (IsAirMarker(normalized)) return ImportedShipmentMode.AirLclColoader;
             if (IsFclEquipment(normalized)) return ImportedShipmentMode.Fcl;
         }
 
