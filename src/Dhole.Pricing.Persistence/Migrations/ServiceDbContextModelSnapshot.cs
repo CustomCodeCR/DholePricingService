@@ -1462,6 +1462,12 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("source_type");
 
+                    b.Property<string>("ShipmentMode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("shipment_mode");
+
                     b.Property<string>("SourceUrl")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
