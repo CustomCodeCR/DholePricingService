@@ -66,7 +66,6 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         ApplyAgent(agent);
         ApplyContainerType(containerType);
         ApplyCurrency(currency);
-        NormalizeShipmentModeAndEquipment();
 
         Commodity = Normalize(commodity);
         SpaceComment = Normalize(spaceComment);
@@ -413,6 +412,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         TransitDays = transitDays;
         ValidFrom = validFrom;
         ValidTo = validTo;
+        NormalizeShipmentModeAndEquipment();
 
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
     }
