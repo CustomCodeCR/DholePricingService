@@ -1083,8 +1083,7 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasIndex("PortRole");
 
-                    b.HasIndex("ShipmentMode")
-                        .HasDatabaseName("IX_ImportFclRates_ShipmentMode");
+                    b.HasIndex("ShipmentMode");
 
                     b.HasIndex("ShipmentModeMask");
 
