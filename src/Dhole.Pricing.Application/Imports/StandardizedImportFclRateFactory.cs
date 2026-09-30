@@ -5,6 +5,7 @@ using System.Text.Json;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
+using Dhole.Pricing.Domain.Imports.Services;
 
 namespace Dhole.Pricing.Application.Imports;
 
@@ -113,13 +114,15 @@ public static class StandardizedImportFclRateFactory
                         "PENDING",
                         "Por asignar"
                     ),
-                    IsLcl(row)
-                        ? CreateFallbackSnapshot("container-types", "LCL", "LCL", "LCL")
-                        : ResolveOptionalSnapshot(
-                            row.ContainerTypeReference,
-                            IsAir(row) ? "air-equipment-types" : "container-types",
-                            row.ContainerType
-                        ),
+                    IsAir(row)
+                        ? CreateFallbackSnapshot("air-equipment-types", "AIR", "AIR", "AIR")
+                        : IsLcl(row)
+                            ? CreateFallbackSnapshot("container-types", "LCL", "LCL", "LCL")
+                            : ResolveOptionalSnapshot(
+                                row.ContainerTypeReference,
+                                "container-types",
+                                row.ContainerType
+                            ),
                     ResolveCurrencySnapshot(row.CurrencyReference, row.Currency),
                     row.Commodity,
                     row.SpaceComment,
@@ -161,7 +164,7 @@ public static class StandardizedImportFclRateFactory
         return !hasNonReviewableBlockingIssue
             && HasText(row.OriginPort)
             && HasText(resolvedPortOfExit)
-            && (IsLcl(row) || (HasText(row.ContainerType) && HasText(row.Carrier)))
+            && (IsLcl(row) || IsAir(row) || (HasText(row.ContainerType) && HasText(row.Carrier)))
             && row.ValidFrom.HasValue
             && row.ValidTo.HasValue
             && row.ValidTo.Value >= row.ValidFrom.Value
@@ -180,43 +183,20 @@ public static class StandardizedImportFclRateFactory
             && FitsNumeric18Scale4(row.Margin);
     }
 
-    private static bool IsLcl(DataExtractionFclPricingRow row)
-    {
-        if (ContainsLclMarker(row.ContainerType)) return true;
-        if (!HasText(row.RawJson)) return false;
-
-        var explicitMode = ReadRawJsonValue(
-            row.RawJson!,
-            "ShipmentMode",
-            "shipmentMode",
-            "Mode",
-            "mode",
-            "Modalidad",
-            "modalidad",
-            "ServiceType",
-            "serviceType",
-            "LoadType",
-            "loadType"
+    private static ImportedShipmentMode ShipmentMode(DataExtractionFclPricingRow row) =>
+        ImportShipmentModeClassifier.Classify(
+            row.ContainerType,
+            row.ContainerType,
+            row.ContainerType,
+            null,
+            row.RawJson
         );
 
-        return ContainsLclMarker(explicitMode) || ContainsLclMarker(row.RawJson);
-    }
-
-    private static bool ContainsLclMarker(string? value)
-    {
-        if (!HasText(value)) return false;
-        var normalized = value!.Trim().ToLowerInvariant();
-        return normalized.Contains("lcl", StringComparison.Ordinal)
-            || normalized.Contains("less than container load", StringComparison.Ordinal)
-            || normalized.Contains("less-than-container-load", StringComparison.Ordinal);
-    }
+    private static bool IsLcl(DataExtractionFclPricingRow row) =>
+        ShipmentMode(row) == ImportedShipmentMode.Lcl;
 
     private static bool IsAir(DataExtractionFclPricingRow row) =>
-        string.Equals(
-            row.ContainerType?.Trim(),
-            "AIR",
-            StringComparison.OrdinalIgnoreCase
-        );
+        ShipmentMode(row) == ImportedShipmentMode.Air;
 
     private static bool ShouldPromoteEmailDestinationToPoe(
         DataExtractionFclPricingRow row,
