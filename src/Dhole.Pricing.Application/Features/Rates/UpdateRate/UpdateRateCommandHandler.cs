@@ -178,18 +178,37 @@ public sealed class UpdateRateCommandHandler(
                     )
                 };
 
-            var equipmentCatalogSlug = command.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl
-                ? PricingConstants.CatalogSlugs.LandEquipmentTypes
-                : PricingConstants.CatalogSlugs.ContainerTypes;
-            var equipmentCatalogLabel = command.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl
-                ? "El tipo de unidad terrestre"
+            var isLandShipment = command.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
+            var equipmentCatalogSlug = command.ShipmentMode == ShipmentMode.Ftl
+                ? PricingConstants.CatalogSlugs.LandEquipmentSizes
+                : command.ShipmentMode == ShipmentMode.Ltl
+                    ? PricingConstants.CatalogSlugs.LandEquipmentTypes
+                    : PricingConstants.CatalogSlugs.ContainerTypes;
+            IReadOnlyCollection<string> acceptedEquipmentCatalogSlugs = command.ShipmentMode switch
+            {
+                ShipmentMode.Ftl =>
+                [
+                    PricingConstants.CatalogSlugs.LandEquipmentSizes,
+                    PricingConstants.CatalogSlugs.LandEquipmentTypes,
+                    PricingConstants.CatalogSlugs.LandEquipmentKinds,
+                ],
+                ShipmentMode.Ltl =>
+                [
+                    PricingConstants.CatalogSlugs.LandEquipmentTypes,
+                    PricingConstants.CatalogSlugs.LandEquipmentSizes,
+                    PricingConstants.CatalogSlugs.LandEquipmentKinds,
+                ],
+                _ => [PricingConstants.CatalogSlugs.ContainerTypes],
+            };
+            var equipmentCatalogLabel = isLandShipment
+                ? "La unidad terrestre"
                 : "El tipo de contenedor";
 
             foreach (var requested in requestedContainers)
             {
-                var containerType = await configCatalog.GetActiveInGroupAsync(
+                var containerType = await configCatalog.GetActiveInAnyGroupAsync(
                     requested.ContainerTypeId,
-                    equipmentCatalogSlug,
+                    acceptedEquipmentCatalogSlugs,
                     cancellationToken
                 );
                 if (containerType is null)
