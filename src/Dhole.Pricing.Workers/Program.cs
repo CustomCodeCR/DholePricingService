@@ -69,7 +69,7 @@ static async Task EnsureDatabaseSchemaAsync(
 
             if (await dbContext.Database.CanConnectAsync())
             {
-                await dbContext.Database.MigrateAsync();
+                await DatabaseMigrationCoordinator.MigrateAsync(dbContext);
 
                 var pending = await dbContext.Database.GetPendingMigrationsAsync();
                 if (!pending.Any())
