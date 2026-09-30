@@ -17,6 +17,7 @@ internal sealed class ImportFclRatesConfiguration
         builder.Property(x => x.ImportBatchId).IsRequired();
         builder.Property(x => x.ExtractionRecordId).IsRequired();
         builder.Property(x => x.SourceType).HasConversion<string>().HasMaxLength(50).IsRequired();
+        builder.Property(x => x.ShipmentMode).HasConversion<string>().HasMaxLength(30).IsRequired();
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
 
         ConfigureSnapshot(builder, "ImportProfile", 100, 200);
@@ -53,6 +54,7 @@ internal sealed class ImportFclRatesConfiguration
 
         builder.HasIndex(x => x.ImportBatchId);
         builder.HasIndex(x => x.ExtractionRecordId).IsUnique();
+        builder.HasIndex(x => x.ShipmentMode);
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => new
         {
