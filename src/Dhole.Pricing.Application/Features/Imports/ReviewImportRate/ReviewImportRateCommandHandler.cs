@@ -123,6 +123,7 @@ public sealed class ReviewImportRateCommandHandler(
         try
         {
             importRate.ApplyManualReview(
+                shipmentMode,
                 Snapshot(profile),
                 Snapshot(pol),
                 Snapshot(poe),
