@@ -3,6 +3,7 @@ using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
 using Dhole.Pricing.Application.Features.Imports.InactivateImportRate;
 using Dhole.Pricing.Domain.Imports.Enums;
+using Dhole.Pricing.Domain.Imports.Services;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.AspNetCore.Mvc;
@@ -117,14 +118,24 @@ public static class ImportRateReviewQueueEndpoints
         var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)safePageSize));
         var safePageNumber = Math.Clamp(pageNumber ?? 1, 1, totalPages);
 
-        var rows = await query
+        var pageRows = await query
             .OrderByDescending(x => x.CreatedAtUtc)
             .Skip((safePageNumber - 1) * safePageSize)
             .Take(safePageSize)
+            .ToListAsync(cancellationToken);
+
+        var rows = pageRows
             .Select(x => new ImportRateReviewQueueItemDto(
                 x.Id,
                 x.ImportBatchId,
                 x.SourceType.ToString(),
+                ImportShipmentModeClassifier.Classify(
+                    x.ContainerType,
+                    x.ContainerTypeName,
+                    x.ContainerTypeCode,
+                    x.ContainerTypeSlug,
+                    x.RawDataJson
+                ).ToString(),
                 x.CarrierName,
                 x.AgentName,
                 x.PolName,
@@ -141,7 +152,7 @@ public static class ImportRateReviewQueueEndpoints
                 x.RawDataJson,
                 x.CreatedAtUtc
             ))
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         return Results.Ok(new ImportRateReviewQueueResponseDto(
             rows,
@@ -164,6 +175,7 @@ public static class ImportRateReviewQueueEndpoints
         Guid Id,
         Guid ImportBatchId,
         string SourceType,
+        string ShipmentMode,
         string Carrier,
         string Agent,
         string Pol,
