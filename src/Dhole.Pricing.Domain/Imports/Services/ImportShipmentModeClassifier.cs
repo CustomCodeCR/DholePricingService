@@ -28,6 +28,8 @@ public static class ImportShipmentModeClassifier
         "servicemode",
         "modalidad",
         "mode",
+        "servicetype",
+        "loadtype",
     };
 
     public static ImportedShipmentMode Classify(
@@ -43,13 +45,14 @@ public static class ImportShipmentModeClassifier
             containerTypeCode,
             containerTypeSlug);
 
-        // The normalized equipment snapshot is authoritative. Some historical
-        // extraction payloads contain contradictory Raw.TariffMode values.
-        if (explicitContainerMode != ImportedShipmentMode.Unknown)
+        // LCL/AIR canonical equipment is authoritative. Historical air/LCL rows
+        // may still carry a legacy FCL placeholder (for example 40HC), so FCL
+        // must be validated against the extraction evidence before returning it.
+        if (explicitContainerMode is ImportedShipmentMode.Lcl or ImportedShipmentMode.Air)
             return explicitContainerMode;
 
         if (string.IsNullOrWhiteSpace(rawDataJson))
-            return ImportedShipmentMode.Unknown;
+            return explicitContainerMode;
 
         try
         {
@@ -59,24 +62,37 @@ public static class ImportShipmentModeClassifier
             CollectRawValues(document.RootElement, equipmentValues, modeValues);
 
             var rawEquipmentMode = ClassifyEquipmentValues(equipmentValues.ToArray());
-            if (rawEquipmentMode != ImportedShipmentMode.Unknown)
+            if (rawEquipmentMode is ImportedShipmentMode.Lcl or ImportedShipmentMode.Air)
                 return rawEquipmentMode;
 
-            foreach (var value in modeValues)
+            var rawCanonical = CanonicalText(document.RootElement.GetRawText());
+
+            // Air evidence takes precedence over a historical 20/40/45 container
+            // placeholder because old email extractions used those placeholders.
+            if (HasStrongAirEvidence(rawCanonical, modeValues))
+                return ImportedShipmentMode.Air;
+
+            if (HasStrongLclEvidence(rawCanonical, modeValues))
+                return ImportedShipmentMode.Lcl;
+
+            if (explicitContainerMode == ImportedShipmentMode.Fcl)
+                return ImportedShipmentMode.Fcl;
+
+            if (rawEquipmentMode == ImportedShipmentMode.Fcl)
+                return ImportedShipmentMode.Fcl;
+
+            if (modeValues.Any(value =>
+                    CanonicalText(value).Contains("fcl", StringComparison.Ordinal)))
             {
-                var normalized = CanonicalText(value);
-                if (IsLclMarker(normalized)) return ImportedShipmentMode.Lcl;
-                if (IsAirMarker(normalized)) return ImportedShipmentMode.Air;
-                if (normalized.Contains("fcl", StringComparison.Ordinal))
-                    return ImportedShipmentMode.Fcl;
+                return ImportedShipmentMode.Fcl;
             }
         }
         catch (JsonException)
         {
-            // Invalid legacy JSON remains Unknown instead of being guessed as FCL/LCL.
+            // Malformed legacy JSON falls back to the normalized equipment snapshot.
         }
 
-        return ImportedShipmentMode.Unknown;
+        return explicitContainerMode;
     }
 
     private static ImportedShipmentMode ClassifyEquipmentValues(params string?[] values)
@@ -94,17 +110,60 @@ public static class ImportShipmentModeClassifier
         return ImportedShipmentMode.Unknown;
     }
 
+    private static bool HasStrongLclEvidence(
+        string rawCanonical,
+        IReadOnlyCollection<string> modeValues)
+    {
+        if (modeValues.Any(value => IsLclMarker(CanonicalText(value))))
+            return true;
+
+        return rawCanonical.Contains("unitwm", StringComparison.Ordinal)
+            || rawCanonical.Contains("lessthancontainerload", StringComparison.Ordinal)
+            || rawCanonical.Contains("groupage", StringComparison.Ordinal)
+            || rawCanonical.Contains("coloader", StringComparison.Ordinal)
+            || rawCanonical.Contains("coloading", StringComparison.Ordinal);
+    }
+
+    private static bool HasStrongAirEvidence(
+        string rawCanonical,
+        IReadOnlyCollection<string> modeValues)
+    {
+        if (modeValues.Any(value => IsAirMarker(CanonicalText(value))))
+            return true;
+
+        if (rawCanonical.Contains("airlineroute", StringComparison.Ordinal)
+            || rawCanonical.Contains("kgpercbm", StringComparison.Ordinal)
+            || rawCanonical.Contains("ratebasiskgvol", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var mentionsAirline =
+            rawCanonical.Contains("aerolinea", StringComparison.Ordinal)
+            || rawCanonical.Contains("airline", StringComparison.Ordinal);
+        var hasVolumetricAirBasis =
+            rawCanonical.Contains("167kg", StringComparison.Ordinal)
+            || rawCanonical.Contains("kgvol", StringComparison.Ordinal)
+            || rawCanonical.Contains("volumetric", StringComparison.Ordinal);
+
+        return mentionsAirline && hasVolumetricAirBasis;
+    }
+
     private static bool IsLclMarker(string normalized) =>
         normalized == "lcl"
+        || normalized.StartsWith("lcl", StringComparison.Ordinal)
         || normalized.Contains("lessthancontainerload", StringComparison.Ordinal)
         || normalized.Contains("loosecargo", StringComparison.Ordinal)
-        || normalized.Contains("groupage", StringComparison.Ordinal);
+        || normalized.Contains("groupage", StringComparison.Ordinal)
+        || normalized.Contains("coloader", StringComparison.Ordinal)
+        || normalized.Contains("coloading", StringComparison.Ordinal);
 
     private static bool IsAirMarker(string normalized) =>
         normalized == "air"
         || normalized.StartsWith("aircargo", StringComparison.Ordinal)
         || normalized.StartsWith("airconsolidated", StringComparison.Ordinal)
-        || normalized.StartsWith("airbacktoback", StringComparison.Ordinal);
+        || normalized.StartsWith("airbacktoback", StringComparison.Ordinal)
+        || normalized.StartsWith("airlcl", StringComparison.Ordinal);
 
     private static bool IsFclEquipment(string normalized)
     {
