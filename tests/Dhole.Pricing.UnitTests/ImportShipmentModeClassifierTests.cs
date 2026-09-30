@@ -26,7 +26,7 @@ public sealed class ImportShipmentModeClassifierTests
             "lcl",
             raw);
 
-        Assert.AreEqual(ImportedShipmentMode.Lcl, mode);
+        Assert.AreEqual(ImportedShipmentMode.LclColoader, mode);
     }
 
     [TestMethod]
@@ -62,7 +62,7 @@ public sealed class ImportShipmentModeClassifierTests
             "AIR",
             "air");
 
-        Assert.AreEqual(ImportedShipmentMode.Air, mode);
+        Assert.AreEqual(ImportedShipmentMode.AirLclColoader, mode);
     }
 
     [TestMethod]
@@ -84,7 +84,7 @@ public sealed class ImportShipmentModeClassifierTests
             "por-asignar",
             raw);
 
-        Assert.AreEqual(ImportedShipmentMode.Lcl, mode);
+        Assert.AreEqual(ImportedShipmentMode.LclColoader, mode);
     }
 
     [TestMethod]
@@ -129,7 +129,7 @@ public sealed class ImportShipmentModeClassifierTests
             "40-high-cube",
             raw);
 
-        Assert.AreEqual(ImportedShipmentMode.Air, mode);
+        Assert.AreEqual(ImportedShipmentMode.AirLclColoader, mode);
     }
 
     [TestMethod]
@@ -154,7 +154,7 @@ public sealed class ImportShipmentModeClassifierTests
             "40-high-cube",
             raw);
 
-        Assert.AreEqual(ImportedShipmentMode.Air, mode);
+        Assert.AreEqual(ImportedShipmentMode.AirLclColoader, mode);
     }
 
     [TestMethod]
@@ -177,7 +177,7 @@ public sealed class ImportShipmentModeClassifierTests
             "40-high-cube",
             raw);
 
-        Assert.AreEqual(ImportedShipmentMode.Lcl, mode);
+        Assert.AreEqual(ImportedShipmentMode.LclColoader, mode);
     }
 
 }
