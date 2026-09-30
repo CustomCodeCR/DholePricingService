@@ -14,7 +14,7 @@ internal static class ImportRateMappings
             ImportBatchId = importRate.ImportBatchId,
             ExtractionRecordId = importRate.ExtractionRecordId,
             SourceType = importRate.SourceType.ToString(),
-            ShipmentMode = ResolveShipmentMode(importRate),
+            ShipmentMode = importRate.ShipmentMode.ToString(),
             ImportProfileId = importRate.ImportProfileId,
             ImportProfileName = importRate.ImportProfileName,
             ImportProfileCode = importRate.ImportProfileCode,
@@ -66,22 +66,6 @@ internal static class ImportRateMappings
             Status = importRate.Status.ToString(),
             UsedAsRateCount = importRate.UsedAsRateCount,
             CreatedAsRateHeaderId = importRate.CreatedAsRateHeaderId,
-        };
-    }
-
-    private static string ResolveShipmentMode(ImportFclRates importRate)
-    {
-        return ImportShipmentModeClassifier.Classify(
-            importRate.ContainerType,
-            importRate.ContainerTypeName,
-            importRate.ContainerTypeCode,
-            importRate.ContainerTypeSlug,
-            importRate.RawDataJson) switch
-        {
-            ImportedShipmentMode.Lcl => "Lcl",
-            ImportedShipmentMode.Air => "Air",
-            ImportedShipmentMode.Fcl => "Fcl",
-            _ => "Fcl",
         };
     }
 
