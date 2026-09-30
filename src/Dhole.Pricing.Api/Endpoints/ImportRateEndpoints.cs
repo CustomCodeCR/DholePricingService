@@ -43,7 +43,10 @@ public static class ImportRateEndpoints
 
         group
             .MapGet("/{importRateId:guid}", GetImportRateByIdAsync)
-            .RequireScope(PricingConstants.Scopes.ImportFclRateReview);
+            // Pricing necesita releer inmediatamente una fuente creada manualmente desde
+            // Pantalla 6. La revisión/aprobación sigue protegida por ImportFclRateReview,
+            // pero consultar una fuente individual es parte normal del workspace.
+            .RequireScope(PricingConstants.Scopes.WorkspaceAccess);
 
         group
             .MapPost("/", CreateImportRateAsync)
