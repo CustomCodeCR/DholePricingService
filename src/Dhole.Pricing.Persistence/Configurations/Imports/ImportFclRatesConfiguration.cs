@@ -54,7 +54,7 @@ internal sealed class ImportFclRatesConfiguration
 
         builder.HasIndex(x => x.ImportBatchId);
         builder.HasIndex(x => x.ExtractionRecordId).IsUnique();
-        builder.HasIndex(x => x.ShipmentMode);
+        builder.HasIndex(x => x.ShipmentMode).HasDatabaseName("IX_ImportFclRates_ShipmentMode");
         builder.HasIndex(x => x.Status);
         builder.HasIndex(x => new
         {
