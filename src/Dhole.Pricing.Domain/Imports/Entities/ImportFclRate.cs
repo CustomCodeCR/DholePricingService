@@ -508,11 +508,11 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
             RawDataJson
         );
 
-        if (ShipmentMode == ImportedShipmentMode.Lcl)
+        if (ShipmentMode == ImportedShipmentMode.LclColoader)
         {
             ApplyContainerType(LclContainerSnapshot());
         }
-        else if (ShipmentMode == ImportedShipmentMode.Air)
+        else if (ShipmentMode == ImportedShipmentMode.AirLclColoader)
         {
             ApplyContainerType(AirContainerSnapshot());
         }
