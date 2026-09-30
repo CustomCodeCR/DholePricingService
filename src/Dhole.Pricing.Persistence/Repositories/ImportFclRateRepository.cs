@@ -172,11 +172,7 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext, IConfigu
                 ImportBatchId = x.ImportBatchId,
                 ExtractionRecordId = x.ExtractionRecordId,
                 SourceType = x.SourceType.ToString(),
-                ShipmentMode =
-                    x.ShipmentMode == ImportedShipmentMode.LclColoader ? "Lcl"
-                    : x.ShipmentMode == ImportedShipmentMode.AirLclColoader ? "Air"
-                    : x.ShipmentMode == ImportedShipmentMode.Fcl ? "Fcl"
-                    : "Unknown",
+                ShipmentMode = x.ShipmentMode.ToString(),
                 ImportProfileId = x.ImportProfileId,
                 ImportProfileName = x.ImportProfileName,
                 ImportProfileCode = x.ImportProfileCode,
