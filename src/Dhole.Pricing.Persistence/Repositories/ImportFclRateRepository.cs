@@ -4,6 +4,7 @@ using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Contracts.Imports.Response;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
+using Dhole.Pricing.Domain.Imports.Services;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -224,6 +225,19 @@ public sealed class ImportFclRateRepository(ServiceDbContext dbContext, IConfigu
                 CreatedAsRateHeaderId = x.CreatedAsRateHeaderId,
             })
             .ToListAsync(cancellationToken);
+
+        items = items
+            .Select(item => item with
+            {
+                ShipmentMode = ImportShipmentModeClassifier.Classify(
+                    item.ContainerType,
+                    item.ContainerType,
+                    item.ContainerTypeCode,
+                    item.ContainerTypeSlug,
+                    item.RawDataJson
+                ).ToString(),
+            })
+            .ToList();
 
         return PagedResult<ImportRateDto>.Create(items, page.PageNumber, page.PageSize, total);
     }
