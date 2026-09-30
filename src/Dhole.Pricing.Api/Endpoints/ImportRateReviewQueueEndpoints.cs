@@ -126,10 +126,7 @@ public static class ImportRateReviewQueueEndpoints
                 x.Id,
                 x.ImportBatchId,
                 x.SourceType.ToString(),
-                x.ShipmentMode == ImportedShipmentMode.Lcl ? "Lcl"
-                    : x.ShipmentMode == ImportedShipmentMode.Air ? "Air"
-                    : x.ShipmentMode == ImportedShipmentMode.Fcl ? "Fcl"
-                    : "Unknown",
+                x.ShipmentMode.ToString(),
                 x.CarrierName,
                 x.AgentName,
                 x.PolName,
