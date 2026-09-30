@@ -60,15 +60,11 @@ public sealed class ReviewImportRateCommandHandler(
         {
             pod = await ResolveAsync(command.PodId.Value, ["pod", "ports"], cancellationToken);
         }
-        var isLclImport = IsLclShipmentMode(command.ShipmentMode)
-            || ImportShipmentModeClassifier.Classify(
-                importRate.ContainerType,
-                importRate.ContainerTypeName,
-                importRate.ContainerTypeCode,
-                importRate.ContainerTypeSlug,
-                importRate.RawDataJson) == ImportedShipmentMode.Lcl;
+        var shipmentMode = ResolveShipmentMode(command.ShipmentMode, importRate);
+        var isConsolidatedImport =
+            shipmentMode is ImportedShipmentMode.Lcl or ImportedShipmentMode.Air;
         var carrierWasProvided = command.CarrierId.HasValue && command.CarrierId.Value != Guid.Empty;
-        var containerTypeWasProvided = !isLclImport
+        var containerTypeWasProvided = !isConsolidatedImport
             && command.ContainerTypeId.HasValue
             && command.ContainerTypeId.Value != Guid.Empty;
 
@@ -88,7 +84,7 @@ public sealed class ReviewImportRateCommandHandler(
             || (command.PodId.HasValue && pod is null)
             || agent is null
             || currency is null
-            || (!isLclImport && (carrier is null || containerType is null))
+            || (!isConsolidatedImport && (carrier is null || containerType is null))
             || (carrierWasProvided && carrier is null)
             || (containerTypeWasProvided && containerType is null)
         )
@@ -104,16 +100,19 @@ public sealed class ReviewImportRateCommandHandler(
                 importRate.CarrierSlug
             )
             : Snapshot(carrier);
-        var containerTypeSnapshot = isLclImport
-            ? LclContainerSnapshot()
-            : containerType is null
+        var containerTypeSnapshot = shipmentMode switch
+        {
+            ImportedShipmentMode.Lcl => LclContainerSnapshot(),
+            ImportedShipmentMode.Air => AirContainerSnapshot(),
+            _ => containerType is null
                 ? new CatalogSnapshot(
                     importRate.ContainerTypeId,
                     importRate.ContainerTypeName,
                     importRate.ContainerTypeCode,
                     importRate.ContainerTypeSlug
                 )
-                : Snapshot(containerType);
+                : Snapshot(containerType),
+        };
 
         var before = PricingAuditSnapshots.From(importRate);
         var beforeJson = JsonSerializer.Serialize(before);
@@ -218,12 +217,47 @@ public sealed class ReviewImportRateCommandHandler(
             : null;
     }
 
-    private static bool IsLclShipmentMode(string? value) =>
-        string.Equals(value?.Trim(), "Lcl", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(value?.Trim(), "LCL", StringComparison.OrdinalIgnoreCase);
+    private static ImportedShipmentMode ResolveShipmentMode(
+        string? requested,
+        ImportFclRates importRate)
+    {
+        var normalized = requested?.Trim();
+        if (string.Equals(normalized, "Lcl", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "LCL", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "LclColoader", StringComparison.OrdinalIgnoreCase))
+        {
+            return ImportedShipmentMode.Lcl;
+        }
+
+        if (string.Equals(normalized, "Air", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "AirConsol", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "AirLclColoader", StringComparison.OrdinalIgnoreCase))
+        {
+            return ImportedShipmentMode.Air;
+        }
+
+        if (string.Equals(normalized, "Fcl", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "FCL", StringComparison.OrdinalIgnoreCase))
+        {
+            return ImportedShipmentMode.Fcl;
+        }
+
+        return importRate.ShipmentMode != ImportedShipmentMode.Unknown
+            ? importRate.ShipmentMode
+            : ImportShipmentModeClassifier.Classify(
+                importRate.ContainerType,
+                importRate.ContainerTypeName,
+                importRate.ContainerTypeCode,
+                importRate.ContainerTypeSlug,
+                importRate.RawDataJson
+            );
+    }
 
     private static CatalogSnapshot LclContainerSnapshot() =>
-        new(Guid.Parse("4c434c00-0000-4000-8000-000000000001"), "LCL", "LCL", "lcl");
+        new(Guid.Parse("f4d19764-7556-2a0d-9222-42d7b48d00d8"), "LCL", "LCL", "lcl");
+
+    private static CatalogSnapshot AirContainerSnapshot() =>
+        new(Guid.Parse("321ae516-76a1-10ed-6d98-2117496f8ff4"), "AIR", "AIR", "air");
 
     private static CatalogSnapshot Snapshot(PricingConfigCatalogItem item) =>
         CatalogSnapshot.Create(item.Id, item.Name, item.Code, item.Slug);
