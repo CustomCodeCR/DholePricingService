@@ -1,6 +1,7 @@
 using CustomCodeFramework.Core.Domain.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
 using Dhole.Pricing.Domain.Imports.Events;
+using Dhole.Pricing.Domain.Imports.Services;
 
 namespace Dhole.Pricing.Domain.Imports.Entities;
 
@@ -65,6 +66,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         ApplyAgent(agent);
         ApplyContainerType(containerType);
         ApplyCurrency(currency);
+        NormalizeShipmentModeAndEquipment();
 
         Commodity = Normalize(commodity);
         SpaceComment = Normalize(spaceComment);
@@ -84,6 +86,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         ValidFrom = validFrom;
         ValidTo = validTo;
         RawDataJson = Normalize(rawDataJson);
+        NormalizeShipmentModeAndEquipment();
         // Imported rows enter a machine pre-authorized state. An authorized
         // reviewer can still perform the manual pre-approval through Approve().
         Status = ImportStatus.PreAuthorized;
@@ -94,6 +97,7 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
     public Guid ImportBatchId { get; private set; }
     public Guid ExtractionRecordId { get; private set; }
     public ImportSourceType SourceType { get; private set; }
+    public ImportedShipmentMode ShipmentMode { get; private set; } = ImportedShipmentMode.Unknown;
 
     public Guid ImportProfileId { get; private set; }
     public string ImportProfileName { get; private set; } = string.Empty;
@@ -489,6 +493,44 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         ContainerTypeCode = value.Code;
         ContainerTypeSlug = value.Slug;
     }
+
+    private void NormalizeShipmentModeAndEquipment()
+    {
+        ShipmentMode = ImportShipmentModeClassifier.Classify(
+            ContainerType,
+            ContainerTypeName,
+            ContainerTypeCode,
+            ContainerTypeSlug,
+            RawDataJson
+        );
+
+        if (ShipmentMode == ImportedShipmentMode.Lcl)
+        {
+            ApplyContainerType(LclContainerSnapshot());
+            FreeDays = 0;
+        }
+        else if (ShipmentMode == ImportedShipmentMode.Air)
+        {
+            ApplyContainerType(AirContainerSnapshot());
+            FreeDays = 0;
+        }
+    }
+
+    private static CatalogSnapshot LclContainerSnapshot() =>
+        new(
+            Guid.Parse("f4d19764-7556-2a0d-9222-42d7b48d00d8"),
+            "LCL",
+            "LCL",
+            "lcl"
+        );
+
+    private static CatalogSnapshot AirContainerSnapshot() =>
+        new(
+            Guid.Parse("321ae516-76a1-10ed-6d98-2117496f8ff4"),
+            "AIR",
+            "AIR",
+            "air"
+        );
 
     private void ApplyCurrency(CatalogSnapshot value)
     {
