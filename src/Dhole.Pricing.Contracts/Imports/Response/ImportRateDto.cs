@@ -6,7 +6,7 @@ public sealed record ImportRateDto
     public Guid ImportBatchId { get; init; }
     public Guid ExtractionRecordId { get; init; }
     public string SourceType { get; init; } = string.Empty;
-    public string ShipmentMode { get; init; } = "Fcl";
+    public string ShipmentMode { get; init; } = "Unknown";
     public Guid ImportProfileId { get; init; }
     public string ImportProfileName { get; init; } = string.Empty;
     public string ImportProfileCode { get; init; } = string.Empty;
