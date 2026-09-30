@@ -8,4 +8,5 @@ public enum ImportSourceType
     Csv = 4,
     Image = 5,
     Manual = 6,
+    AgentExtraction = 7,
 }
