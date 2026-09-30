@@ -81,7 +81,7 @@ internal static class ImportRateMappings
             ImportedShipmentMode.Lcl => "Lcl",
             ImportedShipmentMode.Air => "Air",
             ImportedShipmentMode.Fcl => "Fcl",
-            _ => "Fcl",
+            _ => "Unknown",
         };
     }
 
