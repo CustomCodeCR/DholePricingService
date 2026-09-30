@@ -14,7 +14,13 @@ internal static class ImportRateMappings
             ImportBatchId = importRate.ImportBatchId,
             ExtractionRecordId = importRate.ExtractionRecordId,
             SourceType = importRate.SourceType.ToString(),
-            ShipmentMode = importRate.ShipmentMode.ToString(),
+            ShipmentMode = importRate.ShipmentMode switch
+            {
+                ImportedShipmentMode.LclColoader => "Lcl",
+                ImportedShipmentMode.AirLclColoader => "Air",
+                ImportedShipmentMode.Fcl => "Fcl",
+                _ => "Unknown",
+            },
             ImportProfileId = importRate.ImportProfileId,
             ImportProfileName = importRate.ImportProfileName,
             ImportProfileCode = importRate.ImportProfileCode,

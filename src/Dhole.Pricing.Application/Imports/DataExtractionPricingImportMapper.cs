@@ -59,8 +59,8 @@ public static class DataExtractionPricingImportMapper
             null,
             row.RawJson
         );
-        var isLcl = shipmentMode == ImportedShipmentMode.Lcl;
-        var isAir = shipmentMode == ImportedShipmentMode.Air;
+        var isLcl = shipmentMode == ImportedShipmentMode.LclColoader;
+        var isAir = shipmentMode == ImportedShipmentMode.AirLclColoader;
         var normalizedContainerType = isLcl ? "LCL" : isAir ? "AIR" : row.ContainerType;
         var validFrom = row.ValidFrom;
         var validTo = row.ValidTo;
