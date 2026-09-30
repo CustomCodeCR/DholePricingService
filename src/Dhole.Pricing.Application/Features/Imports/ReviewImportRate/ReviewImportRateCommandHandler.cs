@@ -60,7 +60,7 @@ public sealed class ReviewImportRateCommandHandler(
         }
         var shipmentMode = ResolveShipmentMode(command.ShipmentMode, importRate);
         var isConsolidatedImport =
-            shipmentMode is ImportedShipmentMode.Lcl or ImportedShipmentMode.Air;
+            shipmentMode is ImportedShipmentMode.LclColoader or ImportedShipmentMode.AirLclColoader;
         var carrierWasProvided = command.CarrierId.HasValue && command.CarrierId.Value != Guid.Empty;
         var containerTypeWasProvided = !isConsolidatedImport
             && command.ContainerTypeId.HasValue
@@ -100,8 +100,8 @@ public sealed class ReviewImportRateCommandHandler(
             : Snapshot(carrier);
         var containerTypeSnapshot = shipmentMode switch
         {
-            ImportedShipmentMode.Lcl => LclContainerSnapshot(),
-            ImportedShipmentMode.Air => AirContainerSnapshot(),
+            ImportedShipmentMode.LclColoader => LclContainerSnapshot(),
+            ImportedShipmentMode.AirLclColoader => AirContainerSnapshot(),
             _ => containerType is null
                 ? new CatalogSnapshot(
                     importRate.ContainerTypeId,
@@ -202,14 +202,14 @@ public sealed class ReviewImportRateCommandHandler(
             || string.Equals(normalized, "LCL", StringComparison.OrdinalIgnoreCase)
             || string.Equals(normalized, "LclColoader", StringComparison.OrdinalIgnoreCase))
         {
-            return ImportedShipmentMode.Lcl;
+            return ImportedShipmentMode.LclColoader;
         }
 
         if (string.Equals(normalized, "Air", StringComparison.OrdinalIgnoreCase)
             || string.Equals(normalized, "AirConsol", StringComparison.OrdinalIgnoreCase)
             || string.Equals(normalized, "AirLclColoader", StringComparison.OrdinalIgnoreCase))
         {
-            return ImportedShipmentMode.Air;
+            return ImportedShipmentMode.AirLclColoader;
         }
 
         if (string.Equals(normalized, "Fcl", StringComparison.OrdinalIgnoreCase)
