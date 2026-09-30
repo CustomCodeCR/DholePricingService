@@ -295,7 +295,7 @@ public static class LclRateSourceEndpoints
             rate.ContainerTypeName,
             rate.ContainerTypeCode,
             rate.ContainerTypeSlug,
-            rate.RawDataJson) == ImportedShipmentMode.Lcl;
+            rate.RawDataJson) == ImportedShipmentMode.LclColoader;
 
     private static decimal ResolveImportedLclTotalCost(ImportFclRates rate)
     {
