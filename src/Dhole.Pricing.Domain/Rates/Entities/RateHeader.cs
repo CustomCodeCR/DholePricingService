@@ -803,9 +803,13 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             // minimum belongs to PerChargeableCbm (ocean freight), not raw-CBM fees
             // such as CFS.
             ChargeBasis.PerCbm => Math.Max(TotalVolumeCbm, 0.001m),
-            ChargeBasis.PerChargeableCbm => ShipmentMode == ShipmentMode.Lcl
+            ChargeBasis.PerChargeableCbm => ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl
                 ? Math.Max(chargeableCbm, 1m)
                 : Math.Max(chargeableCbm, 0.001m),
+            ChargeBasis.PerCft => Math.Max(TotalVolumeCbm * 35.31466672148859m, 0.001m),
+            ChargeBasis.PerChargeableCft => (ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl
+                ? Math.Max(chargeableCbm, 1m)
+                : Math.Max(chargeableCbm, 0.001m)) * 35.31466672148859m,
             ChargeBasis.PerKg => Math.Max(TotalWeightKg, 0.001m),
             ChargeBasis.Per100Kg => Math.Max(TotalWeightKg / 100m, 0.001m),
             ChargeBasis.PerTon => Math.Max(TotalWeightKg / 1000m, 0.001m),
