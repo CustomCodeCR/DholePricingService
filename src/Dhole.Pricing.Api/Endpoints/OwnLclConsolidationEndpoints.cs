@@ -10,6 +10,8 @@ namespace Dhole.Pricing.Api.Endpoints;
 
 public static class OwnLclConsolidationEndpoints
 {
+    private const decimal ForcedNonStackableHeightCm = 177.8m;
+    private const decimal NonStackableBillableHeightCm = 266m;
     private const decimal DefaultMaximumCbm = 50m;
     private const decimal DefaultFreightProfitPerCbm = 5.69m;
     private const decimal CentralAmericaOperationBaseCbm = 70m;
@@ -377,11 +379,11 @@ public static class OwnLclConsolidationEndpoints
         var lengthCm = Math.Max(0m, line.LengthCm);
         var widthCm = Math.Max(0m, line.WidthCm);
         var heightCm = Math.Max(0m, line.HeightCm);
-        var forcedNonStackable = heightCm >= RateCargoProfileFactory.ForcedNonStackableHeightCm;
+        var forcedNonStackable = heightCm >= ForcedNonStackableHeightCm;
         var isStackable = !forcedNonStackable && (line.IsStackable ?? true);
         var billableHeightCm = isStackable
             ? heightCm
-            : Math.Max(RateCargoProfileFactory.NonStackableBillableHeightCm, heightCm);
+            : Math.Max(NonStackableBillableHeightCm, heightCm);
 
         var physical = lengthCm * widthCm * heightCm * units / 1_000_000m;
         var dimensional = lengthCm * widthCm * billableHeightCm * units / 1_000_000m;
