@@ -1,5 +1,6 @@
 using Dhole.Pricing.Contracts.Rates.Response;
 using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Rates.Enums;
 
 namespace Dhole.Pricing.Application.Features.Rates;
 
@@ -7,6 +8,12 @@ internal static class RateMappings
 {
     public static RateDto ToDto(this RateHeader rate)
     {
+        var isLand = rate.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
+        var agentName = isLand ? "Grupo Castro Fallas" : rate.AgentName;
+        var agentCode = isLand ? "GCF" : rate.AgentCode;
+        var carrierName = rate.ShipmentMode == ShipmentMode.Ftl ? "TIGSA" : rate.CarrierName;
+        var carrierCode = rate.ShipmentMode == ShipmentMode.Ftl ? "TIGSA" : rate.CarrierCode;
+
         var dto = new RateDto(
             rate.Id,
             rate.RateCode,
@@ -16,11 +23,11 @@ internal static class RateMappings
             rate.SourceTariffRateId,
             rate.SourceTariffRevisionNumber,
             rate.AgentId,
-            rate.AgentName,
-            rate.AgentCode,
+            agentName,
+            agentCode,
             rate.CarrierId,
-            rate.CarrierName,
-            rate.CarrierCode,
+            carrierName,
+            carrierCode,
             rate.PolId,
             rate.PolName,
             rate.PolCode,
