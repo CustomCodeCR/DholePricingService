@@ -517,4 +517,86 @@ public sealed class StandardizedImportFclRateFactoryTests
         string slug,
         string name
     ) => new(Guid.NewGuid(), group, code, slug, name, name);
+
+    [TestMethod]
+    public void CreateRates_WhenLclDoesNotIdentifyPoe_PersistsPendingPoe()
+    {
+        var rowId = Guid.NewGuid();
+        var extraction = new DataExtractionFclPricingResult(
+            true,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "test-lcl-pending-poe",
+            new DataExtractionFclPricingSummary(1, 0, 1, 0, true),
+            [
+                new DataExtractionFclPricingRow(
+                    rowId,
+                    "ASIA DIRECTO",
+                    8,
+                    "Shanghai",
+                    null,
+                    null,
+                    "LCL",
+                    null,
+                    "Pier17 Shanghai",
+                    null,
+                    "USD",
+                    null,
+                    28,
+                    new DateTime(2026, 10, 1),
+                    new DateTime(2026, 10, 14),
+                    120m,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "Directo",
+                    "RequiresReview",
+                    "{\"TariffMode\":\"LCL\",\"RateBasis\":\"W/M\"}",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+                )
+            ],
+            [
+                new DataExtractionFclPricingIssue(
+                    Guid.NewGuid(),
+                    rowId,
+                    "missing_port_of_exit",
+                    "La tarifa LCL no identifica un POE explícito.",
+                    false,
+                    "ASIA DIRECTO",
+                    8,
+                    "PortOfExit",
+                    null
+                )
+            ],
+            null,
+            null
+        );
+
+        var result = StandardizedImportFclRateFactory.CreateRates(
+            Guid.NewGuid(),
+            ImportSourceType.Email,
+            extraction,
+            null
+        );
+
+        var rate = result.Rates.Single();
+        Assert.AreEqual(0, result.SkippedExtractionRowIds.Count);
+        Assert.AreEqual("Shanghai", rate.PolName);
+        Assert.AreEqual("Por asignar", rate.PoeName);
+        Assert.AreEqual("PENDING", rate.PoeCode);
+        Assert.AreEqual("LCL", rate.ContainerTypeCode);
+        Assert.AreEqual(120m, rate.OceanFreight);
+    }
+
 }
