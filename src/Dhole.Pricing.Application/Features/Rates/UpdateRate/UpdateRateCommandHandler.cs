@@ -32,11 +32,13 @@ public sealed class UpdateRateCommandHandler(
     private const string LclInternalCarrierName = "No aplica (LCL)";
     private const string LclInternalCarrierCode = "LCL";
     private static readonly Guid LandInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c42");
-    private const string LandInternalAgentName = "No aplica (terrestre)";
-    private const string LandInternalAgentCode = "LAND";
+    private const string LandInternalAgentName = "Grupo Castro Fallas";
+    private const string LandInternalAgentCode = "GCF";
     private static readonly Guid LandInternalCarrierId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c43");
     private const string LandInternalCarrierName = "No aplica (terrestre)";
     private const string LandInternalCarrierCode = "LAND";
+    private const string FtlInternalCarrierName = "TIGSA";
+    private const string FtlInternalCarrierCode = "TIGSA";
 
     public async Task<Result> HandleAsync(
         UpdateRateCommand command,
@@ -243,10 +245,14 @@ public sealed class UpdateRateCommandHandler(
                     ? LandInternalCarrierId
                     : lclWithoutCarrier ? LclInternalCarrierId : carrier!.Id,
                 CarrierName = landWithoutProvider
-                    ? LandInternalCarrierName
+                    ? command.ShipmentMode == ShipmentMode.Ftl
+                        ? FtlInternalCarrierName
+                        : LandInternalCarrierName
                     : lclWithoutCarrier ? LclInternalCarrierName : carrier!.SnapshotName(),
                 CarrierCode = landWithoutProvider
-                    ? LandInternalCarrierCode
+                    ? command.ShipmentMode == ShipmentMode.Ftl
+                        ? FtlInternalCarrierCode
+                        : LandInternalCarrierCode
                     : lclWithoutCarrier ? LclInternalCarrierCode : carrier!.Code,
                 PolId = pol.Id,
                 PolName = pol.SnapshotName(),
