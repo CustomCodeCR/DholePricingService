@@ -7,5 +7,6 @@ public sealed record RateCargoLineRequest(
     decimal WeightKg,
     decimal LengthCm,
     decimal WidthCm,
-    decimal HeightCm
+    decimal HeightCm,
+    bool? IsStackable = null
 );

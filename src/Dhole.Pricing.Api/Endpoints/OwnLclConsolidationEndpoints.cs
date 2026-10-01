@@ -374,9 +374,30 @@ public static class OwnLclConsolidationEndpoints
     private static CargoCalculationLine CalculateCargoLine(OwnLclCargoLineRequest line)
     {
         var units = Math.Max(0, line.Units);
-        var dim = Math.Max(0m, line.LengthCm) * Math.Max(0m, line.WidthCm) * Math.Max(0m, line.HeightCm) * units / 1_000_000m;
+        var lengthCm = Math.Max(0m, line.LengthCm);
+        var widthCm = Math.Max(0m, line.WidthCm);
+        var heightCm = Math.Max(0m, line.HeightCm);
+        var forcedNonStackable = heightCm >= RateCargoProfileFactory.ForcedNonStackableHeightCm;
+        var isStackable = !forcedNonStackable && (line.IsStackable ?? true);
+        var billableHeightCm = isStackable
+            ? heightCm
+            : Math.Max(RateCargoProfileFactory.NonStackableBillableHeightCm, heightCm);
+
+        var physical = lengthCm * widthCm * heightCm * units / 1_000_000m;
+        var dimensional = lengthCm * widthCm * billableHeightCm * units / 1_000_000m;
+        var deadSpace = Math.Max(0m, dimensional - physical);
         var weight = Math.Max(0m, line.TotalWeightKg) / 500m;
-        return new CargoCalculationLine(line.Description?.Trim() ?? string.Empty, units, line.TotalWeightKg, dim, weight, Math.Max(dim, weight));
+
+        return new CargoCalculationLine(
+            line.Description?.Trim() ?? string.Empty,
+            units,
+            line.TotalWeightKg,
+            dimensional,
+            weight,
+            Math.Max(dimensional, weight),
+            physical,
+            deadSpace,
+            isStackable);
     }
 
     private static void AddDestinationLines(
@@ -783,9 +804,19 @@ public sealed record OwnLclCargoLineRequest(
     decimal TotalWeightKg,
     decimal LengthCm,
     decimal WidthCm,
-    decimal HeightCm);
+    decimal HeightCm,
+    bool? IsStackable = null);
 
-public sealed record CargoCalculationLine(string Description, int Units, decimal TotalWeightKg, decimal DimensionalCbm, decimal WeightCbm, decimal ChargeableCbm);
+public sealed record CargoCalculationLine(
+    string Description,
+    int Units,
+    decimal TotalWeightKg,
+    decimal DimensionalCbm,
+    decimal WeightCbm,
+    decimal ChargeableCbm,
+    decimal PhysicalCbm = 0m,
+    decimal DeadSpaceCbm = 0m,
+    bool IsStackable = true);
 public sealed record OwnLclQuoteLine(string Name, string ChargeBasis, decimal Quantity, decimal CostUnit, decimal SaleUnit, decimal CostTotal, decimal SaleTotal, decimal Profit);
 
 public sealed record OwnLclConsolidationDto(

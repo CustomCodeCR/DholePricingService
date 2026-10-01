@@ -489,7 +489,8 @@ public sealed class CreateRateCommandHandler(
                 cargoProfile.TotalVolumeCbm,
                 cargoProfile.KgPerCbm,
                 cargoProfile.CargoLinesJson,
-                command.CreatedBy
+                command.CreatedBy,
+                cargoProfile.ChargeableVolumeCbm
             );
 
             if (importedRate is not null)

@@ -8,5 +8,8 @@ public sealed record RateCargoLineDto(
     decimal LengthCm,
     decimal WidthCm,
     decimal HeightCm,
-    decimal VolumeCbm
+    decimal VolumeCbm,
+    bool? IsStackable = null,
+    decimal BillableVolumeCbm = 0m,
+    decimal DeadSpaceCbm = 0m
 );

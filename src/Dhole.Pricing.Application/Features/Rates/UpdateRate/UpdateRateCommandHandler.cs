@@ -635,7 +635,8 @@ public sealed class UpdateRateCommandHandler(
                 cargoProfile.TotalVolumeCbm,
                 cargoProfile.KgPerCbm,
                 cargoProfile.CargoLinesJson,
-                command.UpdatedBy
+                command.UpdatedBy,
+                cargoProfile.ChargeableVolumeCbm
             );
 
             foreach (var id in removedIds)

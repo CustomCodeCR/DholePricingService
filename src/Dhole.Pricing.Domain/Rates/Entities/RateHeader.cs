@@ -708,7 +708,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         decimal totalVolumeCbm,
         decimal kgPerCbm,
         string? cargoLinesJson,
-        Guid? updatedBy
+        Guid? updatedBy,
+        decimal? chargeableVolumeCbm = null
     )
     {
         if (totalPackages < 0 || totalPallets < 0 || totalWeightKg < 0m || totalVolumeCbm < 0m)
@@ -738,15 +739,23 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             FreeDays = 0;
         }
 
-        var cargoChargeableQuantity = Math.Max(TotalVolumeCbm, TotalWeightKg / KgPerCbm);
+        // TotalVolumeCbm remains the physical volume. Non-stackable cargo can reserve
+        // more vertical space, so chargeableVolumeCbm is calculated per cargo line and
+        // is used only for the commercial chargeable quantity.
+        var effectiveChargeableVolumeCbm = chargeableVolumeCbm.HasValue
+            ? Math.Max(chargeableVolumeCbm.Value, 0m)
+            : TotalVolumeCbm;
+        var cargoChargeableQuantity = Math.Max(
+            effectiveChargeableVolumeCbm,
+            TotalWeightKg / KgPerCbm
+        );
         ChargeableQuantity = shipmentMode switch
         {
-            // LCL has a commercial minimum of 1 CBM. Keep zero as zero so the
-            // validation below still rejects a shipment without weight or volume.
-            ShipmentMode.Lcl => cargoChargeableQuantity > 0m
+            // Consolidated cargo has a commercial minimum of 1 CBM. Keep zero as zero so
+            // the validation below still rejects a shipment without weight or volume.
+            ShipmentMode.Lcl or ShipmentMode.Ltl => cargoChargeableQuantity > 0m
                 ? Math.Max(1m, cargoChargeableQuantity)
                 : 0m,
-            ShipmentMode.Ltl => cargoChargeableQuantity,
             ShipmentMode.Ftl or ShipmentMode.Fcl => Math.Max(ContainerQuantity, 1),
             _ => 1m,
         };

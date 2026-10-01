@@ -9,12 +9,16 @@ internal sealed record RateCargoProfile(
     int TotalPallets,
     decimal TotalWeightKg,
     decimal TotalVolumeCbm,
+    decimal ChargeableVolumeCbm,
     decimal KgPerCbm,
     string? CargoLinesJson
 );
 
 internal static class RateCargoProfileFactory
 {
+    internal const decimal ForcedNonStackableHeightCm = 177.8m;
+    internal const decimal NonStackableBillableHeightCm = 266m;
+
     public static RateCargoProfile Create(
         ShipmentMode shipmentMode,
         decimal kgPerCbm,
@@ -27,15 +31,17 @@ internal static class RateCargoProfileFactory
     {
         var effectiveFactor = kgPerCbm > 0m
             ? kgPerCbm
-            : shipmentMode == ShipmentMode.Ltl ? 333m : 500m;
+            : shipmentMode == ShipmentMode.Ltl ? 330m : 500m;
 
         if (lines.Count == 0)
         {
+            var fallbackVolume = Math.Max(fallbackVolumeCbm, 0m);
             return new RateCargoProfile(
                 Math.Max(fallbackPackages, 0),
                 Math.Max(fallbackPallets, 0),
                 Math.Max(fallbackWeightKg, 0m),
-                Math.Max(fallbackVolumeCbm, 0m),
+                fallbackVolume,
+                fallbackVolume,
                 effectiveFactor,
                 null
             );
@@ -45,7 +51,8 @@ internal static class RateCargoProfileFactory
         var packages = 0;
         var pallets = 0;
         var weight = 0m;
-        var volume = 0m;
+        var physicalVolume = 0m;
+        var chargeableVolume = 0m;
 
         foreach (var line in lines)
         {
@@ -61,13 +68,24 @@ internal static class RateCargoProfileFactory
                 throw new InvalidOperationException("Los valores de las líneas de carga no pueden ser negativos.");
             }
 
-            var lineVolume = line.LengthCm * line.WidthCm * line.HeightCm / 1_000_000m;
-            lineVolume *= Math.Max(line.Packages, 1);
+            var units = Math.Max(line.Packages, 1);
+            var forcedNonStackable = line.HeightCm >= ForcedNonStackableHeightCm;
+            var isStackable = !forcedNonStackable && line.IsStackable;
+            var billableHeightCm = isStackable
+                ? line.HeightCm
+                : Math.Max(NonStackableBillableHeightCm, line.HeightCm);
+
+            var linePhysicalVolume =
+                line.LengthCm * line.WidthCm * line.HeightCm * units / 1_000_000m;
+            var lineBillableVolume =
+                line.LengthCm * line.WidthCm * billableHeightCm * units / 1_000_000m;
+            var deadSpaceCbm = Math.Max(0m, lineBillableVolume - linePhysicalVolume);
 
             packages += line.Packages;
             pallets += line.Pallets;
             weight += line.WeightKg;
-            volume += lineVolume;
+            physicalVolume += linePhysicalVolume;
+            chargeableVolume += lineBillableVolume;
 
             snapshots.Add(
                 new RateCargoLineDto(
@@ -78,7 +96,10 @@ internal static class RateCargoProfileFactory
                     line.LengthCm,
                     line.WidthCm,
                     line.HeightCm,
-                    Math.Round(lineVolume, 6, MidpointRounding.AwayFromZero)
+                    Math.Round(linePhysicalVolume, 6, MidpointRounding.AwayFromZero),
+                    isStackable,
+                    Math.Round(lineBillableVolume, 6, MidpointRounding.AwayFromZero),
+                    Math.Round(deadSpaceCbm, 6, MidpointRounding.AwayFromZero)
                 )
             );
         }
@@ -87,7 +108,8 @@ internal static class RateCargoProfileFactory
             packages,
             pallets,
             Math.Round(weight, 4, MidpointRounding.AwayFromZero),
-            Math.Round(volume, 6, MidpointRounding.AwayFromZero),
+            Math.Round(physicalVolume, 6, MidpointRounding.AwayFromZero),
+            Math.Round(chargeableVolume, 6, MidpointRounding.AwayFromZero),
             effectiveFactor,
             JsonSerializer.Serialize(snapshots)
         );
