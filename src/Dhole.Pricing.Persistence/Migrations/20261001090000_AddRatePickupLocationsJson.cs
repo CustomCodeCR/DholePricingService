@@ -1,10 +1,14 @@
+using Dhole.Pricing.Persistence.DbContexts;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Dhole.Pricing.Persistence.Migrations;
 
-public partial class AddRatePickupLocationsJson : Migration
+[DbContext(typeof(ServiceDbContext))]
+[Migration("20261001090000_AddRatePickupLocationsJson")]
+public sealed class AddRatePickupLocationsJson : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
