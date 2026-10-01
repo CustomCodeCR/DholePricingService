@@ -153,6 +153,34 @@ public sealed class RateFreightQuantityTests
     }
 
     [TestMethod]
+    [DataRow("24 pies", "24FT", "24")]
+    [DataRow("26 pies / 7 TON", "26FT", "26")]
+    [DataRow("48 pies", "48FT", "48")]
+    [DataRow("53 pies", "53FT", "53")]
+    public void Ftl_RateName_UsesQuantityAndEquipmentSize(string equipmentName, string equipmentCode, string expectedSize)
+    {
+        var rate = CreateRate(containerQuantity: 1);
+        var equipmentId = Guid.NewGuid();
+
+        rate.ReplaceContainerAllocations(
+            [new RateContainerAllocationSpec(equipmentId, equipmentName, equipmentCode, 1)],
+            updatedBy: null
+        );
+        rate.ConfigureShipment(
+            ShipmentMode.Ftl,
+            totalPackages: 0,
+            totalPallets: 0,
+            totalWeightKg: 0m,
+            totalVolumeCbm: 0m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+
+        StringAssert.Contains(rate.RateName, $"Tarifa 1x{expectedSize} -");
+    }
+
+    [TestMethod]
     [DataRow(CostDetailType.Freight)]
     [DataRow(CostDetailType.InlandTransport)]
     public void CreateCost_FreightTypes_AreAlwaysMarkedPerContainer(CostDetailType detailType)
