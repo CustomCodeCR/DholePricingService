@@ -1414,9 +1414,46 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         {
             ShipmentMode.Lcl => $"LCL · {ChargeableQuantity:0.###} CBM cobrable",
             ShipmentMode.Ltl => $"LTL · {ChargeableQuantity:0.###} CBM cobrable",
-            ShipmentMode.Ftl => $"{Math.Max(ContainerQuantity, 1)} x FTL",
+            ShipmentMode.Ftl => BuildLandEquipmentDescription(),
             _ => BuildContainerDescription(),
         };
+    }
+
+    private string BuildLandEquipmentDescription()
+    {
+        if (_rateContainers.Count == 0)
+        {
+            return $"{Math.Max(ContainerQuantity, 1)}x{CompactLandEquipmentLabel(ContainerTypeName, ContainerTypeCode)}";
+        }
+
+        return string.Join(
+            " + ",
+            _rateContainers
+                .OrderBy(x => x.ContainerTypeName)
+                .ThenBy(x => x.ContainerTypeCode)
+                .Select(x => $"{x.Quantity}x{CompactLandEquipmentLabel(x.ContainerTypeName, x.ContainerTypeCode)}")
+        );
+    }
+
+    private static string CompactLandEquipmentLabel(string? name, string? code)
+    {
+        var source = $"{code} {name}";
+        var match = System.Text.RegularExpressions.Regex.Match(
+            source,
+            @"(?<!\d)(24|26|48|53)(?!\d)",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant
+        );
+
+        if (match.Success)
+            return match.Groups[1].Value;
+
+        if (!string.IsNullOrWhiteSpace(name))
+            return name.Trim();
+
+        if (!string.IsNullOrWhiteSpace(code))
+            return code.Trim();
+
+        return "FTL";
     }
 
     private string BuildContainerDescription()
