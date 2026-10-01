@@ -490,8 +490,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         decimal? pickupLongitude
     )
     {
-        var applies = string.Equals(IncotermCode, "EXW", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(IncotermCode, "FCA", StringComparison.OrdinalIgnoreCase);
+        var applies = MatchesIncoterm("EXW") || MatchesIncoterm("FCA");
 
         if (!applies)
         {
@@ -515,7 +514,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
     public void ConfigurePickupLocations(string? pickupLocationsJson)
     {
-        if (!string.Equals(IncotermCode, "EXW", StringComparison.OrdinalIgnoreCase))
+        if (!MatchesIncoterm("EXW"))
         {
             PickupLocationsJson = null;
             return;
@@ -1694,6 +1693,12 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             return "CRC";
 
         return normalizedCode;
+    }
+
+    private bool MatchesIncoterm(string expected)
+    {
+        var snapshot = $"{IncotermName} {IncotermCode}";
+        return snapshot.Contains(expected, StringComparison.OrdinalIgnoreCase);
     }
 
     private static Guid? NormalizeId(Guid? value) =>
