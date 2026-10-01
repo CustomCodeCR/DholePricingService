@@ -449,6 +449,7 @@ public sealed class CreateRateCommandHandler(
                 command.PickupLatitude,
                 command.PickupLongitude
             );
+            rate.ConfigurePickupLocations(command.PickupLocationsJson);
             rate.ConfigureExecutive(command.ExecutiveName);
             rate.ConfigureCommercialPresentation(command.UseAllInPresentation, command.CreatedBy);
             rate.ConfigureFinalBackupStorageIds(command.FinalBackupStorageIds);

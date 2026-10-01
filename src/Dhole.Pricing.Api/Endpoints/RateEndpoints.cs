@@ -602,6 +602,7 @@ public static class RateEndpoints
             )
             {
                 FinalBackupStorageIds = request.FinalBackupStorageIds ?? [],
+                PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
             },
             cancellationToken
         );
@@ -807,6 +808,7 @@ public static class RateEndpoints
                 FinalBackupStorageIds = request.FinalBackupStorageIds,
                 SourceImportFclRateId = request.SourceImportFclRateId,
                 UpdateReason = request.UpdateReason,
+                PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
             },
             cancellationToken
         );
@@ -957,6 +959,30 @@ public static class RateEndpoints
         );
 
         return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static string? SerializePickupLocations(
+        IReadOnlyCollection<RatePickupLocationRequest>? pickupLocations
+    )
+    {
+        if (pickupLocations is null) return null;
+
+        var normalized = pickupLocations
+            .Where(x => !string.IsNullOrWhiteSpace(x.Address))
+            .Take(50)
+            .Select(x => new RatePickupLocationRequest(
+                x.Address.Trim(),
+                x.Latitude,
+                x.Longitude,
+                x.CargoCondition is "FiscalCargo" or "NationalizedCargo"
+                    ? x.CargoCondition
+                    : null
+            ))
+            .ToArray();
+
+        return normalized.Length == 0
+            ? null
+            : System.Text.Json.JsonSerializer.Serialize(normalized);
     }
 
     private static bool HasScope(ClaimsPrincipal user, string requiredScope)

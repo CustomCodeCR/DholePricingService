@@ -96,6 +96,7 @@ public sealed record UpdateRateCommand(
 ) : ICommand<Result>
 {
     public IReadOnlyCollection<Guid>? FinalBackupStorageIds { get; init; }
+    public string? PickupLocationsJson { get; init; }
 
     // El middleware de edición neutraliza temporalmente SourceImportFclRateId en la entidad
     // para permitir cambiar la fuente/estructura. Conservamos el valor pedido por Web como

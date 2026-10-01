@@ -60,4 +60,7 @@ public sealed record CreateRateRequest(
     IReadOnlyCollection<RateServiceRequest>? Services = null,
     bool UseAllInPresentation = false,
     IReadOnlyCollection<Guid>? FinalBackupStorageIds = null
-);
+)
+{
+    public IReadOnlyCollection<RatePickupLocationRequest>? PickupLocations { get; init; }
+}

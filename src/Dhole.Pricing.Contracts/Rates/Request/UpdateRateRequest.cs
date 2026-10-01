@@ -62,4 +62,7 @@ public sealed record UpdateRateRequest(
     string? UpdateReason = null,
     IReadOnlyCollection<Guid>? FinalBackupStorageIds = null,
     Guid? SourceImportFclRateId = null
-);
+)
+{
+    public IReadOnlyCollection<RatePickupLocationRequest>? PickupLocations { get; init; }
+}
