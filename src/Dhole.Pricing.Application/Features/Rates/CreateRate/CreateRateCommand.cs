@@ -95,4 +95,5 @@ public sealed record CreateRateCommand(
 ) : ICommand<Result<Guid>>
 {
     public IReadOnlyCollection<Guid> FinalBackupStorageIds { get; init; } = [];
+    public string? PickupLocationsJson { get; init; }
 }

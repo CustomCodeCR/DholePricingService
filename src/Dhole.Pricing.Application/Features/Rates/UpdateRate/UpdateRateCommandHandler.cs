@@ -556,6 +556,11 @@ public sealed class UpdateRateCommandHandler(
                 command.PickupLongitude
                     ?? (preserveExistingPickupLocation ? rate.PickupLongitude : null)
             );
+            if (!string.IsNullOrWhiteSpace(command.PickupLocationsJson)
+                || !IsIncoterm(command.IncotermName, command.IncotermCode, "EXW"))
+            {
+                rate.ConfigurePickupLocations(command.PickupLocationsJson);
+            }
 
             if (command.ExchangeRateApplied is > 0m || command.ExchangeRateSale is > 0m)
             {

@@ -189,6 +189,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string? PickupAddress { get; private set; }
     public decimal? PickupLatitude { get; private set; }
     public decimal? PickupLongitude { get; private set; }
+    public string? PickupLocationsJson { get; private set; }
 
     public Guid CurrencyId { get; private set; }
     public string CurrencyName { get; private set; } = string.Empty;
@@ -512,6 +513,17 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         PickupLongitude = pickupLongitude;
     }
 
+    public void ConfigurePickupLocations(string? pickupLocationsJson)
+    {
+        if (!string.Equals(IncotermCode, "EXW", StringComparison.OrdinalIgnoreCase))
+        {
+            PickupLocationsJson = null;
+            return;
+        }
+
+        PickupLocationsJson = Normalize(pickupLocationsJson);
+    }
+
     public void ConfigureExchangeRateSnapshot(
         decimal? purchase,
         decimal? sale,
@@ -776,6 +788,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             ChargeBasis.PerContainer => requestedQuantity > 0m ? requestedQuantity : Math.Max(ContainerQuantity, 1),
             ChargeBasis.PerTruck => requestedQuantity > 0m ? requestedQuantity : Math.Max(ContainerQuantity, 1),
             ChargeBasis.PerTeu => ResolveTeuQuantity(requestedQuantity),
+            ChargeBasis.PerPickup => requestedQuantity > 0m
+                ? requestedQuantity
+                : ResolvePickupQuantity(),
             // Per CBM charges use the real shipment volume. The 1 CBM commercial
             // minimum belongs to PerChargeableCbm (ocean freight), not raw-CBM fees
             // such as CFS.
@@ -791,6 +806,25 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             ChargeBasis.PerDocument => explicitQuantity,
             _ => 1m,
         };
+    }
+
+    private decimal ResolvePickupQuantity()
+    {
+        if (string.IsNullOrWhiteSpace(PickupLocationsJson))
+            return 1m;
+
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(PickupLocationsJson);
+            if (document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                return Math.Max(document.RootElement.GetArrayLength(), 1);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Tarifas históricas conservan la recolección simple.
+        }
+
+        return 1m;
     }
 
     private decimal ResolveTeuQuantity(decimal requestedQuantity)

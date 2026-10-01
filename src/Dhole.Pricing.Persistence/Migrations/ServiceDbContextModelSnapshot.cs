@@ -2454,6 +2454,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("numeric(10,7)")
                         .HasColumnName("pickup_longitude");
 
+                    b.Property<string>("PickupLocationsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("pickup_locations_json");
+
                     b.Property<string>("PodCode")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)")

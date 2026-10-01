@@ -90,6 +90,7 @@ public sealed record RateDto(
     public string? CreatedByUserName { get; init; }
     public string? CreatedByDisplayName { get; init; }
     public IReadOnlyCollection<Guid> FinalBackupStorageIds { get; init; } = [];
+    public IReadOnlyCollection<RatePickupLocationDto> PickupLocations { get; init; } = [];
 
     public int? TransitDays
     {

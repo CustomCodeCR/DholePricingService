@@ -143,8 +143,23 @@ internal static class RateMappings
         )
         {
             FinalBackupStorageIds = rate.FinalBackupStorageIds,
+            PickupLocations = DeserializePickupLocations(rate.PickupLocationsJson),
         };
 
         return dto.WithRecalculatedFinancials();
+    }
+
+    private static IReadOnlyCollection<RatePickupLocationDto> DeserializePickupLocations(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<RatePickupLocationDto[]>(json) ?? [];
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return [];
+        }
     }
 }

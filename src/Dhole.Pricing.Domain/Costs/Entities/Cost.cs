@@ -535,6 +535,8 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
             "ElectronicSeal",
             "Anticipado",
             "Redestino",
+            "FiscalCargo",
+            "NationalizedCargo",
         };
 
         var normalized = (operationalConditions ?? [])
