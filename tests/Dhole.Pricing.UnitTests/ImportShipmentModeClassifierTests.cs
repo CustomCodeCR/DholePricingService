@@ -180,4 +180,17 @@ public sealed class ImportShipmentModeClassifierTests
         Assert.AreEqual(ImportedShipmentMode.LclColoader, mode);
     }
 
+
+    [TestMethod]
+    public void Classify_WhenContainerSaysAirFreight_ReturnsAir()
+    {
+        var mode = ImportShipmentModeClassifier.Classify(
+            "Air Freight",
+            "Air Freight",
+            "AIRFREIGHT",
+            "air-freight");
+
+        Assert.AreEqual(ImportedShipmentMode.AirLclColoader, mode);
+    }
+
 }
