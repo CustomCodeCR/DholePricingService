@@ -97,7 +97,9 @@ public static class StandardizedImportFclRateFactory
                     ResolveOptionalSnapshot(
                         row.PortOfExitReference,
                         "poe",
-                        resolvedPortOfExit
+                        resolvedPortOfExit,
+                        "PENDING",
+                        "Por asignar"
                     ),
                     ResolveOptionalSnapshot(
                         promoteDestinationToPoe ? null : row.DestinationPortReference,
@@ -163,7 +165,7 @@ public static class StandardizedImportFclRateFactory
 
         return !hasNonReviewableBlockingIssue
             && HasText(row.OriginPort)
-            && HasText(resolvedPortOfExit)
+            && (HasText(resolvedPortOfExit) || IsLcl(row))
             && (IsLcl(row) || IsAir(row) || (HasText(row.ContainerType) && HasText(row.Carrier)))
             && row.ValidFrom.HasValue
             && row.ValidTo.HasValue
@@ -225,7 +227,11 @@ public static class StandardizedImportFclRateFactory
             )
             || (
                 code.Equals("missing_port_of_exit", StringComparison.OrdinalIgnoreCase)
-                && (HasText(row.PortOfExit) || ShouldPromoteEmailDestinationToPoe(row, sourceType))
+                && (
+                    IsLcl(row)
+                    || HasText(row.PortOfExit)
+                    || ShouldPromoteEmailDestinationToPoe(row, sourceType)
+                )
             )
             || (
                 code.Equals("missing_container_type", StringComparison.OrdinalIgnoreCase)
