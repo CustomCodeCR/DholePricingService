@@ -160,10 +160,14 @@ public static class ImportShipmentModeClassifier
 
     private static bool IsAirMarker(string normalized) =>
         normalized == "air"
+        || normalized == "aereo"
+        || normalized.StartsWith("airfreight", StringComparison.Ordinal)
+        || normalized.StartsWith("airshipment", StringComparison.Ordinal)
         || normalized.StartsWith("aircargo", StringComparison.Ordinal)
         || normalized.StartsWith("airconsolidated", StringComparison.Ordinal)
         || normalized.StartsWith("airbacktoback", StringComparison.Ordinal)
-        || normalized.StartsWith("airlcl", StringComparison.Ordinal);
+        || normalized.StartsWith("airlcl", StringComparison.Ordinal)
+        || normalized.StartsWith("aereoconsolidado", StringComparison.Ordinal);
 
     private static bool IsFclEquipment(string normalized)
     {
