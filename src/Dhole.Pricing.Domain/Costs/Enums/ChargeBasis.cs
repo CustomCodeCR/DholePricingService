@@ -9,6 +9,8 @@ public enum ChargeBasis
     PerPickup = 4,
     PerCbm = 10,
     PerChargeableCbm = 11,
+    PerCft = 12,
+    PerChargeableCft = 13,
     PerKg = 20,
     Per100Kg = 21,
     PerTon = 22,
