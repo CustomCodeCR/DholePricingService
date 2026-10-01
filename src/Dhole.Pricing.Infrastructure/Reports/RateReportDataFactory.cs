@@ -32,7 +32,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var originOfficePublicUrl = CreateOriginOfficePublicUrl(rate);
         var originOfficeQrDataUri = CreateQrDataUri(originOfficePublicUrl);
         var isLand = rate.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
-        var showAgent = !isLand;
+        var showAgent = true;
+        var reportAgentName = isLand ? "Grupo Castro Fallas" : Text(rate.AgentName, "No asignado");
         var showCarrier = rate.ShipmentMode == ShipmentMode.Fcl;
         var route = !string.IsNullOrWhiteSpace(rate.PodName)
             ? $"{rate.PolName} → {rate.PodName} vía {rate.PoeName}"
@@ -62,22 +63,34 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                         .Select(x => new
                         {
                             containerTypeId = x.ContainerTypeId,
-                            containerType = x.ContainerTypeName,
-                            containerTypeName = x.ContainerTypeName,
+                            containerType = rate.ShipmentMode == ShipmentMode.Ftl
+                                ? CompactLandEquipmentLabel(x.ContainerTypeName, x.ContainerTypeCode)
+                                : x.ContainerTypeName,
+                            containerTypeName = rate.ShipmentMode == ShipmentMode.Ftl
+                                ? CompactLandEquipmentLabel(x.ContainerTypeName, x.ContainerTypeCode)
+                                : x.ContainerTypeName,
                             containerTypeCode = x.ContainerTypeCode,
                             quantity = x.Quantity,
-                            label = $"{x.Quantity} x {x.ContainerTypeName}"
+                            label = rate.ShipmentMode == ShipmentMode.Ftl
+                                ? $"{x.Quantity}x{CompactLandEquipmentLabel(x.ContainerTypeName, x.ContainerTypeCode)}"
+                                : $"{x.Quantity} x {x.ContainerTypeName}"
                         })
                     : new[]
                     {
                         new
                         {
                             containerTypeId = rate.ContainerTypeId,
-                            containerType = rate.ContainerTypeName,
-                            containerTypeName = rate.ContainerTypeName,
+                            containerType = rate.ShipmentMode == ShipmentMode.Ftl
+                                ? CompactLandEquipmentLabel(rate.ContainerTypeName, rate.ContainerTypeCode)
+                                : rate.ContainerTypeName,
+                            containerTypeName = rate.ShipmentMode == ShipmentMode.Ftl
+                                ? CompactLandEquipmentLabel(rate.ContainerTypeName, rate.ContainerTypeCode)
+                                : rate.ContainerTypeName,
                             containerTypeCode = rate.ContainerTypeCode,
                             quantity = rate.ContainerQuantity,
-                            label = $"{rate.ContainerQuantity} x {rate.ContainerTypeName}"
+                            label = rate.ShipmentMode == ShipmentMode.Ftl
+                                ? $"{rate.ContainerQuantity}x{CompactLandEquipmentLabel(rate.ContainerTypeName, rate.ContainerTypeCode)}"
+                                : $"{rate.ContainerQuantity} x {rate.ContainerTypeName}"
                         }
                     })
                 .ToArray();
@@ -86,7 +99,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         {
             ShipmentMode.Lcl => $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable",
             ShipmentMode.Ltl => $"LTL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable",
-            ShipmentMode.Ftl => $"FTL · {rate.ContainerQuantity} camión{(rate.ContainerQuantity == 1 ? string.Empty : "es")}",
+            ShipmentMode.Ftl => equipmentSummary,
             _ => equipmentSummary,
         };
 
@@ -263,7 +276,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 quoteNumber = Text(rate.QuoNumber, rate.RateCode),
                 idtraNumber = Text(rate.IdtraNumber, string.Empty),
                 clientName = Text(rate.ClientName),
-                agent = showAgent ? Text(rate.AgentName, "No asignado") : string.Empty,
+                agent = showAgent ? reportAgentName : string.Empty,
                 showAgent,
                 carrier = showCarrier ? Text(rate.CarrierName, "No asignada") : string.Empty,
                 showCarrier,
@@ -407,6 +420,22 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         return decimal.Round(total, 2, MidpointRounding.AwayFromZero);
     }
 
+    private static string CompactLandEquipmentLabel(string? name, string? code)
+    {
+        var source = $"{code} {name}";
+        var match = Regex.Match(source, @"(?<!\d)(24|26|48|53)(?!\d)", RegexOptions.CultureInvariant);
+        if (match.Success)
+            return match.Groups[1].Value;
+
+        if (!string.IsNullOrWhiteSpace(name))
+            return name.Trim();
+
+        if (!string.IsNullOrWhiteSpace(code))
+            return code.Trim();
+
+        return "FTL";
+    }
+
     private string CreateOriginOfficePublicUrl(RateHeader rate)
     {
         var baseAddress = (configuration["Reports:PublicWebBaseAddress"] ?? "https://dhole.customcodecr.com")
@@ -423,10 +452,14 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             + $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
             + $"&route={Uri.EscapeDataString(routeKey)}";
 
-        if (!string.IsNullOrWhiteSpace(rate.AgentCode))
-            publicUrl += $"&agentCode={Uri.EscapeDataString(rate.AgentCode.Trim())}";
-        if (!string.IsNullOrWhiteSpace(rate.AgentName))
-            publicUrl += $"&agent={Uri.EscapeDataString(rate.AgentName.Trim())}";
+        var isLand = rate.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
+        var agentCode = isLand ? "GCF" : rate.AgentCode;
+        var agentName = isLand ? "Grupo Castro Fallas" : rate.AgentName;
+
+        if (!string.IsNullOrWhiteSpace(agentCode))
+            publicUrl += $"&agentCode={Uri.EscapeDataString(agentCode.Trim())}";
+        if (!string.IsNullOrWhiteSpace(agentName))
+            publicUrl += $"&agent={Uri.EscapeDataString(agentName.Trim())}";
 
         return publicUrl;
     }
