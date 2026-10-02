@@ -239,7 +239,19 @@ public static class StandardizedImportFclRateFactory
             )
             || (
                 code.Equals("missing_carrier", StringComparison.OrdinalIgnoreCase)
-                && HasText(row.Carrier)
+                && (HasText(row.Carrier) || IsLcl(row) || IsAir(row))
+            )
+            || (
+                code.Equals("missing_rate_amount", StringComparison.OrdinalIgnoreCase)
+                && (row.OceanFreight.HasValue || row.TotalSale.HasValue)
+            )
+            || (
+                code.Equals("missing_valid_from", StringComparison.OrdinalIgnoreCase)
+                && row.ValidFrom.HasValue
+            )
+            || (
+                code.Equals("missing_valid_to", StringComparison.OrdinalIgnoreCase)
+                && row.ValidTo.HasValue
             );
     }
 
