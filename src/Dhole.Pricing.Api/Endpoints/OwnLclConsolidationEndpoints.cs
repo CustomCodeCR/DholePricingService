@@ -784,15 +784,26 @@ public sealed record CalculateOwnLclQuoteRequest(
     bool IsDangerousCargo = false,
     bool IsBonded = false);
 
+// Own-LCL cargo DTOs include stackability because Miami and the consolidated-cargo UI calculate billable dead space from it.
 public sealed record OwnLclCargoLineRequest(
     string? Description,
     int Units,
     decimal TotalWeightKg,
     decimal LengthCm,
     decimal WidthCm,
-    decimal HeightCm);
+    decimal HeightCm,
+    bool? IsStackable = null);
 
-public sealed record CargoCalculationLine(string Description, int Units, decimal TotalWeightKg, decimal DimensionalCbm, decimal WeightCbm, decimal ChargeableCbm);
+public sealed record CargoCalculationLine(
+    string Description,
+    int Units,
+    decimal TotalWeightKg,
+    decimal DimensionalCbm,
+    decimal WeightCbm,
+    decimal ChargeableCbm,
+    decimal PhysicalCbm = 0m,
+    decimal DeadSpaceCbm = 0m,
+    bool IsStackable = true);
 public sealed record OwnLclQuoteLine(string Name, string ChargeBasis, decimal Quantity, decimal CostUnit, decimal SaleUnit, decimal CostTotal, decimal SaleTotal, decimal Profit);
 
 public sealed record OwnLclConsolidationDto(
