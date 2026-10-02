@@ -182,6 +182,63 @@ public sealed class ImportShipmentModeClassifierTests
 
 
     [TestMethod]
+    public void Classify_WhenPier17AirTariffContainsConsolidatedAndBreakpoints_ReturnsAir()
+    {
+        const string raw = """
+        {
+          "Raw": {
+            "Equipo": "LCL AIR",
+            "TariffMode": "AIR",
+            "ServiceMode": "AIR_CONSOLIDATED",
+            "RateBasis": "KG/VOL",
+            "Aerolinea": "Avianca",
+            "MinimumRate": "55",
+            "AirRatePlus100": "1.20",
+            "AirRatePlus500": "1.20",
+            "AirRatePlus1000": "1.35",
+            "Remarks": "TARIFARIO AIR DIVISION - Consolidado"
+          }
+        }
+        """;
+
+        var mode = ImportShipmentModeClassifier.Classify(
+            "LCL AIR",
+            "LCL AIR",
+            "LCLAIR",
+            "lcl-air",
+            raw);
+
+        Assert.AreEqual(ImportedShipmentMode.AirLclColoader, mode);
+    }
+
+    [TestMethod]
+    public void Classify_WhenMaritimeLclUsesWmWithoutAirEvidence_ReturnsLcl()
+    {
+        const string raw = """
+        {
+          "Raw": {
+            "Equipo": "LCL",
+            "TariffMode": "LCL",
+            "RateBasis": "W/M",
+            "Origin": "Shanghai CFS",
+            "RatePerCbm": "45",
+            "Minimum": "1 CBM",
+            "Remarks": "CFS TO CFS coloader"
+          }
+        }
+        """;
+
+        var mode = ImportShipmentModeClassifier.Classify(
+            "LCL",
+            "LCL",
+            "LCL",
+            "lcl",
+            raw);
+
+        Assert.AreEqual(ImportedShipmentMode.LclColoader, mode);
+    }
+
+    [TestMethod]
     public void Classify_WhenContainerSaysAirFreight_ReturnsAir()
     {
         var mode = ImportShipmentModeClassifier.Classify(
