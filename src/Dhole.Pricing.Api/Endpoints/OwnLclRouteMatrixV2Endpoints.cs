@@ -20,6 +20,39 @@ public static class OwnLclRouteMatrixV2Endpoints
     private const decimal PanamaAndCentralAmericaFreightSalePerCbm = 164m;
     private const decimal CostaRicaFreightSalePerCbm = 210m;
 
+    // Reglas comerciales Miami heredadas del cotizador operativo.
+    private const decimal MiamiCftPerCbm = 35.3146667m;
+    private const decimal MiamiKgPerCft = 14.16m;
+    private const decimal ForcedNonStackableHeightCm = 177.8m;
+    private const decimal NonStackableBillableHeightCm = 266m;
+
+    private sealed record MiamiCommercialRate(
+        string Label,
+        decimal SalePerCft,
+        decimal MinimumFreightSale,
+        decimal Sed,
+        decimal Handling,
+        decimal Vgm,
+        decimal Tica,
+        decimal Seal,
+        decimal Documentation,
+        decimal Forwarding,
+        decimal InsurancePct,
+        decimal InsuranceMinimum,
+        bool Little = false);
+
+    private static readonly IReadOnlyDictionary<string, MiamiCommercialRate> MiamiCommercialRates =
+        new Dictionary<string, MiamiCommercialRate>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["A"] = new("Cliente A", 2.80m, 280m, 25m, 45m, 20m, 25m, 20m, 25m, 0m, 0.75m, 50m),
+            ["B"] = new("Cliente B", 2.95m, 295m, 28m, 55m, 25m, 25m, 30m, 45m, 0m, 0.80m, 60m),
+            ["C"] = new("Cliente C", 3.00m, 300m, 30m, 65m, 25m, 25m, 35m, 50m, 0m, 0.80m, 60m),
+            ["D"] = new("Cliente D", 2.92m, 292m, 35m, 55m, 45m, 30m, 35m, 50m, 65m, 0.80m, 60m),
+            ["NVOCC-B"] = new("Cliente NVOCC-B", 2.90m, 170m, 25m, 45m, 20m, 0m, 20m, 0m, 0m, 0.50m, 50m),
+            ["NVOCC-A"] = new("Cliente NVOCC-A", 2.60m, 95m, 25m, 60m, 0m, 0m, 25m, 25m, 0m, 0.50m, 50m),
+            ["LITTLE"] = new("CARGAS LITTLE", 0m, 0m, 0m, 35m, 15m, 0m, 0m, 20m, 0m, 0.50m, 10m, true),
+        };
+
     // CNCA matrices: negotiated China origin differential for Costa Rica / Panama.
     private static readonly IReadOnlyDictionary<string, decimal> OriginSurcharges =
         new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
@@ -311,26 +344,102 @@ public static class OwnLclRouteMatrixV2Endpoints
             });
         }
 
-        var cargo = request.CargoLines.Select(CalculateCargoLine).ToArray();
+        var planKey = NormalizeMiamiCommercialPlan(request.CommercialPlan);
+        if (!MiamiCommercialRates.TryGetValue(planKey, out var commercialRate))
+        {
+            return Results.BadRequest(new
+            {
+                code = "Pricing.OwnLclMiamiCommercialPlanInvalid",
+                message = $"La tarifa comercial Miami '{request.CommercialPlan}' no es válida.",
+            });
+        }
+
+        var cargo = request.CargoLines.Select(CalculateMiamiCargoLine).ToArray();
         var chargeableCbm = cargo.Sum(line => line.ChargeableCbm);
-        var billableCbm = chargeableCbm > 0 ? Math.Max(1m, chargeableCbm) : 0m;
-        if (billableCbm <= 0)
-            return Results.BadRequest(new { code = "Pricing.OwnLclChargeableCbmRequired", message = "La carga no genera CBM cobrable." });
+        if (chargeableCbm <= 0m)
+            return Results.BadRequest(new { code = "Pricing.OwnLclChargeableCbmRequired", message = "La carga no genera volumen cobrable." });
 
-        var oceanCostPerCbm = consolidation.OceanFreight / Math.Max(1m, consolidation.MaximumCbm);
+        // Miami trabaja comercialmente en CFT. A diferencia de la matriz China,
+        // no fuerza 1 CBM: el mínimo es monetario por perfil comercial.
+        var billableCbm = chargeableCbm;
+        var chargeableCft = chargeableCbm * MiamiCftPerCbm;
+        var totalWeightKg = cargo.Sum(line => Math.Max(0m, line.TotalWeightKg));
+
+        if (commercialRate.Little)
+        {
+            var issues = new List<string>();
+            if (totalWeightKg > 100m) issues.Add("Peso mayor a 100 kg");
+            if (chargeableCft > 80m) issues.Add("Volumen mayor a 80 CFT");
+            if (Math.Max(0m, request.CargoValue) > 1000m) issues.Add("Valor de carga mayor a USD 1,000");
+            if (request.IsDangerousCargo) issues.Add("Carga indicada como IMO");
+            if (request.IsBonded) issues.Add("Carga indicada como Bonded");
+            if (Math.Max(1, request.WhsQty) > 3) issues.Add("Cantidad de WHS mayor a 3");
+
+            if (issues.Count > 0)
+            {
+                return Results.BadRequest(new
+                {
+                    code = "Pricing.OwnLclMiamiLittleNotApplicable",
+                    message = "NO APLICA PARA CARGAS LITTLE.",
+                    reasons = issues,
+                });
+            }
+        }
+
         var configuredLines = await LoadPricingLineOverridesAsync(consolidation.Id, db, ct);
-        var freightSalePerCbm = request.SalePerCbm is > 0
-            ? request.SalePerCbm.Value
-            : CeilingCent(oceanCostPerCbm + MinimumCentralAmericaProfitPerCbm);
-        var recommendedSalePerCbm = CeilingCent(oceanCostPerCbm + MinimumCentralAmericaProfitPerCbm);
+        var oceanCostPerCbm = consolidation.OceanFreight / Math.Max(0.01m, consolidation.MaximumCbm);
+        var bunker = ResolveConfiguredLine(configuredLines, "MIA_BUNKER");
+        var thcd = ResolveConfiguredLine(configuredLines, "MIA_THCD");
+        var freightOperationalCostPerCbm = oceanCostPerCbm + Math.Max(0m, bunker.Cost) + Math.Max(0m, thcd.Cost);
+        var freightCostPerCft = freightOperationalCostPerCbm / MiamiCftPerCbm;
 
+        decimal freightSaleTotal;
+        if (commercialRate.Little)
+        {
+            freightSaleTotal = chargeableCft <= 30m
+                ? 30m
+                : chargeableCft <= 60m
+                    ? 40m
+                    : 50m;
+        }
+        else
+        {
+            var calculatedFreightSale = chargeableCft * commercialRate.SalePerCft;
+            freightSaleTotal = Math.Max(calculatedFreightSale, commercialRate.MinimumFreightSale);
+        }
+
+        var freightSalePerCft = chargeableCft > 0m ? freightSaleTotal / chargeableCft : 0m;
         var lines = new List<OwnLclQuoteLine>();
-        AddLine(lines, "Flete Internacional Marítimo LCL", "CBM", billableCbm, oceanCostPerCbm, freightSalePerCbm);
-        AddMiamiMatrixLines(lines, configuredLines, billableCbm);
+        AddLine(lines, "Flete Miami → Costa Rica", "CFT", chargeableCft, freightCostPerCft, freightSalePerCft);
 
-        var matrixCost = lines.Skip(1).Sum(line => line.CostTotal);
-        var matrixCostPerCbm = matrixCost / billableCbm;
-        var routeCostPerCbm = oceanCostPerCbm + matrixCostPerCbm;
+        var handling = ResolveConfiguredLine(configuredLines, "MIA_HANDLING");
+        var forwarding = ResolveConfiguredLine(configuredLines, "MIA_FORWARDING");
+        var hbl = ResolveConfiguredLine(configuredLines, "MIA_HBL");
+
+        var sedCount = request.IncludeSed && commercialRate.Sed > 0m
+            ? Math.Max(1, request.SedQty)
+            : 0;
+        if (sedCount > 0)
+            AddLine(lines, "SED", "HBL", sedCount, 0m, commercialRate.Sed);
+
+        AddLine(lines, "Manejos", "HBL", 1m, Math.Max(0m, handling.Cost), commercialRate.Handling);
+        AddLine(lines, "VGM", "HBL", 1m, 0m, commercialRate.Vgm);
+        AddLine(lines, "TICA", "HBL", 1m, 0m, commercialRate.Tica);
+        AddLine(lines, "Marchamo", "HBL", 1m, 0m, commercialRate.Seal);
+        AddLine(lines, "HBL / Documentación", "HBL", 1m, Math.Max(0m, hbl.Cost), commercialRate.Documentation);
+        if (commercialRate.Forwarding > 0m || forwarding.Cost > 0m)
+            AddLine(lines, "Forwarding", "HBL", 1m, Math.Max(0m, forwarding.Cost), commercialRate.Forwarding);
+
+        var cargoValue = Math.Max(0m, request.CargoValue);
+        if (cargoValue > 0m)
+        {
+            var insuranceCalculated = cargoValue * commercialRate.InsurancePct / 100m;
+            var insuranceSale = Math.Max(insuranceCalculated, commercialRate.InsuranceMinimum);
+            AddLine(lines, "Seguro", "HBL", 1m, 0m, insuranceSale);
+        }
+
+        if (request.PickupCost > 0m || request.PickupSale > 0m)
+            AddLine(lines, "Recolecta", "HBL", 1m, Math.Max(0m, request.PickupCost), Math.Max(0m, request.PickupSale));
 
         var totalCost = lines.Sum(line => line.CostTotal);
         var subtotalSale = lines.Sum(line => line.SaleTotal);
@@ -338,10 +447,14 @@ public static class OwnLclRouteMatrixV2Endpoints
         var finalSale = subtotalSale - discount;
         var profit = finalSale - totalCost;
         var profitPerCbm = profit / billableCbm;
-        var profitPercentage = finalSale > 0 ? profit / finalSale * 100m : 0m;
-        var oceanProfitPerCbm = freightSalePerCbm - oceanCostPerCbm;
-        var minimumProfit = MinimumCentralAmericaProfitPerCbm;
-        var meetsMinimum = profitPerCbm >= minimumProfit;
+        var profitPercentage = finalSale > 0m ? profit / finalSale * 100m : 0m;
+
+        var matrixCost = lines.Skip(1).Sum(line => line.CostTotal);
+        var matrixCostPerCbm = matrixCost / billableCbm;
+        var routeCostPerCbm = totalCost / billableCbm;
+        var effectiveFreightSalePerCbm = freightSaleTotal / billableCbm;
+        var oceanProfitPerCbm = effectiveFreightSalePerCbm - freightOperationalCostPerCbm;
+        var meetsMinimum = profit >= 0m;
 
         return Results.Ok(new OwnLclRouteMatrixQuoteDto(
             consolidation.Id,
@@ -364,9 +477,9 @@ public static class OwnLclRouteMatrixV2Endpoints
             0m,
             0m,
             routeCostPerCbm,
-            oceanCostPerCbm,
-            recommendedSalePerCbm,
-            freightSalePerCbm,
+            freightOperationalCostPerCbm,
+            effectiveFreightSalePerCbm,
+            effectiveFreightSalePerCbm,
             lines,
             totalCost,
             subtotalSale,
@@ -375,56 +488,93 @@ public static class OwnLclRouteMatrixV2Endpoints
             profit,
             profitPerCbm,
             profitPercentage,
-            minimumProfit,
+            0m,
             oceanProfitPerCbm,
             meetsMinimum,
             !meetsMinimum));
     }
 
-    private static void AddMiamiMatrixLines(
-        List<OwnLclQuoteLine> lines,
-        IReadOnlyDictionary<string, (decimal Cost, decimal Sale, decimal? CalculationBaseCbm)> pricingLines,
-        decimal cbm)
-    {
-        foreach (var definition in OwnLclPricingLineCatalog.Miami)
-        {
-            var configured = pricingLines.TryGetValue(definition.LineKey, out var stored)
-                ? stored
-                : (
-                    Cost: definition.DefaultCostUnit ?? 0m,
-                    Sale: definition.DefaultSaleUnit,
-                    CalculationBaseCbm: (decimal?)null);
 
-            var quantity = definition.ChargeBasis.Equals("CBM", StringComparison.OrdinalIgnoreCase)
-                ? cbm
-                : 1m;
-            AddLine(
-                lines,
-                definition.Name,
-                definition.ChargeBasis,
-                quantity,
-                Math.Max(0m, configured.Cost),
-                Math.Max(0m, configured.Sale));
-        }
+    private static string NormalizeMiamiCommercialPlan(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "A";
+        var compact = new string(value.Trim().ToUpperInvariant()
+            .Where(ch => char.IsLetterOrDigit(ch))
+            .ToArray());
+
+        return compact switch
+        {
+            "A" or "CLIENTEA" => "A",
+            "B" or "CLIENTEB" => "B",
+            "C" or "CLIENTEC" => "C",
+            "D" or "CLIENTED" => "D",
+            "NVOCCA" or "CLIENTENVOCCA" => "NVOCC-A",
+            "NVOCCB" or "CLIENTENVOCCB" => "NVOCC-B",
+            "LITTLE" or "CARGASLITTLE" => "LITTLE",
+            _ => value.Trim().ToUpperInvariant(),
+        };
     }
+
+    private static CargoCalculationLine CalculateMiamiCargoLine(OwnLclCargoLineRequest line)
+    {
+        var units = Math.Max(0, line.Units);
+        var lengthCm = Math.Max(0m, line.LengthCm);
+        var widthCm = Math.Max(0m, line.WidthCm);
+        var heightCm = Math.Max(0m, line.HeightCm);
+        var forcedNonStackable = heightCm >= ForcedNonStackableHeightCm;
+        var isStackable = !forcedNonStackable && (line.IsStackable ?? true);
+        var billableHeightCm = isStackable
+            ? heightCm
+            : Math.Max(NonStackableBillableHeightCm, heightCm);
+
+        var physicalCbm = lengthCm * widthCm * heightCm * units / 1_000_000m;
+        var dimensionalCbm = lengthCm * widthCm * billableHeightCm * units / 1_000_000m;
+        var deadSpaceCbm = Math.Max(0m, dimensionalCbm - physicalCbm);
+        var weightCft = Math.Max(0m, line.TotalWeightKg) / MiamiKgPerCft;
+        var weightCbm = weightCft / MiamiCftPerCbm;
+
+        return new CargoCalculationLine(
+            line.Description?.Trim() ?? string.Empty,
+            units,
+            Math.Max(0m, line.TotalWeightKg),
+            dimensionalCbm,
+            weightCbm,
+            Math.Max(dimensionalCbm, weightCbm),
+            physicalCbm,
+            deadSpaceCbm,
+            isStackable);
+    }
+
 
     private static CargoCalculationLine CalculateCargoLine(OwnLclCargoLineRequest line)
     {
         var units = Math.Max(0, line.Units);
-        var dimensionalCbm = Math.Max(0m, line.LengthCm)
-            * Math.Max(0m, line.WidthCm)
-            * Math.Max(0m, line.HeightCm)
-            * units / 1_000_000m;
+        var lengthCm = Math.Max(0m, line.LengthCm);
+        var widthCm = Math.Max(0m, line.WidthCm);
+        var heightCm = Math.Max(0m, line.HeightCm);
+        var forcedNonStackable = heightCm >= ForcedNonStackableHeightCm;
+        var isStackable = !forcedNonStackable && (line.IsStackable ?? true);
+        var billableHeightCm = isStackable
+            ? heightCm
+            : Math.Max(NonStackableBillableHeightCm, heightCm);
+
+        var physicalCbm = lengthCm * widthCm * heightCm * units / 1_000_000m;
+        var dimensionalCbm = lengthCm * widthCm * billableHeightCm * units / 1_000_000m;
+        var deadSpaceCbm = Math.Max(0m, dimensionalCbm - physicalCbm);
         var weightCbm = Math.Max(0m, line.TotalWeightKg) / 500m;
 
         return new CargoCalculationLine(
             line.Description?.Trim() ?? string.Empty,
             units,
-            line.TotalWeightKg,
+            Math.Max(0m, line.TotalWeightKg),
             dimensionalCbm,
             weightCbm,
-            Math.Max(dimensionalCbm, weightCbm));
+            Math.Max(dimensionalCbm, weightCbm),
+            physicalCbm,
+            deadSpaceCbm,
+            isStackable);
     }
+
 
     private static void AddDestinationLines(
         List<OwnLclQuoteLine> lines,
