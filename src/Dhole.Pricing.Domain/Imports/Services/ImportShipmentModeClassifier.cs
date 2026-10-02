@@ -102,8 +102,11 @@ public static class ImportShipmentModeClassifier
             var normalized = CanonicalText(value);
             if (string.IsNullOrEmpty(normalized)) continue;
 
-            if (IsLclMarker(normalized)) return ImportedShipmentMode.LclColoader;
+            // AIR takes precedence when legacy sources contain mixed labels such
+            // as "LCL AIR" or "air consolidated". In logistics, LCL alone means
+            // maritime consolidation; an explicit air marker changes the modality.
             if (IsAirMarker(normalized)) return ImportedShipmentMode.AirLclColoader;
+            if (IsLclMarker(normalized)) return ImportedShipmentMode.LclColoader;
             if (IsFclEquipment(normalized)) return ImportedShipmentMode.Fcl;
         }
 
@@ -133,7 +136,11 @@ public static class ImportShipmentModeClassifier
 
         if (rawCanonical.Contains("airlineroute", StringComparison.Ordinal)
             || rawCanonical.Contains("kgpercbm", StringComparison.Ordinal)
-            || rawCanonical.Contains("ratebasiskgvol", StringComparison.Ordinal))
+            || rawCanonical.Contains("ratebasiskgvol", StringComparison.Ordinal)
+            || rawCanonical.Contains("tarifarioairdivision", StringComparison.Ordinal)
+            || rawCanonical.Contains("tarifarioaereo", StringComparison.Ordinal)
+            || rawCanonical.Contains("airfreight", StringComparison.Ordinal)
+            || rawCanonical.Contains("aereoconsolidado", StringComparison.Ordinal))
         {
             return true;
         }
@@ -145,8 +152,18 @@ public static class ImportShipmentModeClassifier
             rawCanonical.Contains("167kg", StringComparison.Ordinal)
             || rawCanonical.Contains("kgvol", StringComparison.Ordinal)
             || rawCanonical.Contains("volumetric", StringComparison.Ordinal);
+        var hasAirBreakpointMatrix =
+            rawCanonical.Contains("airrateplus100", StringComparison.Ordinal)
+            || (
+                rawCanonical.Contains("minimumrate", StringComparison.Ordinal)
+                && rawCanonical.Contains("ratebasis", StringComparison.Ordinal)
+                && rawCanonical.Contains("kgvol", StringComparison.Ordinal)
+            );
+        var hasAwbEvidence = rawCanonical.Contains("awbfee", StringComparison.Ordinal)
+            || rawCanonical.Contains("handlingaereo", StringComparison.Ordinal);
 
-        return mentionsAirline && hasVolumetricAirBasis;
+        return (mentionsAirline && (hasVolumetricAirBasis || hasAirBreakpointMatrix))
+            || (hasAwbEvidence && hasVolumetricAirBasis);
     }
 
     private static bool IsLclMarker(string normalized) =>
