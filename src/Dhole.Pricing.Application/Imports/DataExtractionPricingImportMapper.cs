@@ -125,13 +125,37 @@ public static class DataExtractionPricingImportMapper
             var minimumRate = ReadRawValue(row.RawJson, "minimumrate", "minimum", "minimo");
             var kgPerCbm = ReadRawValue(row.RawJson, "kgpercbm", "density", "densidad");
             var airlineRoute = ReadRawValue(row.RawJson, "airlineroute", "route", "ruta");
+            var ratePlus100 = ReadRawValue(
+                row.RawJson,
+                "airrateplus100",
+                "flete100",
+                "rate100",
+                "100"
+            );
+            var ratePlus300 = ReadRawValue(
+                row.RawJson,
+                "airrateplus300",
+                "flete300",
+                "rate300",
+                "300"
+            );
+            var ratePlus500 = ReadRawValue(
+                row.RawJson,
+                "airrateplus500",
+                "flete500",
+                "rate500",
+                "500"
+            );
 
             spaceComment = MergeComments(
                 row.SpaceComment,
                 row.Remarks,
                 HasText(serviceMode) ? $"Servicio aéreo: {serviceMode}" : "Servicio aéreo",
-                HasText(rateBasis) ? $"Base: {rateBasis}" : null,
+                HasText(rateBasis) ? $"Base: {rateBasis}" : "Base: KG/VOL",
                 HasText(minimumRate) ? $"Mínimo: {minimumRate}" : null,
+                HasText(ratePlus100) ? $"+100: {ratePlus100}" : null,
+                HasText(ratePlus300) ? $"+300: {ratePlus300}" : null,
+                HasText(ratePlus500) ? $"+500: {ratePlus500}" : null,
                 HasText(kgPerCbm) ? $"Densidad: 1 CBM = {kgPerCbm} KG" : null,
                 HasText(airlineRoute) ? $"Ruta aérea: {airlineRoute}" : null,
                 !HasText(row.Carrier)
