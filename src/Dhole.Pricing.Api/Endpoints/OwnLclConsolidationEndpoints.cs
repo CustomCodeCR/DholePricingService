@@ -798,7 +798,14 @@ public sealed record CalculateOwnLclQuoteRequest(
     int Hbl = 1,
     decimal PickupCost = 0m,
     decimal PickupSale = 0m,
-    decimal Discount = 0m);
+    decimal Discount = 0m,
+    string? CommercialPlan = null,
+    decimal CargoValue = 0m,
+    int WhsQty = 1,
+    bool IncludeSed = true,
+    int SedQty = 1,
+    bool IsDangerousCargo = false,
+    bool IsBonded = false);
 
 public sealed record OwnLclCargoLineRequest(
     string? Description,
