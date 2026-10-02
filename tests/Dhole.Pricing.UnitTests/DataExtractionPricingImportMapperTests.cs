@@ -175,6 +175,9 @@ public sealed class DataExtractionPricingImportMapperTests
               "ServiceMode": "AIR_CONSOLIDATED",
               "RateBasis": "KG/VOL",
               "MinimumRate": "150",
+              "AirRatePlus100": "6.37",
+              "AirRatePlus500": "5.95",
+              "AirRatePlus1000": "5.65",
               "KgPerCbm": "167",
               "AirlineRoute": "PVG-SEA-ATL-SJO"
             }
@@ -231,6 +234,9 @@ public sealed class DataExtractionPricingImportMapperTests
         StringAssert.Contains(row.SpaceComment, "AIR_CONSOLIDATED");
         StringAssert.Contains(row.SpaceComment, "KG/VOL");
         StringAssert.Contains(row.SpaceComment, "Mínimo: 150");
+        StringAssert.Contains(row.SpaceComment, "+100: 6.37");
+        StringAssert.Contains(row.SpaceComment, "+500: 5.95");
+        StringAssert.Contains(row.SpaceComment, "+1000: 5.65");
         StringAssert.Contains(row.SpaceComment, "1 CBM = 167 KG");
         StringAssert.Contains(row.SpaceComment, "PVG-SEA-ATL-SJO");
     }
