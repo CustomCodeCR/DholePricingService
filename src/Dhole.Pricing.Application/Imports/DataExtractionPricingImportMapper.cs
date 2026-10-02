@@ -146,6 +146,13 @@ public static class DataExtractionPricingImportMapper
                 "rate500",
                 "500"
             );
+            var ratePlus1000 = ReadRawValue(
+                row.RawJson,
+                "airrateplus1000",
+                "flete1000",
+                "rate1000",
+                "1000"
+            );
 
             spaceComment = MergeComments(
                 row.SpaceComment,
@@ -156,6 +163,7 @@ public static class DataExtractionPricingImportMapper
                 HasText(ratePlus100) ? $"+100: {ratePlus100}" : null,
                 HasText(ratePlus300) ? $"+300: {ratePlus300}" : null,
                 HasText(ratePlus500) ? $"+500: {ratePlus500}" : null,
+                HasText(ratePlus1000) ? $"+1000: {ratePlus1000}" : null,
                 HasText(kgPerCbm) ? $"Densidad: 1 CBM = {kgPerCbm} KG" : null,
                 HasText(airlineRoute) ? $"Ruta aérea: {airlineRoute}" : null,
                 !HasText(row.Carrier)
