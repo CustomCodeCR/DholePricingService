@@ -114,6 +114,11 @@ public static class DataExtractionImportEndpoints
                 enrichedResponse,
                 request.ExtractionExecutionId,
                 request.PricingImportId);
+            extraction = PricingEmailExtractionRecovery.Recover(
+                extraction,
+                sourceType,
+                request.Subject,
+                request.OriginalFileName);
 
             var result = await importService.PersistExtractionAsync(
                 request.PricingImportId,
