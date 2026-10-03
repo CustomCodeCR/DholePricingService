@@ -16,6 +16,7 @@ public static class OwnLclConsolidationEndpoints
     private const decimal DefaultFreightProfitPerCbm = 5.69m;
     private const decimal CentralAmericaOperationBaseCbm = 70m;
     private const decimal CostaRicaWarehouseOperation = 415m;
+    private static readonly Guid MiamiSystemConsolidationId = Guid.Parse("4d49414d-4900-4000-8000-000000000001");
 
     private static readonly IReadOnlyDictionary<string, decimal> OriginSurcharges =
         new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
@@ -68,6 +69,7 @@ public static class OwnLclConsolidationEndpoints
     {
         await using var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
+        await EnsureMiamiSystemConsolidationAsync(connection, ct);
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, consolidation_number, name, booking, etd, carrier_id, carrier_name, carrier_code,
@@ -731,6 +733,104 @@ public static class OwnLclConsolidationEndpoints
     private static string? GetNullableString(DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
     private static Guid? GetNullableGuid(DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : reader.GetGuid(ordinal);
     private static DateOnly? GetNullableDate(DbDataReader reader, int ordinal) => reader.IsDBNull(ordinal) ? null : DateOnly.FromDateTime(reader.GetDateTime(ordinal));
+
+    private static async Task EnsureMiamiSystemConsolidationAsync(DbConnection connection, CancellationToken ct)
+    {
+        // Miami es una matriz base permanente. No debe depender de que un usuario
+        // cree manualmente un consolidado para que aparezca en Pantalla 5.
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.CommandText = """
+                WITH next_number AS (
+                    SELECT GREATEST(COALESCE(MAX(consolidation_number), 47) + 1, 48) AS value
+                    FROM pricing."OwnLclConsolidations"
+                )
+                INSERT INTO pricing."OwnLclConsolidations"
+                    (id, consolidation_number, name, booking, etd,
+                     carrier_id, carrier_name, carrier_code,
+                     container_id, container_name, container_code,
+                     pol_id, pol_name, pol_code,
+                     panama_arrival_port_id, panama_arrival_port_name, panama_arrival_port_code,
+                     destination_charge_snapshot_json,
+                     ocean_freight, maximum_cbm, carrier_destination_cost_total,
+                     panama_to_cr_cost, bunker_cost, cr_transfer_base_cbm,
+                     freight_profit_per_cbm, matrix_version, status, is_active,
+                     created_at_utc, updated_at_utc)
+                SELECT
+                    @id, next_number.value, 'Consolidado Miami', NULL, NULL,
+                    NULL, NULL, NULL,
+                    NULL, NULL, NULL,
+                    NULL, 'Miami, Estados Unidos', 'USMIA',
+                    NULL, 'Puerto Caldera, Costa Rica', 'CRCAL',
+                    '{"finalRatePointName":"San Jose, Costa Rica","finalRatePointCode":"CRSJO"}'::jsonb,
+                    0, 50, 0,
+                    0, 0, 50,
+                    5.69, 'MIA-SYSTEM-v1', 'Open', TRUE,
+                    now(), now()
+                FROM next_number
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM pricing."OwnLclConsolidations"
+                    WHERE id=@id
+                )
+                ON CONFLICT DO NOTHING;
+                """;
+            Add(insert, "id", MiamiSystemConsolidationId);
+            await insert.ExecuteNonQueryAsync(ct);
+        }
+
+        // Si la fila ya existía, la reactivamos y mantenemos la ruta del sistema.
+        // Los costos editables del proyecto no se pisan.
+        await using (var repair = connection.CreateCommand())
+        {
+            repair.CommandText = """
+                UPDATE pricing."OwnLclConsolidations"
+                SET name='Consolidado Miami',
+                    etd=NULL,
+                    pol_name='Miami, Estados Unidos',
+                    pol_code='USMIA',
+                    panama_arrival_port_name='Puerto Caldera, Costa Rica',
+                    panama_arrival_port_code='CRCAL',
+                    destination_charge_snapshot_json='{"finalRatePointName":"San Jose, Costa Rica","finalRatePointCode":"CRSJO"}'::jsonb,
+                    maximum_cbm=CASE WHEN maximum_cbm <= 0 THEN 50 ELSE maximum_cbm END,
+                    matrix_version='MIA-SYSTEM-v1',
+                    status='Open',
+                    is_active=TRUE,
+                    updated_at_utc=now()
+                WHERE id=@id;
+                """;
+            Add(repair, "id", MiamiSystemConsolidationId);
+            await repair.ExecuteNonQueryAsync(ct);
+        }
+
+        // Costos operativos de Miami. Las ventas A/B/C/D/NVOCC/LITTLE viven en
+        // el motor comercial y no se guardan como valores editables de la matriz.
+        await using (var lines = connection.CreateCommand())
+        {
+            lines.CommandText = """
+                WITH defaults(line_key, cost_unit, sale_unit) AS (
+                    VALUES
+                        ('MIA_HANDLING', 0::numeric, 0::numeric),
+                        ('MIA_FORWARDING', 0::numeric, 0::numeric),
+                        ('MIA_HBL', 0::numeric, 0::numeric),
+                        ('MIA_BUNKER', 0::numeric, 0::numeric),
+                        ('MIA_THCD', 0::numeric, 0::numeric)
+                )
+                INSERT INTO pricing."OwnLclConsolidationPricingLines"
+                    (id, consolidation_id, line_key, cost_unit, sale_unit, updated_at_utc)
+                SELECT gen_random_uuid(), @id, defaults.line_key, defaults.cost_unit, defaults.sale_unit, now()
+                FROM defaults
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM pricing."OwnLclConsolidations"
+                    WHERE id=@id AND is_active=TRUE
+                )
+                ON CONFLICT (consolidation_id, line_key) DO NOTHING;
+                """;
+            Add(lines, "id", MiamiSystemConsolidationId);
+            await lines.ExecuteNonQueryAsync(ct);
+        }
+    }
 
     private static async Task EnsureOpenAsync(DbConnection connection, CancellationToken ct)
     {
