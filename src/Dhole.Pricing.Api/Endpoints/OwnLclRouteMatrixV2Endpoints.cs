@@ -30,6 +30,10 @@ public static class OwnLclRouteMatrixV2Endpoints
         string Label,
         decimal SalePerCft,
         decimal MinimumFreightSale,
+        decimal FreightCostPerCft,
+        decimal BunkerCostPerCft,
+        decimal ThcCostPerCft,
+        decimal GriCostPerCft,
         decimal Sed,
         decimal Handling,
         decimal Vgm,
@@ -39,18 +43,24 @@ public static class OwnLclRouteMatrixV2Endpoints
         decimal Forwarding,
         decimal InsurancePct,
         decimal InsuranceMinimum,
-        bool Little = false);
+        bool Little = false)
+    {
+        public decimal TotalFreightCostPerCft =>
+            FreightCostPerCft + BunkerCostPerCft + ThcCostPerCft + GriCostPerCft;
+    }
 
     private static readonly IReadOnlyDictionary<string, MiamiCommercialRate> MiamiCommercialRates =
         new Dictionary<string, MiamiCommercialRate>(StringComparer.OrdinalIgnoreCase)
         {
-            ["A"] = new("Cliente A", 2.80m, 280m, 25m, 45m, 20m, 25m, 20m, 25m, 0m, 0.75m, 50m),
-            ["B"] = new("Cliente B", 2.95m, 295m, 28m, 55m, 25m, 25m, 30m, 45m, 0m, 0.80m, 60m),
-            ["C"] = new("Cliente C", 3.00m, 300m, 30m, 65m, 25m, 25m, 35m, 50m, 0m, 0.80m, 60m),
-            ["D"] = new("Cliente D", 2.92m, 292m, 35m, 55m, 45m, 30m, 35m, 50m, 65m, 0.80m, 60m),
-            ["NVOCC-B"] = new("Cliente NVOCC-B", 2.90m, 170m, 25m, 45m, 20m, 0m, 20m, 0m, 0m, 0.50m, 50m),
-            ["NVOCC-A"] = new("Cliente NVOCC-A", 2.60m, 95m, 25m, 60m, 0m, 0m, 25m, 25m, 0m, 0.50m, 50m),
-            ["LITTLE"] = new("CARGAS LITTLE", 0m, 0m, 0m, 35m, 15m, 0m, 0m, 20m, 0m, 0.50m, 10m, true),
+            // Costos por CFT tomados del cotizador Miami original.
+            // El costo de flete mostrado en Pantalla 6 usa la suma de estos componentes.
+            ["A"] = new("Cliente A", 2.80m, 280m, 1.75m, 0.70m, 0.35m, 0m, 25m, 45m, 20m, 25m, 20m, 25m, 0m, 0.75m, 50m),
+            ["B"] = new("Cliente B", 2.95m, 295m, 1.80m, 0.80m, 0.35m, 0m, 28m, 55m, 25m, 25m, 30m, 45m, 0m, 0.80m, 60m),
+            ["C"] = new("Cliente C", 3.00m, 300m, 1.85m, 0.80m, 0.35m, 0m, 30m, 65m, 25m, 25m, 35m, 50m, 0m, 0.80m, 60m),
+            ["D"] = new("Cliente D", 2.92m, 292m, 1.85m, 0.72m, 0.35m, 0m, 35m, 55m, 45m, 30m, 35m, 50m, 65m, 0.80m, 60m),
+            ["NVOCC-B"] = new("Cliente NVOCC-B", 2.90m, 170m, 1.85m, 0.70m, 0.35m, 0m, 25m, 45m, 20m, 0m, 20m, 0m, 0m, 0.50m, 50m),
+            ["NVOCC-A"] = new("Cliente NVOCC-A", 2.60m, 95m, 2.04m, 0m, 0.34m, 0.22m, 25m, 60m, 0m, 0m, 25m, 25m, 0m, 0.50m, 50m),
+            ["LITTLE"] = new("CARGAS LITTLE", 0m, 0m, 0m, 0m, 0m, 0m, 0m, 35m, 15m, 0m, 0m, 20m, 0m, 0.50m, 10m, true),
         };
 
     // CNCA matrices: negotiated China origin differential for Costa Rica / Panama.
@@ -387,11 +397,13 @@ public static class OwnLclRouteMatrixV2Endpoints
         }
 
         var configuredLines = await LoadPricingLineOverridesAsync(consolidation.Id, db, ct);
-        var oceanCostPerCbm = consolidation.OceanFreight / Math.Max(0.01m, consolidation.MaximumCbm);
-        var bunker = ResolveConfiguredLine(configuredLines, "MIA_BUNKER");
-        var thcd = ResolveConfiguredLine(configuredLines, "MIA_THCD");
-        var freightOperationalCostPerCbm = oceanCostPerCbm + Math.Max(0m, bunker.Cost) + Math.Max(0m, thcd.Cost);
-        var freightCostPerCft = freightOperationalCostPerCbm / MiamiCftPerCbm;
+
+        // Miami no toma el costo del flete del consolidado genérico.
+        // Cada perfil comercial trae su estructura interna por CFT desde el cotizador Miami:
+        // Freight + Bunker/GRI + THC.
+        var freightCostPerCft = commercialRate.TotalFreightCostPerCft;
+        var oceanCostPerCbm = commercialRate.FreightCostPerCft * MiamiCftPerCbm;
+        var freightOperationalCostPerCbm = freightCostPerCft * MiamiCftPerCbm;
 
         decimal freightSaleTotal;
         if (commercialRate.Little)
