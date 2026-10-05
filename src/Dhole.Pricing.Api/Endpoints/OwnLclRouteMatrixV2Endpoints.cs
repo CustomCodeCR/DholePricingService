@@ -364,22 +364,45 @@ public static class OwnLclRouteMatrixV2Endpoints
             });
         }
 
+        if (destination != "CR")
+        {
+            return Results.BadRequest(new
+            {
+                code = "Pricing.OwnLclMiamiDestinationInvalid",
+                message = "La matriz Miami aplica únicamente para Miami → Costa Rica.",
+            });
+        }
+
         var cargo = request.CargoLines.Select(CalculateMiamiCargoLine).ToArray();
-        var chargeableCbm = cargo.Sum(line => line.ChargeableCbm);
-        if (chargeableCbm <= 0m)
+
+        // Regla exacta del cotizador Miami:
+        // 1) se suma primero TODO el volumen facturable (incluyendo espacio muerto);
+        // 2) se suma TODO el peso y se convierte a CFT con 14.16 kg/CFT;
+        // 3) para A/B/C/D/NVOCC rige el MAYOR entre volumen y peso;
+        // 4) para LITTLE el peso NO participa en el CFT cobrable.
+        //
+        // No se debe tomar MAX(peso, volumen) por línea y luego sumar, porque eso
+        // sobre-factura cargas mixtas y no reproduce el cotizador operativo.
+        var dimensionalCbm = cargo.Sum(line => Math.Max(0m, line.DimensionalCbm));
+        var volumeCft = dimensionalCbm * MiamiCftPerCbm;
+        var totalWeightKg = cargo.Sum(line => Math.Max(0m, line.TotalWeightKg));
+        var weightEquivalentCft = totalWeightKg / MiamiKgPerCft;
+        var chargeableCft = commercialRate.Little
+            ? volumeCft
+            : Math.Max(volumeCft, weightEquivalentCft);
+        var chargeableCbm = chargeableCft / MiamiCftPerCbm;
+
+        if (chargeableCft <= 0m)
             return Results.BadRequest(new { code = "Pricing.OwnLclChargeableCbmRequired", message = "La carga no genera volumen cobrable." });
 
-        // Miami trabaja comercialmente en CFT. A diferencia de la matriz China,
-        // no fuerza 1 CBM: el mínimo es monetario por perfil comercial.
+        // Miami no fuerza mínimo físico de 1 CBM. El mínimo es monetario por plan.
         var billableCbm = chargeableCbm;
-        var chargeableCft = chargeableCbm * MiamiCftPerCbm;
-        var totalWeightKg = cargo.Sum(line => Math.Max(0m, line.TotalWeightKg));
 
         if (commercialRate.Little)
         {
             var issues = new List<string>();
             if (totalWeightKg > 100m) issues.Add("Peso mayor a 100 kg");
-            if (chargeableCft > 80m) issues.Add("Volumen mayor a 80 CFT");
+            if (volumeCft > 80.01m) issues.Add("Volumen mayor a 80.01 CFT");
             if (Math.Max(0m, request.CargoValue) > 1000m) issues.Add("Valor de carga mayor a USD 1,000");
             if (request.IsDangerousCargo) issues.Add("Carga indicada como IMO");
             if (request.IsBonded) issues.Add("Carga indicada como Bonded");
@@ -408,11 +431,14 @@ public static class OwnLclRouteMatrixV2Endpoints
         decimal freightSaleTotal;
         if (commercialRate.Little)
         {
-            freightSaleTotal = chargeableCft <= 30m
+            // LITTLE usa exclusivamente CFT por volumen, nunca el equivalente por peso.
+            freightSaleTotal = volumeCft <= 30m
                 ? 30m
-                : chargeableCft <= 60m
+                : volumeCft <= 60m
                     ? 40m
-                    : 50m;
+                    : volumeCft <= 80.01m
+                        ? 50m
+                        : 0m;
         }
         else
         {
@@ -551,7 +577,9 @@ public static class OwnLclRouteMatrixV2Endpoints
             Math.Max(0m, line.TotalWeightKg),
             dimensionalCbm,
             weightCbm,
-            Math.Max(dimensionalCbm, weightCbm),
+            // En Miami el peso/volumen se compara a nivel TOTAL de la cotización.
+            // Por línea conservamos como cobrable el volumen facturable de esa línea.
+            dimensionalCbm,
             physicalCbm,
             deadSpaceCbm,
             isStackable);
