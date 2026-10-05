@@ -2,6 +2,7 @@ using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Queries;
 using Dhole.Pricing.Contracts.Imports.Response;
 using Dhole.Pricing.Domain.Imports.Enums;
+using Dhole.Pricing.Domain.Imports.Services;
 
 namespace Dhole.Pricing.Application.Features.Imports.GetImportRatesForSelect;
 
