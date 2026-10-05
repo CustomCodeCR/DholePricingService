@@ -175,10 +175,10 @@ public static class FtlTariffEndpoints
                   )
                   OR
                   (
-                      lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun'))
-                          = lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun'))
-                      AND lower(translate(trim(destination_name), 'áéíóúüñ', 'aeiouun'))
-                          = lower(translate(trim(@destination_name), 'áéíóúüñ', 'aeiouun'))
+                      trim(regexp_replace(replace(lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun')), ' de ', ' '), '[[:space:]]+', ' ', 'g'))
+                          = trim(regexp_replace(replace(lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun')), ' de ', ' '), '[[:space:]]+', ' ', 'g'))
+                      AND trim(regexp_replace(replace(lower(translate(trim(destination_name), 'áéíóúüñ', 'aeiouun')), ' de ', ' '), '[[:space:]]+', ' ', 'g'))
+                          = trim(regexp_replace(replace(lower(translate(trim(@destination_name), 'áéíóúüñ', 'aeiouun')), ' de ', ' '), '[[:space:]]+', ' ', 'g'))
                   )
                   OR
                   (
@@ -217,8 +217,8 @@ public static class FtlTariffEndpoints
                           OR lower(translate(trim(COALESCE(destination_name, '')), 'áéíóúüñ', 'aeiouun')) LIKE '%zona libre de colon%'
                           OR lower(trim(COALESCE(destination_code, ''))) = 'cfz'
                       )
-                      AND lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun'))
-                          = lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun'))
+                      AND trim(regexp_replace(replace(lower(translate(trim(origin_name), 'áéíóúüñ', 'aeiouun')), ' de ', ' '), '[[:space:]]+', ' ', 'g'))
+                          = trim(regexp_replace(replace(lower(translate(trim(@origin_name), 'áéíóúüñ', 'aeiouun')), ' de ', ' '), '[[:space:]]+', ' ', 'g'))
                   )
                   OR
                   (
