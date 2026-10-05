@@ -516,6 +516,10 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         {
             ApplyContainerType(AirContainerSnapshot());
         }
+        else if (ShipmentMode == ImportedShipmentMode.Ltl)
+        {
+            ApplyContainerType(LandLtlContainerSnapshot());
+        }
     }
 
     private static CatalogSnapshot LclContainerSnapshot() =>
@@ -532,6 +536,14 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
             "AIR",
             "AIR",
             "air"
+        );
+
+    private static CatalogSnapshot LandLtlContainerSnapshot() =>
+        new(
+            Guid.Parse("4f0f5cf1-c43b-4c6e-a70d-7eb657817442"),
+            "LTL",
+            "LTL",
+            "ltl"
         );
 
     private void ApplyCurrency(CatalogSnapshot value)
