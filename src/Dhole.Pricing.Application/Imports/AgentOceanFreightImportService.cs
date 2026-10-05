@@ -152,6 +152,8 @@ public sealed class AgentOceanFreightImportService(
                         ? offer.Charges.Sum(x => x.Amount)
                         : offer.OceanFreight.Amount + originCharges + destinationCharges + surcharges);
 
+                var validTo = ResolveOfferValidTo(spotDate, offer);
+
                 var rawDataJson = JsonSerializer.Serialize(new
                 {
                     _dholeSource = new
@@ -194,7 +196,7 @@ public sealed class AgentOceanFreightImportService(
                     0,
                     Math.Max(0, offer.TransitDays),
                     spotDate,
-                    spotDate,
+                    validTo,
                     rawDataJson,
                     null);
 
@@ -310,6 +312,15 @@ public sealed class AgentOceanFreightImportService(
         return fuzzy is not null
             ? ToSnapshot(fuzzy)
             : CreateFallbackSnapshot(group, fallbackName, fallbackCode);
+    }
+
+    private static DateTime ResolveOfferValidTo(DateTime spotDate, AgentOffer offer)
+    {
+        var validTo = offer.CargoCutoff?.Date
+            ?? offer.Etd?.Date
+            ?? spotDate.AddDays(7);
+
+        return validTo < spotDate ? spotDate : validTo;
     }
 
     private static decimal SumCharges(

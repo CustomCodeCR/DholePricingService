@@ -61,7 +61,7 @@ public static class ImportRateReviewQueueEndpoints
     {
         var query = db.ImportFclRates
             .AsNoTracking()
-            .Where(x => !x.IsDeleted && x.Status != ImportStatus.Expired);
+            .Where(x => !x.IsDeleted);
 
         if (sourceType is { Length: > 0 })
             query = query.Where(x => sourceType.Contains(x.SourceType));
