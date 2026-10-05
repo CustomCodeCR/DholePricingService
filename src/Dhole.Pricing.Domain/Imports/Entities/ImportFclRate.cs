@@ -520,6 +520,27 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         {
             ApplyContainerType(LandLtlContainerSnapshot());
         }
+
+        NormalizeConsolidatedCarrier();
+    }
+
+    private void NormalizeConsolidatedCarrier()
+    {
+        if (ShipmentMode == ImportedShipmentMode.Fcl || ShipmentMode == ImportedShipmentMode.Unknown)
+            return;
+
+        var carrier = CanonicalText(
+            $"{Carrier}|{CarrierName}|{CarrierCode}|{CarrierSlug}"
+        );
+
+        if (
+            carrier.Contains("lclconsolidado", StringComparison.Ordinal)
+            || carrier.Contains("aereo", StringComparison.Ordinal)
+            || carrier.Contains("terrestreltl", StringComparison.Ordinal)
+        )
+        {
+            ApplyCarrier(PendingCarrierSnapshot());
+        }
     }
 
     private static CatalogSnapshot LclContainerSnapshot() =>
@@ -545,6 +566,32 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
             "LTL",
             "ltl"
         );
+
+    private static CatalogSnapshot PendingCarrierSnapshot() =>
+        new(
+            Guid.Parse("9eb7d950-ef7e-7dd7-b304-a60fa63d646d"),
+            "Por asignar",
+            "PORASIGNAR",
+            "por-asignar"
+        );
+
+    private static string CanonicalText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+
+        return new string(
+            value
+                .Normalize(System.Text.NormalizationForm.FormD)
+                .Where(character =>
+                    System.Globalization.CharUnicodeInfo.GetUnicodeCategory(character)
+                    != System.Globalization.UnicodeCategory.NonSpacingMark
+                )
+                .Where(char.IsLetterOrDigit)
+                .Select(char.ToLowerInvariant)
+                .ToArray()
+        );
+    }
 
     private void ApplyCurrency(CatalogSnapshot value)
     {
