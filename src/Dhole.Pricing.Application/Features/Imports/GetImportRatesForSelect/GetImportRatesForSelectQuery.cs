@@ -17,5 +17,6 @@ public sealed record GetImportRatesForSelectQuery(
     string? Pod = null,
     string? ContainerType = null,
     string? Currency = null,
-    DateTime? QuoteDate = null
+    DateTime? QuoteDate = null,
+    ImportedShipmentMode? ShipmentMode = null
 ) : IQuery<Result<IReadOnlyCollection<ImportRateSelectDto>>>;
