@@ -18,6 +18,7 @@ internal static class ImportRateMappings
             {
                 ImportedShipmentMode.LclColoader => "Lcl",
                 ImportedShipmentMode.AirLclColoader => "Air",
+                ImportedShipmentMode.Ltl => "Ltl",
                 ImportedShipmentMode.Fcl => "Fcl",
                 _ => "Unknown",
             },
