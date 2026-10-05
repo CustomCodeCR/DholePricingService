@@ -175,6 +175,7 @@ public static class ImportRateEndpoints
         string? containerType,
         string? currency,
         DateTime? quoteDate,
+        ImportedShipmentMode? shipmentMode,
         IQueryDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -193,7 +194,8 @@ public static class ImportRateEndpoints
                 pod,
                 containerType,
                 currency,
-                quoteDate
+                quoteDate,
+                shipmentMode
             ),
             cancellationToken
         );
