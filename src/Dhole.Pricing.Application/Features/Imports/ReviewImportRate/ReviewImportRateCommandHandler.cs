@@ -62,7 +62,9 @@ public sealed class ReviewImportRateCommandHandler(
         }
         var shipmentMode = ResolveShipmentMode(command.ShipmentMode, importRate);
         var isConsolidatedImport =
-            shipmentMode is ImportedShipmentMode.LclColoader or ImportedShipmentMode.AirLclColoader;
+            shipmentMode is ImportedShipmentMode.LclColoader
+                or ImportedShipmentMode.AirLclColoader
+                or ImportedShipmentMode.Ltl;
         var carrierWasProvided = command.CarrierId.HasValue && command.CarrierId.Value != Guid.Empty;
         var containerTypeWasProvided = !isConsolidatedImport
             && command.ContainerTypeId.HasValue
@@ -104,6 +106,7 @@ public sealed class ReviewImportRateCommandHandler(
         {
             ImportedShipmentMode.LclColoader => LclContainerSnapshot(),
             ImportedShipmentMode.AirLclColoader => AirContainerSnapshot(),
+            ImportedShipmentMode.Ltl => LandLtlContainerSnapshot(),
             _ => containerType is null
                 ? new CatalogSnapshot(
                     importRate.ContainerTypeId,
@@ -230,6 +233,14 @@ public sealed class ReviewImportRateCommandHandler(
             return ImportedShipmentMode.LclColoader;
         }
 
+        if (string.Equals(normalized, "Ltl", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "LTL", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "LandLtl", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalized, "LtlLand", StringComparison.OrdinalIgnoreCase))
+        {
+            return ImportedShipmentMode.Ltl;
+        }
+
         if (string.Equals(normalized, "Air", StringComparison.OrdinalIgnoreCase)
             || string.Equals(normalized, "AirConsol", StringComparison.OrdinalIgnoreCase)
             || string.Equals(normalized, "AirLclColoader", StringComparison.OrdinalIgnoreCase))
@@ -259,6 +270,9 @@ public sealed class ReviewImportRateCommandHandler(
 
     private static CatalogSnapshot AirContainerSnapshot() =>
         new(Guid.Parse("321ae516-76a1-10ed-6d98-2117496f8ff4"), "AIR", "AIR", "air");
+
+    private static CatalogSnapshot LandLtlContainerSnapshot() =>
+        new(Guid.Parse("4f0f5cf1-c43b-4c6e-a70d-7eb657817442"), "LTL", "LTL", "ltl");
 
     private static CatalogSnapshot Snapshot(PricingConfigCatalogItem item) =>
         CatalogSnapshot.Create(item.Id, item.Name, item.Code, item.Slug);
