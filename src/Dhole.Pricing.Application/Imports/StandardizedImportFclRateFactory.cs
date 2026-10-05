@@ -118,9 +118,11 @@ public static class StandardizedImportFclRateFactory
                     ),
                     IsAir(row)
                         ? CreateFallbackSnapshot("air-equipment-types", "AIR", "AIR", "AIR")
-                        : IsLcl(row)
-                            ? CreateFallbackSnapshot("container-types", "LCL", "LCL", "LCL")
-                            : ResolveOptionalSnapshot(
+                        : IsLandLtl(row)
+                            ? CreateFallbackSnapshot("container-types", "LTL", "LTL", "LTL")
+                            : IsLcl(row)
+                                ? CreateFallbackSnapshot("container-types", "LCL", "LCL", "LCL")
+                                : ResolveOptionalSnapshot(
                                 row.ContainerTypeReference,
                                 "container-types",
                                 row.ContainerType
@@ -166,7 +168,7 @@ public static class StandardizedImportFclRateFactory
         return !hasNonReviewableBlockingIssue
             && HasText(row.OriginPort)
             && (HasText(resolvedPortOfExit) || IsLcl(row))
-            && (IsLcl(row) || IsAir(row) || (HasText(row.ContainerType) && HasText(row.Carrier)))
+            && (IsLcl(row) || IsAir(row) || IsLandLtl(row) || (HasText(row.ContainerType) && HasText(row.Carrier)))
             && row.ValidFrom.HasValue
             && row.ValidTo.HasValue
             && row.ValidTo.Value >= row.ValidFrom.Value
@@ -199,6 +201,9 @@ public static class StandardizedImportFclRateFactory
 
     private static bool IsAir(DataExtractionFclPricingRow row) =>
         ShipmentMode(row) == ImportedShipmentMode.AirLclColoader;
+
+    private static bool IsLandLtl(DataExtractionFclPricingRow row) =>
+        ShipmentMode(row) == ImportedShipmentMode.Ltl;
 
     private static bool ShouldPromoteEmailDestinationToPoe(
         DataExtractionFclPricingRow row,
@@ -235,11 +240,11 @@ public static class StandardizedImportFclRateFactory
             )
             || (
                 code.Equals("missing_container_type", StringComparison.OrdinalIgnoreCase)
-                && HasText(row.ContainerType)
+                && (HasText(row.ContainerType) || IsLandLtl(row))
             )
             || (
                 code.Equals("missing_carrier", StringComparison.OrdinalIgnoreCase)
-                && (HasText(row.Carrier) || IsLcl(row) || IsAir(row))
+                && (HasText(row.Carrier) || IsLcl(row) || IsAir(row) || IsLandLtl(row))
             )
             || (
                 code.Equals("missing_rate_amount", StringComparison.OrdinalIgnoreCase)
