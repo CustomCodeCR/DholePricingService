@@ -8,6 +8,7 @@ public enum ImportedShipmentMode
     Fcl = 1,
     LclColoader = 2,
     AirLclColoader = 3,
+    Ltl = 4,
 }
 
 public static class ImportShipmentModeClassifier
@@ -48,8 +49,12 @@ public static class ImportShipmentModeClassifier
         // LCL/AIR canonical equipment is authoritative. Historical air/LCL rows
         // may still carry a legacy FCL placeholder (for example 40HC), so FCL
         // must be validated against the extraction evidence before returning it.
-        if (explicitContainerMode is ImportedShipmentMode.LclColoader or ImportedShipmentMode.AirLclColoader)
+        if (explicitContainerMode is ImportedShipmentMode.LclColoader
+            or ImportedShipmentMode.AirLclColoader
+            or ImportedShipmentMode.Ltl)
+        {
             return explicitContainerMode;
+        }
 
         if (string.IsNullOrWhiteSpace(rawDataJson))
             return explicitContainerMode;
@@ -62,8 +67,12 @@ public static class ImportShipmentModeClassifier
             CollectRawValues(document.RootElement, equipmentValues, modeValues);
 
             var rawEquipmentMode = ClassifyEquipmentValues(equipmentValues.ToArray());
-            if (rawEquipmentMode is ImportedShipmentMode.LclColoader or ImportedShipmentMode.AirLclColoader)
+            if (rawEquipmentMode is ImportedShipmentMode.LclColoader
+                or ImportedShipmentMode.AirLclColoader
+                or ImportedShipmentMode.Ltl)
+            {
                 return rawEquipmentMode;
+            }
 
             var rawCanonical = CanonicalText(document.RootElement.GetRawText());
 
@@ -71,6 +80,9 @@ public static class ImportShipmentModeClassifier
             // placeholder because old email extractions used those placeholders.
             if (HasStrongAirEvidence(rawCanonical, modeValues))
                 return ImportedShipmentMode.AirLclColoader;
+
+            if (HasStrongLandLtlEvidence(rawCanonical, modeValues))
+                return ImportedShipmentMode.Ltl;
 
             if (HasStrongLclEvidence(rawCanonical, modeValues))
                 return ImportedShipmentMode.LclColoader;
@@ -106,11 +118,28 @@ public static class ImportShipmentModeClassifier
             // as "LCL AIR" or "air consolidated". In logistics, LCL alone means
             // maritime consolidation; an explicit air marker changes the modality.
             if (IsAirMarker(normalized)) return ImportedShipmentMode.AirLclColoader;
+            if (IsLandLtlMarker(normalized)) return ImportedShipmentMode.Ltl;
             if (IsLclMarker(normalized)) return ImportedShipmentMode.LclColoader;
             if (IsFclEquipment(normalized)) return ImportedShipmentMode.Fcl;
         }
 
         return ImportedShipmentMode.Unknown;
+    }
+
+    private static bool HasStrongLandLtlEvidence(
+        string rawCanonical,
+        IReadOnlyCollection<string> modeValues)
+    {
+        if (modeValues.Any(value => IsLandLtlMarker(CanonicalText(value))))
+            return true;
+
+        return rawCanonical.Contains("lessthantruckload", StringComparison.Ordinal)
+            || rawCanonical.Contains("ltlterrestre", StringComparison.Ordinal)
+            || rawCanonical.Contains("terrestreltl", StringComparison.Ordinal)
+            || rawCanonical.Contains("landltl", StringComparison.Ordinal)
+            || rawCanonical.Contains("shipmentmodeltl", StringComparison.Ordinal)
+            || rawCanonical.Contains("tariffmodeltl", StringComparison.Ordinal)
+            || rawCanonical.Contains("servicemodeltl", StringComparison.Ordinal);
     }
 
     private static bool HasStrongLclEvidence(
@@ -165,6 +194,14 @@ public static class ImportShipmentModeClassifier
         return (mentionsAirline && (hasVolumetricAirBasis || hasAirBreakpointMatrix))
             || (hasAwbEvidence && hasVolumetricAirBasis);
     }
+
+    private static bool IsLandLtlMarker(string normalized) =>
+        normalized == "ltl"
+        || normalized == "landltl"
+        || normalized == "ltlland"
+        || normalized.Contains("lessthantruckload", StringComparison.Ordinal)
+        || normalized.Contains("ltlterrestre", StringComparison.Ordinal)
+        || normalized.Contains("terrestreltl", StringComparison.Ordinal);
 
     private static bool IsLclMarker(string normalized) =>
         normalized == "lcl"
