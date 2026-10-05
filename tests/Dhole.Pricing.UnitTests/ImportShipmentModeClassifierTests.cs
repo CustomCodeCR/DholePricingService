@@ -239,6 +239,26 @@ public sealed class ImportShipmentModeClassifierTests
     }
 
     [TestMethod]
+    public void Classify_WhenLandLtlModeExists_ReturnsLtl()
+    {
+        const string raw = """
+        {
+          "Raw": {
+            "ShipmentMode": "LTL",
+            "ServiceType": "Less than truckload",
+            "Origin": "San José, Costa Rica",
+            "Destination": "Ciudad de Guatemala, Guatemala",
+            "RateBasis": "CBM"
+          }
+        }
+        """;
+
+        var mode = ImportShipmentModeClassifier.Classify(null, null, null, null, raw);
+
+        Assert.AreEqual(ImportedShipmentMode.Ltl, mode);
+    }
+
+    [TestMethod]
     public void Classify_WhenContainerSaysAirFreight_ReturnsAir()
     {
         var mode = ImportShipmentModeClassifier.Classify(
