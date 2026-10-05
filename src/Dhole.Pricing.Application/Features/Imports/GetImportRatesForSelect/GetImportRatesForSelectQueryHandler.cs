@@ -31,7 +31,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         var exact = approvedExact
             .Concat(preAuthorizedExact)
             .Where(IsSelectableStatus)
-            .Where(IsFclRate)
+            .Where(rate => MatchesRequestedShipmentMode(query.ShipmentMode, rate))
             .GroupBy(x => x.Id)
             .Select(group => group.First())
             .OrderBy(x => StatusPriority(x.Status))
@@ -55,7 +55,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         var fallback = approvedFallback
             .Concat(preAuthorizedFallback)
             .Where(x => IsSelectableStatus(x.Status))
-            .Where(IsFclRate)
+            .Where(rate => MatchesRequestedShipmentMode(query.ShipmentMode, rate))
             .Where(x => EquipmentMatches(query.ContainerType, x.ContainerType, x.ContainerTypeCode))
             .Where(x => PodMatchesOrIsUnassigned(query.Pod, x.Pod, x.PodCode, x.PodId))
             .Where(x => !requestedDate.HasValue || x.ValidTo.Date >= requestedDate.Value)
@@ -98,7 +98,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         var rates = approved
             .Concat(preAuthorized)
             .Where(x => IsSelectableStatus(x.Status))
-            .Where(IsFclRate)
+            .Where(rate => MatchesRequestedShipmentMode(query.ShipmentMode, rate))
             .Where(x => EquipmentMatches(query.ContainerType, x.ContainerType, x.ContainerTypeCode))
             .Where(x => PodMatchesOrIsUnassigned(query.Pod, x.Pod, x.PodCode, x.PodId))
             .Where(x => !requestedDate.HasValue || x.ValidTo.Date >= requestedDate.Value)
@@ -307,6 +307,40 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
     }
 
     private static bool IsSelectableStatus(ImportRateSelectDto rate) => IsSelectableStatus(rate.Status);
+
+    private static bool MatchesRequestedShipmentMode(
+        ImportedShipmentMode? requested,
+        ImportRateSelectDto rate
+    )
+    {
+        var actual = ImportShipmentModeClassifier.Classify(
+            rate.ContainerType,
+            rate.ContainerType,
+            rate.ContainerTypeCode,
+            null,
+            rate.RawDataJson
+        );
+        return !requested.HasValue || requested.Value == ImportedShipmentMode.Unknown
+            ? actual == ImportedShipmentMode.Fcl
+            : actual == requested.Value;
+    }
+
+    private static bool MatchesRequestedShipmentMode(
+        ImportedShipmentMode? requested,
+        ImportRateDto rate
+    )
+    {
+        var actual = ImportShipmentModeClassifier.Classify(
+            rate.ContainerType,
+            rate.ContainerType,
+            rate.ContainerTypeCode,
+            null,
+            rate.RawDataJson
+        );
+        return !requested.HasValue || requested.Value == ImportedShipmentMode.Unknown
+            ? actual == ImportedShipmentMode.Fcl
+            : actual == requested.Value;
+    }
 
     private static bool IsFclRate(ImportRateSelectDto rate) =>
         ImportShipmentModeClassifier.Classify(
