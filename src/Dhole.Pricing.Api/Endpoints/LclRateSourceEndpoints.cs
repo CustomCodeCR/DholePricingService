@@ -31,6 +31,7 @@ public static class LclRateSourceEndpoints
         Guid? poeId,
         Guid? podId,
         Guid? incotermId,
+        string? modality,
         string? pol,
         string? poe,
         string? pod,
@@ -39,6 +40,10 @@ public static class LclRateSourceEndpoints
         CancellationToken cancellationToken)
     {
         var effectiveDate = (quoteDate ?? DateTime.UtcNow).Date;
+        var isAir = string.Equals(modality, "Air", StringComparison.OrdinalIgnoreCase);
+        var expectedImportedMode = isAir
+            ? ImportedShipmentMode.AirLclColoader
+            : ImportedShipmentMode.LclColoader;
 
         // La fecha de carga funciona como límite inferior de vencimiento: se muestran
         // tarifas que venzan ese día o después, incluso si su vigencia inicia después.
@@ -46,7 +51,14 @@ public static class LclRateSourceEndpoints
         var candidates = await db.RateHeaders
             .AsNoTracking()
             .Where(rate =>
-                rate.ShipmentMode == ShipmentMode.Lcl
+                (isAir
+                    ? rate.ShipmentMode == ShipmentMode.Air
+                        || rate.ShipmentMode == ShipmentMode.AirConsol
+                        || (rate.ShipmentMode == ShipmentMode.Lcl
+                            && (rate.ContainerTypeCode == "AIR" || rate.ContainerTypeName == "AIR"))
+                    : rate.ShipmentMode == ShipmentMode.Lcl
+                        && rate.ContainerTypeCode != "AIR"
+                        && rate.ContainerTypeName != "AIR")
                 && rate.RateType == RateType.Tariff
                 && rate.ValidTo >= effectiveDate
                 && (rate.Status == RateStatus.Open || rate.Status == RateStatus.ApprovedByManagement))
@@ -165,7 +177,7 @@ public static class LclRateSourceEndpoints
             .ToListAsync(cancellationToken);
 
         var importedLclRates = importedLclCandidates
-            .Where(IsImportedLclRate)
+            .Where(rate => ImportedMode(rate) == expectedImportedMode)
             .Where(rate => LocationMatches(polId, pol, rate.PolId, rate.PolName, rate.PolCode))
             .Where(rate => LocationMatches(poeId, poe, rate.PoeId, rate.PoeName, rate.PoeCode))
             .Where(rate => PodMatchesOrIsUnassigned(
@@ -239,14 +251,18 @@ public static class LclRateSourceEndpoints
                 ? decimal.Round((profit / totalSale) * 100m, 4)
                 : 0m;
             var hasAssignedPod = !IsUnassignedLocation(rate.PodName, rate.PodCode, rate.PodSlug);
-            var lines = BuildImportedLclLines(rate, totalCost, totalSale);
+            var lines = BuildImportedLclLines(rate, totalCost, totalSale, isAir);
 
             return new
             {
                 sourceType = "Coloader",
                 id = rate.Id,
-                rateCode = $"IMP-LCL-{rate.Id.ToString("N")[..8].ToUpperInvariant()}",
-                rateName = $"{rate.AgentName} LCL · {rate.PolName} → {(hasAssignedPod ? rate.PodName : rate.PoeName)}",
+                rateCode = isAir
+                    ? $"IMP-AIR-{rate.Id.ToString("N")[..8].ToUpperInvariant()}"
+                    : $"IMP-LCL-{rate.Id.ToString("N")[..8].ToUpperInvariant()}",
+                rateName = isAir
+                    ? $"{rate.AgentName} AÉREO · {rate.PolName} → {(hasAssignedPod ? rate.PodName : rate.PoeName)}"
+                    : $"{rate.AgentName} LCL · {rate.PolName} → {(hasAssignedPod ? rate.PodName : rate.PoeName)}",
                 providerId = (Guid?)rate.AgentId,
                 providerName = rate.AgentName,
                 providerCode = rate.AgentCode,
@@ -289,13 +305,13 @@ public static class LclRateSourceEndpoints
         return Results.Ok(new { items });
     }
 
-    private static bool IsImportedLclRate(ImportFclRates rate) =>
+    private static ImportedShipmentMode ImportedMode(ImportFclRates rate) =>
         ImportShipmentModeClassifier.Classify(
             rate.ContainerType,
             rate.ContainerTypeName,
             rate.ContainerTypeCode,
             rate.ContainerTypeSlug,
-            rate.RawDataJson) == ImportedShipmentMode.LclColoader;
+            rate.RawDataJson);
 
     private static decimal ResolveImportedLclTotalCost(ImportFclRates rate)
     {
@@ -311,7 +327,8 @@ public static class LclRateSourceEndpoints
     private static ColoaderLine[] BuildImportedLclLines(
         ImportFclRates rate,
         decimal totalCost,
-        decimal totalSale)
+        decimal totalSale,
+        bool isAir)
     {
         var lines = new List<ColoaderLine>();
         var freight = Math.Max(0m, rate.OceanFreight ?? rate.Freight);
@@ -340,12 +357,17 @@ public static class LclRateSourceEndpoints
                 amount,
                 1m,
                 0m,
-                "Fuente LCL importada y preaprobada.",
+                isAir ? "Fuente aérea importada y preaprobada." : "Fuente LCL importada y preaprobada.",
                 false,
                 0m));
         }
 
-        AddLine(1, "Flete internacional LCL", "Freight", "PerChargeableCbm", freight);
+        AddLine(
+            1,
+            isAir ? "Flete internacional aéreo" : "Flete internacional LCL",
+            "Freight",
+            isAir ? "PerKg" : "PerChargeableCbm",
+            freight);
         AddLine(2, "Cargos de origen", "OriginCharge", "PerShipment", Math.Max(0m, rate.OriginCharges ?? 0m));
         AddLine(3, "Cargos de destino", "DestinationCharge", "PerShipment", Math.Max(0m, rate.DestinationCharges ?? 0m));
         AddLine(4, "Recargos", "Other", "PerShipment", Math.Max(0m, rate.Surcharges ?? 0m));
@@ -356,10 +378,10 @@ public static class LclRateSourceEndpoints
                 rate.Id,
                 SyntheticLineId(rate.Id, 5),
                 null,
-                "Flete internacional LCL",
+                isAir ? "Flete internacional aéreo" : "Flete internacional LCL",
                 "Freight",
                 "Fixed",
-                "PerChargeableCbm",
+                isAir ? "PerKg" : "PerChargeableCbm",
                 rate.CurrencyId,
                 rate.CurrencyName,
                 rate.CurrencyCode,
