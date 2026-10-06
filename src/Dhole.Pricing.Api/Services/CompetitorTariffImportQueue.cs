@@ -395,16 +395,84 @@ public sealed class CompetitorTariffImportProcessor(
             fallback,
         };
 
-        var iso = candidates
-            .Select(value => value?.Trim())
-            .FirstOrDefault(value =>
-                !string.IsNullOrWhiteSpace(value)
-                && value.Length == 3
-                && value.All(char.IsLetter)
-            );
+        foreach (var candidate in candidates)
+        {
+            var value = candidate?.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
 
-        if (!string.IsNullOrWhiteSpace(iso))
-            return iso.ToUpperInvariant();
+            if (
+                value.Contains('
+    private static decimal ResolveExtractionConfidence(string? status) =>
+        status?.Trim().ToLowerInvariant() switch
+        {
+            "valid" or "approved" => 1m,
+            "warning" or "review" or "pending" => 0.85m,
+            _ => 0.65m,
+        };
+
+    private static decimal? SumRawComponents(DataExtractionFclPricingRow row)
+    {
+        var values = new[]
+        {
+            row.OceanFreight,
+            row.OriginCharges,
+            row.DestinationCharges,
+            row.Surcharges,
+        };
+
+        return values.Any(x => x.HasValue)
+            ? values.Where(x => x.HasValue).Sum(x => x!.Value)
+            : null;
+    }
+
+    private static DateTime NormalizeUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+        };
+}
+)
+                || value.Equals("USD", StringComparison.OrdinalIgnoreCase)
+                || value.Contains("DOLAR", StringComparison.OrdinalIgnoreCase)
+                || value.Contains("DÓLAR", StringComparison.OrdinalIgnoreCase)
+            )
+            {
+                return "USD";
+            }
+
+            if (
+                value.Contains('₡')
+                || value.Equals("CRC", StringComparison.OrdinalIgnoreCase)
+                || value.Contains("COLON", StringComparison.OrdinalIgnoreCase)
+                || value.Contains("COLÓN", StringComparison.OrdinalIgnoreCase)
+            )
+            {
+                return "CRC";
+            }
+
+            if (
+                value.Contains('€')
+                || value.Equals("EUR", StringComparison.OrdinalIgnoreCase)
+                || value.Contains("EURO", StringComparison.OrdinalIgnoreCase)
+            )
+            {
+                return "EUR";
+            }
+
+            if (
+                value.Contains('£')
+                || value.Equals("GBP", StringComparison.OrdinalIgnoreCase)
+            )
+            {
+                return "GBP";
+            }
+
+            if (value.Length == 3 && value.All(char.IsLetter))
+                return value.ToUpperInvariant();
+        }
 
         return string.IsNullOrWhiteSpace(fallback)
             ? null
