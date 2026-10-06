@@ -76,6 +76,16 @@ public sealed class GetCostsForSelectQueryHandler(
             cancellationToken
         );
 
+        // A shipment-mode-only lookup is also a real filter. Historically ShipmentMode
+        // was evaluated only when ApplicableToContext=true, so /costs/select?shipmentMode=AirConsol
+        // returned every active cost and forced the browser to recover the intended set.
+        if (!query.ApplicableToContext && query.ShipmentMode.HasValue)
+        {
+            items = items
+                .Where(item => ShipmentModeMatches(item, query, requireConfiguredContext: false))
+                .ToArray();
+        }
+
         var selections = await routePorts.GetManyAsync(
             items.Select(item => item.Id).ToArray(),
             cancellationToken
@@ -163,22 +173,8 @@ public sealed class GetCostsForSelectQueryHandler(
                 return false;
         }
 
-        var configuredShipmentModes = ConfiguredShipmentModes(cost);
-        if (configuredShipmentModes.Count > 0)
-        {
-            if (!query.ShipmentMode.HasValue)
-            {
-                if (requireConfiguredContext)
-                    return false;
-            }
-            else if (!configuredShipmentModes.Contains(
-                query.ShipmentMode.Value.ToString(),
-                StringComparer.OrdinalIgnoreCase
-            ))
-            {
-                return false;
-            }
-        }
+        if (!ShipmentModeMatches(cost, query, requireConfiguredContext))
+            return false;
 
         if (cost.PortId.HasValue && !LegacyPortMatches(cost, query))
             return false;
@@ -356,6 +352,27 @@ public sealed class GetCostsForSelectQueryHandler(
             })
             .OrderBy(item => item.Name)
             .ToArray();
+    }
+
+    private static bool ShipmentModeMatches(
+        CostSelectDto cost,
+        GetCostsForSelectQuery query,
+        bool requireConfiguredContext
+    )
+    {
+        var configuredShipmentModes = ConfiguredShipmentModes(cost);
+
+        // No configured mode means wildcard: the cost is intentionally reusable.
+        if (configuredShipmentModes.Count == 0)
+            return true;
+
+        if (!query.ShipmentMode.HasValue)
+            return !requireConfiguredContext;
+
+        return configuredShipmentModes.Contains(
+            query.ShipmentMode.Value.ToString(),
+            StringComparer.OrdinalIgnoreCase
+        );
     }
 
     private static IReadOnlyCollection<string> ConfiguredShipmentModes(CostSelectDto cost)
