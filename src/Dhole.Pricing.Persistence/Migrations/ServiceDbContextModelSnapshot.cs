@@ -175,6 +175,39 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("uuid[]")
                         .HasColumnName("CarrierIds");
 
+                    b.Property<string>("CompetitorCompanyName")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("CompetitorCompanyName");
+
+                    b.Property<Guid?>("ExtractionExecutionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ExtractionExecutionId");
+
+                    b.Property<string>("ImportStatus")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("ImportStatus");
+
+                    b.Property<DateTime>("ImportedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ImportedAtUtc");
+
+                    b.Property<Guid?>("IncotermId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("IncotermId");
+
+                    b.Property<int>("ObservationCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("ObservationCount");
+
+                    b.Property<string>("OriginalFileName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("OriginalFileName");
+
                     b.Property<Guid[]>("PodIds")
                         .IsRequired()
                         .HasColumnType("uuid[]")
@@ -189,6 +222,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("uuid[]")
                         .HasColumnName("PolIds");
+
+                    b.Property<int>("ReviewCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("ReviewCount");
 
                     b.Property<string>("ShipmentMode")
                         .IsRequired()
@@ -210,6 +247,12 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("PK_CompetitorTariffs");
+
+                    b.HasIndex("CompetitorCompanyName")
+                        .HasDatabaseName("IX_CompetitorTariffs_CompetitorCompanyName");
+
+                    b.HasIndex("ImportStatus")
+                        .HasDatabaseName("IX_CompetitorTariffs_ImportStatus");
 
                     b.HasIndex("ShipmentMode")
                         .HasDatabaseName("IX_CompetitorTariffs_ShipmentMode");
