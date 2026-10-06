@@ -402,59 +402,25 @@ public sealed class CompetitorTariffImportProcessor(
                 continue;
 
             if (
-                value.Contains('
-    private static decimal ResolveExtractionConfidence(string? status) =>
-        status?.Trim().ToLowerInvariant() switch
-        {
-            "valid" or "approved" => 1m,
-            "warning" or "review" or "pending" => 0.85m,
-            _ => 0.65m,
-        };
-
-    private static decimal? SumRawComponents(DataExtractionFclPricingRow row)
-    {
-        var values = new[]
-        {
-            row.OceanFreight,
-            row.OriginCharges,
-            row.DestinationCharges,
-            row.Surcharges,
-        };
-
-        return values.Any(x => x.HasValue)
-            ? values.Where(x => x.HasValue).Sum(x => x!.Value)
-            : null;
-    }
-
-    private static DateTime NormalizeUtc(DateTime value) =>
-        value.Kind switch
-        {
-            DateTimeKind.Utc => value,
-            DateTimeKind.Local => value.ToUniversalTime(),
-            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
-        };
-}
-)
+                value.Contains((char)36)
                 || value.Equals("USD", StringComparison.OrdinalIgnoreCase)
                 || value.Contains("DOLAR", StringComparison.OrdinalIgnoreCase)
-                || value.Contains("DÓLAR", StringComparison.OrdinalIgnoreCase)
             )
             {
                 return "USD";
             }
 
             if (
-                value.Contains('₡')
+                value.Contains((char)8353)
                 || value.Equals("CRC", StringComparison.OrdinalIgnoreCase)
                 || value.Contains("COLON", StringComparison.OrdinalIgnoreCase)
-                || value.Contains("COLÓN", StringComparison.OrdinalIgnoreCase)
             )
             {
                 return "CRC";
             }
 
             if (
-                value.Contains('€')
+                value.Contains((char)8364)
                 || value.Equals("EUR", StringComparison.OrdinalIgnoreCase)
                 || value.Contains("EURO", StringComparison.OrdinalIgnoreCase)
             )
@@ -463,7 +429,7 @@ public sealed class CompetitorTariffImportProcessor(
             }
 
             if (
-                value.Contains('£')
+                value.Contains((char)163)
                 || value.Equals("GBP", StringComparison.OrdinalIgnoreCase)
             )
             {
