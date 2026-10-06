@@ -381,6 +381,7 @@ public sealed class CompetitorTariffImportProcessor(
             _ => MarketRateBasis.Unknown,
         };
 
+    // Competitor PDFs may express business currency as ISO code, symbol, or localized label.
     private static string? ResolveBusinessCurrency(
         DataExtractionCatalogReference? reference,
         string? fallback
