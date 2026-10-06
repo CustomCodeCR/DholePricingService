@@ -32,6 +32,11 @@ public static class CompetitorTariffEndpoints
         group.MapPost("/import", ImportAsync).RequireScope(PricingConstants.Scopes.RateCreate);
         group.MapGet("/{competitorTariffId:guid}/observations", GetObservationsAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapPut(
+                "/{competitorTariffId:guid}/observations/{observationId:guid}",
+                ReviewObservationAsync
+            )
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapGet("/{competitorTariffId:guid}", GetByIdAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapPost("/", CreateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateCreate);
         group.MapPut("/{competitorTariffId:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.RateUpdate);
@@ -285,6 +290,166 @@ public static class CompetitorTariffEndpoints
             .ToListAsync(cancellationToken);
 
         return EndpointResults.Ok(rows.Select(MapObservation).ToArray());
+    }
+
+    private static async Task<IResult> ReviewObservationAsync(
+        Guid competitorTariffId,
+        Guid observationId,
+        ReviewCompetitorRateObservationRequest request,
+        ServiceDbContext dbContext,
+        IMarketRateNormalizationService normalizationService,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        if (request.IncotermId == Guid.Empty || request.PolId == Guid.Empty)
+        {
+            return EndpointResults.BadRequest(
+                "CompetitorTariff.InvalidReview",
+                "Incoterm y POL son obligatorios para revisar la observación.",
+                httpContext
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Currency) || request.OriginalAmount < 0m)
+        {
+            return EndpointResults.BadRequest(
+                "CompetitorTariff.InvalidReview",
+                "Moneda y monto son obligatorios para revisar la observación.",
+                httpContext
+            );
+        }
+
+        var validFrom = NormalizeUtc(request.ValidFrom);
+        var validTo = NormalizeUtc(request.ValidTo);
+        if (validTo < validFrom)
+        {
+            return EndpointResults.BadRequest(
+                "CompetitorTariff.InvalidReview",
+                "La vigencia hasta no puede ser anterior a la vigencia desde.",
+                httpContext
+            );
+        }
+
+        var parent = await dbContext.CompetitorTariffs
+            .FirstOrDefaultAsync(x => x.Id == competitorTariffId, cancellationToken);
+        if (parent is null)
+            return Results.NotFound();
+
+        var observation = await dbContext.CompetitorRateObservations
+            .FirstOrDefaultAsync(
+                x => x.Id == observationId && x.CompetitorTariffId == competitorTariffId,
+                cancellationToken
+            );
+        if (observation is null)
+            return Results.NotFound();
+
+        var currency = request.Currency.Trim().ToUpperInvariant();
+
+        var normalized = await normalizationService.NormalizeAsync(
+            new MarketRateNormalizationRequest(
+                request.IncotermId,
+                null,
+                request.PolId,
+                null,
+                request.PoeId,
+                null,
+                request.PodId,
+                null,
+                request.CarrierId,
+                null,
+                request.ContainerTypeId,
+                null,
+                observation.Mode.ToString(),
+                observation.Mode,
+                currency,
+                Math.Max(1, observation.Quantity),
+                observation.RateBasis,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                request.OriginalAmount,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                validFrom
+            ),
+            cancellationToken
+        );
+
+        observation.ApplyManualReview(
+            currency,
+            request.OriginalAmount,
+            validFrom,
+            validTo
+        );
+
+        var normalizedAmount = normalized.NormalizedAllIn
+            ?? normalized.NormalizedOceanFreight;
+
+        observation.ApplyNormalization(
+            normalized.Incoterm.Id,
+            normalized.Incoterm.Code,
+            normalized.Route.Pol.Id,
+            normalized.Route.Pol.Name,
+            normalized.Route.Pol.Code,
+            normalized.Route.Poe.Id,
+            normalized.Route.Poe.Name,
+            normalized.Route.Poe.Code,
+            normalized.Route.Pod.Id,
+            normalized.Route.Pod.Name,
+            normalized.Route.Pod.Code,
+            normalized.Carrier.Id,
+            normalized.Carrier.Name,
+            normalized.Carrier.Code,
+            normalized.Equipment.Id,
+            normalized.Equipment.Code,
+            Math.Max(1, observation.Quantity),
+            normalized.NormalizedOceanFreight,
+            normalized.NormalizedAllIn,
+            normalized.Currency.NormalizedCurrency,
+            normalizedAmount,
+            normalized.Currency.RateToUsd,
+            normalized.Currency.ExchangeRateDate,
+            normalized.NormalizationConfidence
+        );
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var allObservations = await dbContext.CompetitorRateObservations
+            .Where(x => x.CompetitorTariffId == competitorTariffId)
+            .ToListAsync(cancellationToken);
+
+        var reviewCount = allObservations.Count(x => !IsUsableObservation(x));
+        var from = allObservations.Count > 0
+            ? allObservations.Min(x => x.ValidFrom)
+            : parent.ValidFrom;
+        var to = allObservations.Count > 0
+            ? allObservations.Max(x => x.ValidTo)
+            : parent.ValidTo;
+
+        parent.CompleteImport(
+            allObservations.Where(x => x.PolId.HasValue).Select(x => x.PolId!.Value).ToArray(),
+            allObservations.Where(x => x.PoeId.HasValue).Select(x => x.PoeId!.Value).ToArray(),
+            allObservations.Where(x => x.PodId.HasValue).Select(x => x.PodId!.Value).ToArray(),
+            allObservations.Where(x => x.CarrierId.HasValue).Select(x => x.CarrierId!.Value).ToArray(),
+            from,
+            to,
+            parent.ExtractionExecutionId,
+            allObservations.Count,
+            reviewCount,
+            reviewCount == 0 ? "Processed" : "ReviewRequired"
+        );
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        return EndpointResults.Ok(MapObservation(observation));
     }
 
     private static async Task<IResult> GetMatchingAsync(
