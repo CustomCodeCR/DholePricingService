@@ -215,13 +215,16 @@ public static class CompetitorTariffEndpoints
             );
         }
 
-        if (await dbContext.CompetitorTariffs.AnyAsync(x => x.Id == id, cancellationToken))
+        var existing = await dbContext.CompetitorTariffs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (existing is not null)
         {
-            return EndpointResults.BadRequest(
-                "CompetitorTariff.AlreadyExists",
-                "Ya existe un tarifario de competencia con ese identificador.",
-                httpContext
-            );
+            // The client-generated id acts as an idempotency key. If the original
+            // response was lost during a transient gateway/origin restart, a retry
+            // must return the already-created import instead of creating a duplicate.
+            return EndpointResults.Ok(Map(existing));
         }
 
         await using var memory = new MemoryStream();
