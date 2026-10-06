@@ -175,7 +175,7 @@ public sealed class CompetitorTariffImportProcessor(
                     continue;
                 }
 
-                var currency = row.CurrencyReference?.Code ?? row.Currency;
+                var currency = ResolveBusinessCurrency(row.CurrencyReference, row.Currency);
                 if (string.IsNullOrWhiteSpace(currency))
                 {
                     reviewCount++;
@@ -380,6 +380,36 @@ public sealed class CompetitorTariffImportProcessor(
             ShipmentMode.Air or ShipmentMode.AirConsol => MarketRateBasis.PerKg,
             _ => MarketRateBasis.Unknown,
         };
+
+    private static string? ResolveBusinessCurrency(
+        DataExtractionCatalogReference? reference,
+        string? fallback
+    )
+    {
+        var candidates = new[]
+        {
+            reference?.RawValue,
+            reference?.Name,
+            reference?.Slug,
+            reference?.Code,
+            fallback,
+        };
+
+        var iso = candidates
+            .Select(value => value?.Trim())
+            .FirstOrDefault(value =>
+                !string.IsNullOrWhiteSpace(value)
+                && value.Length == 3
+                && value.All(char.IsLetter)
+            );
+
+        if (!string.IsNullOrWhiteSpace(iso))
+            return iso.ToUpperInvariant();
+
+        return string.IsNullOrWhiteSpace(fallback)
+            ? null
+            : fallback.Trim().ToUpperInvariant();
+    }
 
     private static decimal ResolveExtractionConfidence(string? status) =>
         status?.Trim().ToLowerInvariant() switch
