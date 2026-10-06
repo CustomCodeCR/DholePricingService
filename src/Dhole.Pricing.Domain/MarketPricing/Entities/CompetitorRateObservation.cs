@@ -175,6 +175,32 @@ public sealed class CompetitorRateObservation : Entity<Guid>
         importedAtUtc ?? DateTime.UtcNow
     );
 
+    public void ApplyManualReview(
+        string currency,
+        decimal originalAmount,
+        DateTime validFrom,
+        DateTime validTo
+    )
+    {
+        Currency = RequireText(
+            currency,
+            "La moneda revisada es obligatoria."
+        ).ToUpperInvariant();
+        OriginalAmount = EnsureNonNegative(originalAmount, nameof(originalAmount));
+
+        ValidFrom = NormalizeUtc(validFrom);
+        ValidTo = NormalizeUtc(validTo);
+        if (ValidTo < ValidFrom)
+        {
+            throw new InvalidOperationException(
+                "La vigencia hasta no puede ser anterior a la vigencia desde."
+            );
+        }
+
+        // A human explicitly validated this observation.
+        ExtractionConfidence = 1m;
+    }
+
     public void ApplyNormalization(
         Guid? incotermId,
         string? incotermCode,
