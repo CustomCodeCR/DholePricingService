@@ -182,7 +182,7 @@ public sealed class AgentOceanFreightImportService(
                     container,
                     currency,
                     payload.Commodity,
-                    null,
+                    BuildAgentSpaceComment(offer.CargoCutoff, offer.Etd),
                     offer.OceanFreight.Amount,
                     originCharges,
                     destinationCharges,
@@ -310,6 +310,29 @@ public sealed class AgentOceanFreightImportService(
         return fuzzy is not null
             ? ToSnapshot(fuzzy)
             : CreateFallbackSnapshot(group, fallbackName, fallbackCode);
+    }
+
+    private static string? BuildAgentSpaceComment(
+        DateTimeOffset? cargoCutoff,
+        DateTimeOffset? etd)
+    {
+        var comments = new List<string>(2);
+
+        if (cargoCutoff.HasValue)
+        {
+            comments.Add(
+                $"CCC: {cargoCutoff.Value.ToUniversalTime():yyyy-MM-dd HH:mm} UTC");
+        }
+
+        if (etd.HasValue)
+        {
+            comments.Add(
+                $"ETD: {etd.Value.ToUniversalTime():yyyy-MM-dd HH:mm} UTC");
+        }
+
+        return comments.Count == 0
+            ? null
+            : string.Join(Environment.NewLine, comments);
     }
 
     private static decimal SumCharges(
