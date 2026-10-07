@@ -23,8 +23,23 @@ jobs:
       - name: Load Dhole deployment infrastructure
         run: |
           set -euo pipefail
-          rm -rf .dhole-system
-          git clone --depth 1 --branch master https://github.com/CustomCodeCR/DholeSystem.git .dhole-system
+          clone_ok=0
+          for attempt in 1 2 3 4 5; do
+            rm -rf .dhole-system
+            if git clone --depth 1 --branch master https://github.com/CustomCodeCR/DholeSystem.git .dhole-system; then
+              clone_ok=1
+              break
+            fi
+
+            echo "::warning::No se pudo clonar DholeSystem (intento $attempt/5). Verificando DNS antes de reintentar..."
+            getent ahosts github.com || true
+            sleep $((attempt * 5))
+          done
+
+          if [ "$clone_ok" -ne 1 ]; then
+            echo "::error::No fue posible resolver/conectar con github.com después de 5 intentos."
+            exit 1
+          fi
           mkdir -p "$RUNNER_TEMP/dhole-env"
           bash .dhole-system/deploy/prepare-environments.sh /opt/dhole/.env "$RUNNER_TEMP/dhole-env"
           echo "DHOLE_ENV_FILE=$RUNNER_TEMP/dhole-env/.env.production" >> "$GITHUB_ENV"
