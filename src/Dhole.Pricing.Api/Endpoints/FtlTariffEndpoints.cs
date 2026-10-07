@@ -17,9 +17,9 @@ public static class FtlTariffEndpoints
             .WithTags("Land tariffs")
             .RequireAuthorization();
 
-        group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.CostView);
-        group.MapGet("/resolve", ResolveAsync).RequireScope(PricingConstants.Scopes.CostSelect);
-        group.MapPost("/", CreateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.CostUpdate);
+        group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.WorkspaceAccess);
+        group.MapGet("/resolve", ResolveAsync).RequireScope(PricingConstants.Scopes.WorkspaceAccess);
+        group.MapPost("/", CreateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.CostCreate);
         group.MapPut("/{id:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.CostUpdate);
         group.MapPost("/import", ImportAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.CostUpdate);
         group.MapPost("/seed-defaults", SeedDefaultsAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.CostUpdate);
