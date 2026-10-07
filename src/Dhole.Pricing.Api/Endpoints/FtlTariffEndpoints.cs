@@ -1248,14 +1248,14 @@ public static class FtlTariffEndpoints
         var isNvocc = string.Equals(commercialProfile, "Nvocc", StringComparison.OrdinalIgnoreCase);
         return new LtlChargeItemDto[]
         {
-            // Cargos base del tarifario Centroamérica.
+            // Cargos base del tarifario LTL: se aplican automáticamente.
             new("dua", "DUA Export", "CustomsCharge", "PerDocument", "origin_charges", 50m, 60m, true),
             new("duca-t", "DUCA-T", "Documentation", "PerDocument", "international_freight", 30m, isNvocc ? 30m : 35m, true),
             new("stuffing", "Stuffing", "OriginCharge", "PerChargeableCbm", "origin_charges", 550m / 60m, 10m, true),
             new("carta-porte", "Carta Porte", "Documentation", "PerDocument", "international_freight", 0m, isNvocc ? 35m : 45m, true),
             new("manejos", "Manejos", "AgentCharge", "PerShipment", "origin_charges", 0m, isNvocc ? 25m : 45m, true),
 
-            // Cargos/recargos que se muestran siempre como opciones y solo se aplican cuando corresponda.
+            // Opcionales LTL: nunca traen costo/venta predefinidos.
             new("seguro", "Seguro", "Insurance", "PerShipment", "origin_charges", null, null, false),
             new("recolecta", "Recolecta", "OriginCharge", "PerShipment", "pickup_origin", null, null, false),
             new("reembarque", "Reembarque", "Other", "PerShipment", "origin_charges", null, null, false),
@@ -1263,14 +1263,11 @@ public static class FtlTariffEndpoints
             new("tramite-aduanas-destino", "Trámite Aduanas Destino", "CustomsCharge", "PerShipment", "destination_charges", null, null, false),
             new("entrega-destino", "Entrega en Destino", "InlandTransport", "PerShipment", "delivery_destination", null, null, false),
             new("otros", "Otros", "Other", "PerShipment", "destination_charges", null, null, false),
-            new("duca-f", "DUCA-F", "Documentation", "PerDocument", "international_freight", null, isNvocc ? 30m : 35m, false),
-            new("impuesto-exportacion", "Impuesto Exportación", "CustomsCharge", "PerDocument", "origin_charges", null, 28m, false),
-            new("recargo-imo", "Recargo IMO", "Other", "PerShipment", "origin_charges", null, 150m, false),
-            new("recargo-estadia", "Recargo por Estadía", "Other", "PerShipment", "origin_charges", null, 100m, false),
-            new("recargo-sobredimension", "Recargo por Sobre Dimensión", "Other", "PerShipment", "origin_charges", null, 100m, false),
-            new("menaje-casa", "Recargo por Menaje de Casa", "Other", "PerShipment", "origin_charges", null, 90m, false),
-            new("bodegaje-exportacion", "Bodegaje de Exportación", "OriginCharge", "PerPallet", "origin_charges", null, 5m, false),
-            new("recepcion-destino", "Manejos en Destino", "DestinationCharge", "PerDocument", "destination_charges", 50m, 70m, false),
+            new("duca-f", "DUCA-F", "Documentation", "PerDocument", "international_freight", null, null, false),
+            new("impuesto-exportacion", "Impuesto Exportación", "CustomsCharge", "PerShipment", "origin_charges", null, null, false),
+            new("recepcion-destino", "Recepción en Destino", "DestinationCharge", "PerShipment", "destination_charges", null, null, false),
+            new("carga-peligrosa", "Carga Peligrosa", "Other", "PerShipment", "origin_charges", null, null, false),
+            new("sobrepeso", "Sobrepeso", "Other", "PerShipment", "origin_charges", null, null, false),
         };
     }
 
