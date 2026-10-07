@@ -18,6 +18,8 @@ internal static class RateCargoProfileFactory
 {
     internal const decimal ForcedNonStackableHeightCm = 177.8m;
     internal const decimal NonStackableBillableHeightCm = 266m;
+    internal const decimal LandConsolidatedMaxHeightCm = 270m;
+    internal const decimal MaritimeConsolidatedMaxHeightCm = 269m;
 
     public static RateCargoProfile Create(
         ShipmentMode shipmentMode,
@@ -26,7 +28,8 @@ internal static class RateCargoProfileFactory
         int fallbackPackages,
         int fallbackPallets,
         decimal fallbackWeightKg,
-        decimal fallbackVolumeCbm
+        decimal fallbackVolumeCbm,
+        string? equipmentCode = null
     )
     {
         var effectiveFactor = kgPerCbm > 0m
@@ -47,6 +50,8 @@ internal static class RateCargoProfileFactory
             );
         }
 
+        var maximumHeightCm = ResolveMaximumHeightCm(shipmentMode, equipmentCode);
+
         var snapshots = new List<RateCargoLineDto>(lines.Count);
         var packages = 0;
         var pallets = 0;
@@ -66,6 +71,18 @@ internal static class RateCargoProfileFactory
             )
             {
                 throw new InvalidOperationException("Los valores de las líneas de carga no pueden ser negativos.");
+            }
+
+            if (maximumHeightCm.HasValue && line.HeightCm > maximumHeightCm.Value)
+            {
+                var context = shipmentMode == ShipmentMode.Ltl
+                    ? "consolidado terrestre"
+                    : string.IsNullOrWhiteSpace(equipmentCode)
+                        ? "consolidado marítimo"
+                        : $"contenedor {equipmentCode.Trim()}";
+                throw new InvalidOperationException(
+                    $"La altura de la carga no puede superar {maximumHeightCm.Value:0.##} cm para {context}."
+                );
             }
 
             var units = Math.Max(line.Packages, 1);
@@ -113,6 +130,36 @@ internal static class RateCargoProfileFactory
             effectiveFactor,
             JsonSerializer.Serialize(snapshots)
         );
+    }
+
+    private static decimal? ResolveMaximumHeightCm(ShipmentMode shipmentMode, string? equipmentCode)
+    {
+        if (shipmentMode == ShipmentMode.Ltl)
+            return LandConsolidatedMaxHeightCm;
+
+        if (shipmentMode != ShipmentMode.Lcl)
+            return null;
+
+        var normalizedEquipment = (equipmentCode ?? string.Empty)
+            .Trim()
+            .ToUpperInvariant()
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal)
+            .Replace(" ", string.Empty, StringComparison.Ordinal);
+
+        // Aéreo se persiste históricamente como LCL en algunos flujos. No se le aplica
+        // el límite físico del consolidado marítimo.
+        if (
+            normalizedEquipment.Contains("AIR", StringComparison.Ordinal)
+            || normalizedEquipment.Contains("ULD", StringComparison.Ordinal)
+            || normalizedEquipment.Contains("PALLET", StringComparison.Ordinal)
+            || normalizedEquipment.Contains("LOOSE", StringComparison.Ordinal)
+        )
+        {
+            return null;
+        }
+
+        return MaritimeConsolidatedMaxHeightCm;
     }
 
     public static IReadOnlyCollection<RateCargoLineDto> Deserialize(string? json)

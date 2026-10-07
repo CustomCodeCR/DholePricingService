@@ -625,7 +625,8 @@ public sealed class UpdateRateCommandHandler(
                 command.TotalPackages,
                 command.TotalPallets,
                 command.TotalWeightKg,
-                command.TotalVolumeCbm
+                command.TotalVolumeCbm,
+                command.ContainerTypeCode
             );
             rate.ConfigureShipment(
                 command.ShipmentMode,

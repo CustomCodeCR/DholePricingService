@@ -59,6 +59,51 @@ public sealed class RateCargoProfileFactoryTests
     }
 
     [TestMethod]
+    public void Ltl_HeightAbove270Cm_IsRejected()
+    {
+        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            RateCargoProfileFactory.Create(
+                ShipmentMode.Ltl,
+                330m,
+                [new RateCargoLineCommandItem("Carga terrestre alta", 1, 1, 0m, 100m, 100m, 270.01m, false)],
+                0, 0, 0m, 0m,
+                "53"
+            ));
+
+        StringAssert.Contains(exception.Message, "270 cm");
+    }
+
+    [TestMethod]
+    public void MaritimeLcl_40HcHeightAbove269Cm_IsRejected()
+    {
+        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+            RateCargoProfileFactory.Create(
+                ShipmentMode.Lcl,
+                500m,
+                [new RateCargoLineCommandItem("Carga marítima alta", 1, 1, 0m, 100m, 100m, 269.01m, false)],
+                0, 0, 0m, 0m,
+                "40HC"
+            ));
+
+        StringAssert.Contains(exception.Message, "269 cm");
+        StringAssert.Contains(exception.Message, "40HC");
+    }
+
+    [TestMethod]
+    public void AirLikeLclEquipment_DoesNotUseMaritimeHeightLimit()
+    {
+        var profile = RateCargoProfileFactory.Create(
+            ShipmentMode.Lcl,
+            500m,
+            [new RateCargoLineCommandItem("ULD alto", 1, 1, 0m, 100m, 100m, 300m, false)],
+            0, 0, 0m, 0m,
+            "ULD"
+        );
+
+        Assert.AreEqual(3m, profile.TotalVolumeCbm);
+    }
+
+    [TestMethod]
     public void Ltl_DefaultWeightFactor_Is330KgPerCbm()
     {
         var profile = RateCargoProfileFactory.Create(
