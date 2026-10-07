@@ -28,9 +28,13 @@ public static class CostEndpoints
 
         group.MapGet("/", GetCostsAsync).RequireScope(PricingConstants.Scopes.CostView);
 
+        // Seleccionar costos forma parte del flujo normal de crear/cotizar una tarifa.
+        // Mantener la administración del catálogo de costos protegida por sus scopes
+        // específicos, pero permitir que cualquier usuario con acceso al workspace
+        // de Pricing consuma los costos aplicables en el wizard.
         group
             .MapGet("/select", GetCostsForSelectAsync)
-            .RequireScope(PricingConstants.Scopes.CostSelect);
+            .RequireScope(PricingConstants.Scopes.WorkspaceAccess);
 
         group
             .MapGet("/export.xlsx", ExportActiveCostsAsync)
