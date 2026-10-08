@@ -1,3 +1,5 @@
+using System.Data;
+using System.Data.Common;
 using CustomCodeFramework.Core.Pagination;
 using CustomCodeFramework.Postgres.EntityFramework.Repositories;
 using Dhole.Pricing.Application.Abstractions.Repositories;
@@ -123,6 +125,13 @@ public sealed class CostRepository(ServiceDbContext dbContext)
             isActive: null
         );
 
+        var selectionMatches = await GetMultiSelectionFilterMatchesAsync(
+            carrierIds,
+            agentIds,
+            portIds,
+            cancellationToken
+        );
+
         query = ApplyMultiFilters(
             query,
             costTypes,
@@ -132,7 +141,10 @@ public sealed class CostRepository(ServiceDbContext dbContext)
             portIds,
             portRoles,
             currencyIds,
-            activeStates
+            activeStates,
+            selectionMatches.CarrierCostIds,
+            selectionMatches.AgentCostIds,
+            selectionMatches.PortCostIds
         );
 
         var total = await query.CountAsync(cancellationToken);
@@ -203,6 +215,7 @@ public sealed class CostRepository(ServiceDbContext dbContext)
             .ToListAsync(cancellationToken);
 
         items = await AttachShipmentModesAsync(items, cancellationToken);
+        items = await AttachMultiSelectionsAsync(items, cancellationToken);
 
         return PagedResult<CostDto>.Create(items, page.PageNumber, page.PageSize, total);
     }
@@ -462,7 +475,10 @@ public sealed class CostRepository(ServiceDbContext dbContext)
         IReadOnlyCollection<Guid>? portIds,
         IReadOnlyCollection<CostPortRole>? portRoles,
         IReadOnlyCollection<Guid>? currencyIds,
-        IReadOnlyCollection<bool>? activeStates
+        IReadOnlyCollection<bool>? activeStates,
+        IReadOnlyCollection<Guid>? selectedCarrierCostIds,
+        IReadOnlyCollection<Guid>? selectedAgentCostIds,
+        IReadOnlyCollection<Guid>? selectedPortCostIds
     )
     {
         if (costTypes is { Count: > 0 })
@@ -480,23 +496,33 @@ public sealed class CostRepository(ServiceDbContext dbContext)
         if (carrierIds is { Count: > 0 })
         {
             var values = carrierIds.Distinct().ToArray();
-            query = query.Where(x => x.CarrierId.HasValue && values.Contains(x.CarrierId.Value));
+            var selectedCostIds = selectedCarrierCostIds?.Distinct().ToArray() ?? [];
+            query = query.Where(x =>
+                (x.CarrierId.HasValue && values.Contains(x.CarrierId.Value))
+                || selectedCostIds.Contains(x.Id)
+            );
         }
 
         if (agentIds is { Count: > 0 })
         {
             var values = agentIds.Distinct().ToArray();
-            query = query.Where(x => x.AgentId.HasValue && values.Contains(x.AgentId.Value));
+            var selectedCostIds = selectedAgentCostIds?.Distinct().ToArray() ?? [];
+            query = query.Where(x =>
+                (x.AgentId.HasValue && values.Contains(x.AgentId.Value))
+                || selectedCostIds.Contains(x.Id)
+            );
         }
 
         if (portIds is { Count: > 0 })
         {
             var values = portIds.Distinct().ToArray();
+            var selectedCostIds = selectedPortCostIds?.Distinct().ToArray() ?? [];
             query = query.Where(x =>
                 (x.PortId.HasValue && values.Contains(x.PortId.Value))
                 || (x.PolId.HasValue && values.Contains(x.PolId.Value))
                 || (x.PoeId.HasValue && values.Contains(x.PoeId.Value))
                 || (x.PodId.HasValue && values.Contains(x.PodId.Value))
+                || selectedCostIds.Contains(x.Id)
             );
         }
 
@@ -533,5 +559,320 @@ public sealed class CostRepository(ServiceDbContext dbContext)
         }
 
         return query;
+    }
+
+    private async Task<MultiSelectionFilterMatches> GetMultiSelectionFilterMatchesAsync(
+        IReadOnlyCollection<Guid>? carrierIds,
+        IReadOnlyCollection<Guid>? agentIds,
+        IReadOnlyCollection<Guid>? portIds,
+        CancellationToken cancellationToken
+    )
+    {
+        var normalizedCarrierIds = NormalizeIds(carrierIds);
+        var normalizedAgentIds = NormalizeIds(agentIds);
+        var normalizedPortIds = NormalizeIds(portIds);
+
+        if (
+            normalizedCarrierIds.Length == 0
+            && normalizedAgentIds.Length == 0
+            && normalizedPortIds.Length == 0
+        )
+        {
+            return MultiSelectionFilterMatches.Empty;
+        }
+
+        var connection = dbContext.Database.GetDbConnection();
+        var closeWhenDone = connection.State != ConnectionState.Open;
+        if (closeWhenDone)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            var carrierCostIds = await ReadPartySelectionCostIdsAsync(
+                connection,
+                "Carrier",
+                normalizedCarrierIds,
+                cancellationToken
+            );
+            var agentCostIds = await ReadPartySelectionCostIdsAsync(
+                connection,
+                "Agent",
+                normalizedAgentIds,
+                cancellationToken
+            );
+            var portCostIds = await ReadPortSelectionCostIdsAsync(
+                connection,
+                normalizedPortIds,
+                cancellationToken
+            );
+
+            return new MultiSelectionFilterMatches(
+                carrierCostIds,
+                agentCostIds,
+                portCostIds
+            );
+        }
+        finally
+        {
+            if (closeWhenDone)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
+    private async Task<List<CostDto>> AttachMultiSelectionsAsync(
+        List<CostDto> items,
+        CancellationToken cancellationToken
+    )
+    {
+        if (items.Count == 0)
+            return items;
+
+        var ids = items.Select(item => item.Id).Distinct().ToArray();
+        var connection = dbContext.Database.GetDbConnection();
+        var closeWhenDone = connection.State != ConnectionState.Open;
+        if (closeWhenDone)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            var parameterNames = AddGuidParameters(command, "cost", ids);
+            var inClause = string.Join(", ", parameterNames);
+
+            command.CommandText = $"""
+                SELECT cost_id, role, port_id AS selection_id
+                FROM pricing."CostRoutePortSelections"
+                WHERE cost_id IN ({inClause})
+
+                UNION ALL
+
+                SELECT cost_id, party_type AS role, party_id AS selection_id
+                FROM pricing."CostPartySelections"
+                WHERE cost_id IN ({inClause})
+                """;
+
+            var selections = new Dictionary<Guid, SelectionAccumulator>();
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                var costId = reader.GetGuid(0);
+                var role = reader.GetString(1);
+                var selectionId = reader.GetGuid(2);
+
+                if (!selections.TryGetValue(costId, out var selection))
+                {
+                    selection = new SelectionAccumulator();
+                    selections[costId] = selection;
+                }
+
+                switch (role.ToLowerInvariant())
+                {
+                    case "pol":
+                        selection.PolIds.Add(selectionId);
+                        break;
+                    case "poe":
+                        selection.PoeIds.Add(selectionId);
+                        break;
+                    case "pod":
+                        selection.PodIds.Add(selectionId);
+                        break;
+                    case "carrier":
+                        selection.CarrierIds.Add(selectionId);
+                        break;
+                    case "agent":
+                        selection.AgentIds.Add(selectionId);
+                        break;
+                }
+            }
+
+            return items
+                .Select(item =>
+                {
+                    selections.TryGetValue(item.Id, out var selection);
+
+                    return item with
+                    {
+                        Pols = BuildRelations(
+                            selection?.PolIds,
+                            item.PolId,
+                            item.PolName,
+                            item.PolCode
+                        ),
+                        Poes = BuildRelations(
+                            selection?.PoeIds,
+                            item.PoeId,
+                            item.PoeName,
+                            item.PoeCode
+                        ),
+                        Pods = BuildRelations(
+                            selection?.PodIds,
+                            item.PodId,
+                            item.PodName,
+                            item.PodCode
+                        ),
+                        Carriers = BuildRelations(
+                            selection?.CarrierIds,
+                            item.CarrierId,
+                            item.CarrierName,
+                            item.CarrierCode
+                        ),
+                        Agents = BuildRelations(
+                            selection?.AgentIds,
+                            item.AgentId,
+                            item.AgentName,
+                            item.AgentCode
+                        ),
+                    };
+                })
+                .ToList();
+        }
+        finally
+        {
+            if (closeWhenDone)
+            {
+                await connection.CloseAsync();
+            }
+        }
+    }
+
+    private static IReadOnlyCollection<CostRelationDto> BuildRelations(
+        IReadOnlyCollection<Guid>? selectedIds,
+        Guid? legacyId,
+        string? legacyName,
+        string? legacyCode
+    )
+    {
+        var ids = selectedIds is { Count: > 0 }
+            ? selectedIds.Where(id => id != Guid.Empty).Distinct().ToArray()
+            : legacyId.HasValue && legacyId.Value != Guid.Empty
+                ? [legacyId.Value]
+                : [];
+
+        return ids
+            .Select(id =>
+                legacyId == id
+                    ? new CostRelationDto(
+                        id,
+                        string.IsNullOrWhiteSpace(legacyName) ? id.ToString() : legacyName.Trim(),
+                        legacyCode?.Trim() ?? string.Empty
+                    )
+                    : new CostRelationDto(id, id.ToString(), string.Empty)
+            )
+            .ToArray();
+    }
+
+    private static async Task<Guid[]> ReadPartySelectionCostIdsAsync(
+        DbConnection connection,
+        string partyType,
+        IReadOnlyCollection<Guid> partyIds,
+        CancellationToken cancellationToken
+    )
+    {
+        if (partyIds.Count == 0)
+            return [];
+
+        await using var command = connection.CreateCommand();
+        var parameterNames = AddGuidParameters(command, "party", partyIds);
+        var partyTypeParameter = command.CreateParameter();
+        partyTypeParameter.ParameterName = "@partyType";
+        partyTypeParameter.DbType = DbType.String;
+        partyTypeParameter.Value = partyType;
+        command.Parameters.Add(partyTypeParameter);
+
+        command.CommandText = $"""
+            SELECT DISTINCT cost_id
+            FROM pricing."CostPartySelections"
+            WHERE party_type = @partyType
+              AND party_id IN ({string.Join(", ", parameterNames)})
+            """;
+
+        return await ReadGuidColumnAsync(command, cancellationToken);
+    }
+
+    private static async Task<Guid[]> ReadPortSelectionCostIdsAsync(
+        DbConnection connection,
+        IReadOnlyCollection<Guid> portIds,
+        CancellationToken cancellationToken
+    )
+    {
+        if (portIds.Count == 0)
+            return [];
+
+        await using var command = connection.CreateCommand();
+        var parameterNames = AddGuidParameters(command, "port", portIds);
+        command.CommandText = $"""
+            SELECT DISTINCT cost_id
+            FROM pricing."CostRoutePortSelections"
+            WHERE port_id IN ({string.Join(", ", parameterNames)})
+            """;
+
+        return await ReadGuidColumnAsync(command, cancellationToken);
+    }
+
+    private static async Task<Guid[]> ReadGuidColumnAsync(
+        DbCommand command,
+        CancellationToken cancellationToken
+    )
+    {
+        var values = new HashSet<Guid>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            values.Add(reader.GetGuid(0));
+        }
+
+        return values.ToArray();
+    }
+
+    private static string[] AddGuidParameters(
+        DbCommand command,
+        string prefix,
+        IReadOnlyCollection<Guid> ids
+    )
+    {
+        var values = ids.Where(id => id != Guid.Empty).Distinct().ToArray();
+        var names = new string[values.Length];
+
+        for (var index = 0; index < values.Length; index++)
+        {
+            var parameterName = $"@{prefix}{index}";
+            names[index] = parameterName;
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = parameterName;
+            parameter.DbType = DbType.Guid;
+            parameter.Value = values[index];
+            command.Parameters.Add(parameter);
+        }
+
+        return names;
+    }
+
+    private static Guid[] NormalizeIds(IReadOnlyCollection<Guid>? ids) =>
+        ids is null
+            ? []
+            : ids.Where(id => id != Guid.Empty).Distinct().ToArray();
+
+    private sealed record MultiSelectionFilterMatches(
+        IReadOnlyCollection<Guid> CarrierCostIds,
+        IReadOnlyCollection<Guid> AgentCostIds,
+        IReadOnlyCollection<Guid> PortCostIds
+    )
+    {
+        public static MultiSelectionFilterMatches Empty { get; } = new([], [], []);
+    }
+
+    private sealed class SelectionAccumulator
+    {
+        public HashSet<Guid> PolIds { get; } = [];
+        public HashSet<Guid> PoeIds { get; } = [];
+        public HashSet<Guid> PodIds { get; } = [];
+        public HashSet<Guid> CarrierIds { get; } = [];
+        public HashSet<Guid> AgentIds { get; } = [];
     }
 }
