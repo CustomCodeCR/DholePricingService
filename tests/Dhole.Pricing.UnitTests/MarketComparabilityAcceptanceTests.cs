@@ -103,6 +103,42 @@ public sealed class MarketComparabilityAcceptanceTests
     }
 
     [TestMethod]
+    public void CompareCandidates_ProvisionalObservation_CannotInfluenceAverage()
+    {
+        var ids = TestIds.Create();
+        var pendingReview = CreateObservation(
+            "Competitor with missing source validity",
+            ids.Fca,
+            ids.PolShanghai,
+            ids.PoeCaldera,
+            ids.PodSanJose,
+            ids.Container40Hc,
+            ShipmentMode.Fcl,
+            ids.CarrierPil,
+            1m,
+            extractionConfidence: 0m
+        );
+
+        var key = new MarketComparisonKey(
+            ids.Fca,
+            ids.PolShanghai,
+            ids.PoeCaldera,
+            ids.PodSanJose,
+            ids.Container40Hc,
+            ShipmentMode.Fcl,
+            ids.CarrierPil
+        );
+        var result = CreateService().CompareCandidates(
+            key, ReferenceDate, [pendingReview]
+        );
+
+        Assert.AreEqual(0, result.IncludedObservationCount);
+        var evaluated = result.Observations.Single();
+        Assert.IsFalse(evaluated.WasIncluded);
+        Assert.AreEqual("manual_review_required", evaluated.ExclusionReason);
+    }
+
+    [TestMethod]
     public void CompareCandidates_PrimaryCarrier_ReceivesMoreWeightThanSecondaryCarrier()
     {
         var ids = TestIds.Create();
@@ -174,7 +210,8 @@ public sealed class MarketComparabilityAcceptanceTests
         Guid containerTypeId,
         ShipmentMode mode,
         Guid carrierId,
-        decimal allIn
+        decimal allIn,
+        decimal extractionConfidence = 1m
     )
     {
         var observation = CompetitorRateObservation.Create(
@@ -194,7 +231,7 @@ public sealed class MarketComparabilityAcceptanceTests
             inlandCharges: 0m,
             otherCharges: 0m,
             originalAmount: allIn,
-            extractionConfidence: 1m,
+            extractionConfidence: extractionConfidence,
             rawPayloadJson: "{}",
             importedAtUtc: ReferenceDate.AddDays(-1)
         );
