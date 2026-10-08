@@ -176,7 +176,7 @@ public sealed class GetCostsForSelectQueryHandler(
         if (!ShipmentModeMatches(cost, query, requireConfiguredContext))
             return false;
 
-        if (cost.PortId.HasValue && !LegacyPortMatches(cost, query))
+        if (cost.PortId.HasValue && !LegacyPortMatches(cost, query, selection))
             return false;
 
         return true;
@@ -223,10 +223,24 @@ public sealed class GetCostsForSelectQueryHandler(
 
     private static bool LegacyPortMatches(
         CostSelectDto cost,
-        GetCostsForSelectQuery query
+        GetCostsForSelectQuery query,
+        CostRoutePortSelectionSet? selection
     )
     {
         if (!cost.PortId.HasValue)
+            return true;
+
+        // Multi-port selections are authoritative. PortId is only a legacy
+        // snapshot of the first configured port and must not reject another
+        // POE/POL/POD explicitly selected in CostRoutePortSelections.
+        var selectedPortsForRole = cost.PortRole?.ToLowerInvariant() switch
+        {
+            "pol" => selection?.PolIds,
+            "poe" => selection?.PoeIds,
+            "pod" => selection?.PodIds,
+            _ => null,
+        };
+        if (selectedPortsForRole is { Count: > 0 })
             return true;
 
         return cost.PortRole?.ToLowerInvariant() switch
