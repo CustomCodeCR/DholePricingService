@@ -221,72 +221,78 @@ public sealed class CompetitorTariffImportProcessor(
                     })
                 );
 
-                var normalized = await normalizationService.NormalizeAsync(
-                    new MarketRateNormalizationRequest(
-                        workItem.IncotermId,
-                        null,
-                        row.OriginPortReference?.Id,
-                        row.OriginPort,
-                        row.PortOfExitReference?.Id,
-                        row.PortOfExit,
-                        row.DestinationPortReference?.Id,
-                        row.DestinationPort,
-                        row.CarrierReference?.Id,
-                        row.Carrier,
-                        row.ContainerTypeReference?.Id,
-                        row.ContainerType,
-                        workItem.ShipmentMode.ToString(),
-                        workItem.ShipmentMode,
-                        currency ?? "UNSPECIFIED",
+                // An unknown currency cannot be converted safely; retain the raw
+                // observation and let the reviewer supply its real currency.
+                if (!needsCurrencyReview)
+                {
+                    var normalized = await normalizationService.NormalizeAsync(
+                        new MarketRateNormalizationRequest(
+                            workItem.IncotermId,
+                            null,
+                            row.OriginPortReference?.Id,
+                            row.OriginPort,
+                            row.PortOfExitReference?.Id,
+                            row.PortOfExit,
+                            row.DestinationPortReference?.Id,
+                            row.DestinationPort,
+                            row.CarrierReference?.Id,
+                            row.Carrier,
+                            row.ContainerTypeReference?.Id,
+                            row.ContainerType,
+                            workItem.ShipmentMode.ToString(),
+                            workItem.ShipmentMode,
+                            currency ?? "UNSPECIFIED",
+                            1,
+                            basis,
+                            null,
+                            row.OceanFreight,
+                            row.OriginCharges,
+                            row.DestinationCharges,
+                            null,
+                            row.Surcharges,
+                            row.TotalSale,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            null,
+                            requiresManualReview ? null : validFrom
+                        ),
+                        cancellationToken
+                    );
+
+                    var normalizedAmount = normalized.NormalizedAllIn
+                        ?? normalized.NormalizedOceanFreight;
+
+                    observation.ApplyNormalization(
+                        normalized.Incoterm.Id,
+                        normalized.Incoterm.Code,
+                        normalized.Route.Pol.Id,
+                        normalized.Route.Pol.Name,
+                        normalized.Route.Pol.Code,
+                        normalized.Route.Poe.Id,
+                        normalized.Route.Poe.Name,
+                        normalized.Route.Poe.Code,
+                        normalized.Route.Pod.Id,
+                        normalized.Route.Pod.Name,
+                        normalized.Route.Pod.Code,
+                        normalized.Carrier.Id,
+                        normalized.Carrier.Name,
+                        normalized.Carrier.Code,
+                        normalized.Equipment.Id,
+                        normalized.Equipment.Code,
                         1,
-                        basis,
-                        null,
-                        row.OceanFreight,
-                        row.OriginCharges,
-                        row.DestinationCharges,
-                        null,
-                        row.Surcharges,
-                        row.TotalSale,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        requiresManualReview ? null : validFrom
-                    ),
-                    cancellationToken
-                );
+                        normalized.NormalizedOceanFreight,
+                        normalized.NormalizedAllIn,
+                        normalized.Currency.NormalizedCurrency,
+                        normalizedAmount,
+                        normalized.Currency.RateToUsd,
+                        normalized.Currency.ExchangeRateDate,
+                        normalized.NormalizationConfidence
+                    );
 
-                var normalizedAmount = normalized.NormalizedAllIn
-                    ?? normalized.NormalizedOceanFreight;
-
-                observation.ApplyNormalization(
-                    normalized.Incoterm.Id,
-                    normalized.Incoterm.Code,
-                    normalized.Route.Pol.Id,
-                    normalized.Route.Pol.Name,
-                    normalized.Route.Pol.Code,
-                    normalized.Route.Poe.Id,
-                    normalized.Route.Poe.Name,
-                    normalized.Route.Poe.Code,
-                    normalized.Route.Pod.Id,
-                    normalized.Route.Pod.Name,
-                    normalized.Route.Pod.Code,
-                    normalized.Carrier.Id,
-                    normalized.Carrier.Name,
-                    normalized.Carrier.Code,
-                    normalized.Equipment.Id,
-                    normalized.Equipment.Code,
-                    1,
-                    normalized.NormalizedOceanFreight,
-                    normalized.NormalizedAllIn,
-                    normalized.Currency.NormalizedCurrency,
-                    normalizedAmount,
-                    normalized.Currency.RateToUsd,
-                    normalized.Currency.ExchangeRateDate,
-                    normalized.NormalizationConfidence
-                );
+                }
 
                 if (!IsUsableObservation(observation))
                     reviewCount++;
