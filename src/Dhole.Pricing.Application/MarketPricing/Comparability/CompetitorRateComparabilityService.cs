@@ -174,6 +174,13 @@ internal sealed class CompetitorRateComparabilityService(
         CompetitorRateObservation observation
     )
     {
+        // Provisional values used to retain incomplete imports must never
+        // influence market percentiles, even with a zero final weight.
+        if (observation.ExtractionConfidence <= 0m)
+        {
+            return "manual_review_required";
+        }
+
         if (observation.Mode != key.Mode)
         {
             return "mode_mismatch";
