@@ -39,6 +39,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             ? $"{rate.PolName} → {rate.PodName} vía {rate.PoeName}"
             : $"{rate.PolName} → {rate.PoeName}";
         var cargoDetails = CreateCargoDetails(rate.CargoLinesJson);
+        var pickupLocations = CreatePickupLocations(
+            rate.PickupLocationsJson, rate.PickupAddress, rate.IncotermCode, rate.IncotermName);
 
         // LCL must never leak the legacy container placeholder (for example 20 DV)
         // into the commercial document. For consolidated cargo the shipment itself is
@@ -297,6 +299,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 kgPerCbm = rate.KgPerCbm,
                 chargeableQuantity = rate.ChargeableQuantity,
                 cargoDetails,
+                pickupLocations,
                 currency = currencyValue,
                 currencyCode = rate.CurrencyCode,
                 hasSingleCurrency,
@@ -324,6 +327,80 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         };
 
         return JsonSerializer.Serialize(data, JsonOptions);
+    }
+
+
+    private sealed record PickupReportLocation(string Label, string Address, string Classification);
+
+    private static PickupReportLocation[] CreatePickupLocations(
+        string? pickupLocationsJson,
+        string? legacyPickupAddress,
+        string? incotermCode,
+        string? incotermName)
+    {
+        var locations = new List<PickupReportLocation>();
+
+        if (!string.IsNullOrWhiteSpace(pickupLocationsJson))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(pickupLocationsJson);
+                if (document.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in document.RootElement.EnumerateArray())
+                    {
+                        if (item.ValueKind != JsonValueKind.Object)
+                            continue;
+
+                        var address = PickupStringProperty(item, "Address");
+                        if (string.IsNullOrWhiteSpace(address))
+                            continue;
+
+                        var cargoCondition = PickupStringProperty(item, "CargoCondition");
+                        var classification = cargoCondition switch
+                        {
+                            "FiscalCargo" => " — Carga fiscal",
+                            "NationalizedCargo" => " — Carga nacionalizada",
+                            _ => string.Empty
+                        };
+
+                        locations.Add(new PickupReportLocation(
+                            $"Punto {locations.Count + 1}:",
+                            address,
+                            classification));
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                // Los datos históricos pueden tener un JSON inválido. Usar dirección EXW anterior.
+            }
+        }
+
+        // Las tarifas anteriores a las recolectas múltiples conservan solo PickupAddress.
+        // FCA usa este campo para la dirección de entrega: no presentarla como recolecta.
+        var isExw = string.Equals(incotermCode, "EXW", StringComparison.OrdinalIgnoreCase)
+            || (incotermName?.Contains("EXW", StringComparison.OrdinalIgnoreCase) ?? false)
+            || (incotermName?.Contains("Ex Works", StringComparison.OrdinalIgnoreCase) ?? false);
+        if (locations.Count == 0 && isExw && !string.IsNullOrWhiteSpace(legacyPickupAddress)
+            && !string.Equals(legacyPickupAddress.Trim(), "Recolecta incluida en líneas LCL", StringComparison.OrdinalIgnoreCase))
+        {
+            locations.Add(new PickupReportLocation("Punto 1:", legacyPickupAddress.Trim(), string.Empty));
+        }
+
+        return locations.ToArray();
+    }
+
+    private static string? PickupStringProperty(JsonElement location, string propertyName)
+    {
+        foreach (var property in location.EnumerateObject())
+        {
+            if (property.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase)
+                && property.Value.ValueKind == JsonValueKind.String)
+                return property.Value.GetString()?.Trim();
+        }
+
+        return null;
     }
 
     private static string CreateCargoDetails(string? cargoLinesJson)
