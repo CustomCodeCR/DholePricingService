@@ -225,7 +225,9 @@ public sealed class CompetitorTariffImportProcessor(
                 // observation and let the reviewer supply its real currency.
                 if (!needsCurrencyReview)
                 {
-                    var normalized = await normalizationService.NormalizeAsync(
+                    try
+                    {
+                        var normalized = await normalizationService.NormalizeAsync(
                         new MarketRateNormalizationRequest(
                             workItem.IncotermId,
                             null,
@@ -291,7 +293,22 @@ public sealed class CompetitorTariffImportProcessor(
                         normalized.Currency.ExchangeRateDate,
                         normalized.NormalizationConfidence
                     );
-
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception exception)
+                    {
+                        // A malformed competitor row must not abort the entire document.
+                        // The original observation remains available for manual review.
+                        logger.LogWarning(
+                            exception,
+                            "Competitor tariff {TariffId} row {RowId} needs normalization review.",
+                            workItem.CompetitorTariffId,
+                            row.Id
+                        );
+                    }
                 }
 
                 if (!IsUsableObservation(observation))
