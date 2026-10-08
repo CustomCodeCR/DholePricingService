@@ -733,7 +733,8 @@ public static class CompetitorTariffEndpoints
             ?? observation.NormalizedOceanFreight;
 
         if (
-            !observation.IncotermId.HasValue
+            observation.ExtractionConfidence <= 0m
+            || !observation.IncotermId.HasValue
             || !observation.PolId.HasValue
             || !normalizedAmount.HasValue
             || !string.Equals(
