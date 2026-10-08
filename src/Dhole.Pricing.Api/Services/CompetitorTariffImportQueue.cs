@@ -169,22 +169,26 @@ public sealed class CompetitorTariffImportProcessor(
                     ? NormalizeUtc(row.ValidTo.Value)
                     : workItem.FallbackTo ?? validFrom;
 
-                if (!validFrom.HasValue || !validTo.HasValue || validTo < validFrom)
-                {
-                    reviewCount++;
-                    continue;
-                }
-
+                // Keep partially extracted rows in the review queue instead of
+                // silently discarding them. Provisional values are NEVER benchmark
+                // eligible; manual review is required before they may be used.
                 var currency = ResolveBusinessCurrency(row.CurrencyReference, row.Currency);
-                if (string.IsNullOrWhiteSpace(currency))
-                {
-                    reviewCount++;
-                    continue;
-                }
+                var needsValidityReview =
+                    !validFrom.HasValue || !validTo.HasValue || validTo < validFrom;
+                var needsCurrencyReview = string.IsNullOrWhiteSpace(currency);
+                var requiresManualReview = needsValidityReview || needsCurrencyReview;
+                var provisionalFrom = validFrom ?? DateTime.UtcNow.Date;
+                var provisionalTo = validTo >= provisionalFrom
+                    ? validTo.Value
+                    : provisionalFrom;
 
                 var basis = ResolveRateBasis(workItem.ShipmentMode);
                 var originalAmount = row.TotalSale ?? SumRawComponents(row);
-                var extractionConfidence = ResolveExtractionConfidence(row.Status);
+                // Zero confidence explicitly gates the observation out of Average.
+                // ApplyManualReview promotes it to confidence 1 once validated.
+                var extractionConfidence = requiresManualReview
+                    ? 0m
+                    : ResolveExtractionConfidence(row.Status);
 
                 var observation = CompetitorRateObservation.Create(
                     workItem.CompetitorTariffId,
@@ -193,9 +197,9 @@ public sealed class CompetitorTariffImportProcessor(
                     null,
                     row.Id,
                     workItem.ShipmentMode,
-                    currency,
-                    validFrom.Value,
-                    validTo.Value,
+                    currency ?? "UNSPECIFIED",
+                    provisionalFrom,
+                    provisionalTo,
                     basis,
                     row.OceanFreight,
                     row.OriginCharges,
@@ -211,6 +215,9 @@ public sealed class CompetitorTariffImportProcessor(
                         row.SourceRowNumber,
                         row.Status,
                         row.RawJson,
+                        RequiresManualReview = requiresManualReview,
+                        MissingValidity = needsValidityReview,
+                        MissingCurrency = needsCurrencyReview,
                     })
                 );
 
@@ -230,7 +237,7 @@ public sealed class CompetitorTariffImportProcessor(
                         row.ContainerType,
                         workItem.ShipmentMode.ToString(),
                         workItem.ShipmentMode,
-                        currency,
+                        currency ?? "UNSPECIFIED",
                         1,
                         basis,
                         null,
@@ -246,7 +253,7 @@ public sealed class CompetitorTariffImportProcessor(
                         null,
                         null,
                         null,
-                        validFrom
+                        requiresManualReview ? null : validFrom
                     ),
                     cancellationToken
                 );
@@ -353,7 +360,8 @@ public sealed class CompetitorTariffImportProcessor(
             ?? observation.NormalizedOceanFreight;
 
         if (
-            !observation.IncotermId.HasValue
+            observation.ExtractionConfidence <= 0m
+            || !observation.IncotermId.HasValue
             || !observation.PolId.HasValue
             || !normalizedAmount.HasValue
             || !string.Equals(
