@@ -173,8 +173,10 @@ public sealed class CompetitorTariffImportProcessor(
                 // silently discarding them. Provisional values are NEVER benchmark
                 // eligible; manual review is required before they may be used.
                 var currency = ResolveBusinessCurrency(row.CurrencyReference, row.Currency);
+                var hasValidFromSource = row.ValidFrom.HasValue || workItem.FallbackFrom.HasValue;
+                var hasValidToSource = row.ValidTo.HasValue || workItem.FallbackTo.HasValue;
                 var needsValidityReview =
-                    !validFrom.HasValue || !validTo.HasValue || validTo < validFrom;
+                    !hasValidFromSource || !hasValidToSource || validTo < validFrom;
                 var needsCurrencyReview = string.IsNullOrWhiteSpace(currency);
                 var requiresManualReview = needsValidityReview || needsCurrencyReview;
                 var provisionalFrom = validFrom ?? DateTime.UtcNow.Date;
