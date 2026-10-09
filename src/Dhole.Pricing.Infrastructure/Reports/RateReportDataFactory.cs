@@ -29,6 +29,22 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             CurrencyValue(detail.CurrencyName, detail.CurrencyCode).Trim().ToUpperInvariant();
         string DetailMoney(RateDetail detail, decimal amount) =>
             $"{CurrencyValue(detail.CurrencyName, detail.CurrencyCode)} {amount.ToString("N2", MoneyCulture)}";
+        string CurrencyIso(string? code, string? name)
+        {
+            var normalizedCode = (code ?? string.Empty).Trim().ToUpperInvariant();
+            var normalizedName = (name ?? string.Empty).Trim().ToUpperInvariant();
+            if (normalizedCode is "USD" or "CRC") return normalizedCode;
+            if (normalizedName.Contains("USD", StringComparison.Ordinal)) return "USD";
+            if (normalizedName.Contains("CRC", StringComparison.Ordinal)
+                || normalizedName.Contains("COLON", StringComparison.Ordinal)
+                || normalizedName.Contains("COLÓN", StringComparison.Ordinal)) return "CRC";
+            return normalizedCode;
+        }
+        bool IsPickupCharge(RateDetail detail) =>
+            detail.Name.Trim().StartsWith("Recolecta", StringComparison.OrdinalIgnoreCase)
+            || detail.Name.Trim().StartsWith("Recolección", StringComparison.OrdinalIgnoreCase)
+            || detail.Name.Trim().StartsWith("Pickup", StringComparison.OrdinalIgnoreCase)
+            || detail.Name.Trim().StartsWith("Pick up", StringComparison.OrdinalIgnoreCase);
 
         var currencyValue = CurrencyValue(rate.CurrencyName, rate.CurrencyCode);
         var commercialTerms = ExclusiveCommercialTerms(rate.Includes, rate.SubjectTo, rate.Excludes);
@@ -50,6 +66,10 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var miamiBillableCft = CalculateMiamiBillableCft(rate);
         decimal ReportQuantity(RateDetail detail)
         {
+            // Recolecta is a flat fee per concept, even on historical rows persisted as CFT/CBM.
+            if (IsPickupCharge(detail))
+                return 1m;
+
             if (!miamiBillableCft.HasValue
                 || detail.CostDetailType != CostDetailType.Freight
                 || detail.ChargeBasis != ChargeBasis.PerChargeableCft)
@@ -207,7 +227,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         // Agrupar por la moneda que realmente se muestra al cliente. Algunos registros
         // históricos tienen CurrencyCode distintos/legacy aunque CurrencyName sea el mismo
         // (por ejemplo USD), lo que antes generaba dos tarjetas USD en el mismo PDF.
-        var currencyTotals = useAllInPresentation
+        var originalCurrencyTotals = useAllInPresentation
             ? new[]
             {
                 new
@@ -240,12 +260,52 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 .OrderBy(x => x.currencyCode)
                 .ThenBy(x => x.currency)
                 .ToArray();
+
+        // Use the exchange-rate snapshot saved with the quote, never an external/current FX rate.
+        // Convert the same normalized detail quantities that the PDF prints, so both cards
+        // represent ONE payable total rather than two independent subtotals.
+        var appliedExchangeRate = rate.ExchangeRateApplied is > 0m
+            ? rate.ExchangeRateApplied
+            : rate.ExchangeRateSale;
+        var canShowEquivalentTotals = appliedExchangeRate is > 0m
+            && (useAllInPresentation
+                ? CurrencyIso(rate.CurrencyCode, rate.CurrencyName) is "USD" or "CRC"
+                : reportDetails.All(detail =>
+                    CurrencyIso(detail.CurrencyCode, detail.CurrencyName) is "USD" or "CRC"));
+        var nativeUsd = useAllInPresentation
+            ? (CurrencyIso(rate.CurrencyCode, rate.CurrencyName) == "USD" ? allInAmount : 0m)
+            : reportDetails.Where(detail => CurrencyIso(detail.CurrencyCode, detail.CurrencyName) == "USD")
+                .Sum(detail => detail.SaleAmount * ReportQuantity(detail));
+        var nativeCrc = useAllInPresentation
+            ? (CurrencyIso(rate.CurrencyCode, rate.CurrencyName) == "CRC" ? allInAmount : 0m)
+            : reportDetails.Where(detail => CurrencyIso(detail.CurrencyCode, detail.CurrencyName) == "CRC")
+                .Sum(detail => detail.SaleAmount * ReportQuantity(detail));
+        var equivalentUsd = canShowEquivalentTotals
+            ? decimal.Round(nativeUsd + nativeCrc / appliedExchangeRate!.Value, 2, MidpointRounding.AwayFromZero)
+            : 0m;
+        var equivalentCrc = canShowEquivalentTotals
+            ? decimal.Round(nativeCrc + nativeUsd * appliedExchangeRate!.Value, 2, MidpointRounding.AwayFromZero)
+            : 0m;
+        var currencyTotals = canShowEquivalentTotals
+            ? new[]
+            {
+                new { currency = "USD", currencyCode = "USD", amount = equivalentUsd,
+                    total = $"USD {equivalentUsd.ToString("N2", MoneyCulture)}" },
+                new { currency = "CRC", currencyCode = "CRC", amount = equivalentCrc,
+                    total = $"CRC {equivalentCrc.ToString("N2", MoneyCulture)}" }
+            }
+            : originalCurrencyTotals;
         var hasSingleCurrency = currencyTotals.Length == 1;
         var hasMultipleCurrencies = currencyTotals.Length > 1;
+        var hasSeparateCurrencyTotals = hasMultipleCurrencies && !canShowEquivalentTotals;
+        var exchangeRateNote = canShowEquivalentTotals
+            ? $"Tipo de cambio aplicado: CRC {appliedExchangeRate!.Value.ToString("N4", MoneyCulture)} por USD 1.00"
+                + (rate.ExchangeRateDate.HasValue ? $" · {rate.ExchangeRateDate.Value:dd/MM/yyyy}" : string.Empty)
+            : string.Empty;
         var reportTotal = hasSingleCurrency
             ? currencyTotals[0].total
             : hasMultipleCurrencies
-                ? "Totales por moneda"
+                ? (canShowEquivalentTotals ? "Total equivalente en USD y CRC" : "Totales por moneda")
                 : $"{currencyValue} 0.00";
         var reportTotalAmount = hasSingleCurrency ? currencyTotals[0].amount : 0m;
 
@@ -327,6 +387,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 totalPallets = rate.TotalPallets,
                 totalWeightKg = rate.TotalWeightKg,
                 totalVolumeCbm = rate.TotalVolumeCbm,
+                totalVolume = cftFreight is not null
+                    ? $"{(rate.TotalVolumeCbm * MiamiCftPerCbm).ToString("N3", MoneyCulture)} CFT"
+                    : $"{rate.TotalVolumeCbm.ToString("N3", MoneyCulture)} CBM",
                 kgPerCbm = rate.KgPerCbm,
                 chargeableQuantity = miamiBillableCft.HasValue && cftFreight is not null
                     ? ReportQuantity(cftFreight) / MiamiCftPerCbm
@@ -337,6 +400,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 currencyCode = rate.CurrencyCode,
                 hasSingleCurrency,
                 hasMultipleCurrencies,
+                hasEquivalentCurrencies = canShowEquivalentTotals,
+                hasSeparateCurrencyTotals,
+                exchangeRateNote,
                 freeDays = rate.FreeDays,
                 transitTime = string.IsNullOrWhiteSpace(rate.TransitTime) ? "Por confirmar" : rate.TransitTime,
                 transitDays = rate.TransitTime,
