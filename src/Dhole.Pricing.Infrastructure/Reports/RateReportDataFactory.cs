@@ -504,6 +504,17 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             && !polName.Contains("Miami", StringComparison.OrdinalIgnoreCase))
             return null;
 
+        // Only own maritime Miami matrices use the 14.16 kg/CFT rule.
+        // An air LCL quote departing Miami can also show CFT, but its billing
+        // rules are different and must never be reconciled with this matrix.
+        var hasMiamiMatrixFreight = rate.RateDetails.Any(detail =>
+            detail.CostDetailType == CostDetailType.Freight
+            && detail.ChargeBasis == ChargeBasis.PerChargeableCft
+            && (detail.Name.Contains("Flete Miami", StringComparison.OrdinalIgnoreCase)
+                || detail.Notes?.Contains("Plan Miami:", StringComparison.OrdinalIgnoreCase) == true));
+        if (!hasMiamiMatrixFreight)
+            return null;
+
         decimal billableCbm = 0m;
         if (!string.IsNullOrWhiteSpace(rate.CargoLinesJson))
         {
