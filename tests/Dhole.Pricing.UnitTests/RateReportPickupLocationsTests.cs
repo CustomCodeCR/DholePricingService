@@ -272,6 +272,56 @@ public sealed class RateReportPickupLocationsTests
     }
 
     [TestMethod]
+    public void MiamiOwnLclPdf_IncludesPersistedCatalogPickupAndOtherPricedLines()
+    {
+        var rate = CreateRate("EXW", "Miami, Estados Unidos", "USMIA");
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl, totalPackages: 1, totalPallets: 1,
+            totalWeightKg: 171m, totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m, cargoLinesJson: null, updatedBy: null);
+        rate.ConfigurePickupLocations(
+            """[{"Address":"7373 Hunt Ave, Garden Grove, CA","CargoCondition":"NationalizedCargo"}]""");
+
+        rate.AddRateDetail(
+            rate.Id, null, "Flete Miami → Costa Rica",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Freight,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerChargeableCft,
+            rate.CurrencyId, "USD", "USD", 20m, 24.84m,
+            "LCL PROPIO · Plan Miami", 12.077m, null);
+        rate.AddRateDetail(
+            rate.Id, Guid.NewGuid(), "Recolecta",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.InlandTransport,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerChargeableCft,
+            rate.CurrencyId, "USD", "USD", 630m, 655m, null, 12.077m, null);
+        rate.AddRateDetail(
+            rate.Id, Guid.NewGuid(), "Forwarding",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.OriginCharge,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerShipment,
+            rate.CurrencyId, "USD", "USD", 40m, 50m, null, 1m, null);
+        rate.AddRateDetail(
+            rate.Id, null, "Manejos",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.OriginCharge,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerShipment,
+            rate.CurrencyId, "USD", "USD", 55m, 65m, null, 1m, null);
+
+        using var report = QuoteData(rate);
+        var rows = report.RootElement.GetProperty("items").EnumerateArray().ToArray();
+        Assert.AreEqual(4, rows.Length, "No se pueden ocultar líneas cotizadas por tener CostId.");
+        var pickup = rows.Single(item => item.GetProperty("description").GetString() == "Recolecta");
+        Assert.AreEqual(1m, pickup.GetProperty("quantity").GetDecimal());
+        Assert.AreEqual(655m, pickup.GetProperty("lineTotalAmount").GetDecimal());
+        Assert.IsTrue(rows.Any(item => item.GetProperty("description").GetString() == "Forwarding"));
+        Assert.IsTrue(rows.Any(item => item.GetProperty("description").GetString() == "Manejos"));
+        Assert.AreEqual(4, report.RootElement.GetProperty("rows").GetArrayLength());
+        Assert.AreEqual(1, report.RootElement.GetProperty("rate")
+            .GetProperty("pickupLocations").GetArrayLength());
+    }
+
+    [TestMethod]
     public void PdfCbmShipment_DoesNotPrintCftVolume()
     {
         var rate = CreateRate("EXW");
