@@ -149,7 +149,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         // La limpieza de costos de otro proveedor debe realizarse al cambiar la fuente
         // y guardar la tarifa, nunca silenciosamente al generar el documento.
         var reportDetails = rate.RateDetails
-            .Where(detail => detail.SaleAmount * ReportQuantity(detail) != 0m)
+            // Una recolecta seleccionada debe figurar aunque su precio siga en cero;
+            // no inventamos importes ni mostramos otros conceptos automáticos sin precio.
+            .Where(detail => IsPickupCharge(detail) || detail.SaleAmount * ReportQuantity(detail) != 0m)
             .OrderBy(x => x.CostDetailType)
             .ThenBy(x => x.Name)
             .ToArray();
