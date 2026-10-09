@@ -57,7 +57,7 @@ public static class OwnLclRouteMatrixV2Endpoints
             ["A"] = new("Cliente A", 2.80m, 280m, 1.75m, 0.70m, 0.35m, 0m, 25m, 45m, 20m, 25m, 20m, 25m, 0m, 0.75m, 50m),
             ["B"] = new("Cliente B", 2.95m, 295m, 1.80m, 0.80m, 0.35m, 0m, 28m, 55m, 25m, 25m, 30m, 45m, 0m, 0.80m, 60m),
             ["C"] = new("Cliente C", 3.00m, 300m, 1.85m, 0.80m, 0.35m, 0m, 30m, 65m, 25m, 25m, 35m, 50m, 0m, 0.80m, 60m),
-            ["D"] = new("Cliente D", 3.00m, 300m, 1.85m, 0.80m, 0.35m, 0m, 35m, 65m, 30m, 30m, 35m, 50m, 50m, 0.80m, 60m),
+            ["D"] = new("Cliente D", 3.00m, 300m, 1.85m, 0.80m, 0.35m, 0m, 35m, 65m, 30m, 30m, 35m, 50m, 50m, 0.80m, 95m),
             ["NVOCC-B"] = new("Cliente NVOCC-B", 2.90m, 170m, 1.85m, 0.70m, 0.35m, 0m, 25m, 45m, 20m, 0m, 20m, 0m, 0m, 0.50m, 50m),
             ["NVOCC-A"] = new("Cliente NVOCC-A", 2.60m, 95m, 2.04m, 0m, 0.34m, 0.22m, 25m, 60m, 0m, 0m, 25m, 25m, 0m, 0.50m, 50m),
             ["LITTLE"] = new("CARGAS LITTLE", 0m, 0m, 0m, 0m, 0m, 0m, 0m, 35m, 15m, 0m, 0m, 20m, 0m, 0.50m, 10m, true),
