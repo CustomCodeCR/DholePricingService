@@ -57,7 +57,7 @@ public sealed class RateReportPickupLocationsTests
     [TestMethod]
     public void MiamiLclReport_UsesPersistedCftForHeaderAndFreightLine()
     {
-        var rate = CreateRate("EXW");
+        var rate = CreateRate("EXW", "Miami, Estados Unidos", "USMIA");
         rate.ConfigureShipment(
             ShipmentMode.Lcl,
             totalPackages: 1,
@@ -86,13 +86,116 @@ public sealed class RateReportPickupLocationsTests
             freight.GetProperty("lineTotalAmount").GetDecimal());
     }
 
+    [TestMethod]
+    public void MiamiLclPdf_LegacyOneCbmFloor_RecomputesCftLineAndTotals()
+    {
+        var rate = CreateRate("EXW", "Miami, Estados Unidos", "USMIA");
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 171m,
+            totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+        var freight = rate.AddRateDetail(
+            rate.Id, null, "Flete Miami → Costa Rica",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Freight,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerChargeableCft,
+            rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            3m, 24.84m, "LCL PROPIO · Plan Miami: D",
+            35.3146667m, null
+        );
+        rate.AddRateDetail(
+            rate.Id, null, "Manejos",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.DestinationCharge,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerShipment,
+            rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            0m, 65m, null, 1m, null
+        );
+        var billableCft = 171m / 14.16m;
+        using var report = QuoteData(rate);
+        var root = report.RootElement;
+        var quote = root.GetProperty("rate");
+        var items = root.GetProperty("items");
+        var freightItem = items.EnumerateArray().First(item =>
+            item.GetProperty("description").GetString() == "Flete Miami → Costa Rica");
+
+        Assert.AreEqual(35.3146667m, freight.Quantity); // Commercial snapshot is untouched.
+        Assert.AreEqual(billableCft, freightItem.GetProperty("quantity").GetDecimal());
+        Assert.AreEqual(billableCft * 24.84m, freightItem.GetProperty("lineTotalAmount").GetDecimal());
+        StringAssert.Contains(quote.GetProperty("containerSummary").GetString()!, "CFT cobrable");
+        Assert.AreEqual(billableCft / 35.3146667m, quote.GetProperty("chargeableQuantity").GetDecimal());
+        var usd = root.GetProperty("currencyTotals").EnumerateArray().First();
+        Assert.AreEqual(billableCft * 24.84m + 65m, usd.GetProperty("amount").GetDecimal());
+    }
+
+    [TestMethod]
+    public void MiamiLclPdf_Little_UsesOnlyVolumeAndIgnoresWeight()
+    {
+        var rate = CreateRate("EXW", "Miami, Estados Unidos", "USMIA");
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 171m,
+            totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m,
+            cargoLinesJson: """[{"BillableVolumeCbm":0.2,"VolumeCbm":0.16,"WeightKg":171}]""",
+            updatedBy: null
+        );
+        rate.AddRateDetail(
+            rate.Id, null, "Flete Miami → Costa Rica",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Freight,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerChargeableCft,
+            rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            0m, 10m, "LCL PROPIO · Plan Miami: LITTLE",
+            35.3146667m, null
+        );
+        using var report = QuoteData(rate);
+        var freight = report.RootElement.GetProperty("items")[0];
+        Assert.AreEqual(0.2m * 35.3146667m, freight.GetProperty("quantity").GetDecimal());
+    }
+
+    [TestMethod]
+    public void NonMiamiLclPdf_DoesNotRewriteExistingCftQuantities()
+    {
+        var rate = CreateRate("EXW");
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 171m,
+            totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+        rate.AddRateDetail(
+            rate.Id, null, "Flete aéreo",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Freight,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerChargeableCft,
+            rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            0m, 10m, null,
+            35.3146667m, null
+        );
+        using var report = QuoteData(rate);
+        Assert.AreEqual(35.3146667m, report.RootElement.GetProperty("items")[0].GetProperty("quantity").GetDecimal());
+    }
+
     private static JsonDocument QuoteData(RateHeader rate)
     {
         var factory = new RateReportDataFactory(new ConfigurationBuilder().Build());
         return JsonDocument.Parse(factory.CreateDataJson(rate));
     }
 
-    private static RateHeader CreateRate(string incoterm)
+    private static RateHeader CreateRate(string incoterm, string polName = "Colón, Panamá", string polCode = "PAONX")
     {
         return RateHeader.Create(
             rateCode: "QUO-A7K2P-9X4M8Q",
@@ -104,8 +207,8 @@ public sealed class RateReportPickupLocationsTests
             carrierName: "Naviera",
             carrierCode: "CAR",
             polId: Guid.NewGuid(),
-            polName: "Colón, Panamá",
-            polCode: "PAONX",
+            polName: polName,
+            polCode: polCode,
             poeId: Guid.NewGuid(),
             poeName: "Ciudad de Guatemala",
             poeCode: "GTGUA",
