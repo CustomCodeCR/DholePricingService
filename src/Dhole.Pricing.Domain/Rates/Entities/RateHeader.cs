@@ -739,10 +739,16 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         }
 
         var cargoChargeableQuantity = Math.Max(TotalVolumeCbm, TotalWeightKg / KgPerCbm);
+        // Miami LCL is billed in CFT, with a monetary freight minimum instead
+        // of an artificial 1-CBM (35.315-CFT) volume minimum.
+        var isMiamiLcl = shipmentMode == ShipmentMode.Lcl &&
+            (string.Equals(PolCode?.Trim(), "MIA", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(PolCode?.Trim(), "USMIA", StringComparison.OrdinalIgnoreCase)
+             || (PolName?.Contains("Miami", StringComparison.OrdinalIgnoreCase) ?? false));
         ChargeableQuantity = shipmentMode switch
         {
-            // LCL has a commercial minimum of 1 CBM. Keep zero as zero so the
-            // validation below still rejects a shipment without weight or volume.
+            ShipmentMode.Lcl when isMiamiLcl => cargoChargeableQuantity,
+            // Other LCL origins retain their commercial 1-CBM minimum.
             ShipmentMode.Lcl => cargoChargeableQuantity > 0m
                 ? Math.Max(1m, cargoChargeableQuantity)
                 : 0m,
@@ -798,9 +804,15 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                 ? Math.Max(chargeableCbm, 1m)
                 : Math.Max(chargeableCbm, 0.001m),
             ChargeBasis.PerCft => Math.Max(TotalVolumeCbm * 35.31466672148859m, 0.001m),
-            ChargeBasis.PerChargeableCft => (ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl
-                ? Math.Max(chargeableCbm, 1m)
-                : Math.Max(chargeableCbm, 0.001m)) * 35.31466672148859m,
+            // CFT freight retains its explicit commercial quantity from the matrix.
+            // In particular, 12.076 CFT must not become the 1-CBM floor of 35.315 CFT.
+            ChargeBasis.PerChargeableCft => requestedQuantity > 0m
+                ? requestedQuantity
+                : (ShipmentMode == ShipmentMode.Lcl
+                    ? Math.Max(chargeableCbm, 0.001m)
+                    : ShipmentMode == ShipmentMode.Ltl
+                        ? Math.Max(chargeableCbm, 1m)
+                        : Math.Max(chargeableCbm, 0.001m)) * 35.31466672148859m,
             ChargeBasis.PerKg => Math.Max(TotalWeightKg, 0.001m),
             ChargeBasis.Per100Kg => Math.Max(TotalWeightKg / 100m, 0.001m),
             ChargeBasis.PerTon => Math.Max(TotalWeightKg / 1000m, 0.001m),
