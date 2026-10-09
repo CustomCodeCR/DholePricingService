@@ -42,6 +42,16 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var pickupLocations = CreatePickupLocations(
             rate.PickupLocationsJson, rate.PickupAddress, rate.IncotermCode, rate.IncotermName);
 
+        var cftFreight = rate.ShipmentMode == ShipmentMode.Lcl
+            ? rate.RateDetails.FirstOrDefault(detail =>
+                detail.CostDetailType == CostDetailType.Freight &&
+                detail.ChargeBasis == ChargeBasis.PerChargeableCft)
+            : null;
+        // The quote header and its freight line must use the same commercial unit.
+        var lclChargeableLabel = cftFreight is not null
+            ? $"LCL · {cftFreight.Quantity.ToString("N3", MoneyCulture)} CFT cobrable"
+            : $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable";
+
         // LCL must never leak the legacy container placeholder (for example 20 DV)
         // into the commercial document. For consolidated cargo the shipment itself is
         // the equipment row and its real commercial measure is the chargeable CBM.
@@ -52,10 +62,10 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 {
                     containerTypeId = rate.ContainerTypeId,
                     containerType = "LCL",
-                    containerTypeName = $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable",
+                    containerTypeName = lclChargeableLabel,
                     containerTypeCode = "LCL",
                     quantity = 1,
-                    label = $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable"
+                    label = lclChargeableLabel
                 }
             }
             : (rate.RateContainers.Count > 0
@@ -99,7 +109,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var equipmentSummary = string.Join(" + ", containers.Select(x => x.label));
         var shipmentSummary = rate.ShipmentMode switch
         {
-            ShipmentMode.Lcl => $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable",
+            ShipmentMode.Lcl => lclChargeableLabel,
             ShipmentMode.Ltl => $"LTL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable",
             ShipmentMode.Ftl => equipmentSummary,
             _ => equipmentSummary,
