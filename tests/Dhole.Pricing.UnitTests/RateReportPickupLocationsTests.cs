@@ -189,6 +189,32 @@ public sealed class RateReportPickupLocationsTests
         Assert.AreEqual(35.3146667m, report.RootElement.GetProperty("items")[0].GetProperty("quantity").GetDecimal());
     }
 
+    [TestMethod]
+    public void MiamiAirLclPdf_DoesNotApplyMaritimeMatrixWeightRule()
+    {
+        var rate = CreateRate("EXW", "Miami, Estados Unidos", "USMIA");
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 171m,
+            totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+        rate.AddRateDetail(
+            rate.Id, null, "Flete aéreo",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Freight,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerChargeableCft,
+            rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            0m, 10m, null, 35.3146667m, null
+        );
+        using var report = QuoteData(rate);
+        Assert.AreEqual(35.3146667m, report.RootElement.GetProperty("items")[0].GetProperty("quantity").GetDecimal());
+    }
+
     private static JsonDocument QuoteData(RateHeader rate)
     {
         var factory = new RateReportDataFactory(new ConfigurationBuilder().Build());
