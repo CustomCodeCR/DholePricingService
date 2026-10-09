@@ -928,7 +928,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
 
-        var chargeBasis = InferChargeBasis(costDetailType);
+        var chargeBasis = IsFlatPickupChargeName(name) ? ChargeBasis.PerShipment : InferChargeBasis(costDetailType);
         var effectiveQuantity = costDetailType == CostDetailType.InlandTransport
             ? ResolveChargeQuantity(chargeBasis)
             : ResolveChargeQuantity(chargeBasis, quantity);
@@ -975,6 +975,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             throw new InvalidOperationException("El detalle no corresponde a la tarifa.");
 
         ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
+        // Pickup/recolecta is a flat line: never multiply it by CBM, CFT or number of pickups.
+        if (IsFlatPickupChargeName(name))
+            chargeBasis = ChargeBasis.PerShipment;
         var effectiveQuantity = ResolveChargeQuantity(chargeBasis, quantity);
         var detail = RateDetail.Create(
             Id, costId, name.Trim(), costDetailType, costType, chargeBasis, currencyId,
@@ -1011,7 +1014,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
 
-        var chargeBasis = InferChargeBasis(costDetailType);
+        var chargeBasis = IsFlatPickupChargeName(name) ? ChargeBasis.PerShipment : InferChargeBasis(costDetailType);
         var effectiveQuantity = costDetailType == CostDetailType.InlandTransport
             ? ResolveChargeQuantity(chargeBasis)
             : ResolveChargeQuantity(chargeBasis, quantity);
@@ -1054,6 +1057,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         var detail = _rateDetails.FirstOrDefault(x => x.Id == rateDetailId)
             ?? throw new InvalidOperationException("El detalle de la tarifa no existe.");
         ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
+        // Pickup/recolecta is a flat line: never multiply it by CBM, CFT or number of pickups.
+        if (IsFlatPickupChargeName(name))
+            chargeBasis = ChargeBasis.PerShipment;
         var effectiveQuantity = ResolveChargeQuantity(chargeBasis, quantity);
         detail.Update(costId, name.Trim(), costDetailType, costType, chargeBasis, currencyId,
             currencyName.Trim(), currencyCode.Trim(), costAmount, saleAmount, Normalize(notes), effectiveQuantity);
@@ -1748,6 +1754,15 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                 $"El ítem '{duplicate}' solo puede pertenecer a una categoría: Incluye, Sujeto a o No incluye."
             );
         }
+    }
+
+    private static bool IsFlatPickupChargeName(string? name)
+    {
+        var value = name?.Trim() ?? string.Empty;
+        return value.StartsWith("Recolecta", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("Recolección", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("Pickup", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("Pick up", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ResolveCurrencyIso(string? code, string? name)
