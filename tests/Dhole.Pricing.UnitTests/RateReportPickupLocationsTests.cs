@@ -54,6 +54,38 @@ public sealed class RateReportPickupLocationsTests
             .GetProperty("pickupLocations").GetArrayLength());
     }
 
+    [TestMethod]
+    public void MiamiLclReport_UsesPersistedCftForHeaderAndFreightLine()
+    {
+        var rate = CreateRate("EXW");
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 171m,
+            totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+        rate.AddRateDetail(
+            rate.Id, null, "Flete Miami → Costa Rica",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Freight,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerChargeableCft,
+            rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            3m, 24.84m, null, 171m / 14.16m, null
+        );
+
+        using var report = QuoteData(rate);
+        var root = report.RootElement;
+        StringAssert.Contains(root.GetProperty("rate").GetProperty("containerSummary").GetString()!, "CFT cobrable");
+        var freight = root.GetProperty("items")[0];
+        Assert.AreEqual(171m / 14.16m, freight.GetProperty("quantity").GetDecimal());
+        Assert.AreEqual((171m / 14.16m) * 24.84m,
+            freight.GetProperty("lineTotalAmount").GetDecimal());
+    }
+
     private static JsonDocument QuoteData(RateHeader rate)
     {
         var factory = new RateReportDataFactory(new ConfigurationBuilder().Build());
