@@ -277,6 +277,58 @@ public sealed class RateFreightQuantityTests
     }
 
     [TestMethod]
+    public void MiamiLcl_PerChargeableCft_PreservesActualFreightQuantityWithoutOneCbmFloor()
+    {
+        var rate = CreateRate(containerQuantity: 1);
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 171m,
+            totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+
+        // Miami determines its CFT by the 14.16 kg/CFT rule and uses a monetary
+        // freight minimum. Do not turn the explicit 12.076... CFT into 35.315 CFT.
+        var miamiChargeableCft = 171m / 14.16m;
+        var detail = rate.AddRateDetail(
+            rate.Id, null, "Flete Miami → Costa Rica",
+            CostDetailType.Freight, CostType.Variable, ChargeBasis.PerChargeableCft,
+            rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            3m, 24.84m, "LCL PROPIO · Plan Miami: D", miamiChargeableCft, null
+        );
+        rate.SetAmounts(null);
+
+        Assert.AreEqual(1m, rate.ChargeableQuantity); // Legacy header minimum for CBM products.
+        Assert.AreEqual(miamiChargeableCft, detail.Quantity);
+        Assert.AreEqual(miamiChargeableCft * 24.84m, rate.TotalSaleAmount);
+        Assert.IsTrue(detail.Quantity < 35.3146667m);
+    }
+
+    [TestMethod]
+    public void MiamiLcl_PerChargeableCft_FallbackUsesActualVolumeNotOneCbm()
+    {
+        var rate = CreateRate(containerQuantity: 1);
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 171m,
+            totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+
+        var quantity = rate.ResolveChargeQuantity(ChargeBasis.PerChargeableCft);
+        Assert.AreEqual(171m / 500m * 35.31466672148859m, quantity);
+        Assert.AreEqual(1m, rate.ResolveChargeQuantity(ChargeBasis.PerChargeableCbm));
+    }
+
+    [TestMethod]
     public void ConfigureShipment_Lcl_RemovesLegacyContainerAllocations()
     {
         var rate = CreateRate(containerQuantity: 1);
