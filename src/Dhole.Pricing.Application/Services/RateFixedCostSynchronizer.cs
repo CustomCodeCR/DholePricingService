@@ -52,6 +52,17 @@ public sealed class RateFixedCostSynchronizer(
             return;
         }
 
+        // Las tarifas LCL coloader no usan una naviera propia. Pricing normaliza
+        // CarrierId vacío a la referencia interna "No aplica (LCL)" (CarrierCode=LCL).
+        // Las líneas del tarifario del coloader y las agregadas manualmente son la
+        // fuente autoritativa: no agregarles cargos fijos automáticos de navieras.
+        // Los detalles excluidos se eliminan mediante RemovedExtraDetailIds al editar.
+        if (rate.ShipmentMode == ShipmentMode.Lcl
+            && string.Equals(rate.CarrierCode, "LCL", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         var existingAmounts = rate
             .RateDetails.Where(x => x.CostId.HasValue && x.CostType == CostType.Fixed)
             .GroupBy(x => x.CostId!.Value)
