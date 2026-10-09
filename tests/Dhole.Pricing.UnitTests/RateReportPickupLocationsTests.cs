@@ -54,13 +54,47 @@ public sealed class RateReportPickupLocationsTests
             .GetProperty("pickupLocations").GetArrayLength());
     }
 
+    [TestMethod]
+    public void MiamiLclReport_LegacyOneCbmFreight_UsesActualCftInPdf()
+    {
+        var rate = CreateRate("EXW", "Miami, Estados Unidos", "USMIA");
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 171m,
+            totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+        rate.AddRateDetail(
+            rate.Id, null, "Flete Miami → Costa Rica",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Freight,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerChargeableCft,
+            rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            3m, 24.84m, "LCL PROPIO · Plan Miami: D", 35.3146667m, null
+        );
+        using var report = QuoteData(rate);
+        var items = report.RootElement.GetProperty("items");
+        var freight = items.EnumerateArray().First(item =>
+            item.GetProperty("description").GetString() == "Flete Miami → Costa Rica");
+        var chargeableCft = 171m / 14.16m;
+
+        Assert.AreEqual(chargeableCft, freight.GetProperty("quantity").GetDecimal());
+        Assert.AreEqual(chargeableCft * 24.84m, freight.GetProperty("lineTotalAmount").GetDecimal());
+        StringAssert.Contains(report.RootElement.GetProperty("rate")
+            .GetProperty("containerSummary").GetString()!, "CFT cobrable");
+    }
+
     private static JsonDocument QuoteData(RateHeader rate)
     {
         var factory = new RateReportDataFactory(new ConfigurationBuilder().Build());
         return JsonDocument.Parse(factory.CreateDataJson(rate));
     }
 
-    private static RateHeader CreateRate(string incoterm)
+    private static RateHeader CreateRate(string incoterm, string polName = "Colón, Panamá", string polCode = "PAONX")
     {
         return RateHeader.Create(
             rateCode: "QUO-A7K2P-9X4M8Q",
@@ -72,8 +106,8 @@ public sealed class RateReportPickupLocationsTests
             carrierName: "Naviera",
             carrierCode: "CAR",
             polId: Guid.NewGuid(),
-            polName: "Colón, Panamá",
-            polCode: "PAONX",
+            polName: polName,
+            polCode: polCode,
             poeId: Guid.NewGuid(),
             poeName: "Ciudad de Guatemala",
             poeCode: "GTGUA",
