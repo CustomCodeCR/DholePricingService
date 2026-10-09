@@ -76,9 +76,17 @@ public sealed class UpdateRateCommandHandler(
                 )
             )
         );
+        // La fuente coloader descarta cualquier naviera heredada al editar,
+        // incluso si el cliente envía todavía un CarrierId de LCL propio.
+        var isLclColoader = command.ShipmentMode == ShipmentMode.Lcl
+            && (command.ExtraDetails ?? Array.Empty<UpsertRateExtraDetailCommandItem>())
+                .Any(detail => (detail.Notes ?? string.Empty).Contains(
+                    "Fuente LCL: Coloader", StringComparison.OrdinalIgnoreCase)
+                    || (detail.Notes ?? string.Empty).Contains(
+                        "LCL COLOADER", StringComparison.OrdinalIgnoreCase));
         var lclWithoutCarrier =
             command.ShipmentMode == ShipmentMode.Lcl
-            && command.CarrierId == Guid.Empty;
+            && (command.CarrierId == Guid.Empty || isLclColoader);
 
         // Rehidratamos todos los selectores desde Config. De esta manera cambiar naviera,
         // agente, ruta, contenedor, moneda o Incoterm nunca persiste Name/Code enviados por Web.
@@ -102,7 +110,7 @@ public sealed class UpdateRateCommandHandler(
             }
 
             PricingConfigCatalogItem? carrier = null;
-            if (command.CarrierId != Guid.Empty)
+            if (!lclWithoutCarrier && command.CarrierId != Guid.Empty)
             {
                 carrier = await configCatalog.GetActiveInGroupAsync(
                     command.CarrierId, PricingConstants.CatalogSlugs.Carriers, cancellationToken);
