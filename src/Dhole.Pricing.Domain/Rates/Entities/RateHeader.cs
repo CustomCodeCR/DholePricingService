@@ -749,10 +749,21 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             effectiveChargeableVolumeCbm,
             TotalWeightKg / KgPerCbm
         );
+        // The own maritime Miami matrix charges freight in CFT with a MONETARY
+        // minimum. Converting an artificial 1-CBM floor into 35.315 CFT produces
+        // an incorrect freight line in the client PDF. Keep actual chargeable
+        // volume in the header; the matrix's PerChargeableCft detail remains
+        // authoritative for the exact Miami weight/volume and LITTLE rules.
+        var isMiamiLcl = shipmentMode == ShipmentMode.Lcl &&
+            (string.Equals(PolCode?.Trim(), "MIA", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(PolCode?.Trim(), "USMIA", StringComparison.OrdinalIgnoreCase)
+             || (PolName?.Contains("Miami", StringComparison.OrdinalIgnoreCase) ?? false));
+
         ChargeableQuantity = shipmentMode switch
         {
-            // Consolidated cargo has a commercial minimum of 1 CBM. Keep zero as zero so
-            // the validation below still rejects a shipment without weight or volume.
+            ShipmentMode.Lcl when isMiamiLcl => cargoChargeableQuantity,
+            // Other consolidated modes retain their standard 1-CBM minimum.
+            // Keep zero to reject shipments without chargeable volume/weight.
             ShipmentMode.Lcl or ShipmentMode.Ltl => cargoChargeableQuantity > 0m
                 ? Math.Max(1m, cargoChargeableQuantity)
                 : 0m,
