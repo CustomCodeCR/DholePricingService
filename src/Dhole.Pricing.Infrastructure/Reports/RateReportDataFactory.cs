@@ -143,25 +143,12 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             _ => equipmentSummary,
         };
 
-        // Un consolidado LCL propio toma sus líneas comerciales exclusivamente de la matriz
-        // Excel (EXW/FCA/FOB). Los CostId pertenecen al catálogo general "Costos y recargos"
-        // y no deben aparecer ni alterar el PDF, incluso en tarifas antiguas que los guardaron.
-        var ownLclExcelOnly = rate.ShipmentMode == ShipmentMode.Lcl
-            && (
-                string.Equals(rate.AgentCode, "GCF", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(rate.AgentName, "Grupo Castro Fallas", StringComparison.OrdinalIgnoreCase)
-                || rate.RateDetails.Any(detail =>
-                    !detail.CostId.HasValue
-                    && (
-                        (detail.Notes?.Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase) ?? false)
-                        || (detail.Notes?.Contains("Base del Excel", StringComparison.OrdinalIgnoreCase) ?? false)
-                        || detail.Name.Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase)
-                    )
-                )
-            );
-
+        // El PDF refleja los detalles comerciales persistidos (seleccionados en Pricing).
+        // CostId identifica un costo del catálogo, no una instrucción para ocultarlo.
+        // Filtrarlo para LCL propio eliminaba recolectas y otros cargos realmente cotizados.
+        // La limpieza de costos de otro proveedor debe realizarse al cambiar la fuente
+        // y guardar la tarifa, nunca silenciosamente al generar el documento.
         var reportDetails = rate.RateDetails
-            .Where(detail => !ownLclExcelOnly || !detail.CostId.HasValue)
             .Where(detail => detail.SaleAmount * ReportQuantity(detail) != 0m)
             .OrderBy(x => x.CostDetailType)
             .ThenBy(x => x.Name)
