@@ -35,8 +35,12 @@ public sealed class RateFixedCostSynchronizer(
         // Las líneas del tarifario del coloader y las agregadas manualmente son la
         // fuente autoritativa: no agregarles cargos fijos automáticos de navieras.
         // Los detalles excluidos se eliminan mediante RemovedExtraDetailIds al editar.
+        var hasExplicitColoaderSource = rate.RateDetails.Any(detail =>
+            (detail.Notes ?? string.Empty).Contains("Fuente LCL: Coloader", StringComparison.OrdinalIgnoreCase)
+            || (detail.Notes ?? string.Empty).Contains("LCL COLOADER", StringComparison.OrdinalIgnoreCase));
         if (rate.ShipmentMode == ShipmentMode.Lcl
-            && string.Equals(rate.CarrierCode, "LCL", StringComparison.OrdinalIgnoreCase))
+            && string.Equals(rate.CarrierCode, "LCL", StringComparison.OrdinalIgnoreCase)
+            && (hasExplicitColoaderSource || !IsOwnLclRate(rate)))
         {
             return;
         }
