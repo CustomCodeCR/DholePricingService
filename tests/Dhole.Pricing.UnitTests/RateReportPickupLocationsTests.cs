@@ -88,6 +88,82 @@ public sealed class RateReportPickupLocationsTests
             .GetProperty("containerSummary").GetString()!, "CFT cobrable");
     }
 
+    [TestMethod]
+    public void PdfTotals_UsePersistedFxRateToShowOneEquivalentAmountInUsdAndCrc()
+    {
+        var rate = CreateRate("EXW");
+        rate.ConfigureExchangeRateSnapshot(
+            purchase: null, sale: null, applied: 500m,
+            rateDate: new DateTime(2026, 10, 9),
+            capturedAtUtc: DateTime.UtcNow, source: "Test",
+            manualOverride: true, updatedBy: null);
+        rate.AddRateDetail(
+            rate.Id, null, "Flete", Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Freight,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerShipment,
+            rate.CurrencyId, "USD", "USD", 0m, 100m, null, 1m, null);
+        rate.AddRateDetail(
+            rate.Id, null, "DUA", Dhole.Pricing.Domain.Costs.Enums.CostDetailType.CustomsCharge,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerShipment,
+            Guid.NewGuid(), "CRC", "CRC", 0m, 36000m, null, 1m, null);
+
+        using var report = QuoteData(rate);
+        var root = report.RootElement;
+        var totals = root.GetProperty("currencyTotals");
+        Assert.IsTrue(root.GetProperty("rate").GetProperty("hasEquivalentCurrencies").GetBoolean());
+        Assert.AreEqual(2, totals.GetArrayLength());
+        Assert.AreEqual("USD", totals[0].GetProperty("currencyCode").GetString());
+        Assert.AreEqual(172m, totals[0].GetProperty("amount").GetDecimal());
+        Assert.AreEqual("CRC", totals[1].GetProperty("currencyCode").GetString());
+        Assert.AreEqual(86000m, totals[1].GetProperty("amount").GetDecimal());
+        StringAssert.Contains(root.GetProperty("rate").GetProperty("exchangeRateNote").GetString()!, "500.0000");
+    }
+
+    [TestMethod]
+    public void PdfPickup_IsAlwaysOneFlatChargeEvenWhenInputUsesCft()
+    {
+        var rate = CreateRate("EXW", "Miami, Estados Unidos", "USMIA");
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl, totalPackages: 1, totalPallets: 1,
+            totalWeightKg: 171m, totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m, cargoLinesJson: null, updatedBy: null);
+        var pickup = rate.AddRateDetail(
+            rate.Id, null, "Recolecta",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.InlandTransport,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerChargeableCft,
+            rate.CurrencyId, "USD", "USD", 630m, 655m, null, 12.077m, null);
+        Assert.AreEqual(Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerShipment, pickup.ChargeBasis);
+        Assert.AreEqual(1m, pickup.Quantity);
+
+        using var report = QuoteData(rate);
+        var item = report.RootElement.GetProperty("items")[0];
+        Assert.AreEqual(1m, item.GetProperty("quantity").GetDecimal());
+        Assert.AreEqual(655m, item.GetProperty("lineTotalAmount").GetDecimal());
+        Assert.AreEqual("5.650 CFT", report.RootElement.GetProperty("rate").GetProperty("totalVolume").GetString());
+    }
+
+    [TestMethod]
+    public void PdfCbmShipment_DoesNotPrintCftVolume()
+    {
+        var rate = CreateRate("EXW");
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl, totalPackages: 1, totalPallets: 1,
+            totalWeightKg: 171m, totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m, cargoLinesJson: null, updatedBy: null);
+        rate.AddRateDetail(
+            rate.Id, null, "Flete",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Freight,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerChargeableCbm,
+            rate.CurrencyId, "USD", "USD", 0m, 100m, null, 1m, null);
+        using var report = QuoteData(rate);
+        var header = report.RootElement.GetProperty("rate");
+        Assert.AreEqual("0.160 CBM", header.GetProperty("totalVolume").GetString());
+        StringAssert.Contains(header.GetProperty("containerSummary").GetString()!, "CBM cobrable");
+    }
+
     private static JsonDocument QuoteData(RateHeader rate)
     {
         var factory = new RateReportDataFactory(new ConfigurationBuilder().Build());
