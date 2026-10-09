@@ -145,7 +145,7 @@ public sealed class RateReportPickupLocationsTests
             totalWeightKg: 171m,
             totalVolumeCbm: 0.16m,
             kgPerCbm: 500m,
-            cargoLinesJson: """[{"BillableVolumeCbm":0.2,"VolumeCbm":0.16,"WeightKg":171}]""",
+            cargoLinesJson: """[{"Description":"Caja","Packages":1,"Pallets":1,"WeightKg":171,"LengthCm":100,"WidthCm":100,"HeightCm":16,"VolumeCbm":0.16,"IsStackable":true,"BillableVolumeCbm":0.2,"DeadSpaceCbm":0.04}]""",
             updatedBy: null
         );
         rate.AddRateDetail(
