@@ -322,6 +322,35 @@ public sealed class RateReportPickupLocationsTests
     }
 
     [TestMethod]
+    public void PdfSavedPickupWithZeroSale_RemainsVisibleWithoutInventingACharge()
+    {
+        var rate = CreateRate("EXW", "Miami, Estados Unidos", "USMIA");
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl, totalPackages: 1, totalPallets: 1,
+            totalWeightKg: 171m, totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m, cargoLinesJson: null, updatedBy: null);
+        rate.AddRateDetail(
+            rate.Id, Guid.NewGuid(), "Recolecta",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.InlandTransport,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerShipment,
+            rate.CurrencyId, "USD", "USD", 0m, 0m, null, 1m, null);
+        rate.AddRateDetail(
+            rate.Id, null, "Otro cargo por completar",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Other,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerShipment,
+            rate.CurrencyId, "USD", "USD", 0m, 0m, null, 1m, null);
+
+        using var report = QuoteData(rate);
+        var items = report.RootElement.GetProperty("items").EnumerateArray().ToArray();
+        Assert.AreEqual(1, items.Length);
+        Assert.AreEqual("Recolecta", items[0].GetProperty("description").GetString());
+        Assert.AreEqual(1m, items[0].GetProperty("quantity").GetDecimal());
+        Assert.AreEqual(0m, items[0].GetProperty("lineTotalAmount").GetDecimal());
+    }
+
+    [TestMethod]
     public void PdfCbmShipment_DoesNotPrintCftVolume()
     {
         var rate = CreateRate("EXW");
