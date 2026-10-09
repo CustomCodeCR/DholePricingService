@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Dhole.Pricing.Application.Abstractions.Reports;
+using Dhole.Pricing.Contracts.Rates.Response;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -15,6 +16,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("en-US");
     private const string OriginOfficeMessage = "Estos son los datos de Castro Fallas en origen.";
+    private const decimal MiamiCftPerCbm = 35.3146667m;
+    private const decimal MiamiKgPerCft = 14.16m;
 
     public string CreateDataJson(RateHeader rate)
     {
@@ -42,6 +45,34 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var pickupLocations = CreatePickupLocations(
             rate.PickupLocationsJson, rate.PickupAddress, rate.IncotermCode, rate.IncotermName);
 
+        // Reconcile only previously persisted Miami CFT freight corrupted by
+        // the old 1-CBM floor. Modern, correctly saved CFT lines are unchanged.
+        var miamiBillableCft = CalculateMiamiBillableCft(rate);
+        decimal ReportQuantity(RateDetail detail)
+        {
+            if (!miamiBillableCft.HasValue
+                || detail.CostDetailType != CostDetailType.Freight
+                || detail.ChargeBasis != ChargeBasis.PerChargeableCft)
+                return detail.Quantity;
+
+            var legacyCftFromCbmFloor = Math.Max(rate.ChargeableQuantity, 1m) * MiamiCftPerCbm;
+            var legacyFloorApplied =
+                Math.Abs(detail.Quantity - legacyCftFromCbmFloor) < 0.05m
+                && miamiBillableCft.Value + 0.05m < detail.Quantity;
+
+            return legacyFloorApplied ? miamiBillableCft.Value : detail.Quantity;
+        }
+
+        var cftFreight = rate.ShipmentMode == ShipmentMode.Lcl
+            ? rate.RateDetails.FirstOrDefault(detail =>
+                detail.CostDetailType == CostDetailType.Freight &&
+                detail.ChargeBasis == ChargeBasis.PerChargeableCft)
+            : null;
+        // The quote header and its freight line must use the same commercial unit.
+        var lclChargeableLabel = cftFreight is not null
+            ? $"LCL · {ReportQuantity(cftFreight).ToString("N3", MoneyCulture)} CFT cobrable"
+            : $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable";
+
         // LCL must never leak the legacy container placeholder (for example 20 DV)
         // into the commercial document. For consolidated cargo the shipment itself is
         // the equipment row and its real commercial measure is the chargeable CBM.
@@ -52,10 +83,10 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 {
                     containerTypeId = rate.ContainerTypeId,
                     containerType = "LCL",
-                    containerTypeName = $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable",
+                    containerTypeName = lclChargeableLabel,
                     containerTypeCode = "LCL",
                     quantity = 1,
-                    label = $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable"
+                    label = lclChargeableLabel
                 }
             }
             : (rate.RateContainers.Count > 0
@@ -99,7 +130,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var equipmentSummary = string.Join(" + ", containers.Select(x => x.label));
         var shipmentSummary = rate.ShipmentMode switch
         {
-            ShipmentMode.Lcl => $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable",
+            ShipmentMode.Lcl => lclChargeableLabel,
             ShipmentMode.Ltl => $"LTL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable",
             ShipmentMode.Ftl => equipmentSummary,
             _ => equipmentSummary,
@@ -124,14 +155,14 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
 
         var reportDetails = rate.RateDetails
             .Where(detail => !ownLclExcelOnly || !detail.CostId.HasValue)
-            .Where(detail => detail.SaleAmount * detail.Quantity != 0m)
+            .Where(detail => detail.SaleAmount * ReportQuantity(detail) != 0m)
             .OrderBy(x => x.CostDetailType)
             .ThenBy(x => x.Name)
             .ToArray();
 
         var useAllInPresentation = rate.UseAllInPresentation && reportDetails.Length > 0;
         var allInAmount = useAllInPresentation
-            ? CalculateAllInAmount(rate, reportDetails)
+            ? CalculateAllInAmount(rate, reportDetails, ReportQuantity)
             : 0m;
         var allInIncludesDestinationTax = reportDetails.Any(detail =>
             detail.ApplyDestinationTax && detail.DestinationTaxRate > 0m);
@@ -157,13 +188,13 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 .Select(detail => new
                 {
                     description = detail.Name,
-                    quantity = detail.Quantity,
+                    quantity = ReportQuantity(detail),
                     currency = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
                     currencyCode = detail.CurrencyCode,
                     unitSale = DetailMoney(detail, detail.SaleAmount),
                     unitSaleAmount = detail.SaleAmount,
-                    lineTotal = DetailMoney(detail, detail.SaleAmount * detail.Quantity),
-                    lineTotalAmount = detail.SaleAmount * detail.Quantity,
+                    lineTotal = DetailMoney(detail, detail.SaleAmount * ReportQuantity(detail)),
+                    lineTotalAmount = detail.SaleAmount * ReportQuantity(detail),
                     destinationTaxLabel = detail.ApplyDestinationTax && detail.DestinationTaxRate > 0m
                         ? "IVA incluido"
                         : string.Empty,
@@ -193,7 +224,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 {
                     var first = group.First();
                     var displayCurrency = CurrencyValue(first.CurrencyName, first.CurrencyCode);
-                    var amount = group.Sum(detail => detail.SaleAmount * detail.Quantity);
+                    var amount = group.Sum(detail => detail.SaleAmount * ReportQuantity(detail));
                     var canonicalCode = Regex.IsMatch(group.Key, "^[A-Z]{3}$")
                         ? group.Key
                         : Text(first.CurrencyCode, string.Empty);
@@ -235,10 +266,10 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 .Select(detail => new Dictionary<string, object?>
                 {
                     ["Concepto"] = detail.Name,
-                    ["Cantidad"] = detail.Quantity,
+                    ["Cantidad"] = ReportQuantity(detail),
                     ["Moneda"] = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
                     ["Precio unitario"] = detail.SaleAmount,
-                    ["Total"] = detail.SaleAmount * detail.Quantity,
+                    ["Total"] = detail.SaleAmount * ReportQuantity(detail),
                     ["Notas"] = detail.CostDetailType == CostDetailType.Insurance
                         ? string.Empty
                         : detail.Notes
@@ -297,7 +328,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 totalWeightKg = rate.TotalWeightKg,
                 totalVolumeCbm = rate.TotalVolumeCbm,
                 kgPerCbm = rate.KgPerCbm,
-                chargeableQuantity = rate.ChargeableQuantity,
+                chargeableQuantity = miamiBillableCft.HasValue && cftFreight is not null
+                    ? ReportQuantity(cftFreight) / MiamiCftPerCbm
+                    : rate.ChargeableQuantity,
                 cargoDetails,
                 pickupLocations,
                 currency = currencyValue,
@@ -458,7 +491,64 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         }
     }
 
-    private static decimal CalculateAllInAmount(RateHeader rate, IReadOnlyCollection<RateDetail> details)
+    // Same physical cargo rule used by Miami quote calculation. LITTLE is volume-only.
+    // Do not read ChargeableQuantity: legacy LCL headers clamp it to >= 1 CBM.
+    private static decimal? CalculateMiamiBillableCft(RateHeader rate)
+    {
+        if (rate.ShipmentMode != ShipmentMode.Lcl)
+            return null;
+
+        var polCode = (rate.PolCode ?? string.Empty).Trim().ToUpperInvariant();
+        var polName = rate.PolName ?? string.Empty;
+        if (polCode is not ("MIA" or "USMIA")
+            && !polName.Contains("Miami", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        // Only own maritime Miami matrices use the 14.16 kg/CFT rule.
+        // An air LCL quote departing Miami can also show CFT, but its billing
+        // rules are different and must never be reconciled with this matrix.
+        var hasMiamiMatrixFreight = rate.RateDetails.Any(detail =>
+            detail.CostDetailType == CostDetailType.Freight
+            && detail.ChargeBasis == ChargeBasis.PerChargeableCft
+            && (detail.Name.Contains("Flete Miami", StringComparison.OrdinalIgnoreCase)
+                || detail.Notes?.Contains("Plan Miami:", StringComparison.OrdinalIgnoreCase) == true));
+        if (!hasMiamiMatrixFreight)
+            return null;
+
+        decimal billableCbm = 0m;
+        if (!string.IsNullOrWhiteSpace(rate.CargoLinesJson))
+        {
+            try
+            {
+                var cargoLines = JsonSerializer.Deserialize<RateCargoLineDto[]>(
+                    rate.CargoLinesJson, JsonOptions);
+                if (cargoLines is { Length: > 0 })
+                {
+                    billableCbm = cargoLines.Sum(line =>
+                        Math.Max(line.BillableVolumeCbm > 0m
+                            ? line.BillableVolumeCbm
+                            : line.VolumeCbm, 0m));
+                }
+            }
+            catch (JsonException)
+            {
+                // Historic quotes may contain only their header cargo metrics.
+            }
+        }
+
+        if (billableCbm <= 0m)
+            billableCbm = Math.Max(0m, rate.TotalVolumeCbm);
+
+        var volumeCft = billableCbm * MiamiCftPerCbm;
+        var isLittle = rate.RateDetails.Any(detail =>
+            detail.Notes?.Contains("Plan Miami: LITTLE", StringComparison.OrdinalIgnoreCase) == true);
+        var result = isLittle
+            ? volumeCft
+            : Math.Max(volumeCft, Math.Max(0m, rate.TotalWeightKg) / MiamiKgPerCft);
+        return result > 0m ? result : null;
+    }
+
+    private static decimal CalculateAllInAmount(RateHeader rate, IReadOnlyCollection<RateDetail> details, Func<RateDetail, decimal>? quantityResolver = null)
     {
         var targetCurrency = rate.CurrencyCode.Trim().ToUpperInvariant();
         var exchangeRate = rate.ExchangeRateApplied is > 0m
@@ -468,7 +558,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
 
         foreach (var detail in details)
         {
-            var amount = detail.SaleAmount * detail.Quantity;
+            var amount = detail.SaleAmount * (quantityResolver?.Invoke(detail) ?? detail.Quantity);
             var sourceCurrency = detail.CurrencyCode.Trim().ToUpperInvariant();
 
             if (string.Equals(sourceCurrency, targetCurrency, StringComparison.OrdinalIgnoreCase))
