@@ -807,9 +807,21 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                 ? Math.Max(chargeableCbm, 1m)
                 : Math.Max(chargeableCbm, 0.001m),
             ChargeBasis.PerCft => Math.Max(TotalVolumeCbm * 35.31466672148859m, 0.001m),
-            ChargeBasis.PerChargeableCft => (ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl
-                ? Math.Max(chargeableCbm, 1m)
-                : Math.Max(chargeableCbm, 0.001m)) * 35.31466672148859m,
+            // CFT charges calculated by the Miami/air LCL quote must keep their
+            // explicitly selected billable quantity. Their minimum is monetary,
+            // not an artificial 1-CBM volume floor (35.315 CFT).
+            // This also preserves volume-only quantities for Miami LITTLE.
+            ChargeBasis.PerChargeableCft => requestedQuantity > 0m
+                ? requestedQuantity
+                : (ShipmentMode == ShipmentMode.Lcl
+                    ? Math.Max(
+                        kgPerCbmOverride is > 0m
+                            ? chargeableCbm
+                            : Math.Max(TotalVolumeCbm, TotalWeightKg / Math.Max(KgPerCbm, 1m)),
+                        0.001m)
+                    : ShipmentMode == ShipmentMode.Ltl
+                        ? Math.Max(chargeableCbm, 1m)
+                        : Math.Max(chargeableCbm, 0.001m)) * 35.31466672148859m,
             ChargeBasis.PerKg => Math.Max(TotalWeightKg, 0.001m),
             ChargeBasis.Per100Kg => Math.Max(TotalWeightKg / 100m, 0.001m),
             ChargeBasis.PerTon => Math.Max(TotalWeightKg / 1000m, 0.001m),
