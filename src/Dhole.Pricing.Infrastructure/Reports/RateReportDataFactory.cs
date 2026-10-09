@@ -328,8 +328,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 totalWeightKg = rate.TotalWeightKg,
                 totalVolumeCbm = rate.TotalVolumeCbm,
                 kgPerCbm = rate.KgPerCbm,
-                chargeableQuantity = miamiBillableCft.HasValue
-                    ? miamiBillableCft.Value / MiamiCftPerCbm
+                chargeableQuantity = miamiBillableCft.HasValue && cftFreight is not null
+                    ? ReportQuantity(cftFreight) / MiamiCftPerCbm
                     : rate.ChargeableQuantity,
                 cargoDetails,
                 pickupLocations,
