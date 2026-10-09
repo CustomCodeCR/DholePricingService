@@ -304,7 +304,7 @@ public sealed class RateFreightQuantityTests
 
         Assert.AreEqual(1m, rate.ChargeableQuantity); // Legacy header minimum for CBM products.
         Assert.AreEqual(miamiChargeableCft, detail.Quantity);
-        Assert.AreEqual(miamiChargeableCft * 24.84m, rate.TotalSaleAmount);
+        Assert.AreEqual(decimal.Round(miamiChargeableCft * 24.84m, 2, MidpointRounding.AwayFromZero), rate.TotalSaleAmount);
         Assert.IsTrue(detail.Quantity < 35.3146667m);
     }
 
