@@ -249,6 +249,33 @@ public sealed class RateFreightQuantityTests
     }
 
     [TestMethod]
+    public void MiamiLcl_CftBillingDoesNotUseTheOneCbmMinimum()
+    {
+        var rate = CreateRate(1, "Miami, Estados Unidos", "USMIA");
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 0m,
+            totalVolumeCbm: 0.342m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+        Assert.AreEqual(0.342m, rate.ChargeableQuantity);
+        Assert.AreEqual(0.342m * 35.31466672148859m,
+            rate.ResolveChargeQuantity(ChargeBasis.PerChargeableCft));
+
+        var detail = rate.AddRateDetail(
+            rate.Id, null, "Flete Miami → Costa Rica",
+            CostDetailType.Freight, CostType.Variable, ChargeBasis.PerChargeableCft,
+            rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            3m, 24.84m, null, 12.076m, null
+        );
+        Assert.AreEqual(12.076m, detail.Quantity);
+    }
+
+    [TestMethod]
     public void ConfigureShipment_Lcl_RemovesLegacyContainerAllocations()
     {
         var rate = CreateRate(containerQuantity: 1);
@@ -334,7 +361,7 @@ public sealed class RateFreightQuantityTests
         Assert.IsNull(cost.PortRole);
     }
 
-    private static RateHeader CreateRate(int containerQuantity)
+    private static RateHeader CreateRate(int containerQuantity, string polName = "Shanghai", string polCode = "CNSHA")
     {
         var today = DateTime.UtcNow.Date;
         return RateHeader.Create(
@@ -342,7 +369,7 @@ public sealed class RateFreightQuantityTests
             sourceImportFclRateId: null,
             agentId: Guid.NewGuid(), agentName: "Agente", agentCode: "AGT",
             carrierId: Guid.NewGuid(), carrierName: "Naviera", carrierCode: "CAR",
-            polId: Guid.NewGuid(), polName: "Shanghai", polCode: "CNSHA",
+            polId: Guid.NewGuid(), polName: polName, polCode: polCode,
             poeId: Guid.NewGuid(), poeName: "Caldera", poeCode: "CRCAL",
             podId: Guid.NewGuid(), podName: "San José", podCode: "CRSJO",
             containerTypeId: Guid.NewGuid(), containerTypeName: "40HC", containerTypeCode: "40HC",
