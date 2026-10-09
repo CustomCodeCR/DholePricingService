@@ -35,8 +35,12 @@ public sealed class RateFixedCostSynchronizer(
         // provenientes de las reglas/Excel, que no están ligadas a CostId.
         if (IsOwnLclRate(rate))
         {
+            // Own LCL consolidations must not import automatic fixed catalog costs.
+            // However, user-selected variable charges (e.g. an EXW pickup/recolecta)
+            // are explicitly included in the quote and must never be deleted just
+            // because they retain a CostId referencing the Costs catalog.
             var configuredDetailIds = rate.RateDetails
-                .Where(x => x.CostId.HasValue)
+                .Where(x => x.CostId.HasValue && x.CostType == CostType.Fixed)
                 .Select(x => x.Id)
                 .ToArray();
 
