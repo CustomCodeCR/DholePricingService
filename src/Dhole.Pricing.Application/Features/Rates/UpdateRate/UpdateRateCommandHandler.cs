@@ -66,10 +66,10 @@ public sealed class UpdateRateCommandHandler(
             return Result.Failure(PricingErrors.RateInvalidStatus);
         }
 
-        var acceptedRevision = rate.Status == Dhole.Pricing.Domain.Rates.Enums.RateStatus.AcceptedByClient
-            ? RateRevisionSnapshotFactory.Capture(rate)
-            : null;
-        var acceptedRevisionNumber = rate.RevisionNumber;
+        // Conservar la versión anterior en el historial para CADA edición guardada,
+        // no solo para cotizaciones previamente aceptadas.
+        var previousRevision = RateRevisionSnapshotFactory.Capture(rate);
+        var previousRevisionNumber = rate.RevisionNumber;
         var commercialStatusBeforeUpdate = rate.Status;
 
         if (rate.SourceImportFclRateId.HasValue && command.ShipmentMode != ShipmentMode.Fcl)
@@ -846,18 +846,21 @@ public sealed class UpdateRateCommandHandler(
             return Result.Failure(PricingErrors.RateUpdateValidationFailed(exception.Message));
         }
 
-        if (acceptedRevision is not null)
-        {
-            await rateRevisions.AddAsync(
-                RateRevision.Create(
-                    rate.Id, acceptedRevisionNumber, acceptedRevision.Status, acceptedRevision.RateName,
-                    acceptedRevision.IdtraNumber, acceptedRevision.QuoNumber, acceptedRevision.TotalSaleUsd,
-                    acceptedRevision.TotalSaleCrc, acceptedRevision.MarginPercentage, acceptedRevision.Json, command.UpdatedBy
-                ),
-                cancellationToken
-            );
+        // Solo una actualización validada crea una revisión. Las lecturas, el
+        // PDF y las operaciones rechazadas no modifican el contador.
+        await rateRevisions.AddAsync(
+            RateRevision.Create(
+                rate.Id, previousRevisionNumber, previousRevision.Status, previousRevision.RateName,
+                previousRevision.IdtraNumber, previousRevision.QuoNumber, previousRevision.TotalSaleUsd,
+                previousRevision.TotalSaleCrc, previousRevision.MarginPercentage, previousRevision.Json, command.UpdatedBy
+            ),
+            cancellationToken
+        );
+
+        if (commercialStatusBeforeUpdate == RateStatus.AcceptedByClient)
             rate.BeginRevision(command.UpdatedBy);
-        }
+        else
+            rate.AdvanceRevision(command.UpdatedBy);
 
         await audit.PublishAsync(
             new PricingAuditEvent(
