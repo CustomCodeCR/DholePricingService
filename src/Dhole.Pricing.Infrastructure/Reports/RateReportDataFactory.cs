@@ -381,6 +381,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             {
                 rateCode = rate.RateCode,
                 quoteNumber = Text(rate.QuoNumber, rate.RateCode),
+                revisionNumber = Math.Max(1, rate.RevisionNumber),
                 idtraNumber = Text(rate.IdtraNumber, string.Empty),
                 clientName = Text(rate.ClientName),
                 agent = showAgent ? reportAgentName : string.Empty,
