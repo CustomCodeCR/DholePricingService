@@ -60,6 +60,7 @@ public sealed class SetRateStatusCommandHandler(
         }
 
         if (command.Status == RateStatus.AcceptedByClient
+            && rate.Status != RateStatus.AcceptedByClient
             && string.IsNullOrWhiteSpace(command.IdtraNumber)
             && string.IsNullOrWhiteSpace(rate.IdtraNumber))
         {
