@@ -822,9 +822,9 @@ public sealed class UpdateRateCommandHandler(
             // ya cumple la regla de aprobación (o fue aprobado por el scope).
             if (!rate.RequiredApproval && commercialStatusBeforeUpdate is RateStatus.Sent or RateStatus.RequestedByClient)
             {
-                rate.SetCommercialStatus(RateStatus.Sent, reason: null, command.UpdatedBy);
+                rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: command.UpdatedBy);
                 if (commercialStatusBeforeUpdate == RateStatus.RequestedByClient)
-                    rate.SetCommercialStatus(RateStatus.RequestedByClient, reason: null, command.UpdatedBy);
+                    rate.SetCommercialStatus(RateStatus.RequestedByClient, reason: null, updatedBy: command.UpdatedBy);
             }
 
             // Permite renovar una tarifa Expired. Si la nueva vigencia sigue vencida,
