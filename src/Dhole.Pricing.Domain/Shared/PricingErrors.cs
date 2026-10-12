@@ -201,6 +201,11 @@ public static class PricingErrors
         "El estado de la tarifa no es válido para esta operación."
     );
 
+    public static readonly Error RateIdtraRequiredForAcceptance = new(
+        "Pricing.RateIdtraRequiredForAcceptance",
+        "Para marcar la tarifa como Aceptada debe registrar el IDTRA."
+    );
+
     public static readonly Error RateImportedStructureLocked = new(
         "Pricing.RateImportedStructureLocked",
         "Una tarifa creada desde una importación FCL debe conservar la modalidad y el tipo de contenedor de la tarifa importada."
