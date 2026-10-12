@@ -61,6 +61,24 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var pickupLocations = CreatePickupLocations(
             rate.PickupLocationsJson, rate.PickupAddress, rate.IncotermCode, rate.IncotermName);
 
+        // Air LCL shares ShipmentMode.Lcl with maritime LCL. Detect it using the
+        // persisted KG freight basis, cargo flight context or airport IATA route.
+        // Do not convert legacy CBM quantities in a PDF: doing so would silently
+        // change the customer's payable total without a new commercial quotation.
+        var isAirLcl = rate.ShipmentMode == ShipmentMode.Lcl &&
+            (rate.RateDetails.Any(detail =>
+                detail.CostDetailType == CostDetailType.Freight &&
+                detail.ChargeBasis is ChargeBasis.PerKg or ChargeBasis.Per100Kg)
+             || Regex.IsMatch(rate.CargoLinesJson ?? string.Empty,
+                 @"a[eé]re[ao]|aviaci[oó]n|aeropuerto|airport|vuelos?",
+                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+             || (Regex.IsMatch(rate.PolName ?? string.Empty, @"\([A-Z]{3}\)")
+                 && Regex.IsMatch(rate.PoeName ?? string.Empty, @"\([A-Z]{3}\)")));
+        string ReportDetailName(RateDetail detail) =>
+            isAirLcl && detail.CostDetailType == CostDetailType.Freight
+                ? "Flete Internacional"
+                : detail.Name;
+
         // Reconcile only previously persisted Miami CFT freight corrupted by
         // the old 1-CBM floor. Modern, correctly saved CFT lines are unchanged.
         var miamiBillableCft = CalculateMiamiBillableCft(rate);
@@ -89,9 +107,16 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 detail.ChargeBasis == ChargeBasis.PerChargeableCft)
             : null;
         // The quote header and its freight line must use the same commercial unit.
-        var lclChargeableLabel = cftFreight is not null
-            ? $"LCL · {ReportQuantity(cftFreight).ToString("N3", MoneyCulture)} CFT cobrable"
-            : $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable";
+        var airKgFreight = isAirLcl
+            ? rate.RateDetails.FirstOrDefault(detail =>
+                detail.CostDetailType == CostDetailType.Freight
+                && detail.ChargeBasis == ChargeBasis.PerKg)
+            : null;
+        var lclChargeableLabel = airKgFreight is not null
+            ? $"LCL aéreo · {ReportQuantity(airKgFreight).ToString("N3", MoneyCulture)} KG cobrables"
+            : cftFreight is not null
+                ? $"LCL · {ReportQuantity(cftFreight).ToString("N3", MoneyCulture)} CFT cobrable"
+                : $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable";
 
         // LCL must never leak the legacy container placeholder (for example 20 DV)
         // into the commercial document. For consolidated cargo the shipment itself is
@@ -196,7 +221,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             : reportDetails
                 .Select(detail => new
                 {
-                    description = detail.Name,
+                    description = ReportDetailName(detail),
                     quantity = ReportQuantity(detail),
                     currency = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
                     currencyCode = detail.CurrencyCode,
@@ -314,7 +339,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             : reportDetails
                 .Select(detail => new Dictionary<string, object?>
                 {
-                    ["Concepto"] = detail.Name,
+                    ["Concepto"] = ReportDetailName(detail),
                     ["Cantidad"] = ReportQuantity(detail),
                     ["Moneda"] = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
                     ["Precio unitario"] = detail.SaleAmount,
