@@ -60,6 +60,14 @@ public sealed class SetRateStatusCommandHandler(
         }
 
         if (command.Status == RateStatus.AcceptedByClient
+            && rate.Status != RateStatus.AcceptedByClient
+            && string.IsNullOrWhiteSpace(command.IdtraNumber)
+            && string.IsNullOrWhiteSpace(rate.IdtraNumber))
+        {
+            return Result.Failure(PricingErrors.RateIdtraRequiredForAcceptance);
+        }
+
+        if (command.Status == RateStatus.AcceptedByClient
             && rate.Status != RateStatus.AcceptedByClient)
         {
             var capacity = await rateHeaders.GetOwnLclCapacityForRateAsync(

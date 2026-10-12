@@ -17,6 +17,7 @@ namespace Dhole.Pricing.Application.Features.Rates.UpdateRate;
 public sealed class UpdateRateCommandHandler(
     IRateHeaderRepository rateHeaders,
     IRateRevisionRepository rateRevisions,
+    IImportFclRateRepository importedRates,
     IRateFixedCostSynchronizer fixedCostSynchronizer,
     IRateExtraDetailResolver extraDetailResolver,
     IPricingConfigCatalogClient configCatalog,
@@ -61,6 +62,7 @@ public sealed class UpdateRateCommandHandler(
             ? RateRevisionSnapshotFactory.Capture(rate)
             : null;
         var acceptedRevisionNumber = rate.RevisionNumber;
+        var commercialStatusBeforeUpdate = rate.Status;
 
         if (rate.SourceImportFclRateId.HasValue && command.ShipmentMode != ShipmentMode.Fcl)
             return Result.Failure(PricingErrors.RateImportedStructureLocked);
@@ -266,7 +268,10 @@ public sealed class UpdateRateCommandHandler(
 
         var existingDetails = rate.RateDetails.ToDictionary(x => x.Id);
 
-        var extraDetails = command.ExtraDetails ?? Array.Empty<UpsertRateExtraDetailCommandItem>();
+        var extraDetails = RateDetailUpdateInputNormalizer.Normalize(
+            command.ExtraDetails ?? Array.Empty<UpsertRateExtraDetailCommandItem>(),
+            existingDetails.ToDictionary(pair => pair.Key, pair => pair.Value.CostId)
+        );
 
         var removedIds = (command.RemovedExtraDetailIds ?? Array.Empty<Guid>())
             .Where(x => x != Guid.Empty)
@@ -289,14 +294,10 @@ public sealed class UpdateRateCommandHandler(
 
         var updatedIds = extraDetails.Where(x => x.Id.HasValue).Select(x => x.Id!.Value).ToArray();
 
-        if (updatedIds.Distinct().Count() != updatedIds.Length)
-        {
-            return Result.Failure(PricingErrors.RateInvalidStatus);
-        }
-
         if (updatedIds.Any(removedIds.Contains))
         {
-            return Result.Failure(PricingErrors.RateInvalidStatus);
+            return Result.Failure(PricingErrors.RateUpdateValidationFailed(
+                "No se puede eliminar y actualizar el mismo detalle de tarifa en una sola solicitud."));
         }
 
         foreach (var requestedDetail in extraDetails.Where(x => x.Id.HasValue))
@@ -452,6 +453,20 @@ public sealed class UpdateRateCommandHandler(
         var freeDays = command.FreeDays;
         var validFrom = command.ValidFrom;
         var validTo = command.ValidTo;
+        // En una cotización FCL asociada a un flete importado, la fuente es la
+        // autoridad para la vigencia, también en ediciones y renovaciones.
+        // El middleware de edición puede neutralizar temporalmente la fuente
+        // persistida; por eso priorizamos la seleccionada en la solicitud.
+        var sourceImportId = command.SourceImportFclRateId ?? rate.SourceImportFclRateId;
+        if (command.ShipmentMode == ShipmentMode.Fcl && sourceImportId.HasValue)
+        {
+            var sourceFreight = await importedRates.GetByIdAsync(sourceImportId.Value, cancellationToken);
+            if (sourceFreight is null || sourceFreight.IsDeleted)
+                return Result.Failure(PricingErrors.ImportFclRateNotFound);
+
+            validFrom = sourceFreight.ValidFrom;
+            validTo = sourceFreight.ValidTo;
+        }
         var containerQuantity = requestedContainerQuantity;
         var transitTime = command.TransitTime;
 
