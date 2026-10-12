@@ -10,6 +10,22 @@ namespace Dhole.Pricing.UnitTests;
 public sealed class RateReportPickupLocationsTests
 {
     [TestMethod]
+    public void QuotePdfData_ContainsCurrentRevisionNumberAfterEveryEdit()
+    {
+        var rate = CreateRate("FOB");
+        using (var originalReport = QuoteData(rate))
+        {
+            Assert.AreEqual(1, originalReport.RootElement.GetProperty("rate").GetProperty("revisionNumber").GetInt32());
+        }
+
+        rate.AdvanceRevision(updatedBy: null);
+        rate.AdvanceRevision(updatedBy: null);
+
+        using var updatedReport = QuoteData(rate);
+        Assert.AreEqual(3, updatedReport.RootElement.GetProperty("rate").GetProperty("revisionNumber").GetInt32());
+    }
+
+    [TestMethod]
     public void Report_ListsAllExwPickupsInOrderWithClassification()
     {
         var rate = CreateRate("EXW");
