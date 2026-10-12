@@ -8,6 +8,55 @@ namespace Dhole.Pricing.UnitTests;
 public sealed class RateStatusWorkflowTests
 {
     [TestMethod]
+    public void AdvanceRevision_AfterEachSavedEdit_IncrementsWithoutChangingSentStatus()
+    {
+        var rate = CreateRate();
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+
+        Assert.AreEqual(1, rate.RevisionNumber);
+        rate.AdvanceRevision(updatedBy: null);
+        Assert.AreEqual(2, rate.RevisionNumber);
+        Assert.AreEqual(RateStatus.Sent, rate.Status);
+
+        rate.AdvanceRevision(updatedBy: null);
+        Assert.AreEqual(3, rate.RevisionNumber);
+        Assert.AreEqual(RateStatus.Sent, rate.Status);
+    }
+
+    [TestMethod]
+    public void AdvanceRevision_DoesNotBypassMarginApproval()
+    {
+        var rate = CreateRate();
+        AddFreight(rate, cost: 90m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+
+        rate.AdvanceRevision(updatedBy: null);
+
+        Assert.AreEqual(2, rate.RevisionNumber);
+        Assert.AreEqual(RateStatus.PendingApproval, rate.Status);
+        Assert.IsTrue(rate.RequiredApproval);
+    }
+
+    [TestMethod]
+    public void AdvanceRevision_RequiresAcceptedRateToUseBeginRevision()
+    {
+        var rate = CreateRate();
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+        rate.SetIdtraNumber("IDTRA-001", updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => rate.AdvanceRevision(updatedBy: null));
+        rate.BeginRevision(updatedBy: null);
+
+        Assert.AreEqual(2, rate.RevisionNumber);
+        Assert.AreEqual(RateStatus.Open, rate.Status);
+    }
+
+    [TestMethod]
     public void SetAmounts_MarginAtLeastTwelve_LeavesRateOpen()
     {
         var rate = CreateRate();
