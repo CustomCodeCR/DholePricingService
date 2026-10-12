@@ -468,6 +468,22 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
     }
 
+    /// <summary>
+    /// Advance the visible commercial revision after an ordinary saved edit.
+    /// Preserve the recalculated workflow status (Sent, Open, PendingApproval, etc.).
+    /// Accepted quotes use BeginRevision so the approved snapshot is preserved
+    /// and the new draft goes through the existing approval flow.
+    /// </summary>
+    public void AdvanceRevision(Guid? updatedBy)
+    {
+        if (Status == RateStatus.AcceptedByClient || Status == RateStatus.Closed)
+            throw new InvalidOperationException("La tarifa requiere el flujo de revisión comercial correspondiente.");
+
+        RevisionNumber = checked(Math.Max(1, RevisionNumber) + 1);
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
+    }
+
     public void BeginRevision(Guid? updatedBy)
     {
         if (Status != RateStatus.AcceptedByClient)
