@@ -22,9 +22,9 @@ public sealed class RateDetailUpdateInputNormalizerTests
 
         Assert.AreEqual(2, result.Count);
         Assert.IsNull(result[0].Id);
-        Assert.AreEqual(firstCostId, result[0].CostId);
-        Assert.AreEqual(detailId, result[1].Id);
-        Assert.AreEqual(savedCostId, result[1].CostId);
+        Assert.AreEqual((Guid?)firstCostId, result[0].CostId);
+        Assert.AreEqual((Guid?)detailId, result[1].Id);
+        Assert.AreEqual((Guid?)savedCostId, result[1].CostId);
     }
 
     [TestMethod]
@@ -39,7 +39,7 @@ public sealed class RateDetailUpdateInputNormalizerTests
             new Dictionary<Guid, Guid?> { [detailId] = costId });
 
         Assert.AreEqual(1, result.Count);
-        Assert.AreEqual(detailId, result[0].Id);
+        Assert.AreEqual((Guid?)detailId, result[0].Id);
     }
 
     [TestMethod]
@@ -54,7 +54,7 @@ public sealed class RateDetailUpdateInputNormalizerTests
             new Dictionary<Guid, Guid?> { [detailId] = null });
 
         Assert.AreEqual(2, result.Count);
-        Assert.AreEqual(detailId, result[0].Id);
+        Assert.AreEqual((Guid?)detailId, result[0].Id);
         Assert.IsNull(result[1].Id);
         Assert.AreEqual(125m, result[1].SaleAmount);
     }
