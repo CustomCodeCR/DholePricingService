@@ -70,6 +70,7 @@ public sealed class UpdateRateCommandHandler(
             ? RateRevisionSnapshotFactory.Capture(rate)
             : null;
         var acceptedRevisionNumber = rate.RevisionNumber;
+        var commercialStatusBeforeUpdate = rate.Status;
 
         if (rate.SourceImportFclRateId.HasValue && command.ShipmentMode != ShipmentMode.Fcl)
             return Result.Failure(PricingErrors.RateImportedStructureLocked);
@@ -814,6 +815,16 @@ public sealed class UpdateRateCommandHandler(
                     openAfterAutomaticApproval: true
                 );
                 automaticallyApprovedLowMargin = true;
+            }
+
+            // Recalcular importes no debe retroceder una cotización enviada a Open.
+            // Solo restauramos el estado comercial cuando el margen recalculado
+            // ya cumple la regla de aprobación (o fue aprobado por el scope).
+            if (!rate.RequiredApproval && commercialStatusBeforeUpdate is RateStatus.Sent or RateStatus.RequestedByClient)
+            {
+                rate.SetCommercialStatus(RateStatus.Sent, reason: null, command.UpdatedBy);
+                if (commercialStatusBeforeUpdate == RateStatus.RequestedByClient)
+                    rate.SetCommercialStatus(RateStatus.RequestedByClient, reason: null, command.UpdatedBy);
             }
 
             // Permite renovar una tarifa Expired. Si la nueva vigencia sigue vencida,
