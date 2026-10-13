@@ -252,6 +252,22 @@ public sealed class RateFixedCostSynchronizer(
         if (rate.ShipmentMode != ShipmentMode.Fcl || !IsPanamaToGam(rate))
             return;
 
+        // A Panamá POE and GAM POD do not by themselves mean that the client
+        // contracted a land freight. Customs-only or warehouse-only quotes must
+        // never receive the historical synthetic international-land charge.
+        if (!rate.RateServices.Any(service =>
+            NormalizeRouteText($"{service.ServiceName} {service.ServiceCode}").Contains("TRANSPORTE")))
+            return;
+
+        // Never duplicate a configured catalog freight charge with the historical
+        // synthetic Panamá -> GAM amount.
+        if (rate.RateDetails.Any(detail =>
+            detail.CostId.HasValue
+            && detail.CostDetailType == CostDetailType.InlandTransport
+            && (NormalizeRouteText(detail.Name).Contains("FLETE TERRESTRE")
+                || NormalizeRouteText(detail.Name).Contains("FLETE INTERNACIONAL TERRESTRE"))))
+            return;
+
         if (rate.RateDetails.Any(x => x.CostId == PanamaGamLandFreightRuleId))
             return;
 
