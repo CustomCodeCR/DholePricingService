@@ -520,7 +520,22 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 if (visibleSegments.Length == 0)
                     continue;
 
-                details.Add(string.Join(" · ", visibleSegments));
+                // Older LCL quotations may contain the same observations appended
+                // multiple times inside a single cargo description. Remove only
+                // identical observation blocks, keeping other details and cargo lines.
+                var seenObservations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var uniqueSegments = visibleSegments
+                    .Where(segment =>
+                    {
+                        if (!Regex.IsMatch(segment, @"^Observaciones\s*:", RegexOptions.IgnoreCase))
+                            return true;
+
+                        var key = Regex.Replace(segment, @"\s+", " ").Trim();
+                        return seenObservations.Add(key);
+                    })
+                    .ToArray();
+
+                details.Add(string.Join(" · ", uniqueSegments));
             }
 
             return string.Join(
