@@ -137,7 +137,7 @@ public sealed class RateFixedCostSynchronizer(
                 rate.TotalPackages > 0 ? rate.TotalPackages : null,
                 rate.ContainerTypeId != Guid.Empty ? rate.ContainerTypeId : null,
                 cost.CostAmount, cost.SaleAmount,
-                out var resolvedCostAmount, out var resolvedSaleAmount))
+                out var resolvedCostAmount, out var resolvedSaleAmount, rate.StorageDays))
                 continue;
 
             activeFixedCostSelections.TryGetValue(cost.Id, out var costSelection);
