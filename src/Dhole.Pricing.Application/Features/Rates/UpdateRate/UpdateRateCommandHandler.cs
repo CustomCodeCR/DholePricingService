@@ -625,6 +625,7 @@ public sealed class UpdateRateCommandHandler(
                 command.TotalVolumeCbm,
                 command.ContainerTypeCode
             );
+            rate.ConfigureStorageDays(command.StorageDays);
             rate.ConfigureShipment(
                 command.ShipmentMode,
                 cargoProfile.TotalPackages,
