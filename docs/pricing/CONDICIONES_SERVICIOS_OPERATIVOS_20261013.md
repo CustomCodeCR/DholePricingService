@@ -9,7 +9,7 @@ Referencia: cuatro fotografías aportadas el 13 de octubre de 2026. Estos import
 - `CostType=Fixed` incorpora automáticamente el costo solamente cuando toda la condición coincide; `Optional` lo ofrece al usuario. No aplicar costos que no tengan tramo coincidente ni inventar un importe genérico.
 - `ChargeBasis` se calcula después de resolver `CalculationMode`. Para `PerKg` y `PerExtraDay`, el monto resuelto **ya es el total del tramo**: usar `PerShipment` para no multiplicar dos veces.
 - Mantener `currencyCode` real de cada rubro (USD o CRC) y el IVA como impuesto calculado sobre la venta según configuración fiscal, sin sumar el IVA de una cifra que ya lo incluye.
-- Los días de almacenaje (`StorageDays`) son independientes de `FreeDays` y del tiempo de tránsito. Si faltan, no calcular cargos por días adicionales.
+- Los días de almacenaje (`StorageDays`) son independientes de `FreeDays` y del tiempo de tránsito. Sin un dato de días fiscales positivo, **no se debe aplicar ningún cargo automático de almacenaje**, ni base ni diario.
 - Para FCL mixto, resolver cargo por el contenedor de cada asignación (no asumir que todos tienen el `ContainerTypeId` primario) antes de cotizar varios equipos distintos.
 
 ## 1. Excedentes de combustible / bunker — USD
