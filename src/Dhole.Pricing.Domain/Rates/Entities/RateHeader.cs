@@ -215,6 +215,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public ShipmentMode ShipmentMode { get; private set; } = ShipmentMode.Fcl;
     public RateOperationType OperationType { get; private set; } = RateOperationType.TransitDomestic;
     public int TotalPackages { get; private set; }
+    public int? StorageDays { get; private set; }
     public int TotalPallets { get; private set; }
     public decimal TotalWeightKg { get; private set; }
     public decimal TotalVolumeCbm { get; private set; }
@@ -714,6 +715,17 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                 ClientName
             );
         }
+    }
+
+    /// <summary>
+    /// Warehouse storage days are separate from the carrier's FreeDays and transit time.
+    /// A null value means no actual storage duration was supplied.
+    /// </summary>
+    public void ConfigureStorageDays(int? storageDays)
+    {
+        if (storageDays is < 0)
+            throw new InvalidOperationException("Los días de almacenaje no pueden ser negativos.");
+        StorageDays = storageDays;
     }
 
     public void ConfigureShipment(

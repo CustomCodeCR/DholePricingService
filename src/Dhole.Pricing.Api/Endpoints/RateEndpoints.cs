@@ -603,6 +603,7 @@ public static class RateEndpoints
             {
                 FinalBackupStorageIds = request.FinalBackupStorageIds ?? [],
                 PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
+                StorageDays = request.StorageDays,
             },
             cancellationToken
         );
@@ -809,6 +810,7 @@ public static class RateEndpoints
                 SourceImportFclRateId = request.SourceImportFclRateId,
                 UpdateReason = request.UpdateReason,
                 PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
+                StorageDays = request.StorageDays,
             },
             cancellationToken
         );

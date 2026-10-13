@@ -79,6 +79,7 @@ internal sealed class CostConfiguration : EntityTypeConfigurationBase<Cost, Guid
         builder.Property(x => x.MinimumCostAmount).HasPrecision(18, 2).IsRequired(false);
         builder.Property(x => x.MinimumSaleAmount).HasPrecision(18, 2).IsRequired(false);
         builder.Property(x => x.KgPerCbm).HasPrecision(18, 4).IsRequired(false);
+        builder.Property(x => x.PricingRulesJson).HasColumnType("text").IsRequired(false);
 
         builder.Property(x => x.Notes).HasColumnType("text").IsRequired(false);
 

@@ -137,6 +137,13 @@ public sealed class CreateCostCommandHandler(
             return Result.Failure<Guid>(PricingErrors.ConfigServiceUnavailable);
         }
 
+        // Tiered costs must belong to an actual Pricing service (customs, warehouse,
+        // terrestrial haulage, etc.). No unscoped cargo-rule charge may be injected into
+        // unrelated quotes such as an international-freight-only operation.
+        if (!string.IsNullOrWhiteSpace(command.PricingRulesJson)
+            && (command.Services is null || command.Services.Count == 0))
+            return Result.Failure<Guid>(PricingErrors.InvalidCost);
+
         var resolvedShipmentModes = (command.ShipmentModes
             ?? (command.ShipmentMode.HasValue ? [command.ShipmentMode.Value] : []))
             .Distinct()
@@ -210,6 +217,7 @@ public sealed class CreateCostCommandHandler(
             cost.ConfigureServices(command.Services);
             cost.ConfigureShipmentModes(resolvedShipmentModes);
             cost.ConfigureOperationalConditions(command.OperationalConditions);
+            cost.ConfigurePricingRules(command.PricingRulesJson);
         }
         catch (InvalidOperationException)
         {
