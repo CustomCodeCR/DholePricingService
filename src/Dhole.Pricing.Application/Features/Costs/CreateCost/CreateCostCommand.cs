@@ -45,5 +45,6 @@ public sealed record CreateCostCommand(
     decimal? KgPerCbm,
     Guid? CreatedBy,
     IReadOnlyCollection<string>? OperationalConditions = null,
-    IReadOnlyCollection<ShipmentMode>? ShipmentModes = null
+    IReadOnlyCollection<ShipmentMode>? ShipmentModes = null,
+    string? PricingRulesJson = null
 ) : ICommand<Result<Guid>>;

@@ -41,5 +41,6 @@ public sealed record UpdateCostRequest(
     decimal? KgPerCbm = null,
     IReadOnlyCollection<CostServiceRequest>? Services = null,
     IReadOnlyCollection<string>? OperationalConditions = null,
-    IReadOnlyCollection<string>? ShipmentModes = null
+    IReadOnlyCollection<string>? ShipmentModes = null,
+    string? PricingRulesJson = null
 );

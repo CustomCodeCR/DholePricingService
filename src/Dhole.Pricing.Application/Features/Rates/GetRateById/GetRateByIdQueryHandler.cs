@@ -31,7 +31,7 @@ public sealed class GetRateByIdQueryHandler(
             return Result.Failure<RateDto>(PricingErrors.RateHeaderNotFound);
         }
 
-        var dto = rate.ToDto();
+        var dto = rate.ToDto() with { StorageDays = rate.StorageDays };
 
         await cache.SetRateHeaderByIdAsync(rate.Id, dto, cancellationToken: cancellationToken);
 

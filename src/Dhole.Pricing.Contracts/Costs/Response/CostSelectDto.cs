@@ -48,5 +48,6 @@ public sealed record CostSelectDto(
     IReadOnlyCollection<CostRelationDto>? Carriers = null,
     IReadOnlyCollection<CostRelationDto>? Agents = null,
     IReadOnlyCollection<string>? OperationalConditions = null,
-    IReadOnlyCollection<string>? ShipmentModes = null
+    IReadOnlyCollection<string>? ShipmentModes = null,
+    string? PricingRulesJson = null
 );

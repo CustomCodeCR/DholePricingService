@@ -254,7 +254,8 @@ public static class CostEndpoints
                 request.KgPerCbm,
                 httpContext.GetCurrentUserId(),
                 (request.OperationalConditions ?? []).ToArray(),
-                shipmentModes
+                shipmentModes,
+                request.PricingRulesJson
             ),
             cancellationToken
         );
@@ -357,7 +358,8 @@ public static class CostEndpoints
                 request.KgPerCbm,
                 httpContext.GetCurrentUserId(),
                 (request.OperationalConditions ?? []).ToArray(),
-                shipmentModes
+                shipmentModes,
+                request.PricingRulesJson
             ),
             cancellationToken
         );

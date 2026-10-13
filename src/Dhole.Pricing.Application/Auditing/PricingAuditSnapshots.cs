@@ -56,6 +56,7 @@ public static class PricingAuditSnapshots
             cost.MinimumCostAmount,
             cost.MinimumSaleAmount,
             cost.KgPerCbm,
+            cost.PricingRulesJson,
 
             cost.Notes,
             cost.IsAccountant,
@@ -164,6 +165,7 @@ public static class PricingAuditSnapshots
             rateHeader.ContainerQuantity,
             ShipmentMode = rateHeader.ShipmentMode.ToString(),
             rateHeader.TotalPackages,
+            rateHeader.StorageDays,
             rateHeader.TotalPallets,
             rateHeader.TotalWeightKg,
             rateHeader.TotalVolumeCbm,

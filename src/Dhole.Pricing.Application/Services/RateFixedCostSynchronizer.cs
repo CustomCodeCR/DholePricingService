@@ -129,6 +129,11 @@ public sealed class RateFixedCostSynchronizer(
                 && (!preserveExplicitFixedDetails || !existingAmounts.ContainsKey(cost.Id));
         }))
         {
+            // Resolve the band against persisted cargo before any currency conversion or
+            // ChargeBasis multiplication. A missing band must not create a zero-priced item.
+            if (!TryResolveRateAmounts(cost, rate, out var resolvedCostAmount, out var resolvedSaleAmount))
+                continue;
+
             activeFixedCostSelections.TryGetValue(cost.Id, out var costSelection);
             var isAgentAssociated = cost.AgentId.HasValue || costSelection?.AgentIds.Count > 0;
             var suppressAgentSale = isAgentAssociated && cost.CostDetailType != CostDetailType.OriginCharge;
@@ -173,17 +178,17 @@ public sealed class RateFixedCostSynchronizer(
             // El costo contable de un fijo siempre parte del maestro y se convierte a la moneda
             // de la línea. La venta puede conservar el override de Pricing, convirtiéndolo si hace falta.
             var costAmount = CostaRicaServiceCurrencyRules.ConvertUsdCrc(
-                cost.CostAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
+                resolvedCostAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
             var saleAmount = suppressAgentSale
                 ? 0m
-                : hasExistingAmount && !hasMinimumRule
+                : hasExistingAmount && !hasMinimumRule && string.IsNullOrWhiteSpace(cost.PricingRulesJson)
                     ? CostaRicaServiceCurrencyRules.ConvertUsdCrc(
                         existingAmount.SaleAmount,
                         existingAmount.CurrencyCode,
                         targetCurrencyCode,
                         exchangeRateSale)
                     : CostaRicaServiceCurrencyRules.ConvertUsdCrc(
-                        cost.SaleAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
+                        resolvedSaleAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
 
             var minimumCostAmount = cost.MinimumCostAmount.HasValue
                 ? CostaRicaServiceCurrencyRules.ConvertUsdCrc(
@@ -239,6 +244,22 @@ public sealed class RateFixedCostSynchronizer(
     )
     {
         if (rate.ShipmentMode != ShipmentMode.Fcl || !IsPanamaToGam(rate))
+            return;
+
+        // A Panamá POE and GAM POD do not by themselves mean that the client
+        // contracted a land freight. Customs-only or warehouse-only quotes must
+        // never receive the historical synthetic international-land charge.
+        if (!rate.RateServices.Any(service =>
+            NormalizeRouteText($"{service.ServiceName} {service.ServiceCode}").Contains("TRANSPORTE")))
+            return;
+
+        // Never duplicate a configured catalog freight charge with the historical
+        // synthetic Panamá -> GAM amount.
+        if (rate.RateDetails.Any(detail =>
+            detail.CostId.HasValue
+            && detail.CostDetailType == CostDetailType.InlandTransport
+            && (NormalizeRouteText(detail.Name).Contains("FLETE TERRESTRE")
+                || NormalizeRouteText(detail.Name).Contains("FLETE INTERNACIONAL TERRESTRE"))))
             return;
 
         if (rate.RateDetails.Any(x => x.CostId == PanamaGamLandFreightRuleId))
@@ -318,6 +339,64 @@ public sealed class RateFixedCostSynchronizer(
         });
     }
 
+    private static bool TryResolveRateAmounts(
+        Cost cost,
+        RateHeader rate,
+        out decimal amountCost,
+        out decimal amountSale)
+    {
+        // For a mixed 20'/40' FCL shipment, evaluate each physical container's
+        // price independently. Applying the primary equipment price multiplied by
+        // the total container count would silently misquote mixed equipment.
+        var allocations = rate.RateContainers
+            .Where(x => x.Quantity > 0)
+            .GroupBy(x => x.ContainerTypeId)
+            .Select(g => (TypeId: g.Key, Quantity: g.Sum(x => x.Quantity)))
+            .ToArray();
+
+        if (CostPricingRules.UsesContainerType(cost.PricingRulesJson)
+            && allocations.Length > 1)
+        {
+            amountCost = 0m;
+            amountSale = 0m;
+            if (cost.ChargeBasis is not (ChargeBasis.PerContainer or ChargeBasis.PerTruck
+                or ChargeBasis.PerShipment or ChargeBasis.PerService))
+                return false;
+
+            foreach (var allocation in allocations)
+            {
+                if (!CostPricingRules.TryResolve(
+                    cost.PricingRulesJson,
+                    rate.TotalWeightKg > 0 ? rate.TotalWeightKg : null,
+                    rate.TotalPackages > 0 ? rate.TotalPackages : null,
+                    allocation.TypeId,
+                    cost.CostAmount, cost.SaleAmount,
+                    out var unitCost, out var unitSale, rate.StorageDays))
+                    return false;
+
+                amountCost += unitCost * allocation.Quantity;
+                amountSale += unitSale * allocation.Quantity;
+            }
+
+            if (cost.ChargeBasis is ChargeBasis.PerContainer or ChargeBasis.PerTruck)
+            {
+                var totalQuantity = allocations.Sum(x => x.Quantity);
+                amountCost /= totalQuantity;
+                amountSale /= totalQuantity;
+            }
+
+            return true;
+        }
+
+        return CostPricingRules.TryResolve(
+            cost.PricingRulesJson,
+            rate.TotalWeightKg > 0 ? rate.TotalWeightKg : null,
+            rate.TotalPackages > 0 ? rate.TotalPackages : null,
+            rate.ContainerTypeId != Guid.Empty ? rate.ContainerTypeId : null,
+            cost.CostAmount, cost.SaleAmount,
+            out amountCost, out amountSale, rate.StorageDays);
+    }
+
     private static bool MatchesRate(
         Cost cost,
         RateHeader rate,
@@ -339,6 +418,14 @@ public sealed class RateFixedCostSynchronizer(
                 rate.RateServices.Any(rateService => rateService.ServiceId == costService.ServiceId));
 
         if (!matchesAgent || !matchesCarrier || !matchesMode || !matchesIncoterm || !matchesServices)
+            return false;
+
+        // A warehouse tariff advertised as covering the first five/seven days
+        // cannot be applied until the operator entered the actual fiscal days.
+        // The carrier FreeDays field must never be used as a fallback.
+        if (cost.Services.Any(service =>
+            NormalizeRouteText($"{service.ServiceName} {service.ServiceCode}").Contains("ALMACENAJE"))
+            && rate.StorageDays is not > 0)
             return false;
 
         if (!SelectionMatches(selection?.PolIds, cost.PolId, rate.PolId))
