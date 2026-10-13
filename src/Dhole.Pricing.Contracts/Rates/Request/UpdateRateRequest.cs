@@ -65,4 +65,5 @@ public sealed record UpdateRateRequest(
 )
 {
     public IReadOnlyCollection<RatePickupLocationRequest>? PickupLocations { get; init; }
+    public int? StorageDays { get; init; }
 }
