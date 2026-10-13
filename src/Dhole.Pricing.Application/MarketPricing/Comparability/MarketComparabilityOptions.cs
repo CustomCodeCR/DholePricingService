@@ -17,6 +17,8 @@ public sealed class MarketComparabilityOptions
     public double RecencyDecayDays { get; set; } = 60d;
     public decimal ExpiredRecencyPenalty { get; set; } = 0.65m;
     public int HistoricalLookbackDays { get; set; } = 365;
+    // Permit near-future sailings, while never pricing from expired rates.
+    public int UpcomingLookaheadDays { get; set; } = 7;
     public int MinimumPrimaryCarrierObservations { get; set; } = 2;
     public int MinimumCompetitorsForSufficientMarket { get; set; } = 2;
     public int MinimumObservationsForSufficientMarket { get; set; } = 2;
@@ -54,6 +56,9 @@ public sealed class MarketComparabilityOptions
 
         if (HistoricalLookbackDays < 0)
             throw new InvalidOperationException("HistoricalLookbackDays no puede ser negativo.");
+
+        if (UpcomingLookaheadDays is < 0 or > 90)
+            throw new InvalidOperationException("UpcomingLookaheadDays debe estar entre 0 y 90.");
 
         ValidateRatio(ExpiredRecencyPenalty, nameof(ExpiredRecencyPenalty));
         ValidateRatio(SecondaryCarrierScore, nameof(SecondaryCarrierScore));
