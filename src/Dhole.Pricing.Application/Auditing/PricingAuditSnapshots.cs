@@ -165,6 +165,7 @@ public static class PricingAuditSnapshots
             rateHeader.ContainerQuantity,
             ShipmentMode = rateHeader.ShipmentMode.ToString(),
             rateHeader.TotalPackages,
+            rateHeader.StorageDays,
             rateHeader.TotalPallets,
             rateHeader.TotalWeightKg,
             rateHeader.TotalVolumeCbm,
