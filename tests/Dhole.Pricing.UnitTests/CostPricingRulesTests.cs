@@ -25,6 +25,34 @@ public sealed class CostPricingRulesTests
     }
 
     [TestMethod]
+    public void ConsolidatedLandFreight_ChangesFromFlatAmountToWeightRate()
+    {
+        var rules = CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
+        {
+            new CostPricingRule("WeightKg", 1m, 500m, null, 180m, 180m),
+            new CostPricingRule("WeightKg", 501m, 3000m, null, .20m, .20m, "PerKg"),
+            new CostPricingRule("WeightKg", 3001m, null, null, .18m, .18m, "PerKg"),
+        }));
+
+        Assert.IsTrue(CostPricingRules.TryResolve(rules, 450m, null, null, 0m, 0m, out var cost, out _));
+        Assert.AreEqual(180m, cost);
+        Assert.IsTrue(CostPricingRules.TryResolve(rules, 2000m, null, null, 0m, 0m, out cost, out _));
+        Assert.AreEqual(400m, cost);
+        Assert.IsTrue(CostPricingRules.TryResolve(rules, 3500m, null, null, 0m, 0m, out cost, out _));
+        Assert.AreEqual(630m, cost);
+    }
+
+    [TestMethod]
+    public void PerKgMode_WithPackagesDimensionIsRejected()
+    {
+        var json = JsonSerializer.Serialize(new[]
+        {
+            new CostPricingRule("Packages", 1m, 10m, null, 1m, 2m, "PerKg")
+        });
+        Assert.ThrowsException<InvalidOperationException>(() => CostPricingRules.Normalize(json));
+    }
+
+    [TestMethod]
     public void PackageBands_UseExactIntegerRanges()
     {
         var rules = CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
