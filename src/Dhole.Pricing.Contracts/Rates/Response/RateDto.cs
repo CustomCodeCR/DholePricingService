@@ -85,7 +85,8 @@ public sealed record RateDto(
     IReadOnlyCollection<RateDetailDto> RateDetails,
     IReadOnlyCollection<RateServiceDto> Services
 )
-{
+{    public int? StorageDays { get; init; }
+
     public string? CreatedByUserId { get; init; }
     public string? CreatedByUserName { get; init; }
     public string? CreatedByDisplayName { get; init; }
