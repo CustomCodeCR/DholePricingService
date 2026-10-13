@@ -210,7 +210,9 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 null,
                 null,
                 null,
-                x.OperationalConditions
+                x.OperationalConditions,
+                null,
+                x.PricingRulesJson
             ))
             .ToListAsync(cancellationToken);
 
@@ -304,7 +306,9 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 null,
                 null,
                 null,
-                x.OperationalConditions
+                x.OperationalConditions,
+                null,
+                x.PricingRulesJson
             ))
             .ToListAsync(cancellationToken);
 
