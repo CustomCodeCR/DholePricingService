@@ -23,13 +23,15 @@ internal sealed class CompetitorRateComparabilityService(
         options.Validate();
 
         var referenceUtc = NormalizeUtc(referenceDate);
-        var oldestValidTo = referenceUtc.AddDays(-options.HistoricalLookbackDays);
+        // Only active or imminent quotations are eligible for a commercial benchmark.
+        // The end of the window is exclusive so the entire seventh day is included.
+        var latestValidFromExclusive = referenceUtc.Date.AddDays(options.UpcomingLookaheadDays + 1);
 
         var candidates = await observations.GetMarketCandidatesAsync(
             key.Mode,
             key.PolId,
             referenceUtc,
-            oldestValidTo,
+            latestValidFromExclusive,
             cancellationToken
         );
 
@@ -226,7 +228,12 @@ internal sealed class CompetitorRateComparabilityService(
             return "pod_mismatch";
         }
 
-        if (observation.ValidFrom.Date > referenceDate.Date)
+        if (observation.ValidTo.Date < referenceDate.Date)
+        {
+            return "expired";
+        }
+
+        if (observation.ValidFrom.Date > referenceDate.Date.AddDays(options.UpcomingLookaheadDays))
         {
             return "not_yet_valid";
         }
