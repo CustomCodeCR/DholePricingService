@@ -53,6 +53,21 @@ public sealed class CostPricingRulesTests
     }
 
     [TestMethod]
+    public void FiscalStorage_ExtraDayChargeUsesDaysBeyondIncludedPeriod()
+    {
+        var rules = CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
+        {
+            new CostPricingRule("Packages", 1m, 3m, null, 1500m, 1500m, "PerExtraDay", 5),
+            new CostPricingRule("Packages", 4m, 15m, null, 2000m, 2000m, "PerExtraDay", 5),
+        }));
+
+        Assert.IsFalse(CostPricingRules.TryResolve(rules, null, 2, null, 0m, 0m, out _, out _, storageDays: 5));
+        Assert.IsFalse(CostPricingRules.TryResolve(rules, null, 2, null, 0m, 0m, out _, out _, storageDays: null));
+        Assert.IsTrue(CostPricingRules.TryResolve(rules, null, 2, null, 0m, 0m, out var cost, out _, storageDays: 7));
+        Assert.AreEqual(3000m, cost);
+    }
+
+    [TestMethod]
     public void PackageBands_UseExactIntegerRanges()
     {
         var rules = CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
