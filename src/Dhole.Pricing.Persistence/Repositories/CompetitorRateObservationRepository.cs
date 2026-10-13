@@ -15,20 +15,21 @@ public sealed class CompetitorRateObservationRepository(ServiceDbContext dbConte
         ShipmentMode mode,
         Guid polId,
         DateTime referenceDate,
-        DateTime oldestValidTo,
+        DateTime latestValidFromExclusive,
         CancellationToken cancellationToken = default
     )
     {
         var referenceUtc = NormalizeUtc(referenceDate);
-        var oldestUtc = NormalizeUtc(oldestValidTo);
+        var earliestValidTo = referenceUtc.Date;
+        var latestValidFromUtc = NormalizeUtc(latestValidFromExclusive);
 
         return await dbContext.CompetitorRateObservations
             .AsNoTracking()
             .Where(x =>
                 x.Mode == mode
                 && x.PolId == polId
-                && x.ValidFrom <= referenceUtc
-                && x.ValidTo >= oldestUtc
+                && x.ValidFrom < latestValidFromUtc
+                && x.ValidTo >= earliestValidTo
             )
             .OrderByDescending(x => x.ValidTo)
             .ThenByDescending(x => x.ValidFrom)
