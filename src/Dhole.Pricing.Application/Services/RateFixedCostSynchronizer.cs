@@ -129,6 +129,17 @@ public sealed class RateFixedCostSynchronizer(
                 && (!preserveExplicitFixedDetails || !existingAmounts.ContainsKey(cost.Id));
         }))
         {
+            // Resolve the band against persisted cargo before any currency conversion or
+            // ChargeBasis multiplication. A missing band must not create a zero-priced item.
+            if (!CostPricingRules.TryResolve(
+                cost.PricingRulesJson,
+                rate.TotalWeightKg > 0 ? rate.TotalWeightKg : null,
+                rate.TotalPackages > 0 ? rate.TotalPackages : null,
+                rate.ContainerTypeId != Guid.Empty ? rate.ContainerTypeId : null,
+                cost.CostAmount, cost.SaleAmount,
+                out var resolvedCostAmount, out var resolvedSaleAmount))
+                continue;
+
             activeFixedCostSelections.TryGetValue(cost.Id, out var costSelection);
             var isAgentAssociated = cost.AgentId.HasValue || costSelection?.AgentIds.Count > 0;
             var suppressAgentSale = isAgentAssociated && cost.CostDetailType != CostDetailType.OriginCharge;
@@ -173,17 +184,17 @@ public sealed class RateFixedCostSynchronizer(
             // El costo contable de un fijo siempre parte del maestro y se convierte a la moneda
             // de la línea. La venta puede conservar el override de Pricing, convirtiéndolo si hace falta.
             var costAmount = CostaRicaServiceCurrencyRules.ConvertUsdCrc(
-                cost.CostAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
+                resolvedCostAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
             var saleAmount = suppressAgentSale
                 ? 0m
-                : hasExistingAmount && !hasMinimumRule
+                : hasExistingAmount && !hasMinimumRule && string.IsNullOrWhiteSpace(cost.PricingRulesJson)
                     ? CostaRicaServiceCurrencyRules.ConvertUsdCrc(
                         existingAmount.SaleAmount,
                         existingAmount.CurrencyCode,
                         targetCurrencyCode,
                         exchangeRateSale)
                     : CostaRicaServiceCurrencyRules.ConvertUsdCrc(
-                        cost.SaleAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
+                        resolvedSaleAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
 
             var minimumCostAmount = cost.MinimumCostAmount.HasValue
                 ? CostaRicaServiceCurrencyRules.ConvertUsdCrc(
