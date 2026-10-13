@@ -11,7 +11,7 @@ public interface ICompetitorRateObservationRepository
         ShipmentMode mode,
         Guid polId,
         DateTime referenceDate,
-        DateTime oldestValidTo,
+        DateTime latestValidFromExclusive,
         CancellationToken cancellationToken = default
     );
 
