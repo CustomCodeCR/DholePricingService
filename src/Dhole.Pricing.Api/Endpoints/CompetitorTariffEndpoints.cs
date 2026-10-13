@@ -500,8 +500,8 @@ public static class CompetitorTariffEndpoints
                 x.PolIds.Contains(polId) &&
                 x.PoeIds.Contains(poeId) &&
                 (podId.HasValue && podId != Guid.Empty
-                    ? (x.PodIds.Contains(podId.Value) || x.PodIds.Count == 0)
-                    : x.PodIds.Count == 0) &&
+                    ? (x.PodIds.Contains(podId.Value) || x.PodIds.Length == 0)
+                    : x.PodIds.Length == 0) &&
                 x.CarrierIds.Contains(carrierId) &&
                 x.ShipmentMode == mode
             )
