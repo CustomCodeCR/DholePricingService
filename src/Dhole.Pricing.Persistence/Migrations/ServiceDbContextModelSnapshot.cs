@@ -2633,6 +2633,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("total_cost_usd");
 
+                    b.Property<int?>("StorageDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("storage_days");
+
                     b.Property<int>("TotalPackages")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
