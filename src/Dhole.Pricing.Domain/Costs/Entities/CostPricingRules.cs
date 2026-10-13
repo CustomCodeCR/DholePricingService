@@ -13,7 +13,8 @@ public sealed record CostPricingRule(
     Guid? ContainerTypeId,
     decimal CostAmount,
     decimal SaleAmount,
-    string CalculationMode = "Flat"
+    string CalculationMode = "Flat",
+    int? IncludedStorageDays = null
 );
 
 public static class CostPricingRules
@@ -36,8 +37,12 @@ public static class CostPricingRules
         {
             if (rule.CostAmount < 0 || rule.SaleAmount < 0)
                 throw new InvalidOperationException("Los montos por condición no pueden ser negativos.");
-            if (rule.CalculationMode is not ("Flat" or "PerKg"))
+            if (rule.CalculationMode is not ("Flat" or "PerKg" or "PerExtraDay"))
                 throw new InvalidOperationException("El modo de cálculo debe ser un monto fijo o un importe por kilogramo.");
+            if (rule.IncludedStorageDays is < 0 ||
+                (rule.CalculationMode == "PerExtraDay" && !rule.IncludedStorageDays.HasValue) ||
+                (rule.CalculationMode != "PerExtraDay" && rule.IncludedStorageDays.HasValue))
+                throw new InvalidOperationException("Los días incluidos solo se aplican a un cargo por día adicional.");
             if (rule.CalculationMode == "PerKg" && rule.Dimension != "WeightKg")
                 throw new InvalidOperationException("El cálculo por kilogramo requiere condiciones de peso.");
             if (rule.Dimension is not ("WeightKg" or "Packages" or "ContainerType"))
@@ -87,7 +92,7 @@ public static class CostPricingRules
     public static bool TryResolve(
         string? json, decimal? weightKg, int? packages, Guid? containerTypeId,
         decimal fallbackCost, decimal fallbackSale,
-        out decimal cost, out decimal sale)
+        out decimal cost, out decimal sale, int? storageDays = null)
     {
         cost = fallbackCost;
         sale = fallbackSale;
@@ -103,9 +108,17 @@ public static class CostPricingRules
             "ContainerType" => containerTypeId.HasValue && rule.ContainerTypeId == containerTypeId,
             _ => false
         });
-        if (matching is null) return false;
+        if (matching is null || (matching.CalculationMode == "PerExtraDay" && !storageDays.HasValue))
+            return false;
 
-        var multiplier = matching.CalculationMode == "PerKg" ? weightKg!.Value : 1m;
+        var multiplier = matching.CalculationMode switch
+        {
+            "PerKg" => weightKg!.Value,
+            "PerExtraDay" => Math.Max(0, storageDays!.Value - matching.IncludedStorageDays!.Value),
+            _ => 1m
+        };
+        if (matching.CalculationMode == "PerExtraDay" && multiplier <= 0m)
+            return false;
         cost = matching.CostAmount * multiplier;
         sale = matching.SaleAmount * multiplier;
         return true;
