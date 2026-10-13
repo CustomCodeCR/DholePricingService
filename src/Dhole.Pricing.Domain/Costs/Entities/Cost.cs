@@ -134,6 +134,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
     public decimal? MinimumCostAmount { get; private set; }
     public decimal? MinimumSaleAmount { get; private set; }
     public decimal? KgPerCbm { get; private set; }
+    public string? PricingRulesJson { get; private set; }
     public string[] OperationalConditions { get; private set; } = [];
     public string? Notes { get; private set; }
     private bool _isAccountant;
@@ -442,6 +443,11 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
 
             existing.UpdateSnapshot(incoterm.Name, incoterm.Code);
         }
+    }
+
+    public void ConfigurePricingRules(string? pricingRulesJson)
+    {
+        PricingRulesJson = CostPricingRules.Normalize(pricingRulesJson);
     }
 
     public void ConfigureShipmentModes(IReadOnlyCollection<ShipmentMode>? shipmentModes)
