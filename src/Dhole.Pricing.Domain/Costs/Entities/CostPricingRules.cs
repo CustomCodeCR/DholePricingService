@@ -88,6 +88,13 @@ public static class CostPricingRules
         return JsonSerializer.Serialize(rules, JsonOptions);
     }
 
+    public static bool UsesContainerType(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return false;
+        var rules = JsonSerializer.Deserialize<CostPricingRule[]>(json, JsonOptions) ?? [];
+        return rules.Any(rule => rule.Dimension == "ContainerType");
+    }
+
     /// <returns>false if configured conditions lack a matching cargo context; callers must not apply a default amount.</returns>
     public static bool TryResolve(
         string? json, decimal? weightKg, int? packages, Guid? containerTypeId,
