@@ -178,7 +178,9 @@ public sealed class CompetitorTariffImportProcessor(
                 var needsValidityReview =
                     !hasValidFromSource || !hasValidToSource || validTo < validFrom;
                 var needsCurrencyReview = string.IsNullOrWhiteSpace(currency);
-                var requiresManualReview = needsValidityReview || needsCurrencyReview;
+                var metadata = ReadMultiContainerMetadata(row.RawJson);
+                var requiresManualReview = needsValidityReview || needsCurrencyReview
+                    || metadata.RequiresManualReview;
                 var provisionalFrom = validFrom ?? DateTime.UtcNow.Date;
                 var provisionalTo = validTo >= provisionalFrom
                     ? validTo.Value
@@ -218,6 +220,8 @@ public sealed class CompetitorTariffImportProcessor(
                         row.Status,
                         row.RawJson,
                         RequiresManualReview = requiresManualReview,
+                        SourceContainerQuantity = metadata.Quantity,
+                        SourceUnitPricesNormalized = metadata.UnitPricesNormalized,
                         MissingValidity = needsValidityReview,
                         MissingCurrency = needsCurrencyReview,
                     })
@@ -246,7 +250,7 @@ public sealed class CompetitorTariffImportProcessor(
                             workItem.ShipmentMode.ToString(),
                             workItem.ShipmentMode,
                             currency ?? "UNSPECIFIED",
-                            1,
+                            metadata.Quantity,
                             basis,
                             null,
                             row.OceanFreight,
@@ -286,7 +290,7 @@ public sealed class CompetitorTariffImportProcessor(
                         normalized.Carrier.Code,
                         normalized.Equipment.Id,
                         normalized.Equipment.Code,
-                        1,
+                        metadata.Quantity,
                         normalized.NormalizedOceanFreight,
                         normalized.NormalizedAllIn,
                         normalized.Currency.NormalizedCurrency,
@@ -402,6 +406,47 @@ public sealed class CompetitorTariffImportProcessor(
         return observation.Mode is not (ShipmentMode.Fcl or ShipmentMode.Ftl)
             || observation.ContainerTypeId.HasValue;
     }
+
+    private static MultiContainerMetadata ReadMultiContainerMetadata(string? rawJson)
+    {
+        if (string.IsNullOrWhiteSpace(rawJson))
+            return new MultiContainerMetadata(1, false, false);
+
+        try
+        {
+            using var document = JsonDocument.Parse(rawJson);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("MultiContainerQuotation", out var marker)
+                || !string.Equals(marker.ToString(), "true", StringComparison.OrdinalIgnoreCase))
+                return new MultiContainerMetadata(1, false, false);
+
+            var quantity = 0;
+            if (root.TryGetProperty("Quantity", out var rawQuantity))
+                int.TryParse(rawQuantity.ToString(), out quantity);
+
+            var unitPricesNormalized = root.TryGetProperty("UnitPricesNormalized", out var unit)
+                && string.Equals(unit.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+            var needsReview = root.TryGetProperty("RequiresManualReview", out var review)
+                && string.Equals(review.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+
+            // Fail closed: invoice totals must never become single-container prices.
+            if (quantity < 2 || quantity > 100 || !unitPricesNormalized)
+                return new MultiContainerMetadata(1, false, true);
+
+            return new MultiContainerMetadata(quantity, true, needsReview);
+        }
+        catch (JsonException)
+        {
+            return new MultiContainerMetadata(1, false, true);
+        }
+    }
+
+    private sealed record MultiContainerMetadata(
+        int Quantity,
+        bool UnitPricesNormalized,
+        bool RequiresManualReview
+    );
 
     private static MarketRateBasis ResolveRateBasis(ShipmentMode mode) =>
         mode switch
