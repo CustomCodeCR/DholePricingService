@@ -46,5 +46,6 @@ public sealed record UpdateCostCommand(
     decimal? KgPerCbm,
     Guid? UpdatedBy,
     IReadOnlyCollection<string>? OperationalConditions = null,
-    IReadOnlyCollection<ShipmentMode>? ShipmentModes = null
+    IReadOnlyCollection<ShipmentMode>? ShipmentModes = null,
+    string? PricingRulesJson = null
 ) : ICommand<Result>;
