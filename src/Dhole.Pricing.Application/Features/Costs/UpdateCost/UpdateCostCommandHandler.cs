@@ -217,6 +217,7 @@ public sealed class UpdateCostCommandHandler(
             cost.ConfigureServices(command.Services);
             cost.ConfigureShipmentModes(resolvedShipmentModes);
             cost.ConfigureOperationalConditions(command.OperationalConditions);
+            cost.ConfigurePricingRules(command.PricingRulesJson);
         }
         catch (InvalidOperationException)
         {
