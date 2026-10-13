@@ -131,13 +131,7 @@ public sealed class RateFixedCostSynchronizer(
         {
             // Resolve the band against persisted cargo before any currency conversion or
             // ChargeBasis multiplication. A missing band must not create a zero-priced item.
-            if (!CostPricingRules.TryResolve(
-                cost.PricingRulesJson,
-                rate.TotalWeightKg > 0 ? rate.TotalWeightKg : null,
-                rate.TotalPackages > 0 ? rate.TotalPackages : null,
-                rate.ContainerTypeId != Guid.Empty ? rate.ContainerTypeId : null,
-                cost.CostAmount, cost.SaleAmount,
-                out var resolvedCostAmount, out var resolvedSaleAmount, rate.StorageDays))
+            if (!TryResolveRateAmounts(cost, rate, out var resolvedCostAmount, out var resolvedSaleAmount))
                 continue;
 
             activeFixedCostSelections.TryGetValue(cost.Id, out var costSelection);
@@ -343,6 +337,64 @@ public sealed class RateFixedCostSynchronizer(
             return detail.CostType == CostType.Variable
                 && marker.Contains("BASE DEL EXCEL", StringComparison.Ordinal);
         });
+    }
+
+    private static bool TryResolveRateAmounts(
+        Cost cost,
+        RateHeader rate,
+        out decimal amountCost,
+        out decimal amountSale)
+    {
+        // For a mixed 20'/40' FCL shipment, evaluate each physical container's
+        // price independently. Applying the primary equipment price multiplied by
+        // the total container count would silently misquote mixed equipment.
+        var allocations = rate.RateContainers
+            .Where(x => x.Quantity > 0)
+            .GroupBy(x => x.ContainerTypeId)
+            .Select(g => (TypeId: g.Key, Quantity: g.Sum(x => x.Quantity)))
+            .ToArray();
+
+        if (CostPricingRules.UsesContainerType(cost.PricingRulesJson)
+            && allocations.Length > 1)
+        {
+            amountCost = 0m;
+            amountSale = 0m;
+            if (cost.ChargeBasis is not (ChargeBasis.PerContainer or ChargeBasis.PerTruck
+                or ChargeBasis.PerShipment or ChargeBasis.PerService))
+                return false;
+
+            foreach (var allocation in allocations)
+            {
+                if (!CostPricingRules.TryResolve(
+                    cost.PricingRulesJson,
+                    rate.TotalWeightKg > 0 ? rate.TotalWeightKg : null,
+                    rate.TotalPackages > 0 ? rate.TotalPackages : null,
+                    allocation.TypeId,
+                    cost.CostAmount, cost.SaleAmount,
+                    out var unitCost, out var unitSale, rate.StorageDays))
+                    return false;
+
+                amountCost += unitCost * allocation.Quantity;
+                amountSale += unitSale * allocation.Quantity;
+            }
+
+            if (cost.ChargeBasis is ChargeBasis.PerContainer or ChargeBasis.PerTruck)
+            {
+                var totalQuantity = allocations.Sum(x => x.Quantity);
+                amountCost /= totalQuantity;
+                amountSale /= totalQuantity;
+            }
+
+            return true;
+        }
+
+        return CostPricingRules.TryResolve(
+            cost.PricingRulesJson,
+            rate.TotalWeightKg > 0 ? rate.TotalWeightKg : null,
+            rate.TotalPackages > 0 ? rate.TotalPackages : null,
+            rate.ContainerTypeId != Guid.Empty ? rate.ContainerTypeId : null,
+            cost.CostAmount, cost.SaleAmount,
+            out amountCost, out amountSale, rate.StorageDays);
     }
 
     private static bool MatchesRate(
