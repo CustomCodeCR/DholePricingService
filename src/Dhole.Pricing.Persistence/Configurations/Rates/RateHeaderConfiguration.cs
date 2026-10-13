@@ -128,6 +128,7 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
             .HasDefaultValue(Dhole.Pricing.Domain.Rates.Enums.RateOperationType.TransitDomestic)
             .HasSentinel((Dhole.Pricing.Domain.Rates.Enums.RateOperationType)0);
         builder.Property(x => x.TotalPackages).IsRequired().HasDefaultValue(0);
+        builder.Property(x => x.StorageDays).IsRequired(false);
         builder.Property(x => x.TotalPallets).IsRequired().HasDefaultValue(0);
         builder.Property(x => x.TotalWeightKg).HasPrecision(18, 4).IsRequired().HasDefaultValue(0m);
         builder.Property(x => x.TotalVolumeCbm).HasPrecision(18, 6).IsRequired().HasDefaultValue(0m);
