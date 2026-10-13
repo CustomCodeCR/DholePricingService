@@ -179,11 +179,20 @@ internal sealed class RateMarketPricingContextBuilder(
         DateTime? referenceDate
     )
     {
-        if (referenceDate.HasValue)
-            return NormalizeUtc(referenceDate.Value);
+        var commercialToday = DateTime.SpecifyKind(
+            TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.UtcNow,
+                TimeZoneInfo.FindSystemTimeZoneById("America/Costa_Rica")
+            ).Date,
+            DateTimeKind.Utc
+        );
 
-        var now = DateTime.UtcNow;
-        return rate.ValidFrom > now ? NormalizeUtc(rate.ValidFrom) : now;
+        var selectedDate = referenceDate.HasValue
+            ? NormalizeUtc(referenceDate.Value)
+            : NormalizeUtc(rate.ValidFrom);
+
+        // A saved, historical loading date cannot reactivate expired competition.
+        return selectedDate.Date < commercialToday ? commercialToday : selectedDate;
     }
 
     private static IReadOnlyCollection<AutoPricingChargeInput> BuildChargeInputs(
