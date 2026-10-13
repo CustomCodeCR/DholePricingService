@@ -223,6 +223,64 @@ public sealed class MarketComparabilityAcceptanceTests
         Assert.AreEqual(8818.3333m, quote.NormalizedAllIn);
     }
 
+    [TestMethod]
+    public void CompareCandidates_ExpiredSeptemberRates_DoNotAffectOctoberBenchmark()
+    {
+        var ids = TestIds.Create();
+        var referenceDate = new DateTime(2026, 10, 13, 12, 0, 0, DateTimeKind.Utc);
+        var expired = CreateObservation(
+            "Expired September price", ids.Fca, ids.PolShanghai, ids.PoeCaldera,
+            ids.PodSanJose, ids.Container40Hc, ShipmentMode.Fcl, ids.CarrierPil, 10705m
+        );
+        expired.ApplyManualReview(
+            "USD", 10705m,
+            new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 9, 30, 0, 0, 0, DateTimeKind.Utc)
+        );
+        var current = CreateObservation(
+            "October price", ids.Fca, ids.PolShanghai, ids.PoeCaldera,
+            ids.PodSanJose, ids.Container40Hc, ShipmentMode.Fcl, ids.CarrierPil, 8818.33m
+        );
+        current.ApplyManualReview(
+            "USD", 8818.33m,
+            new DateTime(2026, 10, 15, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 10, 21, 0, 0, 0, DateTimeKind.Utc)
+        );
+        var key = new MarketComparisonKey(
+            ids.Fca, ids.PolShanghai, ids.PoeCaldera, ids.PodSanJose,
+            ids.Container40Hc, ShipmentMode.Fcl, ids.CarrierPil
+        );
+        var comparison = CreateService().CompareCandidates(key, referenceDate, [expired, current]);
+
+        Assert.AreEqual(1, comparison.IncludedObservationCount);
+        Assert.AreEqual("expired",
+            comparison.Observations.Single(x => x.Observation.Id == expired.Id).ExclusionReason);
+        Assert.IsTrue(comparison.Observations.Single(x => x.Observation.Id == current.Id).WasIncluded);
+    }
+
+    [TestMethod]
+    public void CompareCandidates_StartsMoreThanSevenDaysAway_RemainsExcluded()
+    {
+        var ids = TestIds.Create();
+        var referenceDate = new DateTime(2026, 10, 13, 0, 0, 0, DateTimeKind.Utc);
+        var distant = CreateObservation(
+            "Too early", ids.Fca, ids.PolShanghai, ids.PoeCaldera,
+            ids.PodSanJose, ids.Container40Hc, ShipmentMode.Fcl, ids.CarrierPil, 7100m
+        );
+        distant.ApplyManualReview(
+            "USD", 7100m,
+            referenceDate.AddDays(8), referenceDate.AddDays(14)
+        );
+        var key = new MarketComparisonKey(
+            ids.Fca, ids.PolShanghai, ids.PoeCaldera, ids.PodSanJose,
+            ids.Container40Hc, ShipmentMode.Fcl, ids.CarrierPil
+        );
+
+        var comparison = CreateService().CompareCandidates(key, referenceDate, [distant]);
+        Assert.AreEqual(0, comparison.IncludedObservationCount);
+        Assert.AreEqual("not_yet_valid", comparison.Observations.Single().ExclusionReason);
+    }
+
     private static CompetitorRateComparabilityService CreateService() =>
         new(
             null!,
