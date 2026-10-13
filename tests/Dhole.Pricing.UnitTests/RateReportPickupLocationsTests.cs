@@ -440,6 +440,84 @@ public sealed class RateReportPickupLocationsTests
         StringAssert.Contains(header.GetProperty("containerSummary").GetString()!, "CBM cobrable");
     }
 
+    [TestMethod]
+    public void PdfWithAlmacenamiento_UsesPersistedDaysAndCommercialLinesWithoutInventingPrices()
+    {
+        var rate = CreateRate("FOB");
+        rate.ConfigureServices([
+            new RateServiceSelection(Guid.NewGuid(), "Agencia de Aduanas CRC", "CUSTOMS"),
+            new RateServiceSelection(Guid.NewGuid(), "Almacenamiento", "WAREHOUSE")
+        ]);
+        rate.ConfigureStorageDays(8);
+        rate.AddRateDetail(
+            rate.Id, Guid.NewGuid(), "Almacenaje fiscal",
+            Dhole.Pricing.Domain.Costs.Enums.CostDetailType.DestinationCharge,
+            Dhole.Pricing.Domain.Costs.Enums.CostType.Variable,
+            Dhole.Pricing.Domain.Costs.Enums.ChargeBasis.PerShipment,
+            Guid.NewGuid(), "CRC", "CRC", 0m, 125m, "Almacenaje cotizado", 1m, null);
+
+        using var document = QuoteData(rate);
+        var info = document.RootElement.GetProperty("rate");
+        Assert.IsTrue(info.GetProperty("hasStorageService").GetBoolean());
+        Assert.IsTrue(info.GetProperty("hasSelectedServices").GetBoolean());
+        Assert.AreEqual(8, info.GetProperty("storageDays").GetInt32());
+        Assert.AreEqual("8 días", info.GetProperty("storageDaysLabel").GetString());
+        Assert.AreEqual("Agencia de Aduanas CRC, Almacenamiento", info.GetProperty("servicesSummary").GetString());
+        Assert.AreEqual("Cotización de servicios logísticos", info.GetProperty("documentTitle").GetString());
+        Assert.IsFalse(info.GetProperty("hasTransportService").GetBoolean());
+        Assert.IsFalse(info.GetProperty("showCarrier").GetBoolean());
+
+        var item = document.RootElement.GetProperty("items").EnumerateArray().Single();
+        Assert.AreEqual("Almacenaje fiscal", item.GetProperty("description").GetString());
+        Assert.AreEqual("CRC", item.GetProperty("currencyCode").GetString());
+        Assert.AreEqual(125m, item.GetProperty("lineTotalAmount").GetDecimal());
+    }
+
+    [TestMethod]
+    public void PdfWithStorageAndFreight_PreservesTransportInformationAndStorageDays()
+    {
+        var rate = CreateRate("FOB");
+        rate.ConfigureServices([
+            new RateServiceSelection(Guid.NewGuid(), "Transporte Internacional", "INTERNATIONAL-TRANSPORT"),
+            new RateServiceSelection(Guid.NewGuid(), "Almacenaje Fiscal", "WAREHOUSE")
+        ]);
+        rate.ConfigureStorageDays(1);
+        using var document = QuoteData(rate);
+        var info = document.RootElement.GetProperty("rate");
+        Assert.IsTrue(info.GetProperty("hasStorageService").GetBoolean());
+        Assert.IsTrue(info.GetProperty("hasTransportService").GetBoolean());
+        Assert.AreEqual("1 día", info.GetProperty("storageDaysLabel").GetString());
+    }
+
+    [TestMethod]
+    public void PdfWithCustomsOnly_DoesNotClaimWarehouseOrInternationalTransport()
+    {
+        var rate = CreateRate("FOB");
+        rate.ConfigureServices([
+            new RateServiceSelection(Guid.NewGuid(), "Agencia de Aduanas CRC", "CUSTOMS")
+        ]);
+        rate.ConfigureStorageDays(12); // Stale draft information must not imply a storage service.
+        using var document = QuoteData(rate);
+        var info = document.RootElement.GetProperty("rate");
+        Assert.IsFalse(info.GetProperty("hasStorageService").GetBoolean());
+        Assert.IsFalse(info.GetProperty("hasTransportService").GetBoolean());
+        Assert.AreEqual("Cotización de servicios logísticos", info.GetProperty("documentTitle").GetString());
+    }
+
+    [TestMethod]
+    public void PdfWithStorageWithoutKnownDays_ReportsPendingDaysWithoutGeneratingFees()
+    {
+        var rate = CreateRate("FOB");
+        rate.ConfigureServices([
+            new RateServiceSelection(Guid.NewGuid(), "Depósito Fiscal", "STORAGE")
+        ]);
+        using var document = QuoteData(rate);
+        var info = document.RootElement.GetProperty("rate");
+        Assert.IsTrue(info.GetProperty("hasStorageService").GetBoolean());
+        Assert.AreEqual("Por definir", info.GetProperty("storageDaysLabel").GetString());
+        Assert.AreEqual(0, document.RootElement.GetProperty("items").GetArrayLength());
+    }
+
     private static JsonDocument QuoteData(RateHeader rate)
     {
         var factory = new RateReportDataFactory(new ConfigurationBuilder().Build());
