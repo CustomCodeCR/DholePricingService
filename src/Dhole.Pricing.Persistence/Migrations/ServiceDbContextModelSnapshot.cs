@@ -980,6 +980,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("kg_per_cbm");
 
+                    b.Property<string>("PricingRulesJson")
+                        .HasColumnType("text")
+                        .HasColumnName("pricing_rules_json");
+
                     b.Property<decimal?>("MinimumCostAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
