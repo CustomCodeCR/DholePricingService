@@ -211,7 +211,7 @@ internal static class CompetitorTariffRouteOverride
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return Results.Ok(new
+        return EndpointResults.Ok(new
         {
             competitorTariffId,
             polIds,
