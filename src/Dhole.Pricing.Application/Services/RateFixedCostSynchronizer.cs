@@ -368,6 +368,14 @@ public sealed class RateFixedCostSynchronizer(
         if (!matchesAgent || !matchesCarrier || !matchesMode || !matchesIncoterm || !matchesServices)
             return false;
 
+        // A warehouse tariff advertised as covering the first five/seven days
+        // cannot be applied until the operator entered the actual fiscal days.
+        // The carrier FreeDays field must never be used as a fallback.
+        if (cost.Services.Any(service =>
+            NormalizeRouteText($"{service.ServiceName} {service.ServiceCode}").Contains("ALMACENAJE"))
+            && rate.StorageDays is not > 0)
+            return false;
+
         if (!SelectionMatches(selection?.PolIds, cost.PolId, rate.PolId))
             return false;
         if (!SelectionMatches(selection?.PoeIds, cost.PoeId, rate.PoeId))
