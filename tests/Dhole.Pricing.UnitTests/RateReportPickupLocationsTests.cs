@@ -26,6 +26,60 @@ public sealed class RateReportPickupLocationsTests
     }
 
     [TestMethod]
+    public void QuotePdf_RemovesRepeatedObservationsFromSingleLclCargoLine()
+    {
+        var rate = CreateRate("EXW", "Miami, Estados Unidos", "USMIA");
+        const string observation = "Producto: Crujiente de arveja orgánica.\n"
+            + "País de origen: Estados Unidos.\n"
+            + "Dirección de recolección:\n"
+            + "PU @ TURTLE LAKE\n545 Neimann Drive";
+        var cargoDescription = $"Carga LCL 1 · Observaciones: {observation}"
+            + $" · Observaciones: {observation}"
+            + $" · Observaciones: {observation}";
+
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl, totalPackages: 1, totalPallets: 1,
+            totalWeightKg: 340.65m, totalVolumeCbm: 1m,
+            kgPerCbm: 500m,
+            cargoLinesJson: JsonSerializer.Serialize(new[] { new { Description = cargoDescription } }),
+            updatedBy: null);
+        rate.ConfigurePickupLocations(
+            """[{"Address":"545 Neimann Drive, Turtle Lake, WI","CargoCondition":"NationalizedCargo"}]""");
+
+        using var report = QuoteData(rate);
+        var pdfRate = report.RootElement.GetProperty("rate");
+
+        Assert.AreEqual($"Carga LCL 1 · Observaciones: {observation}",
+            pdfRate.GetProperty("cargoDetails").GetString());
+        Assert.AreEqual(1, pdfRate.GetProperty("pickupLocations").GetArrayLength());
+        Assert.AreEqual("545 Neimann Drive, Turtle Lake, WI",
+            pdfRate.GetProperty("pickupLocations")[0].GetProperty("address").GetString());
+    }
+
+    [TestMethod]
+    public void QuotePdf_KeepsDifferentObservationsAndSeparateCargoLines()
+    {
+        var rate = CreateRate("EXW");
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl, totalPackages: 2, totalPallets: 2,
+            totalWeightKg: 500m, totalVolumeCbm: 2m,
+            kgPerCbm: 500m,
+            cargoLinesJson: JsonSerializer.Serialize(new[]
+            {
+                new { Description = "Carga LCL 1 · Observaciones: Entrega primaria · Observaciones: Entrega primaria · Observaciones: Avisar al agente" },
+                new { Description = "Carga LCL 2 · Observaciones: Entrega primaria" }
+            }),
+            updatedBy: null);
+
+        using var report = QuoteData(rate);
+        Assert.AreEqual(
+            "Carga LCL 1 · Observaciones: Entrega primaria · Observaciones: Avisar al agente"
+                + Environment.NewLine
+                + "Carga LCL 2 · Observaciones: Entrega primaria",
+            report.RootElement.GetProperty("rate").GetProperty("cargoDetails").GetString());
+    }
+
+    [TestMethod]
     public void Report_ListsAllExwPickupsInOrderWithClassification()
     {
         var rate = CreateRate("EXW");
