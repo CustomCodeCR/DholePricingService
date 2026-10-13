@@ -51,8 +51,23 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var originOfficePublicUrl = CreateOriginOfficePublicUrl(rate);
         var originOfficeQrDataUri = CreateQrDataUri(originOfficePublicUrl);
         var isLand = rate.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
+        var hasSelectedServices = rate.RateServices.Count > 0;
+        var selectedServiceNames = rate.RateServices
+            .Select(service => service.ServiceName.Trim())
+            .Where(name => name.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var hasStorageService = rate.RateServices.Any(service =>
+                IsStorageService($"{service.ServiceName} {service.ServiceCode}"))
+            || rate.RateDetails.Any(detail =>
+                IsStorageService(detail.Name) && detail.SaleAmount > 0m);
+        var hasTransportService = !hasSelectedServices || rate.RateServices.Any(service =>
+            IsTransportationService($"{service.ServiceName} {service.ServiceCode}"));
+        var documentTitle = hasStorageService || !hasTransportService
+            ? "Cotización de servicios logísticos"
+            : "Cotización de transporte internacional";
         var showAgent = !isLand;
-        var showCarrier = rate.ShipmentMode == ShipmentMode.Fcl;
+        var showCarrier = rate.ShipmentMode == ShipmentMode.Fcl && hasTransportService;
         var route = !string.IsNullOrWhiteSpace(rate.PodName)
             ? $"{rate.PolName} → {rate.PodName} vía {rate.PoeName}"
             : $"{rate.PolName} → {rate.PoeName}";
@@ -356,6 +371,15 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 route,
                 incoterm = Text(rate.IncotermName, Text(rate.IncotermCode, string.Empty)),
                 rateType = rate.RateType == Dhole.Pricing.Domain.Rates.Enums.RateType.Spot ? "SPOT" : "TARIFARIO",
+                documentTitle,
+                hasTransportService,
+                hasSelectedServices,
+                servicesSummary = string.Join(", ", selectedServiceNames),
+                hasStorageService,
+                storageDays = rate.StorageDays,
+                storageDaysLabel = rate.StorageDays is > 0
+                    ? $"{rate.StorageDays} {(rate.StorageDays == 1 ? "día" : "días")}"
+                    : "Por definir",
                 shipmentMode = rate.ShipmentMode.ToString(),
                 containerType = shipmentSummary,
                 containerQuantity = containers.Sum(x => x.quantity),
@@ -405,6 +429,29 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         return JsonSerializer.Serialize(data, JsonOptions);
     }
 
+
+    private static bool IsStorageService(string value)
+    {
+        var normalized = NormalizeServiceLabel(value);
+        return normalized.Contains("ALMACEN", StringComparison.Ordinal)
+            || normalized.Contains("DEPOSITO FISCAL", StringComparison.Ordinal)
+            || normalized.Contains("BODEGA FISCAL", StringComparison.Ordinal);
+    }
+
+    private static bool IsTransportationService(string value)
+    {
+        var normalized = NormalizeServiceLabel(value);
+        return normalized.Contains("TRANSPORTE", StringComparison.Ordinal)
+            || normalized.Contains("FLETE", StringComparison.Ordinal);
+    }
+
+    private static string NormalizeServiceLabel(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var text = value.Normalize(System.Text.NormalizationForm.FormD);
+        return new string(text.Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+            .ToArray()).ToUpperInvariant();
+    }
 
     private sealed record PickupReportLocation(string Label, string Address, string Classification);
 
