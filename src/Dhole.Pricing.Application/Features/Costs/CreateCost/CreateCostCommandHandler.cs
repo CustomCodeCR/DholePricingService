@@ -210,6 +210,7 @@ public sealed class CreateCostCommandHandler(
             cost.ConfigureServices(command.Services);
             cost.ConfigureShipmentModes(resolvedShipmentModes);
             cost.ConfigureOperationalConditions(command.OperationalConditions);
+            cost.ConfigurePricingRules(command.PricingRulesJson);
         }
         catch (InvalidOperationException)
         {
