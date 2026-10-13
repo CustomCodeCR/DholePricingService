@@ -460,7 +460,7 @@ public static class CompetitorTariffEndpoints
     private static async Task<IResult> GetMatchingAsync(
         Guid polId,
         Guid poeId,
-        Guid podId,
+        Guid? podId,
         Guid carrierId,
         string shipmentMode,
         DateTime? validOn,
@@ -472,7 +472,6 @@ public static class CompetitorTariffEndpoints
         if (
             polId == Guid.Empty ||
             poeId == Guid.Empty ||
-            podId == Guid.Empty ||
             carrierId == Guid.Empty
         )
         {
@@ -500,7 +499,9 @@ public static class CompetitorTariffEndpoints
             .Where(x =>
                 x.PolIds.Contains(polId) &&
                 x.PoeIds.Contains(poeId) &&
-                x.PodIds.Contains(podId) &&
+                (podId.HasValue && podId != Guid.Empty
+                    ? (x.PodIds.Contains(podId.Value) || x.PodIds.Count == 0)
+                    : x.PodIds.Count == 0) &&
                 x.CarrierIds.Contains(carrierId) &&
                 x.ShipmentMode == mode
             )
