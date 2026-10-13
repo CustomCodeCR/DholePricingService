@@ -25,21 +25,21 @@ public sealed class CostPricingRulesTests
     }
 
     [TestMethod]
-    public void ConsolidatedLandFreight_ChangesFromFlatAmountToWeightRate()
+    public void UserConfiguredFlatAndPerKgBands_AreResolvedWithoutSeededTariffs()
     {
         var rules = CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
         {
-            new CostPricingRule("WeightKg", 1m, 500m, null, 180m, 180m),
-            new CostPricingRule("WeightKg", 501m, 3000m, null, .20m, .20m, "PerKg"),
-            new CostPricingRule("WeightKg", 3001m, null, null, .18m, .18m, "PerKg"),
+            new CostPricingRule("WeightKg", 1m, 10m, null, 9m, 12m),
+            new CostPricingRule("WeightKg", 11m, 20m, null, 3m, 4m, "PerKg"),
+            new CostPricingRule("WeightKg", 21m, null, null, 2m, 5m, "PerKg"),
         }));
 
-        Assert.IsTrue(CostPricingRules.TryResolve(rules, 450m, null, null, 0m, 0m, out var cost, out _));
-        Assert.AreEqual(180m, cost);
-        Assert.IsTrue(CostPricingRules.TryResolve(rules, 2000m, null, null, 0m, 0m, out cost, out _));
-        Assert.AreEqual(400m, cost);
-        Assert.IsTrue(CostPricingRules.TryResolve(rules, 3500m, null, null, 0m, 0m, out cost, out _));
-        Assert.AreEqual(630m, cost);
+        Assert.IsTrue(CostPricingRules.TryResolve(rules, 10m, null, null, 0m, 0m, out var cost, out var sale));
+        Assert.AreEqual(9m, cost);
+        Assert.AreEqual(12m, sale);
+        Assert.IsTrue(CostPricingRules.TryResolve(rules, 15m, null, null, 0m, 0m, out cost, out sale));
+        Assert.AreEqual(45m, cost);
+        Assert.AreEqual(60m, sale);
     }
 
     [TestMethod]
@@ -53,18 +53,18 @@ public sealed class CostPricingRulesTests
     }
 
     [TestMethod]
-    public void FiscalStorage_ExtraDayChargeUsesDaysBeyondIncludedPeriod()
+    public void FiscalStorage_ExtraDayChargeUsesOnlyUserProvidedDays()
     {
         var rules = CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
         {
-            new CostPricingRule("Packages", 1m, 3m, null, 1500m, 1500m, "PerExtraDay", 5),
-            new CostPricingRule("Packages", 4m, 15m, null, 2000m, 2000m, "PerExtraDay", 5),
+            new CostPricingRule("Packages", 1m, 2m, null, 2m, 3m, "PerExtraDay", 3),
         }));
 
-        Assert.IsFalse(CostPricingRules.TryResolve(rules, null, 2, null, 0m, 0m, out _, out _, storageDays: 5));
+        Assert.IsFalse(CostPricingRules.TryResolve(rules, null, 2, null, 0m, 0m, out _, out _, storageDays: 3));
         Assert.IsFalse(CostPricingRules.TryResolve(rules, null, 2, null, 0m, 0m, out _, out _, storageDays: null));
-        Assert.IsTrue(CostPricingRules.TryResolve(rules, null, 2, null, 0m, 0m, out var cost, out _, storageDays: 7));
-        Assert.AreEqual(3000m, cost);
+        Assert.IsTrue(CostPricingRules.TryResolve(rules, null, 2, null, 0m, 0m, out var cost, out var sale, storageDays: 5));
+        Assert.AreEqual(4m, cost);
+        Assert.AreEqual(6m, sale);
     }
 
     [TestMethod]
