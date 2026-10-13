@@ -191,6 +191,38 @@ public sealed class MarketComparabilityAcceptanceTests
         Assert.IsTrue(pilResult.FinalWeight > maerskResult.FinalWeight);
     }
 
+    [TestMethod]
+    public void CompareCandidates_PoeOnlyTariff_MatchesRequestedPolWithoutPOD()
+    {
+        var ids = TestIds.Create();
+        var quote = CreateObservation(
+            "Competitor six origins with POE Caldera",
+            ids.Fca,
+            ids.PolShanghai,
+            ids.PoeCaldera,
+            null,
+            ids.Container40Hc,
+            ShipmentMode.Fcl,
+            ids.CarrierPil,
+            8818.3333m
+        );
+        var key = new MarketComparisonKey(
+            ids.Fca,
+            ids.PolShanghai,
+            ids.PoeCaldera,
+            ids.PodSanJose,
+            ids.Container40Hc,
+            ShipmentMode.Fcl,
+            ids.CarrierPil
+        );
+        var result = CreateService().CompareCandidates(key, ReferenceDate, [quote]);
+
+        Assert.AreEqual(1, result.IncludedObservationCount);
+        Assert.IsTrue(result.Observations.Single().WasIncluded);
+        Assert.IsNull(quote.PodId);
+        Assert.AreEqual(8818.3333m, quote.NormalizedAllIn);
+    }
+
     private static CompetitorRateComparabilityService CreateService() =>
         new(
             null!,
@@ -206,7 +238,7 @@ public sealed class MarketComparabilityAcceptanceTests
         Guid incotermId,
         Guid polId,
         Guid poeId,
-        Guid podId,
+        Guid? podId,
         Guid containerTypeId,
         ShipmentMode mode,
         Guid carrierId,
@@ -246,8 +278,8 @@ public sealed class MarketComparabilityAcceptanceTests
             "Puerto Caldera",
             "CRCAL",
             podId,
-            "San José",
-            "CRSJO",
+            podId.HasValue ? "San José" : null,
+            podId.HasValue ? "CRSJO" : null,
             carrierId,
             carrierId.ToString("D"),
             carrierId.ToString("N"),
