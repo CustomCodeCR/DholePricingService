@@ -143,7 +143,7 @@ public static class MarketPricingEndpoints
         var result = await dispatcher.DispatchAsync(
             new CalculateMarketBenchmarkCommand(
                 key,
-                NormalizeUtc(request.ReferenceDate ?? DateTime.UtcNow),
+                ResolveActiveComparisonDate(request.ReferenceDate),
                 amountKind,
                 targetPercentile,
                 ceilingPercentile
@@ -475,6 +475,21 @@ public static class MarketPricingEndpoints
         httpContext.User.Identity?.Name
         ?? httpContext.User.FindFirst("name")?.Value
         ?? httpContext.User.FindFirst("preferred_username")?.Value;
+
+    // Live Average must not price against an expired historical quote date.
+    // Costa Rica is the commercial clock for Dhole quotation validity.
+    private static DateTime ResolveActiveComparisonDate(DateTime? requested)
+    {
+        var today = DateTime.SpecifyKind(
+            TimeZoneInfo.ConvertTimeFromUtc(
+                DateTime.UtcNow,
+                TimeZoneInfo.FindSystemTimeZoneById("America/Costa_Rica")
+            ).Date,
+            DateTimeKind.Utc
+        );
+        var chosen = NormalizeUtc(requested ?? today);
+        return chosen.Date < today ? today : chosen;
+    }
 
     private static DateTime NormalizeUtc(DateTime value) =>
         value.Kind switch
