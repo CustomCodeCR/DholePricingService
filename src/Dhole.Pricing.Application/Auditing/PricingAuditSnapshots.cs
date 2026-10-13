@@ -56,6 +56,7 @@ public static class PricingAuditSnapshots
             cost.MinimumCostAmount,
             cost.MinimumSaleAmount,
             cost.KgPerCbm,
+            cost.PricingRulesJson,
 
             cost.Notes,
             cost.IsAccountant,
