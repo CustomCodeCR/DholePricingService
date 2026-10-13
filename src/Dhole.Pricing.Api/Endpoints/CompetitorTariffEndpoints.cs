@@ -30,6 +30,8 @@ public static class CompetitorTariffEndpoints
         group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/matching", GetMatchingAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapPost("/import", ImportAsync).RequireScope(PricingConstants.Scopes.RateCreate);
+        group.MapPut("/{competitorTariffId:guid}/routes", CompetitorTariffRouteOverride.ApplyAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapGet("/{competitorTariffId:guid}/observations", GetObservationsAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
         group.MapPut(
