@@ -12,7 +12,8 @@ public sealed record CostPricingRule(
     decimal? MaxValue,
     Guid? ContainerTypeId,
     decimal CostAmount,
-    decimal SaleAmount
+    decimal SaleAmount,
+    string CalculationMode = "Flat"
 );
 
 public static class CostPricingRules
@@ -35,6 +36,10 @@ public static class CostPricingRules
         {
             if (rule.CostAmount < 0 || rule.SaleAmount < 0)
                 throw new InvalidOperationException("Los montos por condición no pueden ser negativos.");
+            if (rule.CalculationMode is not ("Flat" or "PerKg"))
+                throw new InvalidOperationException("El modo de cálculo debe ser un monto fijo o un importe por kilogramo.");
+            if (rule.CalculationMode == "PerKg" && rule.Dimension != "WeightKg")
+                throw new InvalidOperationException("El cálculo por kilogramo requiere condiciones de peso.");
             if (rule.Dimension is not ("WeightKg" or "Packages" or "ContainerType"))
                 throw new InvalidOperationException("La condición de costo debe ser Peso, Bultos o Tipo de contenedor.");
             if (dimension is not null && rule.Dimension != dimension)
@@ -100,8 +105,9 @@ public static class CostPricingRules
         });
         if (matching is null) return false;
 
-        cost = matching.CostAmount;
-        sale = matching.SaleAmount;
+        var multiplier = matching.CalculationMode == "PerKg" ? weightKg!.Value : 1m;
+        cost = matching.CostAmount * multiplier;
+        sale = matching.SaleAmount * multiplier;
         return true;
     }
 }
