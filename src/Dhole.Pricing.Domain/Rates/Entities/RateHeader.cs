@@ -1282,7 +1282,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         if (Status == status)
             return;
 
-        var isClosing = status == RateStatus.Closed;
+        var isClosing = status is RateStatus.Closed or RateStatus.Cancelled;
         var isValidTransition = (Status, status) switch
         {
             (RateStatus.ApprovedByManagement, RateStatus.Open) => true,
@@ -1300,6 +1300,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             (RateStatus.RequestedByClient, RateStatus.RejectedByClient) => true,
             (RateStatus.Expired, RateStatus.AcceptedByClient) => true,
             (RateStatus.Expired, RateStatus.RejectedByClient) => true,
+            // Una aceptación puede cancelarse o revertirse a rechazo con motivo auditable.
+            (RateStatus.AcceptedByClient, RateStatus.Cancelled) => true,
+            (RateStatus.AcceptedByClient, RateStatus.RejectedByClient) => true,
             (RateStatus.PendingApproval, RateStatus.Closed) => true,
             (RateStatus.ApprovedByManagement, RateStatus.Closed) => true,
             (RateStatus.RejectedByManagement, RateStatus.Closed) => true,
