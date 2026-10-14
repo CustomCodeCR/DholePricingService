@@ -15,7 +15,8 @@ public sealed record PricingRateDashboardDto(
     DateTime? LastModifiedAtUtc,
     IReadOnlyCollection<PricingRateStatusSummaryDto> Statuses,
     IReadOnlyCollection<PricingRateCurrencySummaryDto> Financials,
-    IReadOnlyCollection<PricingRateDashboardItemDto> RecentRates
+    IReadOnlyCollection<PricingRateDashboardItemDto> RecentRates,
+    IReadOnlyCollection<PricingAcceptedModeSummaryDto> AcceptedByMode
 );
 
 public sealed record PricingRateStatusSummaryDto(
@@ -33,6 +34,18 @@ public sealed record PricingRateCurrencySummaryDto(
     decimal TotalSaleAmount,
     decimal TotalUtilityAmount,
     decimal AverageMarginPercentage
+);
+
+// Los importes se agrupan por moneda; nunca se suman USD y CRC.
+// Air incluye tanto Air como AirConsol para el reporte comercial.
+public sealed record PricingAcceptedModeSummaryDto(
+    string ShipmentMode,
+    string CurrencyCode,
+    string CurrencyName,
+    int RateCount,
+    decimal TotalCostAmount,
+    decimal TotalSaleAmount,
+    decimal TotalUtilityAmount
 );
 
 public sealed record PricingRateDashboardItemDto(
