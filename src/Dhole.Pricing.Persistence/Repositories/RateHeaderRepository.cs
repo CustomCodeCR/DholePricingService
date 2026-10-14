@@ -628,6 +628,46 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             ))
             .ToListAsync(cancellationToken);
 
+        // Resumen comercial: una tarifa aceptada se cuenta una sola vez y
+        // las dos variantes aéreas se presentan en una misma modalidad.
+        // La agrupación por moneda evita sumar importes de USD con CRC.
+        var acceptedModeRows = await query
+            .Where(x => x.Status == RateStatus.AcceptedByClient)
+            .GroupBy(x => new
+            {
+                ShipmentMode = x.ShipmentMode == ShipmentMode.AirConsol
+                    ? ShipmentMode.Air
+                    : x.ShipmentMode,
+                x.CurrencyId,
+                x.CurrencyCode,
+                x.CurrencyName,
+            })
+            .Select(group => new
+            {
+                group.Key.ShipmentMode,
+                group.Key.CurrencyCode,
+                group.Key.CurrencyName,
+                RateCount = group.Count(),
+                TotalCostAmount = group.Sum(x => x.TotalCostAmount),
+                TotalSaleAmount = group.Sum(x => x.TotalSaleAmount),
+                TotalUtilityAmount = group.Sum(x => x.TotalUtilityAmount),
+            })
+            .ToListAsync(cancellationToken);
+
+        var acceptedByMode = acceptedModeRows
+            .OrderBy(x => x.ShipmentMode)
+            .ThenBy(x => x.CurrencyCode)
+            .Select(x => new PricingAcceptedModeSummaryDto(
+                x.ShipmentMode.ToString(),
+                x.CurrencyCode,
+                x.CurrencyName,
+                x.RateCount,
+                x.TotalCostAmount,
+                x.TotalSaleAmount,
+                x.TotalUtilityAmount
+            ))
+            .ToList();
+
         var recentRateRows = await query
             .OrderByDescending(x => x.UpdatedAtUtc ?? x.CreatedAtUtc)
             .ThenByDescending(x => x.CreatedAtUtc)
@@ -707,7 +747,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             lastModifiedAtUtc,
             statuses,
             financials,
-            recentRates
+            recentRates,
+            acceptedByMode
         );
     }
 
