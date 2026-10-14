@@ -136,7 +136,7 @@ public static class SellerRateEndpoints
         }));
     }
 
-    private static bool IsAdminViewer(ClaimsPrincipal principal, SellerVisibilityService visibility)
+    internal static bool IsAdminViewer(ClaimsPrincipal principal, SellerVisibilityService visibility)
     {
         if (visibility.HasScope(principal, PricingConstants.Scopes.RateRequestViewAll))
             return true;
