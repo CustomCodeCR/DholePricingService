@@ -216,6 +216,76 @@ public sealed class RateStatusWorkflowTests
     }
 
     [TestMethod]
+    public void AcceptedRate_CanBeCancelledWithMandatoryReason_WithoutLosingIdtra()
+    {
+        var actor = Guid.NewGuid();
+        var rate = CreateRate(idtraNumber: "IDTRA-2026-00125");
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            rate.SetCommercialStatus(RateStatus.Cancelled, reason: "", updatedBy: actor)
+        );
+        Assert.AreEqual(RateStatus.AcceptedByClient, rate.Status);
+
+        rate.SetCommercialStatus(
+            RateStatus.Cancelled,
+            reason: "El cliente canceló la operación después de aceptarla.",
+            updatedBy: actor
+        );
+
+        Assert.AreEqual(RateStatus.Cancelled, rate.Status);
+        Assert.AreEqual("IDTRA-2026-00125", rate.IdtraNumber);
+        Assert.AreEqual("El cliente canceló la operación después de aceptarla.", rate.ClosedReason);
+        Assert.AreEqual(actor, rate.ClosedBy);
+        Assert.IsNotNull(rate.ClosedAtUtc);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: actor)
+        );
+    }
+
+    [TestMethod]
+    public void AcceptedRate_CanBeRejectedLaterWithMandatoryReason()
+    {
+        var actor = Guid.NewGuid();
+        var rate = CreateRate(idtraNumber: "IDTRA-2026-00126");
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            rate.SetCommercialStatus(RateStatus.RejectedByClient, reason: null, updatedBy: actor)
+        );
+        rate.SetCommercialStatus(
+            RateStatus.RejectedByClient,
+            reason: "El cliente retiró su aceptación.",
+            updatedBy: actor
+        );
+
+        Assert.AreEqual(RateStatus.RejectedByClient, rate.Status);
+        Assert.AreEqual("El cliente retiró su aceptación.", rate.ClosedReason);
+        Assert.AreEqual(actor, rate.ClosedBy);
+        Assert.AreEqual("IDTRA-2026-00126", rate.IdtraNumber);
+    }
+
+    [TestMethod]
+    public void SentRate_CannotBeCancelledWithoutPriorAcceptance()
+    {
+        var rate = CreateRate();
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            rate.SetCommercialStatus(RateStatus.Cancelled, reason: "Motivo", updatedBy: null)
+        );
+        Assert.AreEqual(RateStatus.Sent, rate.Status);
+    }
+
+    [TestMethod]
     public void SetAmounts_WithIdtraAndQuo_DoesNotBypassMarginApproval()
     {
         var rate = CreateRate(idtraNumber: "IDTRA-2026-00125", quoNumber: "QUO-2026-00458");

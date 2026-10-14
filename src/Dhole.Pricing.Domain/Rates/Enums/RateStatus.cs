@@ -12,4 +12,5 @@ public enum RateStatus
     RequestedByClient = 7,
     Closed = 8,
     Expired = 9,
+    Cancelled = 10,
 }
