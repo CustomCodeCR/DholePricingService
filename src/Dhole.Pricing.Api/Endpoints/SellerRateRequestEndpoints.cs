@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +16,10 @@ public static class SellerRateRequestEndpoints
             .WithTags("Seller rate requests")
             .RequireAuthorization()
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
+
+        app.MapGet("/api/pricing/rate-requests/dashboard", GetAdminDashboardAsync)
+            .WithTags("Seller dashboards")
+            .RequireAuthorization();
 
         return app;
     }
@@ -33,6 +38,24 @@ public static class SellerRateRequestEndpoints
             .AsNoTracking()
             .Where(x => x.SellerUserId == currentUserId.Value)
             .OrderByDescending(x => x.RequestedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(requests.Select(ToDto).ToArray());
+    }
+
+    // Resumen de solicitudes para la vista por roles, con autorización en el servidor.
+    private static async Task<IResult> GetAdminDashboardAsync(
+        ServiceDbContext db,
+        SellerVisibilityService visibility,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        if (!SellerRateEndpoints.IsAdminViewer(httpContext.User, visibility))
+            return Results.Forbid();
+
+        var requests = await db.RateRequests
+            .AsNoTracking()
+            .OrderByDescending(request => request.RequestedAtUtc)
             .ToListAsync(cancellationToken);
 
         return Results.Ok(requests.Select(ToDto).ToArray());
