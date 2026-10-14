@@ -902,6 +902,7 @@ public static class RateEndpoints
                 or RateStatus.AcceptedByClient
                 or RateStatus.RejectedByClient
                 or RateStatus.Closed
+                or RateStatus.Cancelled
             ))
         {
             return EndpointResults.BadRequest(

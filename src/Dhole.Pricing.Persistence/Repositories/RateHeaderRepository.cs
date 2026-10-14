@@ -587,6 +587,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             (Status: RateStatus.Expired, Count: expiredCount),
             (Status: RateStatus.AcceptedByClient, Count: acceptedCount),
             (Status: RateStatus.RejectedByClient, Count: notAcceptedCount),
+            (Status: RateStatus.Cancelled, Count: statusCounts.GetValueOrDefault(RateStatus.Cancelled)),
         };
 
         var statuses = commercialStatusCounts

@@ -53,7 +53,7 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateLowMarginRequiresApproval);
         }
 
-        if (command.Status == RateStatus.Closed
+        if (command.Status is RateStatus.Closed or RateStatus.Cancelled
             && string.IsNullOrWhiteSpace(command.Reason))
         {
             return Result.Failure(PricingErrors.RateClosureReasonIsRequired);
