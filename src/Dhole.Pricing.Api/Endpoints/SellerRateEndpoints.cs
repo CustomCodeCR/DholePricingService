@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
@@ -18,6 +19,10 @@ public static class SellerRateEndpoints
             .WithTags("Seller rates")
             .RequireAuthorization()
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
+
+        app.MapGet("/api/pricing/seller-rates/dashboard", GetAdminDashboardAsync)
+            .WithTags("Seller dashboards")
+            .RequireAuthorization();
 
         return app;
     }
@@ -64,4 +69,87 @@ public static class SellerRateEndpoints
 
         return Results.Ok(enrichedItems);
     }
+    // Sólo el SuperUsuario o quien tiene permiso view-all puede consultar este resumen.
+    // Se proyectan datos de cabecera, sin cargar cada tarifa por separado.
+    private static async Task<IResult> GetAdminDashboardAsync(
+        ServiceDbContext db,
+        SellerVisibilityService visibility,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        if (!IsAdminViewer(httpContext.User, visibility))
+            return Results.Forbid();
+
+        var linkedRateIds = db.RateRequests
+            .AsNoTracking()
+            .Where(request => request.RateId.HasValue)
+            .Select(request => request.RateId!.Value)
+            .Distinct();
+
+        var rows = await db.RateHeaders
+            .AsNoTracking()
+            .Where(rate => !rate.IsDeleted && linkedRateIds.Contains(rate.Id))
+            .OrderByDescending(rate => rate.CreatedAtUtc)
+            .Select(rate => new
+            {
+                rate.Id,
+                rate.RateCode,
+                rate.QuoNumber,
+                rate.IdtraNumber,
+                rate.ClientName,
+                rate.ExecutiveName,
+                rate.PolName,
+                rate.PoeName,
+                rate.PodName,
+                rate.ContainerQuantity,
+                rate.ContainerTypeName,
+                rate.ShipmentMode,
+                rate.ValidFrom,
+                rate.ValidTo,
+                rate.TotalSaleAmount,
+                rate.CurrencyName,
+                rate.CurrencyCode,
+                rate.Status,
+            })
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(rows.Select(rate => new
+        {
+            rate.Id,
+            rate.RateCode,
+            rate.QuoNumber,
+            rate.IdtraNumber,
+            rate.ClientName,
+            rate.ExecutiveName,
+            rate.PolName,
+            rate.PoeName,
+            rate.PodName,
+            rate.ContainerQuantity,
+            rate.ContainerTypeName,
+            shipmentMode = rate.ShipmentMode.ToString(),
+            rate.ValidFrom,
+            rate.ValidTo,
+            rate.TotalSaleAmount,
+            rate.CurrencyName,
+            rate.CurrencyCode,
+            status = rate.Status.ToString(),
+        }));
+    }
+
+    private static bool IsAdminViewer(ClaimsPrincipal principal, SellerVisibilityService visibility)
+    {
+        if (visibility.HasScope(principal, PricingConstants.Scopes.RateRequestViewAll))
+            return true;
+
+        return principal.Claims
+            .Where(claim => claim.Type == ClaimTypes.Role
+                || claim.Type.Equals("role", StringComparison.OrdinalIgnoreCase)
+                || claim.Type.Equals("roles", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(claim => claim.Value.Split(
+                new[] { ' ', ',', ';' },
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Any(role => role.Equals("SuperUsuario", StringComparison.OrdinalIgnoreCase)
+                || role.Equals("SuperUser", StringComparison.OrdinalIgnoreCase));
+    }
+
 }
