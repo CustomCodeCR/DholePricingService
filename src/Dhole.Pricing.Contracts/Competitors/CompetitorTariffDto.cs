@@ -17,5 +17,7 @@ public sealed record CompetitorTariffDto(
     int ObservationCount,
     int ReviewCount,
     string ImportStatus,
-    DateTime ImportedAtUtc
+    DateTime ImportedAtUtc,
+    string? ImportErrorCode = null,
+    string? ImportErrorMessage = null
 );
