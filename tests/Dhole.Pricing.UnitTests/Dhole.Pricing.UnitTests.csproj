@@ -19,7 +19,6 @@
     <ProjectReference Include="..\..\src\Dhole.Pricing.Application\Dhole.Pricing.Application.csproj" />
     <ProjectReference Include="..\..\src\Dhole.Pricing.Domain\Dhole.Pricing.Domain.csproj" />
     <ProjectReference Include="..\..\src\Dhole.Pricing.Workers\Dhole.Pricing.Workers.csproj" />
-    <ProjectReference Include="..\..\src\Dhole.Pricing.Api\Dhole.Pricing.Api.csproj" />
   </ItemGroup>
 
 </Project>
