@@ -19,6 +19,10 @@ using Dhole.Pricing.Domain.Imports.Enums;
 using Dhole.Pricing.Domain.Imports.Services;
 using Dhole.Pricing.Domain.Shared;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using Dhole.Pricing.Persistence.DbContexts;
+using Dhole.Pricing.Application.Imports;
 
 namespace Dhole.Pricing.Api.Endpoints;
 
@@ -52,6 +56,10 @@ public static class ImportRateEndpoints
         group
             .MapPost("/", CreateImportRateAsync)
             .RequireIdempotency()
+            .RequireScope(PricingConstants.Scopes.ImportFclRateCreate);
+
+        group
+            .MapGet("/extract/jobs/{jobId:guid}", GetExtractImportJobAsync)
             .RequireScope(PricingConstants.Scopes.ImportFclRateCreate);
 
         group
@@ -282,42 +290,120 @@ public static class ImportRateEndpoints
         }
     }
 
+    private const long MaxManualImportFileBytes = 20L * 1024 * 1024;
+
     private static async Task<IResult> ExtractImportRateFromFileAsync(
         [FromForm] IFormFile file,
         [FromForm] string? profileSlug,
         [FromForm] string? correlationId,
-        ICommandDispatcher dispatcher,
+        ServiceDbContext dbContext,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
     {
+        var requestedBy = httpContext.GetCurrentUserId();
+        if (!requestedBy.HasValue || requestedBy.Value == Guid.Empty)
+            return Results.Unauthorized();
+
         if (file.Length == 0)
-        {
             return EndpointResults.BadRequest(
-                "Pricing.ImportFileIsEmpty",
-                "El archivo de importación está vacío.",
-                httpContext
-            );
+                "Pricing.ImportFileIsEmpty", "El archivo de importación está vacío.", httpContext);
+        if (file.Length > MaxManualImportFileBytes)
+            return EndpointResults.BadRequest(
+                "Pricing.ImportFileTooLarge", "El archivo supera el máximo de 20 MB.", httpContext);
+
+        var requestKey = httpContext.Request.Headers["Idempotency-Key"].ToString().Trim();
+        if (requestKey.Length > 150)
+            return EndpointResults.BadRequest(
+                "Pricing.InvalidIdempotencyKey", "Idempotency-Key supera 150 caracteres.", httpContext);
+
+        if (requestKey.Length > 0)
+        {
+            var previous = await dbContext.ManualImportExtractionJobs
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.RequestedBy == requestedBy.Value &&
+                    x.ClientRequestKey == requestKey, cancellationToken);
+            if (previous is not null)
+                return Results.Accepted($"/api/pricing/import-rates/extract/jobs/{previous.Id}",
+                    new { jobId = previous.Id, status = previous.Status });
         }
 
-        await using var stream = new MemoryStream();
+        await using var memory = new MemoryStream();
+        await file.CopyToAsync(memory, cancellationToken);
+        if (memory.Length > MaxManualImportFileBytes)
+            return EndpointResults.BadRequest(
+                "Pricing.ImportFileTooLarge", "El archivo supera el máximo de 20 MB.", httpContext);
 
-        await file.CopyToAsync(stream, cancellationToken);
+        var job = new ManualImportExtractionJob
+        {
+            Id = Guid.NewGuid(),
+            RequestedBy = requestedBy.Value,
+            RequestedByName = httpContext.User.Identity?.Name,
+            ClientRequestKey = requestKey.Length == 0 ? null : requestKey,
+            OriginalFileName = Path.GetFileName(file.FileName),
+            ContentType = file.ContentType,
+            ProfileSlug = string.IsNullOrWhiteSpace(profileSlug) ? null : profileSlug.Trim(),
+            CorrelationId = string.IsNullOrWhiteSpace(correlationId)
+                ? Guid.NewGuid().ToString("N") : correlationId.Trim(),
+            FileContent = memory.ToArray(),
+            Status = "Pending",
+            CreatedAtUtc = DateTime.UtcNow
+        };
+        dbContext.ManualImportExtractionJobs.Add(job);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException) when (requestKey.Length > 0)
+        {
+            // Concurrent requests with the same idempotency key: report the winner.
+            dbContext.Entry(job).State = EntityState.Detached;
+            var previous = await dbContext.ManualImportExtractionJobs.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.RequestedBy == requestedBy.Value &&
+                    x.ClientRequestKey == requestKey, cancellationToken);
+            if (previous is null) throw;
+            return Results.Accepted($"/api/pricing/import-rates/extract/jobs/{previous.Id}",
+                new { jobId = previous.Id, status = previous.Status });
+        }
 
-        var result = await dispatcher.DispatchAsync(
-            new ExtractImportRateFromFileCommand(
-                file.FileName,
-                file.ContentType,
-                string.IsNullOrWhiteSpace(profileSlug) ? null : profileSlug.Trim(),
-                stream.ToArray(),
-                httpContext.GetCurrentUserId(),
-                httpContext.User.Identity?.Name,
-                correlationId
-            ),
-            cancellationToken
-        );
+        return Results.Accepted($"/api/pricing/import-rates/extract/jobs/{job.Id}",
+            new { jobId = job.Id, status = job.Status });
+    }
 
-        return EndpointResults.FromResult(result, httpContext);
+    private static async Task<IResult> GetExtractImportJobAsync(
+        Guid jobId,
+        ServiceDbContext dbContext,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var requestedBy = httpContext.GetCurrentUserId();
+        if (!requestedBy.HasValue || requestedBy.Value == Guid.Empty)
+            return Results.Unauthorized();
+
+        var job = await dbContext.ManualImportExtractionJobs
+            .AsNoTracking()
+            .Where(x => x.Id == jobId && x.RequestedBy == requestedBy.Value)
+            .Select(x => new
+            {
+                x.Id, x.Status, x.AttemptCount, x.CreatedAtUtc,
+                x.CompletedAtUtc, x.ErrorMessage, x.ResultJson
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (job is null) return Results.NotFound();
+
+        return Results.Ok(new
+        {
+            jobId = job.Id,
+            job.Status,
+            job.AttemptCount,
+            job.CreatedAtUtc,
+            job.CompletedAtUtc,
+            job.ErrorMessage,
+            extractionResult = job.ResultJson is null
+                ? null
+                : JsonSerializer.Deserialize<ExtractAndPersistFclPricingImportResult>(job.ResultJson)
+        });
     }
 
     private static async Task<IResult> ApproveImportRatesAsync(
