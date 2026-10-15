@@ -41,7 +41,7 @@ internal sealed class PricingRateRequestSlaWorker(
             .Where(x => x.Status == RateRequestStatus.Open
                 && x.DueAtUtc <= now
                 && x.SlaReminderSentAtUtc == null)
-            .OrderBy(x => x.Priority)
+            .OrderByDescending(x => x.Priority)
             .ThenBy(x => x.DueAtUtc)
             .Take(batchSize)
             .ToListAsync(cancellationToken);
@@ -82,9 +82,9 @@ internal sealed class PricingRateRequestSlaWorker(
 
             var priorityLabel = request.Priority switch
             {
-                RateRequestPriority.Green => "Verde · máximo 24 horas",
+                RateRequestPriority.Green => "Verde · máximo 72 horas",
                 RateRequestPriority.Yellow => "Amarillo · máximo 48 horas",
-                RateRequestPriority.Red => "Rojo · máximo 72 horas",
+                RateRequestPriority.Red => "Rojo · máximo 24 horas",
                 _ => request.Priority.ToString(),
             };
             var route = $"{request.OriginName ?? "Origen pendiente"} → {request.DestinationName ?? "Destino pendiente"}";
