@@ -41,7 +41,7 @@ internal sealed class PricingRateRequestSlaWorker(
             .Where(x => x.Status == RateRequestStatus.Open
                 && x.DueAtUtc <= now
                 && x.SlaReminderSentAtUtc == null)
-            .OrderBy(x => x.Priority)
+            .OrderByDescending(x => x.Priority)
             .ThenBy(x => x.DueAtUtc)
             .Take(batchSize)
             .ToListAsync(cancellationToken);
