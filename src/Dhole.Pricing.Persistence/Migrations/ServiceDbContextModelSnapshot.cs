@@ -276,49 +276,63 @@ namespace Dhole.Pricing.Persistence.Migrations
             modelBuilder.Entity("Dhole.Pricing.Domain.Competitors.Entities.CompetitorTariffImportPayload", b =>
                 {
                     b.Property<Guid>("CompetitorTariffId")
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("CompetitorTariffId");
 
                     b.Property<int>("AttemptCount")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasColumnName("AttemptCount");
 
                     b.Property<string>("ContentType")
                         .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("ContentType");
 
                     b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("CreatedAtUtc");
 
                     b.Property<DateTime?>("FallbackFrom")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("FallbackFrom");
 
                     b.Property<DateTime?>("FallbackTo")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("FallbackTo");
 
                     b.Property<byte[]>("FileContent")
                         .IsRequired()
-                        .HasColumnType("bytea");
+                        .HasColumnType("bytea")
+                        .HasColumnName("FileContent");
 
                     b.Property<string>("FileHash")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("FileHash");
 
                     b.Property<DateTime?>("LeaseUntilUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("LeaseUntilUtc");
 
                     b.Property<DateTime>("NextAttemptAtUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("NextAttemptAtUtc");
 
                     b.Property<Guid?>("RequestedBy")
-                        .HasColumnType("uuid");
+                        .HasColumnType("uuid")
+                        .HasColumnName("RequestedBy");
 
                     b.Property<string>("RequestedByName")
                         .HasMaxLength(250)
-                        .HasColumnType("character varying(250)");
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("RequestedByName");
 
-                    b.HasKey("CompetitorTariffId");
+                    b.HasKey("CompetitorTariffId")
+                        .HasName("CompetitorTariffImportPayloads_pkey");
 
-                    b.HasIndex("NextAttemptAtUtc", "LeaseUntilUtc");
+                    b.HasIndex("NextAttemptAtUtc", "LeaseUntilUtc")
+                        .HasDatabaseName("IX_CompetitorPayloads_NextAttempt_Lease");
 
                     b.ToTable("CompetitorTariffImportPayloads", "pricing");
                 });
@@ -3057,7 +3071,8 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .WithOne()
                         .HasForeignKey("Dhole.Pricing.Domain.Competitors.Entities.CompetitorTariffImportPayload", "CompetitorTariffId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .IsRequired()
+                        .HasConstraintName("CompetitorTariffImportPayloads_CompetitorTariffId_fkey");
                 });
 
             modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.CompetitorRateObservation", b =>
