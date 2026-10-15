@@ -180,6 +180,12 @@ public sealed class CompetitorTariff
         ImportErrorMessage = Truncate(errorMessage, 2000);
     }
 
+    public void RecordImportIssue(string? errorCode, string? errorMessage)
+    {
+        ImportErrorCode = Truncate(errorCode, 120);
+        ImportErrorMessage = Truncate(errorMessage, 2000);
+    }
+
     public void RetryImport()
     {
         ImportStatus = "Processing";
