@@ -6,11 +6,15 @@ namespace Dhole.Pricing.UnitTests;
 [TestClass]
 public sealed class RateRequestSlaTests
 {
-    [DataTestMethod]
-    [DataRow(RateRequestPriority.Red, 24)]
-    [DataRow(RateRequestPriority.Yellow, 48)]
-    [DataRow(RateRequestPriority.Green, 72)]
-    public void Create_UsesResponseDeadlineForPriority(RateRequestPriority priority, int expectedHours)
+    [TestMethod]
+    public void Create_UsesResponseDeadlineForEachPriority()
+    {
+        AssertDeadline(RateRequestPriority.Red, 24);
+        AssertDeadline(RateRequestPriority.Yellow, 48);
+        AssertDeadline(RateRequestPriority.Green, 72);
+    }
+
+    private static void AssertDeadline(RateRequestPriority priority, int expectedHours)
     {
         var request = RateRequest.Create(
             priority,
@@ -25,7 +29,10 @@ public sealed class RateRequestSlaTests
             payloadJson: "{}"
         );
 
-        Assert.AreEqual(expectedHours, (request.DueAtUtc - request.RequestedAtUtc).TotalHours);
+        Assert.IsTrue(
+            Math.Abs((request.DueAtUtc - request.RequestedAtUtc).TotalHours - expectedHours) < 0.001,
+            $"Priority {priority} should expire after {expectedHours} hours."
+        );
         Assert.AreEqual(DateTimeKind.Utc, request.RequestedAtUtc.Kind);
         Assert.AreEqual(DateTimeKind.Utc, request.DueAtUtc.Kind);
     }
