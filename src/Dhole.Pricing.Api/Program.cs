@@ -81,6 +81,7 @@ app.MapSellerRateStatusEndpoints();
 app.MapSellerVisibilityEndpoints();
 app.MapRateComparisonEndpoints();
 app.MapRateRequestEndpoints();
+app.MapCrmPricingReferenceEndpoints();
 app.MapSellerRateRequestEndpoints();
 app.MapRateRequestCompletionEndpoints();
 app.MapRateRequestReportingEndpoints();
