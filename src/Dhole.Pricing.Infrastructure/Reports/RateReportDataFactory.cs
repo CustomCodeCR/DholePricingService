@@ -171,12 +171,25 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             .ThenBy(x => x.Name)
             .ToArray();
 
+        // Use the exact tax selection persisted on each priced line. Do not infer IVA
+        // from the description/notes or introduce it on untaxed quotations.
+        decimal LineSubtotal(RateDetail detail) => detail.SaleAmount * ReportQuantity(detail);
+        decimal LineTax(RateDetail detail) =>
+            detail.ApplyDestinationTax && detail.DestinationTaxRate > 0m
+                ? decimal.Round(LineSubtotal(detail) * detail.DestinationTaxRate / 100m, 2, MidpointRounding.AwayFromZero)
+                : 0m;
+        string TaxLabel(RateDetail detail) => LineTax(detail) > 0m
+            ? $"IVA {detail.DestinationTaxRate.ToString("0.##", MoneyCulture)}%: {DetailMoney(detail, LineTax(detail))}"
+            : string.Empty;
+
         var useAllInPresentation = rate.UseAllInPresentation && reportDetails.Length > 0;
         var allInAmount = useAllInPresentation
             ? CalculateAllInAmount(rate, reportDetails, ReportQuantity)
             : 0m;
-        var allInIncludesDestinationTax = reportDetails.Any(detail =>
-            detail.ApplyDestinationTax && detail.DestinationTaxRate > 0m);
+        var allInTax = useAllInPresentation
+            ? CalculateAllInAmount(rate, reportDetails, ReportQuantity, LineTax)
+            : 0m;
+        var hasDestinationTax = reportDetails.Any(detail => LineTax(detail) > 0m);
 
         var items = useAllInPresentation
             ? new[]
@@ -191,7 +204,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     unitSaleAmount = allInAmount,
                     lineTotal = $"{currencyValue} {allInAmount.ToString("N2", MoneyCulture)}",
                     lineTotalAmount = allInAmount,
-                    destinationTaxLabel = allInIncludesDestinationTax ? "IVA incluido" : string.Empty,
+                    destinationTaxLabel = allInTax > 0m ? $"IVA: {currencyValue} {allInTax.ToString("N2", MoneyCulture)}" : string.Empty,
                     notes = string.Empty
                 }
             }
@@ -206,9 +219,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     unitSaleAmount = detail.SaleAmount,
                     lineTotal = DetailMoney(detail, detail.SaleAmount * ReportQuantity(detail)),
                     lineTotalAmount = detail.SaleAmount * ReportQuantity(detail),
-                    destinationTaxLabel = detail.ApplyDestinationTax && detail.DestinationTaxRate > 0m
-                        ? "IVA incluido"
-                        : string.Empty,
+                    destinationTaxLabel = TaxLabel(detail),
                     notes = detail.CostDetailType == CostDetailType.Insurance
                         ? string.Empty
                         : Text(detail.Notes, string.Empty)
@@ -225,8 +236,12 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 {
                     currency = currencyValue,
                     currencyCode = Text(rate.CurrencyCode, string.Empty),
-                    amount = allInAmount,
-                    total = $"{currencyValue} {allInAmount.ToString("N2", MoneyCulture)}"
+                    subtotalAmount = allInAmount,
+                    taxAmount = allInTax,
+                    amount = allInAmount + allInTax,
+                    subtotal = $"{currencyValue} {allInAmount.ToString("N2", MoneyCulture)}",
+                    tax = $"{currencyValue} {allInTax.ToString("N2", MoneyCulture)}",
+                    total = $"{currencyValue} {(allInAmount + allInTax).ToString("N2", MoneyCulture)}"
                 }
             }
             : reportDetails
@@ -235,7 +250,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 {
                     var first = group.First();
                     var displayCurrency = CurrencyValue(first.CurrencyName, first.CurrencyCode);
-                    var amount = group.Sum(detail => detail.SaleAmount * ReportQuantity(detail));
+                    var subtotalAmount = group.Sum(LineSubtotal);
+                    var taxAmount = group.Sum(LineTax);
+                    var amount = subtotalAmount + taxAmount;
                     var canonicalCode = Regex.IsMatch(group.Key, "^[A-Z]{3}$")
                         ? group.Key
                         : Text(first.CurrencyCode, string.Empty);
@@ -244,7 +261,11 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     {
                         currency = displayCurrency,
                         currencyCode = canonicalCode,
+                        subtotalAmount,
+                        taxAmount,
                         amount,
+                        subtotal = $"{displayCurrency} {subtotalAmount.ToString("N2", MoneyCulture)}",
+                        tax = $"{displayCurrency} {taxAmount.ToString("N2", MoneyCulture)}",
                         total = $"{displayCurrency} {amount.ToString("N2", MoneyCulture)}"
                     };
                 })
@@ -263,27 +284,49 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 ? CurrencyIso(rate.CurrencyCode, rate.CurrencyName) is "USD" or "CRC"
                 : reportDetails.All(detail =>
                     CurrencyIso(detail.CurrencyCode, detail.CurrencyName) is "USD" or "CRC"));
-        var nativeUsd = useAllInPresentation
+        var nativeUsdSubtotal = useAllInPresentation
             ? (CurrencyIso(rate.CurrencyCode, rate.CurrencyName) == "USD" ? allInAmount : 0m)
             : reportDetails.Where(detail => CurrencyIso(detail.CurrencyCode, detail.CurrencyName) == "USD")
-                .Sum(detail => detail.SaleAmount * ReportQuantity(detail));
-        var nativeCrc = useAllInPresentation
+                .Sum(LineSubtotal);
+        var nativeCrcSubtotal = useAllInPresentation
             ? (CurrencyIso(rate.CurrencyCode, rate.CurrencyName) == "CRC" ? allInAmount : 0m)
             : reportDetails.Where(detail => CurrencyIso(detail.CurrencyCode, detail.CurrencyName) == "CRC")
-                .Sum(detail => detail.SaleAmount * ReportQuantity(detail));
-        var equivalentUsd = canShowEquivalentTotals
-            ? decimal.Round(nativeUsd + nativeCrc / appliedExchangeRate!.Value, 2, MidpointRounding.AwayFromZero)
+                .Sum(LineSubtotal);
+        var nativeUsdTax = useAllInPresentation
+            ? (CurrencyIso(rate.CurrencyCode, rate.CurrencyName) == "USD" ? allInTax : 0m)
+            : reportDetails.Where(detail => CurrencyIso(detail.CurrencyCode, detail.CurrencyName) == "USD")
+                .Sum(LineTax);
+        var nativeCrcTax = useAllInPresentation
+            ? (CurrencyIso(rate.CurrencyCode, rate.CurrencyName) == "CRC" ? allInTax : 0m)
+            : reportDetails.Where(detail => CurrencyIso(detail.CurrencyCode, detail.CurrencyName) == "CRC")
+                .Sum(LineTax);
+        var equivalentUsdSubtotal = canShowEquivalentTotals
+            ? decimal.Round(nativeUsdSubtotal + nativeCrcSubtotal / appliedExchangeRate!.Value, 2, MidpointRounding.AwayFromZero)
             : 0m;
-        var equivalentCrc = canShowEquivalentTotals
-            ? decimal.Round(nativeCrc + nativeUsd * appliedExchangeRate!.Value, 2, MidpointRounding.AwayFromZero)
+        var equivalentCrcSubtotal = canShowEquivalentTotals
+            ? decimal.Round(nativeCrcSubtotal + nativeUsdSubtotal * appliedExchangeRate!.Value, 2, MidpointRounding.AwayFromZero)
+            : 0m;
+        var equivalentUsdTax = canShowEquivalentTotals
+            ? decimal.Round(nativeUsdTax + nativeCrcTax / appliedExchangeRate!.Value, 2, MidpointRounding.AwayFromZero)
+            : 0m;
+        var equivalentCrcTax = canShowEquivalentTotals
+            ? decimal.Round(nativeCrcTax + nativeUsdTax * appliedExchangeRate!.Value, 2, MidpointRounding.AwayFromZero)
             : 0m;
         var currencyTotals = canShowEquivalentTotals
             ? new[]
             {
-                new { currency = "USD", currencyCode = "USD", amount = equivalentUsd,
-                    total = $"USD {equivalentUsd.ToString("N2", MoneyCulture)}" },
-                new { currency = "CRC", currencyCode = "CRC", amount = equivalentCrc,
-                    total = $"CRC {equivalentCrc.ToString("N2", MoneyCulture)}" }
+                new { currency = "USD", currencyCode = "USD",
+                    subtotalAmount = equivalentUsdSubtotal, taxAmount = equivalentUsdTax,
+                    amount = equivalentUsdSubtotal + equivalentUsdTax,
+                    subtotal = $"USD {equivalentUsdSubtotal.ToString("N2", MoneyCulture)}",
+                    tax = $"USD {equivalentUsdTax.ToString("N2", MoneyCulture)}",
+                    total = $"USD {(equivalentUsdSubtotal + equivalentUsdTax).ToString("N2", MoneyCulture)}" },
+                new { currency = "CRC", currencyCode = "CRC",
+                    subtotalAmount = equivalentCrcSubtotal, taxAmount = equivalentCrcTax,
+                    amount = equivalentCrcSubtotal + equivalentCrcTax,
+                    subtotal = $"CRC {equivalentCrcSubtotal.ToString("N2", MoneyCulture)}",
+                    tax = $"CRC {equivalentCrcTax.ToString("N2", MoneyCulture)}",
+                    total = $"CRC {(equivalentCrcSubtotal + equivalentCrcTax).ToString("N2", MoneyCulture)}" }
             }
             : originalCurrencyTotals;
         var hasSingleCurrency = currencyTotals.Length == 1;
@@ -402,6 +445,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 hasSingleCurrency,
                 hasMultipleCurrencies,
                 hasEquivalentCurrencies = canShowEquivalentTotals,
+                hasDestinationTax,
                 hasSeparateCurrencyTotals,
                 exchangeRateNote,
                 freeDays = rate.FreeDays,
@@ -653,7 +697,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         return result > 0m ? result : null;
     }
 
-    private static decimal CalculateAllInAmount(RateHeader rate, IReadOnlyCollection<RateDetail> details, Func<RateDetail, decimal>? quantityResolver = null)
+    private static decimal CalculateAllInAmount(RateHeader rate, IReadOnlyCollection<RateDetail> details, Func<RateDetail, decimal>? quantityResolver = null, Func<RateDetail, decimal>? amountResolver = null)
     {
         var targetCurrency = rate.CurrencyCode.Trim().ToUpperInvariant();
         var exchangeRate = rate.ExchangeRateApplied is > 0m
@@ -663,7 +707,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
 
         foreach (var detail in details)
         {
-            var amount = detail.SaleAmount * (quantityResolver?.Invoke(detail) ?? detail.Quantity);
+            var amount = amountResolver?.Invoke(detail)
+                ?? detail.SaleAmount * (quantityResolver?.Invoke(detail) ?? detail.Quantity);
             var sourceCurrency = detail.CurrencyCode.Trim().ToUpperInvariant();
 
             if (string.Equals(sourceCurrency, targetCurrency, StringComparison.OrdinalIgnoreCase))
