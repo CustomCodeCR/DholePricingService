@@ -1,0 +1,47 @@
+name: Pricing CRM Phase 4 PR Validation
+on:
+  pull_request:
+    branches: [develop, master]
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: read
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: pricing_ci
+          POSTGRES_PASSWORD: pricing_ci_only
+          POSTGRES_DB: dhole_pricing
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pricing_ci" --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      NuGetPackageSourceCredentials_github: Username=github-actions;Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic
+      ConnectionStrings__Postgres: Host=127.0.0.1;Port=5432;Database=dhole_pricing;Username=pricing_ci;Password=pricing_ci_only
+      Redis__ConnectionString: 127.0.0.1:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore DholePricingService.slnx --configfile NuGet.Config
+      - name: Compile .NET 10 Pricing without warnings
+        run: dotnet build DholePricingService.slnx -c Release --no-restore --warnaserror
+      - name: Execute real existing Pricing tests
+        run: dotnet test DholePricingService.slnx -c Release --no-build --logger trx
+      - name: Audit dependencies
+        run: |
+          dotnet list DholePricingService.slnx package --vulnerable --include-transitive > "$RUNNER_TEMP/pricing-audit.txt"
+          if grep -Eqi 'vulnerable packages|critical|high severity' "$RUNNER_TEMP/pricing-audit.txt"; then
+            echo "::error::Pricing dependency advisory detected"; exit 1
+          fi
