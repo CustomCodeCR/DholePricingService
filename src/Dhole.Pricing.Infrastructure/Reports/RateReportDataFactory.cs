@@ -204,6 +204,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     unitSaleAmount = allInAmount,
                     lineTotal = $"{currencyValue} {allInAmount.ToString("N2", MoneyCulture)}",
                     lineTotalAmount = allInAmount,
+                    // Values consumed by the client-facing PDF's IVA and payable-total columns.
+                    lineTaxAmount = allInTax,
+                    lineTotalWithTaxAmount = allInAmount + allInTax,
                     destinationTaxLabel = allInTax > 0m ? $"IVA: {currencyValue} {allInTax.ToString("N2", MoneyCulture)}" : string.Empty,
                     notes = string.Empty
                 }
@@ -219,6 +222,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     unitSaleAmount = detail.SaleAmount,
                     lineTotal = DetailMoney(detail, detail.SaleAmount * ReportQuantity(detail)),
                     lineTotalAmount = detail.SaleAmount * ReportQuantity(detail),
+                    lineTaxAmount = LineTax(detail),
+                    lineTotalWithTaxAmount = LineSubtotal(detail) + LineTax(detail),
                     destinationTaxLabel = TaxLabel(detail),
                     notes = detail.CostDetailType == CostDetailType.Insurance
                         ? string.Empty
