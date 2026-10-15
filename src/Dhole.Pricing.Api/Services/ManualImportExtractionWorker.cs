@@ -55,7 +55,7 @@ public sealed class ManualImportExtractionWorker(
                 UPDATE pricing."ManualImportExtractionJobs"
                    SET status = 'Failed',
                        completed_at_utc = NOW(),
-                       file_content = '\\x'::bytea,
+                       file_content = decode('', 'hex'),
                        lease_expires_at_utc = NULL,
                        error_message = COALESCE(error_message, 'La extracción se interrumpió tras 3 intentos.')
                  WHERE status = 'Processing'
