@@ -35,7 +35,7 @@ public sealed class ExtractImportRateFromFileCommandHandler(
             );
         }
 
-        var importBatchId = Guid.NewGuid();
+        var importBatchId = command.ImportBatchId ?? Guid.NewGuid();
 
         ExtractAndPersistFclPricingImportResult extraction;
 

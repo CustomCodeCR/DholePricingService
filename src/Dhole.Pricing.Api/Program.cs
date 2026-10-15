@@ -36,6 +36,7 @@ builder.Services.AddScoped<AcceptedRateOpeningsNotificationService>();
 builder.Services.AddScoped<LowMarginApprovedNotificationService>();
 builder.Services.AddScoped<CompetitorTariffImportProcessor>();
 builder.Services.AddHostedService<CompetitorTariffImportWorker>();
+builder.Services.AddHostedService<ManualImportExtractionWorker>();
 builder.Services.AddHttpClient("DholeAI", client =>
 {
     var baseAddress = builder.Configuration["AI:Client:BaseAddress"] ?? "http://ai-api:5206/";

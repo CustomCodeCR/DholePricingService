@@ -40,6 +40,8 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
 
     public DbSet<ImportFclRates> ImportFclRates => Set<ImportFclRates>();
 
+    public DbSet<ManualImportExtractionJob> ManualImportExtractionJobs => Set<ManualImportExtractionJob>();
+
     public DbSet<PricingImportFromExtractionJob> PricingImportFromExtractionJobs =>
         Set<PricingImportFromExtractionJob>();
 

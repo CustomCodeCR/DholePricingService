@@ -11,5 +11,6 @@ public sealed record ExtractImportRateFromFileCommand(
     byte[] FileContent,
     Guid? RequestedBy,
     string? RequestedByName,
-    string? CorrelationId = null
+    string? CorrelationId = null,
+    Guid? ImportBatchId = null
 ) : ICommand<Result<ExtractAndPersistFclPricingImportResult>>;
