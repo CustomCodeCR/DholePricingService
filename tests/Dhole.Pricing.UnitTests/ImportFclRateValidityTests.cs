@@ -1,6 +1,5 @@
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
-using Dhole.Pricing.Domain.Imports.Services;
 
 namespace Dhole.Pricing.UnitTests;
 
@@ -147,7 +146,6 @@ public sealed class ImportFclRateValidityTests
     private static void ApplyReview(ImportFclRates rate, decimal oceanFreight, decimal surcharges)
     {
         rate.ApplyManualReview(
-            ImportedShipmentMode.Fcl,
             Snapshot("Profile"),
             Snapshot("POL"),
             Snapshot("POE"),
