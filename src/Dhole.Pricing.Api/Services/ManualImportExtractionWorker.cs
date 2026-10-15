@@ -50,23 +50,34 @@ public sealed class ManualImportExtractionWorker(
         {
             var db = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
             // Atomic claim across API replicas. SKIP LOCKED ensures only one worker owns a job.
-            id = await db.Database.SqlQueryRaw<Guid>(
-                """
-                UPDATE pricing."ManualImportExtractionJobs"
-                   SET status = 'Processing',
-                       attempt_count = attempt_count + 1,
-                       lease_expires_at_utc = NOW() + INTERVAL '30 minutes'
-                 WHERE id = (
-                     SELECT id FROM pricing."ManualImportExtractionJobs"
-                     WHERE (status = 'Pending'
-                         OR (status = 'Processing' AND lease_expires_at_utc < NOW()))
-                       AND attempt_count < 3
-                     ORDER BY created_at_utc
-                     FOR UPDATE SKIP LOCKED LIMIT 1
-                 )
-                RETURNING id AS "Value"
-                """
-            ).FirstOrDefaultAsync(cancellationToken);
+            // UPDATE ... RETURNING must execute as a command, not an EF composed
+            // SELECT (which would generate invalid PostgreSQL SQL).
+            await db.Database.OpenConnectionAsync(cancellationToken);
+            try
+            {
+                await using var command = db.Database.GetDbConnection().CreateCommand();
+                command.CommandText = """
+                    UPDATE pricing."ManualImportExtractionJobs"
+                       SET status = 'Processing',
+                           attempt_count = attempt_count + 1,
+                           lease_expires_at_utc = NOW() + INTERVAL '30 minutes'
+                     WHERE id = (
+                         SELECT id FROM pricing."ManualImportExtractionJobs"
+                         WHERE (status = 'Pending'
+                             OR (status = 'Processing' AND lease_expires_at_utc < NOW()))
+                           AND attempt_count < 3
+                         ORDER BY created_at_utc
+                         FOR UPDATE SKIP LOCKED LIMIT 1
+                     )
+                    RETURNING id
+                    """;
+                var claimed = await command.ExecuteScalarAsync(cancellationToken);
+                id = claimed is Guid jobId ? jobId : null;
+            }
+            finally
+            {
+                await db.Database.CloseConnectionAsync();
+            }
         }
 
         if (id is null || id == Guid.Empty) return;
