@@ -146,6 +146,7 @@ public sealed class ImportFclRateValidityTests
     private static void ApplyReview(ImportFclRates rate, decimal oceanFreight, decimal surcharges)
     {
         rate.ApplyManualReview(
+            ImportedShipmentMode.Fcl,
             Snapshot("Profile"),
             Snapshot("POL"),
             Snapshot("POE"),
