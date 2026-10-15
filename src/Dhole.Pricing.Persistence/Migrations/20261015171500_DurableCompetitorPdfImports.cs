@@ -34,7 +34,7 @@ public partial class DurableCompetitorPdfImports : Migration
                 "CreatedAtUtc" timestamp with time zone NOT NULL DEFAULT now()
             );
 
-            CREATE INDEX IF NOT EXISTS "IX_CompetitorTariffImportPayloads_NextAttemptAtUtc_LeaseUntilUtc"
+            CREATE INDEX IF NOT EXISTS "IX_CompetitorPayloads_NextAttempt_Lease"
                 ON pricing."CompetitorTariffImportPayloads" ("NextAttemptAtUtc", "LeaseUntilUtc");
             """);
     }
