@@ -201,12 +201,20 @@ public sealed class CompetitorTariffImportProcessor(
 
             if (!extraction.Success)
             {
-                entity.MarkImportFailed(
-                    extraction.ExtractionExecutionId,
-                    Math.Max(1, extraction.Summary.InvalidRows)
-                );
-                await dbContext.SaveChangesAsync(cancellationToken);
-                return;
+                var code = extraction.ErrorCode ?? "DataExtraction.Failed";
+                var retry = code is "Grpc.Unavailable" or "Grpc.DeadlineExceeded"
+                    or "Grpc.ResourceExhausted" or "Grpc.Internal" or "Grpc.Cancelled"
+                    || code.Contains("Timeout", StringComparison.OrdinalIgnoreCase)
+                    || code.Contains("502", StringComparison.OrdinalIgnoreCase);
+                throw new CompetitorExtractionException(
+                    code, extraction.ErrorMessage, extraction.ExtractionExecutionId, retry);
+            }
+            if (extraction.Rows.Count == 0)
+            {
+                throw new CompetitorExtractionException(
+                    "DataExtraction.NoRows",
+                    "El extractor devolvió cero filas; revise el PDF original o el formato del documento.",
+                    extraction.ExtractionExecutionId, false);
             }
 
             var observations = new List<CompetitorRateObservation>();
@@ -406,6 +414,11 @@ public sealed class CompetitorTariffImportProcessor(
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            throw;
+        }
+        catch (CompetitorExtractionException)
+        {
+            // Retry and error persistence are owned by the durable worker.
             throw;
         }
         catch (Exception exception)
