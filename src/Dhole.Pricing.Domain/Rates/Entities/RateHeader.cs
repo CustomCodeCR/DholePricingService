@@ -640,7 +640,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                 x.ContainerTypeId,
                 x.ContainerTypeName?.Trim() ?? string.Empty,
                 x.ContainerTypeCode?.Trim() ?? string.Empty,
-                x.Quantity
+                x.Quantity,
+                x.UnitWeightsKg
             ))
             .ToArray();
 
@@ -680,7 +681,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             );
             if (existing is not null)
             {
-                existing.Update(item.ContainerTypeName, item.ContainerTypeCode, item.Quantity);
+                existing.Update(item.ContainerTypeName, item.ContainerTypeCode, item.Quantity, item.UnitWeightsKg);
                 continue;
             }
 
@@ -690,7 +691,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                     item.ContainerTypeId,
                     item.ContainerTypeName,
                     item.ContainerTypeCode,
-                    item.Quantity
+                    item.Quantity,
+                    item.UnitWeightsKg
                 )
             );
         }

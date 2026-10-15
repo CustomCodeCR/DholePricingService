@@ -19,6 +19,7 @@ internal sealed class RateContainerAllocationConfiguration
         builder.Property(x => x.ContainerTypeName).HasMaxLength(120).IsRequired();
         builder.Property(x => x.ContainerTypeCode).HasMaxLength(80).IsRequired();
         builder.Property(x => x.Quantity).IsRequired();
+        builder.Property(x => x.UnitWeightsKgJson).HasColumnName("unit_weights_kg_json").HasColumnType("text").HasDefaultValue("[]").IsRequired();
 
         builder
             .HasIndex(x => x.RateHeaderId)

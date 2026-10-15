@@ -505,7 +505,8 @@ public static class RateEndpoints
                 x.ContainerTypeId,
                 x.ContainerTypeName,
                 x.ContainerTypeCode,
-                x.Quantity
+                x.Quantity,
+                x.UnitWeightsKg
             ))
             .ToList();
 
@@ -718,7 +719,8 @@ public static class RateEndpoints
                 x.ContainerTypeId,
                 x.ContainerTypeName,
                 x.ContainerTypeCode,
-                x.Quantity
+                x.Quantity,
+                x.UnitWeightsKg
             ))
             .ToList();
 

@@ -4,5 +4,6 @@ public sealed record RateContainerRequest(
     Guid ContainerTypeId,
     string ContainerTypeName,
     string ContainerTypeCode,
-    int Quantity
+    int Quantity,
+    IReadOnlyList<decimal>? UnitWeightsKg = null
 );

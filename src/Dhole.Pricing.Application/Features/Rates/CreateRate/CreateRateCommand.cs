@@ -28,7 +28,8 @@ public sealed record RateContainerCommandItem(
     Guid ContainerTypeId,
     string ContainerTypeName,
     string ContainerTypeCode,
-    int Quantity
+    int Quantity,
+    IReadOnlyList<decimal>? UnitWeightsKg = null
 );
 
 public sealed record CreateRateCommand(

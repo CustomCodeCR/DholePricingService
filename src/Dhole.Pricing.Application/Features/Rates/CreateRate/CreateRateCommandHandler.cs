@@ -204,7 +204,7 @@ public sealed class CreateRateCommandHandler(
                         equipmentCatalogLabel, equipmentCatalogSlug));
 
                 normalizedContainers.Add(new RateContainerCommandItem(
-                    containerType.Id, containerType.SnapshotName(), containerType.Code, requested.Quantity));
+                    containerType.Id, containerType.SnapshotName(), containerType.Code, requested.Quantity, requested.UnitWeightsKg));
             }
 
             var primaryContainer = normalizedContainers[0];
@@ -315,6 +315,18 @@ public sealed class CreateRateCommandHandler(
                 detail.Quantity,
                 command.TotalVolumeCbm
             );
+            // Solo las unidades por encima de 21.500 kg generan recargo.
+            if (command.ShipmentMode is ShipmentMode.Fcl or ShipmentMode.Ftl
+                && RateContainerOverweightPolicy.IsOverweightDetail(detail.Name))
+            {
+                var overweightUnits = RateContainerOverweightPolicy.CountOverweight(
+                    command.PoeName, command.Containers.SelectMany(x => x.UnitWeightsKg ?? []));
+                if (command.ShipmentMode == ShipmentMode.Ftl && overweightUnits == 0
+                    && command.TotalWeightKg > RateContainerOverweightPolicy.ThresholdKg
+                    && RateContainerOverweightPolicy.IsEligiblePoe(command.PoeName))
+                    overweightUnits = 1;
+                if (overweightUnits > 0) normalizedQuantity = overweightUnits;
+            }
 
             // Las líneas pueden venir de Costos y recargos, matrices LCL/LTL o rubros manuales.
             // Si una línea no trae snapshot de moneda propio, hereda la moneda del encabezado,
@@ -695,7 +707,8 @@ public sealed class CreateRateCommandHandler(
                 x.ContainerTypeId,
                 x.ContainerTypeName,
                 x.ContainerTypeCode,
-                x.Quantity
+                x.Quantity,
+                x.UnitWeightsKg
             ))
             .ToArray();
 
