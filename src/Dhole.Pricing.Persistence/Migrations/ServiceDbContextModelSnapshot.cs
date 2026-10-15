@@ -1661,6 +1661,99 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.ToTable("ImportFclRates", "pricing");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Domain.Imports.Entities.ManualImportExtractionJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedNever()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<string>("RequestedByName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("requested_by_name");
+
+                    b.Property<string>("ClientRequestKey")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("client_request_key");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("original_file_name");
+
+                    b.Property<string>("ContentType")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("content_type");
+
+                    b.Property<string>("ProfileSlug")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("profile_slug");
+
+                    b.Property<string>("CorrelationId")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<byte[]>("FileContent")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("file_content");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_count");
+
+                    b.Property<DateTime?>("LeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_expires_at_utc");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result_json");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("error_message");
+
+                    b.HasKey("Id")
+                        .HasName("pk_manual_import_extraction_jobs");
+
+                    b.HasIndex("RequestedBy", "ClientRequestKey")
+                        .IsUnique()
+                        .HasFilter("client_request_key IS NOT NULL")
+                        .HasDatabaseName("ix_manual_import_jobs_request_key");
+
+                    b.HasIndex("Status", "LeaseExpiresAtUtc", "CreatedAtUtc")
+                        .HasDatabaseName("ix_manual_import_jobs_queue");
+
+                    b.ToTable("ManualImportExtractionJobs", "pricing");
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Imports.Entities.PricingImportFromExtractionJob", b =>
                 {
                     b.Property<Guid>("Id")
