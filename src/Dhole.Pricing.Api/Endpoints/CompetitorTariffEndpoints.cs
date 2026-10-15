@@ -30,6 +30,8 @@ public static class CompetitorTariffEndpoints
         group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/matching", GetMatchingAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapPost("/import", ImportAsync).RequireScope(PricingConstants.Scopes.RateCreate);
+        group.MapPost("/{competitorTariffId:guid}/retry", RetryImportAsync)
+            .RequireScope(PricingConstants.Scopes.RateCreate);
         group.MapPut("/{competitorTariffId:guid}/routes", CompetitorTariffRouteOverride.ApplyAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapGet("/{competitorTariffId:guid}/observations", GetObservationsAsync)
@@ -132,7 +134,6 @@ public static class CompetitorTariffEndpoints
     private static async Task<IResult> ImportAsync(
         HttpRequest request,
         ServiceDbContext dbContext,
-        ICompetitorTariffImportQueue importQueue,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -218,15 +219,24 @@ public static class CompetitorTariffEndpoints
         }
 
         var existing = await dbContext.CompetitorTariffs
-            .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (existing is not null)
         {
-            // The client-generated id acts as an idempotency key. If the original
-            // response was lost during a transient gateway/origin restart, a retry
-            // must return the already-created import instead of creating a duplicate.
-            return EndpointResults.Ok(Map(existing));
+            // An unfinished import with a durable payload is already being retried.
+            // Allow the same ID to re-upload when the job is failed or orphaned
+            // (older deployments kept only a volatile in-memory copy of the PDF).
+            var payloadExists = await dbContext.CompetitorTariffImportPayloads
+                .AnyAsync(x => x.CompetitorTariffId == id, cancellationToken);
+            if (existing.ImportStatus is "Processed" or "ReviewRequired" or "Legacy"
+                || (existing.ImportStatus == "Processing" && payloadExists
+                    && DateTime.UtcNow - existing.ImportedAtUtc < TimeSpan.FromMinutes(2)))
+                return EndpointResults.Ok(Map(existing));
+
+            if (existing.ImportStatus is not ("Processing" or "Failed"))
+                return Results.Conflict(new { code = "CompetitorTariff.CannotRetry", status = existing.ImportStatus });
+
+            existing.RetryImport();
         }
 
         await using var memory = new MemoryStream();
@@ -236,40 +246,62 @@ public static class CompetitorTariffEndpoints
         var initialFrom = fallbackFrom ?? DateTime.UtcNow;
         var initialTo = fallbackTo ?? fallbackFrom ?? initialFrom;
 
-        var entity = CompetitorTariff.CreateImport(
-            id,
-            competitorCompanyName,
-            incotermId,
-            initialFrom,
-            initialTo,
-            shipmentMode,
-            storageId,
-            file.FileName
+        var entity = existing ?? CompetitorTariff.CreateImport(
+            id, competitorCompanyName, incotermId, initialFrom,
+            initialTo, shipmentMode, storageId, file.FileName
         );
+        if (existing is null)
+            dbContext.CompetitorTariffs.Add(entity);
 
-        dbContext.CompetitorTariffs.Add(entity);
+        // The file and job are committed together. Restarting the API no longer
+        // strands a Processing record without a recoverable source PDF.
+        var payload = await dbContext.CompetitorTariffImportPayloads
+            .FirstOrDefaultAsync(x => x.CompetitorTariffId == id, cancellationToken);
+        if (payload is null)
+        {
+            payload = new CompetitorTariffImportPayload { CompetitorTariffId = id };
+            dbContext.CompetitorTariffImportPayloads.Add(payload);
+        }
+        payload.FileContent = bytes;
+        payload.FileHash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        payload.ContentType = file.ContentType;
+        payload.FallbackFrom = fallbackFrom;
+        payload.FallbackTo = fallbackTo;
+        payload.RequestedBy = httpContext.GetCurrentUserId();
+        payload.RequestedByName = ResolveUserName(httpContext);
+        payload.AttemptCount = 0;
+        payload.LeaseUntilUtc = null;
+        payload.NextAttemptAtUtc = DateTime.UtcNow;
         await dbContext.SaveChangesAsync(cancellationToken);
+        return EndpointResults.Ok(Map(entity));
+    }
 
-        await importQueue.QueueAsync(
-            new CompetitorTariffImportWorkItem(
-                id,
-                incotermId,
-                competitorCompanyName,
-                shipmentMode,
-                fallbackFrom,
-                fallbackTo,
-                file.FileName,
-                file.ContentType,
-                Path.GetExtension(file.FileName),
-                file.Length,
-                Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
-                httpContext.GetCurrentUserId(),
-                ResolveUserName(httpContext),
-                bytes
-            ),
-            cancellationToken
-        );
+    private static async Task<IResult> RetryImportAsync(
+        Guid competitorTariffId,
+        ServiceDbContext dbContext,
+        CancellationToken cancellationToken)
+    {
+        var entity = await dbContext.CompetitorTariffs
+            .FirstOrDefaultAsync(x => x.Id == competitorTariffId, cancellationToken);
+        if (entity is null) return Results.NotFound();
+        if (entity.ImportStatus is "Processed" or "ReviewRequired" or "Legacy")
+            return Results.Conflict(new { code = "CompetitorTariff.AlreadyCompleted" });
 
+        var payload = await dbContext.CompetitorTariffImportPayloads
+            .FirstOrDefaultAsync(x => x.CompetitorTariffId == competitorTariffId, cancellationToken);
+        if (payload is null)
+            return Results.Conflict(new
+            {
+                code = "CompetitorTariff.FileReuploadRequired",
+                message = "La importación anterior perdió la cola en memoria. Vuelva a adjuntar el PDF usando el mismo ID de importación."
+            });
+        if (entity.ImportStatus == "Processing" && payload.LeaseUntilUtc > DateTime.UtcNow)
+            return Results.Conflict(new { code = "CompetitorTariff.CurrentlyRunning" });
+        entity.RetryImport();
+        payload.LeaseUntilUtc = null;
+        payload.AttemptCount = 0;
+        payload.NextAttemptAtUtc = DateTime.UtcNow;
+        await dbContext.SaveChangesAsync(cancellationToken);
         return EndpointResults.Ok(Map(entity));
     }
 
