@@ -20,8 +20,10 @@ public sealed class RateReportDestinationTaxTests
 
         using var data = Report(rate);
         Assert.IsFalse(data.RootElement.GetProperty("rate").GetProperty("hasDestinationTax").GetBoolean());
-        Assert.AreEqual(string.Empty, data.RootElement.GetProperty("items")[0]
-            .GetProperty("destinationTaxLabel").GetString());
+        var noVatItem = data.RootElement.GetProperty("items")[0];
+        Assert.AreEqual(string.Empty, noVatItem.GetProperty("destinationTaxLabel").GetString());
+        Assert.AreEqual(0m, noVatItem.GetProperty("lineTaxAmount").GetDecimal());
+        Assert.AreEqual(125m, noVatItem.GetProperty("lineTotalWithTaxAmount").GetDecimal());
 
         var total = data.RootElement.GetProperty("currencyTotals")[0];
         Assert.AreEqual(125m, total.GetProperty("subtotalAmount").GetDecimal());
@@ -43,6 +45,13 @@ public sealed class RateReportDestinationTaxTests
             .Single(value => value.GetProperty("description").GetString() == "Anticipado");
         StringAssert.Contains(item.GetProperty("destinationTaxLabel").GetString()!, "IVA 13%: USD 16.25");
         Assert.AreEqual(125m, item.GetProperty("lineTotalAmount").GetDecimal());
+        Assert.AreEqual(16.25m, item.GetProperty("lineTaxAmount").GetDecimal());
+        Assert.AreEqual(141.25m, item.GetProperty("lineTotalWithTaxAmount").GetDecimal());
+
+        var untaxed = data.RootElement.GetProperty("items").EnumerateArray()
+            .Single(value => value.GetProperty("description").GetString() == "Flete sin IVA");
+        Assert.AreEqual(0m, untaxed.GetProperty("lineTaxAmount").GetDecimal());
+        Assert.AreEqual(100m, untaxed.GetProperty("lineTotalWithTaxAmount").GetDecimal());
 
         var total = data.RootElement.GetProperty("currencyTotals")[0];
         Assert.AreEqual(225m, total.GetProperty("subtotalAmount").GetDecimal());
@@ -62,6 +71,8 @@ public sealed class RateReportDestinationTaxTests
         var item = data.RootElement.GetProperty("items")[0];
         Assert.AreEqual("ALL IN", item.GetProperty("description").GetString());
         Assert.AreEqual(125m, item.GetProperty("lineTotalAmount").GetDecimal());
+        Assert.AreEqual(16.25m, item.GetProperty("lineTaxAmount").GetDecimal());
+        Assert.AreEqual(141.25m, item.GetProperty("lineTotalWithTaxAmount").GetDecimal());
         var total = data.RootElement.GetProperty("currencyTotals")[0];
         Assert.AreEqual(125m, total.GetProperty("subtotalAmount").GetDecimal());
         Assert.AreEqual(16.25m, total.GetProperty("taxAmount").GetDecimal());
