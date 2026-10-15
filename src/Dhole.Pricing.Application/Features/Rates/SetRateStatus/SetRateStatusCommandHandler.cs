@@ -67,27 +67,6 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateIdtraRequiredForAcceptance);
         }
 
-        if (command.Status == RateStatus.AcceptedByClient
-            && rate.Status != RateStatus.AcceptedByClient)
-        {
-            var capacity = await rateHeaders.GetOwnLclCapacityForRateAsync(
-                rate.Id,
-                cancellationToken
-            );
-
-            if (capacity is not null
-                && capacity.RequestedCbm > capacity.RemainingCbm + 0.000001m)
-            {
-                return Result.Failure(
-                    PricingErrors.OwnLclCapacityExceeded(
-                        capacity.ConsolidationNumber,
-                        capacity.RequestedCbm,
-                        capacity.RemainingCbm
-                    )
-                );
-            }
-        }
-
         var before = PricingAuditSnapshots.From(rate);
 
         try
