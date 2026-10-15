@@ -165,7 +165,7 @@ public static class RateRequestEndpoints
         var requests = await db.RateRequests
             .AsNoTracking()
             .Where(x => x.Status == RateRequestStatus.Open)
-            .OrderBy(x => x.Priority)
+            .OrderByDescending(x => x.Priority)
             .ThenBy(x => x.DueAtUtc)
             .ThenBy(x => x.RequestedAtUtc)
             .ToListAsync(ct);
