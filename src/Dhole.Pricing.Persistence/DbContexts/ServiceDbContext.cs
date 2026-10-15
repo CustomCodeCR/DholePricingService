@@ -22,6 +22,8 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
 
     public DbSet<CompetitorTariff> CompetitorTariffs => Set<CompetitorTariff>();
 
+    public DbSet<CompetitorTariffImportPayload> CompetitorTariffImportPayloads => Set<CompetitorTariffImportPayload>();
+
     public DbSet<CompetitorRateObservation> CompetitorRateObservations => Set<CompetitorRateObservation>();
 
     public DbSet<PricingMarketDecision> PricingMarketDecisions => Set<PricingMarketDecision>();
