@@ -26,7 +26,7 @@ public sealed class PricingEmailExtractionRecoveryTests
                     ValidFrom: null, ValidTo: null, OceanFreight: null,
                     OriginCharges: null, DestinationCharges: null, Surcharges: null,
                     TotalCost: null, TotalSale: null, Profit: null, Margin: null,
-                    SpaceComment: null, Remarks: null, Status: "Invalid", RawJson: rawJson,
+                    SpaceComment: null, Remarks: null, Status: "Invalid", RawJson: null,
                     OriginPortReference: null, PortOfExitReference: null,
                     DestinationPortReference: null, ContainerTypeReference: null,
                     CarrierReference: null, AgentReference: null, CurrencyReference: null
@@ -180,6 +180,7 @@ public sealed class PricingEmailExtractionRecoveryTests
                     null,
                     null,
                     1,
+                    null,
                     null,
                     null,
                     null,
