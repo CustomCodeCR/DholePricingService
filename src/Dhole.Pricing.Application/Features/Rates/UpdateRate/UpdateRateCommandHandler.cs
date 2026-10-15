@@ -226,7 +226,7 @@ public sealed class UpdateRateCommandHandler(
                         equipmentCatalogLabel, equipmentCatalogSlug));
 
                 normalizedContainers.Add(new UpdateRateContainerCommandItem(
-                    containerType.Id, containerType.SnapshotName(), containerType.Code, requested.Quantity));
+                    containerType.Id, containerType.SnapshotName(), containerType.Code, requested.Quantity, requested.UnitWeightsKg));
             }
 
             var normalizedPrimaryContainer = normalizedContainers[0];
@@ -343,6 +343,18 @@ public sealed class UpdateRateCommandHandler(
                 detail.Quantity,
                 command.TotalVolumeCbm
             );
+            // Solo las unidades por encima de 21.500 kg generan recargo.
+            if (command.ShipmentMode is ShipmentMode.Fcl or ShipmentMode.Ftl
+                && RateContainerOverweightPolicy.IsOverweightDetail(detail.Name))
+            {
+                var overweightUnits = RateContainerOverweightPolicy.CountOverweight(
+                    command.PoeName, command.Containers.SelectMany(x => x.UnitWeightsKg ?? []));
+                if (command.ShipmentMode == ShipmentMode.Ftl && overweightUnits == 0
+                    && command.TotalWeightKg > RateContainerOverweightPolicy.ThresholdKg
+                    && RateContainerOverweightPolicy.IsEligiblePoe(command.PoeName))
+                    overweightUnits = 1;
+                if (overweightUnits > 0) normalizedQuantity = overweightUnits;
+            }
 
             var resolution = await extraDetailResolver.ResolveAsync(
                 new RateExtraDetailInput(
@@ -379,7 +391,8 @@ public sealed class UpdateRateCommandHandler(
                 x.ContainerTypeId,
                 x.ContainerTypeName,
                 x.ContainerTypeCode,
-                x.Quantity
+                x.Quantity,
+                x.UnitWeightsKg
             ))
             .ToArray();
 

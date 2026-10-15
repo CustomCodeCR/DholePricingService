@@ -98,7 +98,9 @@ internal static class RateMappings
                         x.ContainerTypeId,
                         x.ContainerTypeName,
                         x.ContainerTypeCode,
-                        x.Quantity
+                        x.Quantity,
+                        x.UnitWeightsKg,
+                        RateContainerOverweightPolicy.CountOverweight(rate.PoeName, x.UnitWeightsKg)
                     ))
                 : new[]
                 {
@@ -108,7 +110,9 @@ internal static class RateMappings
                         rate.ContainerTypeId,
                         rate.ContainerTypeName,
                         rate.ContainerTypeCode,
-                        rate.ContainerQuantity
+                        rate.ContainerQuantity,
+                        [],
+                        0
                     )
                 })
                 .ToList(),

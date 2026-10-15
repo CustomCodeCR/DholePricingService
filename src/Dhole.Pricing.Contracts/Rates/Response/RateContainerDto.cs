@@ -6,5 +6,7 @@ public sealed record RateContainerDto(
     Guid ContainerTypeId,
     string ContainerTypeName,
     string ContainerTypeCode,
-    int Quantity
+    int Quantity,
+    IReadOnlyList<decimal> UnitWeightsKg,
+    int OverweightUnitCount
 );

@@ -12,7 +12,8 @@ public sealed class RateContainerAllocation : Entity<Guid>
         Guid containerTypeId,
         string containerTypeName,
         string containerTypeCode,
-        int quantity
+        int quantity,
+        IReadOnlyList<decimal>? unitWeightsKg
     ) : base(id)
     {
         RateHeaderId = rateHeaderId;
@@ -20,6 +21,7 @@ public sealed class RateContainerAllocation : Entity<Guid>
         ContainerTypeName = containerTypeName.Trim();
         ContainerTypeCode = containerTypeCode.Trim();
         Quantity = quantity;
+        UnitWeightsKgJson = System.Text.Json.JsonSerializer.Serialize(unitWeightsKg ?? []);
     }
 
     public Guid RateHeaderId { get; private set; }
@@ -27,39 +29,48 @@ public sealed class RateContainerAllocation : Entity<Guid>
     public string ContainerTypeName { get; private set; } = string.Empty;
     public string ContainerTypeCode { get; private set; } = string.Empty;
     public int Quantity { get; private set; }
+    public string UnitWeightsKgJson { get; private set; } = "[]";
+
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public IReadOnlyList<decimal> UnitWeightsKg =>
+        System.Text.Json.JsonSerializer.Deserialize<decimal[]>(UnitWeightsKgJson) ?? [];
 
     internal static RateContainerAllocation Create(
         Guid rateHeaderId,
         Guid containerTypeId,
         string containerTypeName,
         string containerTypeCode,
-        int quantity
+        int quantity,
+        IReadOnlyList<decimal>? unitWeightsKg = null
     )
     {
-        Validate(containerTypeId, containerTypeName, containerTypeCode, quantity);
+        Validate(containerTypeId, containerTypeName, containerTypeCode, quantity, unitWeightsKg);
         return new RateContainerAllocation(
             Guid.NewGuid(),
             rateHeaderId,
             containerTypeId,
             containerTypeName,
             containerTypeCode,
-            quantity
+            quantity,
+            unitWeightsKg
         );
     }
 
-    internal void Update(string containerTypeName, string containerTypeCode, int quantity)
+    internal void Update(string containerTypeName, string containerTypeCode, int quantity, IReadOnlyList<decimal>? unitWeightsKg = null)
     {
-        Validate(ContainerTypeId, containerTypeName, containerTypeCode, quantity);
+        Validate(ContainerTypeId, containerTypeName, containerTypeCode, quantity, unitWeightsKg);
         ContainerTypeName = containerTypeName.Trim();
         ContainerTypeCode = containerTypeCode.Trim();
         Quantity = quantity;
+        UnitWeightsKgJson = System.Text.Json.JsonSerializer.Serialize(unitWeightsKg ?? []);
     }
 
     private static void Validate(
         Guid containerTypeId,
         string containerTypeName,
         string containerTypeCode,
-        int quantity
+        int quantity,
+        IReadOnlyList<decimal>? unitWeightsKg = null
     )
     {
         if (
@@ -70,6 +81,10 @@ public sealed class RateContainerAllocation : Entity<Guid>
         {
             throw new InvalidOperationException("El tipo de contenedor es obligatorio.");
         }
+
+        if (unitWeightsKg is { Count: > 0 } &&
+            (unitWeightsKg.Count != quantity || unitWeightsKg.Any(w => w < 0m || w > 100000m)))
+            throw new InvalidOperationException("Indique un peso válido para cada unidad.");
 
         if (quantity <= 0)
         {
@@ -84,5 +99,6 @@ public sealed record RateContainerAllocationSpec(
     Guid ContainerTypeId,
     string ContainerTypeName,
     string ContainerTypeCode,
-    int Quantity
+    int Quantity,
+    IReadOnlyList<decimal>? UnitWeightsKg = null
 );
