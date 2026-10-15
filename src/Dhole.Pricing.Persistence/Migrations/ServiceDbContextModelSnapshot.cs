@@ -185,6 +185,16 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("ExtractionExecutionId");
 
+                    b.Property<string>("ImportErrorCode")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("ImportErrorCode");
+
+                    b.Property<string>("ImportErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("ImportErrorMessage");
+
                     b.Property<string>("ImportStatus")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -261,6 +271,56 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDatabaseName("IX_CompetitorTariffs_ValidTo");
 
                     b.ToTable("CompetitorTariffs", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.Competitors.Entities.CompetitorTariffImportPayload", b =>
+                {
+                    b.Property<Guid>("CompetitorTariffId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ContentType")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FallbackFrom")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("FallbackTo")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("FileContent")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("FileHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime?>("LeaseUntilUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RequestedBy")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestedByName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.HasKey("CompetitorTariffId");
+
+                    b.HasIndex("NextAttemptAtUtc", "LeaseUntilUtc");
+
+                    b.ToTable("CompetitorTariffImportPayloads", "pricing");
                 });
 
             modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.AutoPricingProfile", b =>
@@ -2989,6 +3049,15 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.HasIndex("IsActive", "SortOrder");
 
                     b.ToTable("RateTermItems", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.Competitors.Entities.CompetitorTariffImportPayload", b =>
+                {
+                    b.HasOne("Dhole.Pricing.Domain.Competitors.Entities.CompetitorTariff", null)
+                        .WithOne()
+                        .HasForeignKey("Dhole.Pricing.Domain.Competitors.Entities.CompetitorTariffImportPayload", "CompetitorTariffId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.CompetitorRateObservation", b =>
