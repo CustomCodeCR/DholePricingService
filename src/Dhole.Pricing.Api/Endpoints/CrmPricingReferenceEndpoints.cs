@@ -19,7 +19,7 @@ public static class CrmPricingReferenceEndpoints
         group.MapGet("/requests/{id:guid}", GetRequest)
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
         group.MapGet("/quotes/{id:guid}", GetQuote)
-            .RequireScope(PricingConstants.Scopes.RateView);
+            .RequireAuthorization();
         return app;
     }
 
@@ -47,7 +47,11 @@ public static class CrmPricingReferenceEndpoints
     private static async Task<IResult> GetQuote(Guid id, ServiceDbContext db,
         SellerVisibilityService visibility, HttpContext context, CancellationToken ct)
     {
-        // Rate-view is necessary but never sufficient for accessing unrelated seller quotes.
+        // Sellers may have request-create without global rate-view; visibility is still mandatory.
+        if (!visibility.HasScope(context.User, PricingConstants.Scopes.RateView) &&
+            !visibility.HasScope(context.User, PricingConstants.Scopes.RateRequestCreate))
+            return Results.Forbid();
+        // Restrict to rates legitimately visible to this seller, never all quotes.
         if (!await visibility.CanViewRateAsync(context,id,ct))
             return Results.Forbid();
         var quote = await db.RateHeaders.AsNoTracking()
