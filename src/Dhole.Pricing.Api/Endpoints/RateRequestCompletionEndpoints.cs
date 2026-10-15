@@ -137,6 +137,7 @@ public static class RateRequestCompletionEndpoints
                     quo = quoteNumberText,
                     client = entity.ClientName,
                     route = routeText,
+                    cc = new[] { "pricingcf@castrofallas.com" },
                     attachments = new[]
                     {
                         new
