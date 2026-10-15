@@ -7,8 +7,8 @@ on:
     branches: [develop, master]
     paths:
       - 'src/Dhole.Pricing.Api/Services/CompetitorTariffImportQueue.cs'
-      - 'tests/Dhole.Pricing.UnitTests/CompetitorPdfManualReviewTests.cs'
-      - 'tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj'
+      - 'tests/Dhole.Pricing.CompetitorPdfTests/CompetitorPdfManualReviewTests.cs'
+      - 'tests/Dhole.Pricing.CompetitorPdfTests/Dhole.Pricing.CompetitorPdfTests.csproj'
       - '.github/workflows/validate-average-competitor-import.yml'
 
 permissions:
@@ -30,5 +30,5 @@ jobs:
         run: |
           set -euo pipefail
           export NuGetPackageSourceCredentials_github="Username=${GITHUB_ACTOR};Password=${GITHUB_TOKEN};ValidAuthenticationTypes=Basic"
-          dotnet restore tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj --configfile NuGet.Config
-          dotnet test tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj -c Release --no-restore --filter "FullyQualifiedName~CompetitorPdfManualReviewTests" --verbosity normal
+          dotnet restore tests/Dhole.Pricing.CompetitorPdfTests/Dhole.Pricing.CompetitorPdfTests.csproj --configfile NuGet.Config
+          dotnet test tests/Dhole.Pricing.CompetitorPdfTests/Dhole.Pricing.CompetitorPdfTests.csproj -c Release --no-restore --filter "FullyQualifiedName~CompetitorPdfManualReviewTests" --verbosity normal
