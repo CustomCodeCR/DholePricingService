@@ -81,7 +81,7 @@ public sealed class ManualImportExtractionWorker(
                              OR (status = 'Processing' AND lease_expires_at_utc < NOW()))
                            AND attempt_count < 3
                          ORDER BY created_at_utc
-                         FOR UPDATE SKIP LOCKED LIMIT 1
+                         LIMIT 1 FOR UPDATE SKIP LOCKED
                      )
                     RETURNING id
                     """;
