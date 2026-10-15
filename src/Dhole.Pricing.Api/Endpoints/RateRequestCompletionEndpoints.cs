@@ -128,7 +128,7 @@ public static class RateRequestCompletionEndpoints
                 channel = "Email",
                 entityType = "RateRequest",
                 entityId = requestId.ToString(),
-                subject = $"Tarifa lista - {entity.ClientName ?? rate.QuoNumber ?? rate.RateCode}",
+                subject = $"Tarifa Lista - {(string.IsNullOrWhiteSpace(rate.RateName) ? quoteNumberText : rate.RateName.Trim())}",
                 body = emailBody,
                 payload = new
                 {
@@ -137,7 +137,12 @@ public static class RateRequestCompletionEndpoints
                     quo = quoteNumberText,
                     client = entity.ClientName,
                     route = routeText,
-                    cc = new[] { "pricingcf@castrofallas.com" },
+                    cc = new[]
+                    {
+                        "jmesen@castrofallas.com",
+                        "pricingcf@castrofallas.com",
+                        "cquiros@castrofallas.com",
+                    },
                     attachments = new[]
                     {
                         new
