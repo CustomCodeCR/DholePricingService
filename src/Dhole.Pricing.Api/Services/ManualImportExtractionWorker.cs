@@ -15,7 +15,6 @@ public sealed class ManualImportExtractionWorker(
 ) : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan ProcessingLease = TimeSpan.FromMinutes(30);
     private const int MaxAttempts = 3;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -49,6 +48,21 @@ public sealed class ManualImportExtractionWorker(
         await using (var scope = scopes.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
+            // Recover exhausted leases, even after the final attempt crashed or
+            // the container was killed. No job may remain Processing indefinitely.
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE pricing."ManualImportExtractionJobs"
+                   SET status = 'Failed',
+                       completed_at_utc = NOW(),
+                       file_content = '\\x'::bytea,
+                       lease_expires_at_utc = NULL,
+                       error_message = COALESCE(error_message, 'La extracción se interrumpió tras 3 intentos.')
+                 WHERE status = 'Processing'
+                   AND attempt_count >= 3
+                   AND lease_expires_at_utc < NOW()
+                """, cancellationToken);
+
             // Atomic claim across API replicas. SKIP LOCKED ensures only one worker owns a job.
             // UPDATE ... RETURNING must execute as a command, not an EF composed
             // SELECT (which would generate invalid PostgreSQL SQL).
