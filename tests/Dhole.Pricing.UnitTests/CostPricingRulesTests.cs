@@ -49,7 +49,7 @@ public sealed class CostPricingRulesTests
         {
             new CostPricingRule("Packages", 1m, 10m, null, 1m, 2m, "PerKg")
         });
-        Assert.ThrowsException<InvalidOperationException>(() => CostPricingRules.Normalize(json));
+        Assert.Throws<InvalidOperationException>(() => CostPricingRules.Normalize(json));
     }
 
     [TestMethod]
@@ -106,7 +106,7 @@ public sealed class CostPricingRulesTests
             new CostPricingRule("WeightKg", 1m, 500m, null, 1m, 1m),
             new CostPricingRule("WeightKg", 500m, 1000m, null, 2m, 2m),
         });
-        Assert.ThrowsException<InvalidOperationException>(() => CostPricingRules.Normalize(json));
+        Assert.Throws<InvalidOperationException>(() => CostPricingRules.Normalize(json));
     }
 
     [TestMethod]
