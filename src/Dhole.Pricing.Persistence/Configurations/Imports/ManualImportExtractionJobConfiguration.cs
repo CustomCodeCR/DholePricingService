@@ -9,7 +9,7 @@ internal sealed class ManualImportExtractionJobConfiguration : IEntityTypeConfig
     public void Configure(EntityTypeBuilder<ManualImportExtractionJob> builder)
     {
         builder.ToTable("ManualImportExtractionJobs", "pricing");
-        builder.HasKey(x => x.Id);
+        builder.HasKey(x => x.Id).HasName("pk_manual_import_extraction_jobs");
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.RequestedBy).IsRequired();
         builder.Property(x => x.RequestedByName).HasMaxLength(300);
@@ -24,7 +24,9 @@ internal sealed class ManualImportExtractionJobConfiguration : IEntityTypeConfig
         builder.Property(x => x.ErrorMessage).HasMaxLength(4000);
         builder.HasIndex(x => new { x.RequestedBy, x.ClientRequestKey })
             .IsUnique()
-            .HasFilter("client_request_key IS NOT NULL");
-        builder.HasIndex(x => new { x.Status, x.LeaseExpiresAtUtc, x.CreatedAtUtc });
+            .HasFilter("client_request_key IS NOT NULL")
+            .HasDatabaseName("ix_manual_import_jobs_request_key");
+        builder.HasIndex(x => new { x.Status, x.LeaseExpiresAtUtc, x.CreatedAtUtc })
+            .HasDatabaseName("ix_manual_import_jobs_queue");
     }
 }
