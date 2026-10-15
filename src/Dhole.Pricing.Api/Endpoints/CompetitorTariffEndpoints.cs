@@ -683,7 +683,9 @@ public static class CompetitorTariffEndpoints
             entity.ObservationCount,
             entity.ReviewCount,
             entity.ImportStatus,
-            entity.ImportedAtUtc
+            entity.ImportedAtUtc,
+            entity.ImportErrorCode,
+            entity.ImportErrorMessage
         );
 
     private static CompetitorRateObservationDto MapObservation(
