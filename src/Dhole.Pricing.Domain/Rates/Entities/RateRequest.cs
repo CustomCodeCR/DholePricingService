@@ -26,9 +26,9 @@ public sealed class RateRequest : Entity<Guid>
         RequestedAtUtc = DateTime.UtcNow;
         DueAtUtc = RequestedAtUtc.AddHours(priority switch
         {
-            RateRequestPriority.Green => 24,
+            RateRequestPriority.Green => 72,
             RateRequestPriority.Yellow => 48,
-            RateRequestPriority.Red => 72,
+            RateRequestPriority.Red => 24,
             _ => 72,
         });
         SellerUserId = sellerUserId;
