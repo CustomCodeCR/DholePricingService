@@ -416,10 +416,18 @@ public sealed class CompetitorTariffImportProcessor(
         {
             using var document = JsonDocument.Parse(rawJson);
             var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object
-                || !root.TryGetProperty("MultiContainerQuotation", out var marker)
+            if (root.ValueKind != JsonValueKind.Object)
+                return new MultiContainerMetadata(1, false, true);
+
+            // Single-container competitor PDFs can flag implausible published rates
+            // or missing source fields. Honour that flag even when the source is
+            // not a MultiContainerQuotation and never include it in Average before
+            // human approval.
+            var explicitReview = root.TryGetProperty("RequiresManualReview", out var sourceReview)
+                && string.Equals(sourceReview.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+            if (!root.TryGetProperty("MultiContainerQuotation", out var marker)
                 || !string.Equals(marker.ToString(), "true", StringComparison.OrdinalIgnoreCase))
-                return new MultiContainerMetadata(1, false, false);
+                return new MultiContainerMetadata(1, false, explicitReview);
 
             var quantity = 0;
             if (root.TryGetProperty("Quantity", out var rawQuantity))
@@ -427,8 +435,7 @@ public sealed class CompetitorTariffImportProcessor(
 
             var unitPricesNormalized = root.TryGetProperty("UnitPricesNormalized", out var unit)
                 && string.Equals(unit.ToString(), "true", StringComparison.OrdinalIgnoreCase);
-            var needsReview = root.TryGetProperty("RequiresManualReview", out var review)
-                && string.Equals(review.ToString(), "true", StringComparison.OrdinalIgnoreCase);
+            var needsReview = explicitReview;
 
             // Fail closed: invoice totals must never become single-container prices.
             if (quantity < 2 || quantity > 100 || !unitPricesNormalized)
