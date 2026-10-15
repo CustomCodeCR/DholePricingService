@@ -88,6 +88,40 @@ public sealed class RateRequest : Entity<Guid>
         payloadJson
     );
 
+    public void UpdateSubmission(
+        RateRequestPriority priority,
+        string? clientName,
+        string? executiveName,
+        string? shipmentMode,
+        string? originName,
+        string? destinationName,
+        string payloadJson)
+    {
+        if (Status != RateRequestStatus.Open || RateId.HasValue)
+            throw new InvalidOperationException("La solicitud ya no está disponible para edición.");
+
+        if (Priority != priority)
+        {
+            Priority = priority;
+            // Keep the original submission date so editing cannot reset the SLA clock.
+            DueAtUtc = RequestedAtUtc.AddHours(priority switch
+            {
+                RateRequestPriority.Green => 72,
+                RateRequestPriority.Yellow => 48,
+                RateRequestPriority.Red => 24,
+                _ => 72,
+            });
+            SlaReminderSentAtUtc = null;
+        }
+
+        ClientName = Normalize(clientName);
+        ExecutiveName = Normalize(executiveName);
+        ShipmentMode = Normalize(shipmentMode);
+        OriginName = Normalize(originName);
+        DestinationName = Normalize(destinationName);
+        PayloadJson = string.IsNullOrWhiteSpace(payloadJson) ? "{}" : payloadJson;
+    }
+
     public void SetRoute(Guid? poeId, string? poeName, Guid? podId, string? podName)
     {
         PoeId = poeId;
