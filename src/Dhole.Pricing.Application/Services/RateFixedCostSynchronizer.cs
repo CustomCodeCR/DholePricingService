@@ -138,7 +138,6 @@ public sealed class RateFixedCostSynchronizer(
             var isAgentAssociated = cost.AgentId.HasValue || costSelection?.AgentIds.Count > 0;
             var suppressAgentSale = isAgentAssociated && cost.CostDetailType != CostDetailType.OriginCharge;
             var hasExistingAmount = existingAmounts.TryGetValue(cost.Id, out var existingAmount);
-            var hasMinimumRule = cost.MinimumCostAmount.HasValue || cost.MinimumSaleAmount.HasValue;
             var forceCrc = CostaRicaServiceCurrencyRules.RequiresCrc(cost, rate);
 
             Guid targetCurrencyId;
