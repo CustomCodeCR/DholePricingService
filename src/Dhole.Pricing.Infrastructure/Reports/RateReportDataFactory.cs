@@ -97,6 +97,65 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             return legacyFloorApplied ? miamiBillableCft.Value : detail.Quantity;
         }
 
+
+        // Visual-only Miami matrix component detail for the customer quote.
+        // Reconcile to the persisted cost, never add new RateDetails or sale amounts.
+        // Only maritime OWN Miami freight with an explicit commercial plan qualifies;
+        // other LCL sources and air-LCL must retain their ordinary PDF.
+        string MiamiFreightBreakdown(RateDetail detail)
+        {
+            if (!miamiBillableCft.HasValue
+                || detail.CostDetailType != CostDetailType.Freight
+                || detail.ChargeBasis != ChargeBasis.PerChargeableCft
+                || (!detail.Name.Contains("Flete Miami", StringComparison.OrdinalIgnoreCase)
+                    && detail.Notes?.Contains("Plan Miami:", StringComparison.OrdinalIgnoreCase) != true))
+                return string.Empty;
+
+            var match = Regex.Match(detail.Notes ?? string.Empty,
+                @"Plan Miami:\s*(NVOCC-A|NVOCC-B|LITTLE|A|B|C|D)\b",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (!match.Success)
+                return string.Empty;
+
+            var parts = match.Groups[1].Value.ToUpperInvariant() switch
+            {
+                "A" => new[] { ("Flete", 1.75m), ("Bunker", 0.70m), ("THC", 0.35m) },
+                "B" => new[] { ("Flete", 1.80m), ("Bunker", 0.80m), ("THC", 0.35m) },
+                "C" => new[] { ("Flete", 1.85m), ("Bunker", 0.80m), ("THC", 0.35m) },
+                "D" => new[] { ("Flete", 1.85m), ("Bunker", 0.72m), ("THC", 0.35m) },
+                "NVOCC-B" => new[] { ("Flete", 1.85m), ("Bunker", 0.70m), ("THC", 0.35m) },
+                "NVOCC-A" => new[] { ("Flete", 2.04m), ("GRI", 0.22m), ("THC", 0.34m) },
+                _ => Array.Empty<(string Name, decimal Rate)>()
+            };
+            if (parts.Length == 0)
+                return string.Empty; // LITTLE: tariff by bracket, not by CFT components.
+
+            var quantity = ReportQuantity(detail);
+            var cost = detail.CostAmount * quantity;
+            var weight = parts.Sum(part => part.Item2);
+            if (quantity <= 0m || weight <= 0m)
+                return string.Empty;
+
+            var lines = new List<string>
+            {
+                "Desglose de costo del flete Miami (no son cargos adicionales):"
+            };
+            var allocated = 0m;
+            for (var index = 0; index < parts.Length; index++)
+            {
+                var part = parts[index];
+                var componentCost = index == parts.Length - 1
+                    ? decimal.Round(cost - allocated, 2, MidpointRounding.AwayFromZero)
+                    : decimal.Round(cost * part.Item2 / weight, 2, MidpointRounding.AwayFromZero);
+                allocated += componentCost;
+                lines.Add($"{part.Item1}: USD {part.Item2.ToString("N2", MoneyCulture)}/CFT"
+                    + $" × {quantity.ToString("N3", MoneyCulture)} CFT"
+                    + $" = USD {componentCost.ToString("N2", MoneyCulture)}");
+            }
+
+            return string.Join("\n", lines);
+        }
+
         var cftFreight = rate.ShipmentMode == ShipmentMode.Lcl
             ? rate.RateDetails.FirstOrDefault(detail =>
                 detail.CostDetailType == CostDetailType.Freight &&
@@ -260,6 +319,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     lineTaxAmount = allInTax,
                     lineTotalWithTaxAmount = allInAmount + allInTax,
                     destinationTaxLabel = allInTax > 0m ? $"IVA: {currencyValue} {allInTax.ToString("N2", MoneyCulture)}" : string.Empty,
+                    miamiBreakdown = string.Empty,
                     notes = string.Empty
                 }
             }
@@ -277,6 +337,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     lineTaxAmount = LineTax(detail),
                     lineTotalWithTaxAmount = LineSubtotal(detail) + LineTax(detail),
                     destinationTaxLabel = TaxLabel(detail),
+                    miamiBreakdown = MiamiFreightBreakdown(detail),
                     notes = ClientDetailNotes(detail)
                 })
                 .ToArray();
