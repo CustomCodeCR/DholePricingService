@@ -58,6 +58,7 @@ builder.Services.AddScoped<SellerVisibilityService>();
 builder.Services.AddScoped<AuthSellerDirectoryService>();
 builder.Services.AddScoped<RateCreatorIdentityService>();
 builder.Services.AddScoped<AcceptedRateOpeningsNotificationService>();
+builder.Services.AddScoped<SentRateEmailNotificationService>();
 builder.Services.AddScoped<LowMarginApprovedNotificationService>();
 builder.Services.AddSingleton<ICompetitorTariffImportQueue, CompetitorTariffImportQueue>();
 builder.Services.AddScoped<CompetitorTariffImportProcessor>();
