@@ -66,6 +66,13 @@ public sealed class SentRateEmailNotificationService(
             return $"El vendedor '{executiveName}' no tiene un correo válido configurado. No se cambió el estado.";
         }
 
+        // Notifications sends one SMTP message per recipient. For the shared
+        // Castro Fallas executive, use one message and an explicit CC so that
+        // both addresses are visible on the same outgoing email with its PDF.
+        var isCastroFallas = SameName(executiveName, "Castro Fallas");
+        var toRecipients = isCastroFallas ? emails.Take(1).ToArray() : emails.ToArray();
+        var ccRecipients = isCastroFallas ? emails.Skip(1).ToArray() : Array.Empty<string>();
+
         var documentResult = await dispatcher.DispatchAsync(
             new GenerateRateDocumentCommand(rate.Id, null, "pdf"),
             cancellationToken);
@@ -111,6 +118,7 @@ public sealed class SentRateEmailNotificationService(
                     sellerName = executiveName,
                     action = "open-rate",
                     route = $"/pricing/rates/{rate.Id}/wizard?mode=view",
+                    cc = ccRecipients,
                     attachments = new[]
                     {
                         new
@@ -122,7 +130,7 @@ public sealed class SentRateEmailNotificationService(
                     },
                 },
                 maxAttempts = 5,
-                recipients = emails.Select(email => new
+                recipients = toRecipients.Select(email => new
                 {
                     userId = (string?)null,
                     address = email,
