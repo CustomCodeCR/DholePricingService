@@ -2209,6 +2209,12 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("rate_header_id");
 
+                    b.Property<string>("UnitWeightsKgJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasDefaultValue("[]")
+                        .HasColumnName("unit_weights_kg_json");
+
                     b.HasKey("Id")
                         .HasName("p_k_rate_container_allocations");
 
