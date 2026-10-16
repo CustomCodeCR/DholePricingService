@@ -70,7 +70,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             ? "Cotización de servicios logísticos"
             : "Cotización de transporte internacional";
         var showAgent = true;
-        var reportAgentName = isLand ? "Grupo Castro Fallas" : Text(rate.AgentName, "No asignado");
+        var reportAgentName = UsesRsOriginAgent(rate) ? "RS"
+            : isLand ? "Grupo Castro Fallas" : Text(rate.AgentName, "No asignado");
         var showCarrier = rate.ShipmentMode == ShipmentMode.Fcl && hasTransportService;
         var route = !string.IsNullOrWhiteSpace(rate.PodName)
             ? $"{rate.PolName} → {rate.PodName} vía {rate.PoeName}"
@@ -83,15 +84,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         // persisted KG freight basis, cargo flight context or airport IATA route.
         // Do not convert legacy CBM quantities in a PDF: doing so would silently
         // change the customer's payable total without a new commercial quotation.
-        var isAirLcl = rate.ShipmentMode == ShipmentMode.Lcl &&
-            (rate.RateDetails.Any(detail =>
-                detail.CostDetailType == CostDetailType.Freight &&
-                detail.ChargeBasis is ChargeBasis.PerKg or ChargeBasis.Per100Kg)
-             || Regex.IsMatch(rate.CargoLinesJson ?? string.Empty,
-                 @"a[eé]re[ao]|aviaci[oó]n|aeropuerto|airport|vuelos?",
-                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
-             || (Regex.IsMatch(rate.PolName ?? string.Empty, @"\([A-Z]{3}\)")
-                 && Regex.IsMatch(rate.PoeName ?? string.Empty, @"\([A-Z]{3}\)")));
+        var isAirLcl = IsAirLcl(rate);
         string ReportDetailName(RateDetail detail) =>
             isAirLcl && detail.CostDetailType == CostDetailType.Freight
                 ? "Flete Internacional"
@@ -909,6 +902,37 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         return "FTL";
     }
 
+    // ShipmentMode.Lcl is also used for air cargo. RS is the origin agent only
+    // for maritime own-consolidation LCL; the commercial source remains GCF.
+    private static bool IsAirLcl(RateHeader rate) =>
+        rate.ShipmentMode == ShipmentMode.Lcl &&
+        (rate.RateDetails.Any(detail =>
+            detail.CostDetailType == CostDetailType.Freight &&
+            detail.ChargeBasis is ChargeBasis.PerKg or ChargeBasis.Per100Kg)
+         || Regex.IsMatch(rate.CargoLinesJson ?? string.Empty,
+             @"a[eé]re[ao]|aviaci[oó]n|aeropuerto|airport|vuelos?",
+             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+         || (Regex.IsMatch(rate.PolName ?? string.Empty, @"\([A-Z]{3}\)")
+             && Regex.IsMatch(rate.PoeName ?? string.Empty, @"\([A-Z]{3}\)")));
+
+    private static bool UsesRsOriginAgent(RateHeader rate)
+    {
+        if (rate.ShipmentMode != ShipmentMode.Lcl || IsAirLcl(rate)) return false;
+        // Source notes identify modern LCL quotes and take precedence over legacy
+        // GCF header fields, so a GCF coloader cannot be mistaken for own LCL.
+        if (rate.RateDetails.Any(detail =>
+            detail.Notes?.Contains("LCL COLOADER", StringComparison.OrdinalIgnoreCase) == true))
+            return false;
+        if (rate.RateDetails.Any(detail =>
+            detail.Notes?.Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase) == true
+            || detail.Notes?.Contains("ConsolidadoId:", StringComparison.OrdinalIgnoreCase) == true))
+            return true;
+        // Old own LCL quotations did not always persist the source marker.
+        return string.Equals(rate.AgentCode?.Trim(), "GCF", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(rate.AgentName?.Trim(), "GCF", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(rate.AgentName?.Trim(), "Grupo Castro Fallas", StringComparison.OrdinalIgnoreCase);
+    }
+
     private string CreateOriginOfficePublicUrl(RateHeader rate)
     {
         var baseAddress = (configuration["Reports:PublicWebBaseAddress"] ?? "https://dhole.customcodecr.com")
@@ -926,8 +950,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             + $"&route={Uri.EscapeDataString(routeKey)}";
 
         var isLand = rate.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
-        var agentCode = isLand ? "GCF" : rate.AgentCode;
-        var agentName = isLand ? "Grupo Castro Fallas" : rate.AgentName;
+        var usesRs = UsesRsOriginAgent(rate);
+        var agentCode = usesRs ? "RS" : isLand ? "GCF" : rate.AgentCode;
+        var agentName = usesRs ? "RS" : isLand ? "Grupo Castro Fallas" : rate.AgentName;
 
         if (!string.IsNullOrWhiteSpace(agentCode))
             publicUrl += $"&agentCode={Uri.EscapeDataString(agentCode.Trim())}";
