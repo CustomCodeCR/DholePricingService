@@ -892,6 +892,8 @@ public static class RateEndpoints
         SetRateStatusRequest request,
         ICommandDispatcher dispatcher,
         AcceptedRateOpeningsNotificationService openingsNotificationService,
+        SentRateEmailNotificationService sentRateEmailNotificationService,
+        ServiceDbContext db,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -931,6 +933,38 @@ public static class RateEndpoints
         if (!canUpdateRateStatus && !(isClientDecision && canApproveLowMargin))
         {
             return Results.Forbid();
+        }
+
+        // Preparar el PDF y el correo en Outbox antes de persistir el cambio
+        // de estado. El handler confirma ambos en la misma transacción.
+        if (status == RateStatus.Sent)
+        {
+            var previousStatus = await db.RateHeaders
+                .AsNoTracking()
+                .Where(x => x.Id == rateId && !x.IsDeleted)
+                .Select(x => (RateStatus?)x.Status)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (previousStatus.HasValue && previousStatus.Value != RateStatus.Sent)
+            {
+                string? emailError;
+                try
+                {
+                    emailError = await sentRateEmailNotificationService
+                        .QueueBeforeStatusTransitionAsync(rateId, cancellationToken);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    return Results.Problem(
+                        title: "No se pudo preparar el correo al vendedor",
+                        detail: "No se cambió el estado de la tarifa. Intente nuevamente.",
+                        statusCode: StatusCodes.Status503ServiceUnavailable);
+                }
+
+                if (emailError is not null)
+                    return EndpointResults.BadRequest(
+                        "Pricing.RateSentEmailNotQueued", emailError, httpContext);
+            }
         }
 
         var result = await dispatcher.DispatchAsync(
