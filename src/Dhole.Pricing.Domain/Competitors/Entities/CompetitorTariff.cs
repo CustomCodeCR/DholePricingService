@@ -42,6 +42,8 @@ public sealed class CompetitorTariff
     public int ObservationCount { get; private set; }
     public int ReviewCount { get; private set; }
     public string ImportStatus { get; private set; } = "Legacy";
+    public string? ImportErrorCode { get; private set; }
+    public string? ImportErrorMessage { get; private set; }
     public DateTime ImportedAtUtc { get; private set; }
 
     public static CompetitorTariff Create(
@@ -164,15 +166,39 @@ public sealed class CompetitorTariff
         ObservationCount = Math.Max(0, observationCount);
         ReviewCount = Math.Max(0, reviewCount);
         ImportStatus = RequireText(importStatus, "El estado de importación es obligatorio.");
+        ImportErrorCode = null;
+        ImportErrorMessage = null;
     }
 
-    public void MarkImportFailed(Guid? extractionExecutionId, int reviewCount)
+    public void MarkImportFailed(Guid? extractionExecutionId, int reviewCount, string? errorCode = null, string? errorMessage = null)
     {
         ExtractionExecutionId = extractionExecutionId;
         ObservationCount = 0;
         ReviewCount = Math.Max(0, reviewCount);
         ImportStatus = "Failed";
+        ImportErrorCode = Truncate(errorCode, 120);
+        ImportErrorMessage = Truncate(errorMessage, 2000);
     }
+
+    public void RecordImportIssue(string? errorCode, string? errorMessage)
+    {
+        ImportErrorCode = Truncate(errorCode, 120);
+        ImportErrorMessage = Truncate(errorMessage, 2000);
+    }
+
+    public void RetryImport()
+    {
+        ImportStatus = "Processing";
+        ExtractionExecutionId = null;
+        ObservationCount = 0;
+        ReviewCount = 0;
+        ImportErrorCode = null;
+        ImportErrorMessage = null;
+        ImportedAtUtc = DateTime.UtcNow;
+    }
+
+    private static string? Truncate(string? value, int max) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Length <= max ? value : value[..max];
 
     private void Apply(
         IReadOnlyCollection<Guid> polIds,
