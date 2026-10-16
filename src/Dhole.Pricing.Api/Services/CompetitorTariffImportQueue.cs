@@ -191,7 +191,7 @@ public sealed class CompetitorTariffImportProcessor(
                     workItem.FileExtension,
                     workItem.FileSizeBytes,
                     workItem.FileHash,
-                    "COMPETITOR_FCL",
+                    workItem.ShipmentMode == ShipmentMode.Fcl ? "COMPETITOR_FCL" : null,
                     workItem.RequestedBy,
                     workItem.RequestedByName,
                     workItem.FileContent
