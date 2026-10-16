@@ -1,0 +1,35 @@
+name: Validate Average Import Recovery
+
+on:
+  push:
+    branches: [average-recovery]
+  pull_request:
+    branches: [develop, master]
+    paths:
+      - 'src/Dhole.Pricing.Api/Services/CompetitorTariffImportQueue.cs'
+      - 'src/Dhole.Pricing.Api/Endpoints/CompetitorTariffEndpoints.cs'
+      - 'src/Dhole.Pricing.Domain/Competitors/Entities/**'
+      - 'src/Dhole.Pricing.Persistence/Configurations/Competitors/**'
+      - 'src/Dhole.Pricing.Persistence/Migrations/20261015171500_DurableCompetitorPdfImports.cs'
+      - 'tests/Dhole.Pricing.CompetitorPdfTests/**'
+      - '.github/workflows/validate-average-import-recovery.yml'
+permissions:
+  contents: read
+  packages: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore and test isolated competitor imports
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          export NuGetPackageSourceCredentials_github="Username=${GITHUB_ACTOR};Password=${GITHUB_TOKEN};ValidAuthenticationTypes=Basic"
+          dotnet restore tests/Dhole.Pricing.CompetitorPdfTests/Dhole.Pricing.CompetitorPdfTests.csproj --configfile NuGet.Config
+          dotnet test tests/Dhole.Pricing.CompetitorPdfTests/Dhole.Pricing.CompetitorPdfTests.csproj -c Release --no-restore --verbosity normal
