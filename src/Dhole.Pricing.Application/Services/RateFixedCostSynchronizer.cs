@@ -179,9 +179,13 @@ public sealed class RateFixedCostSynchronizer(
             // de la línea. La venta puede conservar el override de Pricing, convirtiéndolo si hace falta.
             var costAmount = CostaRicaServiceCurrencyRules.ConvertUsdCrc(
                 resolvedCostAmount, cost.CurrencyCode, targetCurrencyCode, exchangeRateSale);
+            // Pantalla 7 is authoritative for the sale of a detail already present in
+            // the quotation. PricingRulesJson and minimum rules may recalculate
+            // catalog costs, but must not discard the sale entered by the user.
+            // MinimumSaleAmount is still enforced on effectiveSaleTotal below.
             var saleAmount = suppressAgentSale
                 ? 0m
-                : hasExistingAmount && !hasMinimumRule && string.IsNullOrWhiteSpace(cost.PricingRulesJson)
+                : hasExistingAmount
                     ? CostaRicaServiceCurrencyRules.ConvertUsdCrc(
                         existingAmount.SaleAmount,
                         existingAmount.CurrencyCode,
