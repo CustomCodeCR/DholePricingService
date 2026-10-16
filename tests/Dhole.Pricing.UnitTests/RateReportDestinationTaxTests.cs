@@ -104,6 +104,49 @@ public sealed class RateReportDestinationTaxTests
         Assert.AreEqual(51130m, currencies[1].GetProperty("amount").GetDecimal());
     }
 
+
+    [TestMethod]
+    public void MixedFclQuote_LabelsCarrierLinkedCostsWithoutLabelingGeneralCharges()
+    {
+        var rate = CreateRate();
+        rate.ReplaceContainerAllocations(
+        [
+            new RateContainerAllocationSpec(rate.ContainerTypeId, "40HC", "40HC", 1),
+            new RateContainerAllocationSpec(Guid.NewGuid(), "20DV", "20DV", 1)
+        ], null);
+        rate.AddRateDetail(rate.Id, null, "Flete Internacional · 40HC",
+            CostDetailType.Freight, CostType.Variable, ChargeBasis.PerContainer,
+            rate.CurrencyId, "USD", "USD", 6500m, 6500m,
+            "Flete específico para 1 × 40HC · NavieraId: 11111111-1111-1111-1111-111111111111 · Naviera: COSCO",
+            1m, null);
+        rate.AddRateDetail(rate.Id, null, "Flete Internacional · 20DV",
+            CostDetailType.Freight, CostType.Variable, ChargeBasis.PerContainer,
+            rate.CurrencyId, "USD", "USD", 6300m, 6300m,
+            "Flete específico para 1 × 20DV · NavieraId: 22222222-2222-2222-2222-222222222222 · Naviera: MSC",
+            1m, null);
+        rate.AddRateDetail(rate.Id, null, "Cargos destino línea naviera",
+            CostDetailType.DestinationCharge, CostType.Fixed, ChargeBasis.PerContainer,
+            rate.CurrencyId, "USD", "USD", 275m, 290m,
+            "THC · Naviera: COSCO · Equipo: 1 × 40HC", 1m, null);
+        AddLine(rate, "Documentación", 50m);
+
+        using var data = Report(rate);
+        var items = data.RootElement.GetProperty("items").EnumerateArray().ToArray();
+        StringAssert.Contains(
+            items.Single(row => row.GetProperty("description").GetString()!.Contains("Cargos destino línea naviera"))
+                .GetProperty("description").GetString()!,
+            "Naviera: COSCO · Equipo: 1 × 40HC");
+        StringAssert.Contains(
+            items.Single(row => row.GetProperty("description").GetString()!.Contains("Flete Internacional · 20DV"))
+                .GetProperty("description").GetString()!,
+            "Naviera: MSC");
+        Assert.AreEqual("Documentación",
+            items.Single(row => row.GetProperty("description").GetString() == "Documentación")
+                .GetProperty("description").GetString());
+        Assert.AreEqual("COSCO / MSC", data.RootElement.GetProperty("rate").GetProperty("carrier").GetString());
+        Assert.IsFalse(items.Any(row => row.GetProperty("notes").GetString()?.Contains("NavieraId:") == true));
+    }
+
     private static RateDetail AddLine(RateHeader rate, string name, decimal sale) =>
         rate.AddRateDetail(
             rate.Id, null, name, CostDetailType.DestinationCharge, CostType.Variable,
