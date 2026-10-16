@@ -308,6 +308,28 @@ public sealed class UpdateRateCommandHandler(
             .Distinct()
             .ToHashSet();
 
+        // An FCL update sends the complete freight distribution for its current
+        // equipment. Older equipment freight must never survive a replacement
+        // just because the route, carrier and other costs stayed unchanged.
+        // This is intentionally limited to Freight: other persisted charges
+        // still follow the explicit removal/synchronization rules.
+        if (command.ShipmentMode == ShipmentMode.Fcl
+            && extraDetails.Any(detail => detail.CostDetailType == CostDetailType.Freight))
+        {
+            var retainedFreightIds = extraDetails
+                .Where(detail => detail.CostDetailType == CostDetailType.Freight
+                    && detail.Id.HasValue)
+                .Select(detail => detail.Id!.Value)
+                .ToHashSet();
+
+            foreach (var staleFreight in existingDetails.Values.Where(detail =>
+                detail.CostDetailType == CostDetailType.Freight
+                && !retainedFreightIds.Contains(detail.Id)))
+            {
+                removedIds.Add(staleFreight.Id);
+            }
+        }
+
         // Pantalla 7 is authoritative for persisted rate details during an edit.
         // Keep the original fixed-cost snapshot so the synchronizer can distinguish between
         // details that already belonged to the quote and new catalog costs discovered later.
