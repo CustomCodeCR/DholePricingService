@@ -158,6 +158,7 @@ internal sealed class PricingRateRequestSlaWorker(
             .AsNoTracking()
             .Where(x => ids.Contains(x.Id)
                 && (x.Status == RateStatus.Sent
+                    || x.Status == RateStatus.Expired
                     || x.Status == RateStatus.AcceptedByClient
                     || x.Status == RateStatus.RejectedByClient
                     || x.Status == RateStatus.Closed))
@@ -176,6 +177,7 @@ internal sealed class PricingRateRequestSlaWorker(
         => dbContext.RateHeaders.AsNoTracking().AnyAsync(
             x => x.Id == rateId
                 && (x.Status == RateStatus.Sent
+                    || x.Status == RateStatus.Expired
                     || x.Status == RateStatus.AcceptedByClient
                     || x.Status == RateStatus.RejectedByClient
                     || x.Status == RateStatus.Closed),
