@@ -27,6 +27,12 @@ public sealed class SentRateEmailNotificationService(
     private const string NotificationEventName = "notifications.notification.requested";
     private const string NotificationType = "pricing.rate.sent-to-seller";
     private const string SalesExecutivesCatalog = "pricing-sales-executives";
+    private static readonly string[] CommercialCopyRecipients =
+    [
+        "pricingcf@castrofallas.com",
+        "jmesen@castrofallas.com",
+        "cquiros@castrofallas.com",
+    ];
 
     /// <returns>Null cuando el correo quedó preparado en el Outbox; de lo contrario, el motivo.</returns>
     public async Task<string?> QueueBeforeStatusTransitionAsync(
@@ -66,12 +72,15 @@ public sealed class SentRateEmailNotificationService(
             return $"El vendedor '{executiveName}' no tiene un correo válido configurado. No se cambió el estado.";
         }
 
-        // Notifications sends one SMTP message per recipient. For the shared
-        // Castro Fallas executive, use one message and an explicit CC so that
-        // both addresses are visible on the same outgoing email with its PDF.
-        var isCastroFallas = SameName(executiveName, "Castro Fallas");
-        var toRecipients = isCastroFallas ? emails.Take(1).ToArray() : emails.ToArray();
-        var ccRecipients = isCastroFallas ? emails.Skip(1).ToArray() : Array.Empty<string>();
+        // El vendedor seleccionado recibe un único correo y Pricing queda en
+        // copia. Notifications enviaría correos independientes si añadimos
+        // cada destinatario en 'recipients', por eso usamos 'payload.cc'.
+        // Evitar que una dirección aparezca simultáneamente en Para y CC.
+        var toRecipients = emails.Take(1).ToArray();
+        var ccRecipients = CommercialCopyRecipients
+            .Where(email => !toRecipients.Contains(email, StringComparer.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         var documentResult = await dispatcher.DispatchAsync(
             new GenerateRateDocumentCommand(rate.Id, null, "pdf"),
@@ -141,8 +150,8 @@ public sealed class SentRateEmailNotificationService(
             cancellationToken: cancellationToken);
 
         logger.LogInformation(
-            "Correo con PDF preparado en Outbox para tarifa {RateId}, vendedor {ExecutiveName}, destinatarios {Count}.",
-            rateId, executiveName, emails.Count);
+            "Correo con PDF preparado en Outbox para tarifa {RateId}, vendedor {ExecutiveName}, destinatarios Para {ToCount}, CC {CcCount}.",
+            rateId, executiveName, toRecipients.Length, ccRecipients.Length);
 
         return null;
     }
@@ -154,7 +163,7 @@ public sealed class SentRateEmailNotificationService(
         CancellationToken cancellationToken)
     {
         if (SameName(executiveName, "Castro Fallas"))
-            return ["pricingcf@castrofallas.com", "jmesen@castrofallas.com"];
+            return ["pricingcf@castrofallas.com"];
 
         // El selector del wizard proviene de Config y tiene email en MetadataJson.
         try
