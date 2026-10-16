@@ -1,8 +1,8 @@
 using System.Text.Json;
-using System.Threading.Channels;
 using Dhole.Pricing.Application.Abstractions.MarketPricing;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.MarketPricing.Normalization;
+using Dhole.Pricing.Domain.Competitors.Entities;
 using Dhole.Pricing.Domain.MarketPricing.Entities;
 using Dhole.Pricing.Domain.MarketPricing.Enums;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -12,84 +12,53 @@ using Microsoft.EntityFrameworkCore;
 namespace Dhole.Pricing.Api.Services;
 
 public sealed record CompetitorTariffImportWorkItem(
-    Guid CompetitorTariffId,
-    Guid IncotermId,
-    string CompetitorCompanyName,
-    ShipmentMode ShipmentMode,
-    DateTime? FallbackFrom,
-    DateTime? FallbackTo,
-    string OriginalFileName,
-    string? ContentType,
-    string? FileExtension,
-    long FileSizeBytes,
-    string FileHash,
-    Guid? RequestedBy,
-    string? RequestedByName,
-    byte[] FileContent
-);
+    Guid CompetitorTariffId, Guid IncotermId, string CompetitorCompanyName,
+    ShipmentMode ShipmentMode, DateTime? FallbackFrom, DateTime? FallbackTo,
+    string OriginalFileName, string? ContentType, string? FileExtension,
+    long FileSizeBytes, string FileHash, Guid? RequestedBy,
+    string? RequestedByName, byte[] FileContent);
 
-public interface ICompetitorTariffImportQueue
+public sealed class CompetitorExtractionException(
+    string code, string? message, Guid? executionId, bool transient)
+    : Exception(message ?? code)
 {
-    ValueTask QueueAsync(
-        CompetitorTariffImportWorkItem workItem,
-        CancellationToken cancellationToken = default
-    );
-
-    ValueTask<CompetitorTariffImportWorkItem> DequeueAsync(
-        CancellationToken cancellationToken
-    );
+    public string ErrorCode { get; } = code;
+    public Guid? ExecutionId { get; } = executionId;
+    public bool IsTransient { get; } = transient;
 }
 
-public sealed class CompetitorTariffImportQueue : ICompetitorTariffImportQueue
-{
-    private readonly Channel<CompetitorTariffImportWorkItem> _channel =
-        Channel.CreateUnbounded<CompetitorTariffImportWorkItem>(
-            new UnboundedChannelOptions
-            {
-                SingleReader = true,
-                SingleWriter = false,
-                AllowSynchronousContinuations = false,
-            }
-        );
-
-    public ValueTask QueueAsync(
-        CompetitorTariffImportWorkItem workItem,
-        CancellationToken cancellationToken = default
-    ) => _channel.Writer.WriteAsync(workItem, cancellationToken);
-
-    public ValueTask<CompetitorTariffImportWorkItem> DequeueAsync(
-        CancellationToken cancellationToken
-    ) => _channel.Reader.ReadAsync(cancellationToken);
-}
-
+/// <summary>
+/// Recovers imports from PostgreSQL, with atomic leases that prevent duplicate
+/// processing across replicas and survive API deployments and restarts.
+/// </summary>
 public sealed class CompetitorTariffImportWorker(
-    ICompetitorTariffImportQueue queue,
     IServiceScopeFactory scopeFactory,
-    ILogger<CompetitorTariffImportWorker> logger
-) : BackgroundService
+    ILogger<CompetitorTariffImportWorker> logger) : BackgroundService
 {
+    private const int MaxAttempts = 3;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            CompetitorTariffImportWorkItem workItem;
-
-            try
-            {
-                workItem = await queue.DequeueAsync(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-
             try
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
-                var processor = scope.ServiceProvider
-                    .GetRequiredService<CompetitorTariffImportProcessor>();
+                var db = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
+                var now = DateTime.UtcNow;
+                var ready = await db.CompetitorTariffImportPayloads
+                    .AsNoTracking()
+                    .Where(p => p.NextAttemptAtUtc <= now
+                        && (p.LeaseUntilUtc == null || p.LeaseUntilUtc < now)
+                        && db.CompetitorTariffs.Any(t =>
+                            t.Id == p.CompetitorTariffId && t.ImportStatus == "Processing"))
+                    .OrderBy(p => p.NextAttemptAtUtc)
+                    .Select(p => p.CompetitorTariffId)
+                    .Take(4)
+                    .ToArrayAsync(stoppingToken);
 
-                await processor.ProcessAsync(workItem, stoppingToken);
+                foreach (var id in ready)
+                    await ProcessOneAsync(id, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -97,12 +66,95 @@ public sealed class CompetitorTariffImportWorker(
             }
             catch (Exception exception)
             {
-                logger.LogError(
-                    exception,
-                    "Competitor tariff import {CompetitorTariffId} failed in background worker.",
-                    workItem.CompetitorTariffId
-                );
+                logger.LogError(exception, "Competitor PDF import recovery scan failed.");
             }
+            try { await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken); }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+        }
+    }
+
+    private async Task ProcessOneAsync(Guid tariffId, CancellationToken cancellationToken)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
+        var now = DateTime.UtcNow;
+        var claimed = await db.CompetitorTariffImportPayloads
+            .Where(p => p.CompetitorTariffId == tariffId
+                && p.NextAttemptAtUtc <= now
+                && (p.LeaseUntilUtc == null || p.LeaseUntilUtc < now))
+            .ExecuteUpdateAsync(updates => updates
+                .SetProperty(p => p.LeaseUntilUtc, (DateTime?)now.AddMinutes(23))
+                .SetProperty(p => p.AttemptCount, p => p.AttemptCount + 1),
+                cancellationToken);
+        if (claimed != 1) return;
+
+        var payload = await db.CompetitorTariffImportPayloads.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.CompetitorTariffId == tariffId, cancellationToken);
+        var tariff = await db.CompetitorTariffs.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == tariffId, cancellationToken);
+        if (payload is null || tariff?.IncotermId is null || tariff.ImportStatus != "Processing")
+            return;
+
+        var item = new CompetitorTariffImportWorkItem(
+            tariffId, tariff.IncotermId.Value, tariff.CompetitorCompanyName,
+            tariff.ShipmentMode, payload.FallbackFrom, payload.FallbackTo,
+            tariff.OriginalFileName ?? "competitor.pdf", payload.ContentType,
+            Path.GetExtension(tariff.OriginalFileName),
+            payload.FileContent.LongLength, payload.FileHash,
+            payload.RequestedBy, payload.RequestedByName, payload.FileContent);
+        try
+        {
+            await scope.ServiceProvider.GetRequiredService<CompetitorTariffImportProcessor>()
+                .ProcessAsync(item, cancellationToken);
+            var status = await db.CompetitorTariffs.AsNoTracking()
+                .Where(t => t.Id == tariffId).Select(t => t.ImportStatus)
+                .FirstAsync(cancellationToken);
+            if (status != "Processing")
+            {
+                // Original PDF is already permanently held in DholeStorage.
+                await db.CompetitorTariffImportPayloads
+                    .Where(p => p.CompetitorTariffId == tariffId)
+                    .ExecuteDeleteAsync(cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Retain bytes; after the lease expires another instance resumes it.
+            throw;
+        }
+        catch (Exception exception)
+        {
+            var extractionError = exception as CompetitorExtractionException;
+            var code = extractionError?.ErrorCode ?? "Competitor.ImportUnhandled";
+            var attempts = payload.AttemptCount;
+            var retry = extractionError?.IsTransient == true && attempts < MaxAttempts;
+            logger.LogWarning(exception,
+                "Competitor import {TariffId}: attempt {Attempt}/{Max}, retry={Retry}, code={Code}.",
+                tariffId, attempts, MaxAttempts, retry, code);
+            db.ChangeTracker.Clear();
+            var current = await db.CompetitorTariffs
+                .FirstOrDefaultAsync(t => t.Id == tariffId, CancellationToken.None);
+            if (current is null) return;
+            if (retry)
+            {
+                current.RecordImportIssue(code, exception.Message);
+                await db.CompetitorTariffImportPayloads
+                    .Where(p => p.CompetitorTariffId == tariffId)
+                    .ExecuteUpdateAsync(u => u
+                        .SetProperty(p => p.LeaseUntilUtc, (DateTime?)null)
+                        .SetProperty(p => p.NextAttemptAtUtc,
+                            DateTime.UtcNow.AddSeconds(15 * attempts * attempts)),
+                        CancellationToken.None);
+            }
+            else
+            {
+                current.MarkImportFailed(extractionError?.ExecutionId, 1, code, exception.Message);
+                await db.CompetitorTariffImportPayloads
+                    .Where(p => p.CompetitorTariffId == tariffId)
+                    .ExecuteUpdateAsync(u => u.SetProperty(p => p.LeaseUntilUtc, (DateTime?)null),
+                        CancellationToken.None);
+            }
+            await db.SaveChangesAsync(CancellationToken.None);
         }
     }
 }
@@ -149,12 +201,20 @@ public sealed class CompetitorTariffImportProcessor(
 
             if (!extraction.Success)
             {
-                entity.MarkImportFailed(
-                    extraction.ExtractionExecutionId,
-                    Math.Max(1, extraction.Summary.InvalidRows)
-                );
-                await dbContext.SaveChangesAsync(cancellationToken);
-                return;
+                var code = extraction.ErrorCode ?? "DataExtraction.Failed";
+                var retry = code is "Grpc.Unavailable" or "Grpc.DeadlineExceeded"
+                    or "Grpc.ResourceExhausted" or "Grpc.Internal" or "Grpc.Cancelled"
+                    || code.Contains("Timeout", StringComparison.OrdinalIgnoreCase)
+                    || code.Contains("502", StringComparison.OrdinalIgnoreCase);
+                throw new CompetitorExtractionException(
+                    code, extraction.ErrorMessage, extraction.ExtractionExecutionId, retry);
+            }
+            if (extraction.Rows.Count == 0)
+            {
+                throw new CompetitorExtractionException(
+                    "DataExtraction.NoRows",
+                    "El extractor devolvió cero filas; revise el PDF original o el formato del documento.",
+                    extraction.ExtractionExecutionId, false);
             }
 
             var observations = new List<CompetitorRateObservation>();
@@ -354,6 +414,11 @@ public sealed class CompetitorTariffImportProcessor(
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            throw;
+        }
+        catch (CompetitorExtractionException)
+        {
+            // Retry and error persistence are owned by the durable worker.
             throw;
         }
         catch (Exception exception)
