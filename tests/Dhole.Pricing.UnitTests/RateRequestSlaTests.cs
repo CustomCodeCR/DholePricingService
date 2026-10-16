@@ -14,6 +14,32 @@ public sealed class RateRequestSlaTests
         AssertDeadline(RateRequestPriority.Green, 72);
     }
 
+    [TestMethod]
+    public void OverdueRequest_CanBeMarkedCompleted_WithoutResettingSla()
+    {
+        var request = RateRequest.Create(
+            RateRequestPriority.Red,
+            sellerUserId: Guid.NewGuid(),
+            sellerName: "Vendedor",
+            sellerEmail: "vendedor@example.com",
+            clientName: "Cliente",
+            executiveName: null,
+            shipmentMode: "Fcl",
+            originName: null,
+            destinationName: null,
+            payloadJson: "{}"
+        );
+        var originalDueAt = request.DueAtUtc;
+        var completedAfterDeadline = originalDueAt.AddMinutes(5);
+
+        request.MarkCompleted(completedAfterDeadline);
+        request.MarkCompleted(completedAfterDeadline.AddMinutes(1));
+
+        Assert.AreEqual(RateRequestStatus.Completed, request.Status);
+        Assert.AreEqual(completedAfterDeadline, request.CompletedAtUtc);
+        Assert.AreEqual(originalDueAt, request.DueAtUtc);
+    }
+
     private static void AssertDeadline(RateRequestPriority priority, int expectedHours)
     {
         var request = RateRequest.Create(
