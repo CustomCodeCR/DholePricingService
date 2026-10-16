@@ -518,7 +518,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 revisionNumber = Math.Max(1, rate.RevisionNumber),
                 idtraNumber = Text(rate.IdtraNumber, string.Empty),
                 clientName = Text(rate.ClientName),
-                agent = showAgent ? Text(rate.AgentName, "No asignado") : string.Empty,
+                agent = showAgent ? (UsesRsOriginAgent(rate) ? "RS" : Text(rate.AgentName, "No asignado")) : string.Empty,
                 showAgent,
                 carrier = showCarrier ? reportCarrierName : string.Empty,
                 showCarrier,
@@ -851,6 +851,37 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         return decimal.Round(total, 2, MidpointRounding.AwayFromZero);
     }
 
+    // ShipmentMode.Lcl is also used for air cargo. RS is the origin agent only
+    // for maritime own-consolidation LCL; the commercial source remains GCF.
+    private static bool IsAirLcl(RateHeader rate) =>
+        rate.ShipmentMode == ShipmentMode.Lcl &&
+        (rate.RateDetails.Any(detail =>
+            detail.CostDetailType == CostDetailType.Freight &&
+            detail.ChargeBasis is ChargeBasis.PerKg or ChargeBasis.Per100Kg)
+         || Regex.IsMatch(rate.CargoLinesJson ?? string.Empty,
+             @"a[eé]re[ao]|aviaci[oó]n|aeropuerto|airport|vuelos?",
+             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+         || (Regex.IsMatch(rate.PolName ?? string.Empty, @"\([A-Z]{3}\)")
+             && Regex.IsMatch(rate.PoeName ?? string.Empty, @"\([A-Z]{3}\)")));
+
+    private static bool UsesRsOriginAgent(RateHeader rate)
+    {
+        if (rate.ShipmentMode != ShipmentMode.Lcl || IsAirLcl(rate)) return false;
+        // Source notes identify modern LCL quotes and take precedence over legacy
+        // GCF header fields, so a GCF coloader cannot be mistaken for own LCL.
+        if (rate.RateDetails.Any(detail =>
+            detail.Notes?.Contains("LCL COLOADER", StringComparison.OrdinalIgnoreCase) == true))
+            return false;
+        if (rate.RateDetails.Any(detail =>
+            detail.Notes?.Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase) == true
+            || detail.Notes?.Contains("ConsolidadoId:", StringComparison.OrdinalIgnoreCase) == true))
+            return true;
+        // Old own LCL quotations did not always persist the source marker.
+        return string.Equals(rate.AgentCode?.Trim(), "GCF", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(rate.AgentName?.Trim(), "GCF", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(rate.AgentName?.Trim(), "Grupo Castro Fallas", StringComparison.OrdinalIgnoreCase);
+    }
+
     private string CreateOriginOfficePublicUrl(RateHeader rate)
     {
         var baseAddress = (configuration["Reports:PublicWebBaseAddress"] ?? "https://dhole.customcodecr.com")
@@ -867,10 +898,12 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             + $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
             + $"&route={Uri.EscapeDataString(routeKey)}";
 
-        if (!string.IsNullOrWhiteSpace(rate.AgentCode))
-            publicUrl += $"&agentCode={Uri.EscapeDataString(rate.AgentCode.Trim())}";
-        if (!string.IsNullOrWhiteSpace(rate.AgentName))
-            publicUrl += $"&agent={Uri.EscapeDataString(rate.AgentName.Trim())}";
+        var agentCode = UsesRsOriginAgent(rate) ? "RS" : rate.AgentCode;
+        var agentName = UsesRsOriginAgent(rate) ? "RS" : rate.AgentName;
+        if (!string.IsNullOrWhiteSpace(agentCode))
+            publicUrl += $"&agentCode={Uri.EscapeDataString(agentCode.Trim())}";
+        if (!string.IsNullOrWhiteSpace(agentName))
+            publicUrl += $"&agent={Uri.EscapeDataString(agentName.Trim())}";
 
         return publicUrl;
     }
