@@ -204,6 +204,58 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         // Filtrarlo para LCL propio eliminaba recolectas y otros cargos realmente cotizados.
         // La limpieza de costos de otro proveedor debe realizarse al cambiar la fuente
         // y guardar la tarifa, nunca silenciosamente al generar el documento.
+
+        // Each RateDetail owns its carrier label; the RateHeader carrier is only a
+        // legacy primary-provider value for quotes combining different navieras.
+        static string CarrierNote(string? notes, string key)
+        {
+            var match = Regex.Match(notes ?? string.Empty,
+                @"(?:^|[·\r\n])\s*" + Regex.Escape(key) + @"\s*:\s*([^·\r\n]+)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
+        }
+
+        string DetailNameWithCarrier(RateDetail detail, string description)
+        {
+            if (rate.ShipmentMode != ShipmentMode.Fcl || rate.RateContainers.Count < 2)
+                return description;
+            var carrier = CarrierNote(detail.Notes, "Naviera");
+            if (string.IsNullOrWhiteSpace(carrier)) return description;
+            var equipment = CarrierNote(detail.Notes, "Equipo");
+            if (string.IsNullOrWhiteSpace(equipment) && detail.CostDetailType == CostDetailType.Freight)
+            {
+                var match = Regex.Match(detail.Notes ?? string.Empty,
+                    @"Flete específico para\s+([^·\r\n]+)",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                if (match.Success) equipment = match.Groups[1].Value.Trim();
+            }
+            return string.IsNullOrWhiteSpace(equipment)
+                ? $"{description} · Naviera: {carrier}"
+                : $"{description} · Naviera: {carrier} · Equipo: {equipment}";
+        }
+
+        string ClientDetailNotes(RateDetail detail)
+        {
+            if (detail.CostDetailType == CostDetailType.Insurance) return string.Empty;
+            var notes = detail.Notes ?? string.Empty;
+            if (rate.ShipmentMode != ShipmentMode.Fcl || rate.RateContainers.Count < 2)
+                return notes.Trim();
+            notes = Regex.Replace(notes,
+                @"(?:^|\s*·\s*)(?:NavieraId|Naviera|Equipo|Tarifa importada)\s*:\s*[^·\r\n]+",
+                "", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return notes.Trim().Trim('·', ' ', '\r', '\n');
+        }
+
+        var freightCarrierNames = rate.ShipmentMode == ShipmentMode.Fcl
+            ? rate.RateDetails.Where(detail => detail.CostDetailType == CostDetailType.Freight)
+                .Select(detail => CarrierNote(detail.Notes, "Naviera"))
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+            : Array.Empty<string>();
+        var reportCarrierName = freightCarrierNames.Length > 1
+            ? string.Join(" / ", freightCarrierNames)
+            : Text(rate.CarrierName, "No asignada");
+
         var reportDetails = rate.RateDetails
             // Una recolecta seleccionada debe figurar aunque su precio siga en cero;
             // no inventamos importes ni mostramos otros conceptos automáticos sin precio.
@@ -255,7 +307,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             : reportDetails
                 .Select(detail => new
                 {
-                    description = ReportDetailName(detail),
+                    description = DetailNameWithCarrier(detail, ReportDetailName(detail)),
                     quantity = ReportQuantity(detail),
                     currency = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
                     currencyCode = detail.CurrencyCode,
@@ -266,9 +318,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     lineTaxAmount = LineTax(detail),
                     lineTotalWithTaxAmount = LineSubtotal(detail) + LineTax(detail),
                     destinationTaxLabel = TaxLabel(detail),
-                    notes = detail.CostDetailType == CostDetailType.Insurance
-                        ? string.Empty
-                        : Text(detail.Notes, string.Empty)
+                    notes = ClientDetailNotes(detail)
                 })
                 .ToArray();
 
@@ -405,14 +455,12 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             : reportDetails
                 .Select(detail => new Dictionary<string, object?>
                 {
-                    ["Concepto"] = ReportDetailName(detail),
+                    ["Concepto"] = DetailNameWithCarrier(detail, ReportDetailName(detail)),
                     ["Cantidad"] = ReportQuantity(detail),
                     ["Moneda"] = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
                     ["Precio unitario"] = detail.SaleAmount,
                     ["Total"] = detail.SaleAmount * ReportQuantity(detail),
-                    ["Notas"] = detail.CostDetailType == CostDetailType.Insurance
-                        ? string.Empty
-                        : detail.Notes
+                    ["Notas"] = ClientDetailNotes(detail)
                 })
                 .ToArray();
 
@@ -452,7 +500,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 clientName = Text(rate.ClientName),
                 agent = showAgent ? reportAgentName : string.Empty,
                 showAgent,
-                carrier = showCarrier ? Text(rate.CarrierName, "No asignada") : string.Empty,
+                carrier = showCarrier ? reportCarrierName : string.Empty,
                 showCarrier,
                 pol = rate.PolName,
                 poe = rate.PoeName,
