@@ -33,6 +33,8 @@ public static class RateRequestEndpoints
             .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapPost("/{id:guid}/attach-rate", AttachRateAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
+        group.MapPost("/{id:guid}/complete", CompleteAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
 
         return app;
     }
@@ -182,6 +184,7 @@ public static class RateRequestEndpoints
                 .AsNoTracking()
                 .Where(x => linkedRateIds.Contains(x.Id)
                     && (x.Status == RateStatus.Sent
+                        || x.Status == RateStatus.Expired
                         || x.Status == RateStatus.AcceptedByClient
                         || x.Status == RateStatus.RejectedByClient
                         || x.Status == RateStatus.Closed))
@@ -220,6 +223,25 @@ public static class RateRequestEndpoints
         if (!rateExists) return Results.BadRequest(new { message = "La tarifa indicada no existe." });
 
         entity.AttachRate(request.RateId);
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+
+    // DueAtUtc es el plazo SLA y no debe impedir completar una solicitud atrasada.
+    // El cierre manual sólo cambia el estado; complete-rate envía la cotización PDF.
+    private static async Task<IResult> CompleteAsync(
+        Guid id,
+        ServiceDbContext db,
+        CancellationToken ct
+    )
+    {
+        var entity = await db.RateRequests.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (entity is null) return Results.NotFound();
+        if (entity.Status == RateRequestStatus.Completed) return Results.NoContent();
+        if (entity.Status != RateRequestStatus.Open)
+            return Results.Conflict(new { message = "Sólo una solicitud abierta puede completarse." });
+
+        entity.MarkCompleted(DateTime.UtcNow);
         await db.SaveChangesAsync(ct);
         return Results.NoContent();
     }
