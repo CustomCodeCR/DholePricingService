@@ -10,8 +10,8 @@ namespace Dhole.Pricing.Persistence.Migrations;
 public sealed class AddPerUnitContainerWeights : Migration
 {
     protected override void Up(MigrationBuilder builder) =>
-        builder.AddColumn<string>("unit_weights_kg_json", "pricing", "RateContainerAllocations",
-            type: "text", nullable: false, defaultValue: "[]");
+        builder.AddColumn<string>(name: "unit_weights_kg_json", schema: "pricing",
+            table: "RateContainerAllocations", type: "text", nullable: false, defaultValue: "[]");
     protected override void Down(MigrationBuilder builder) =>
-        builder.DropColumn("unit_weights_kg_json", "pricing", "RateContainerAllocations");
+        builder.DropColumn(name: "unit_weights_kg_json", schema: "pricing", table: "RateContainerAllocations");
 }
