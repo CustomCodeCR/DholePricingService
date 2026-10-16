@@ -38,6 +38,8 @@ internal sealed class CompetitorTariffConfiguration : IEntityTypeConfiguration<C
         builder.Property(x => x.ObservationCount).HasColumnName("ObservationCount").IsRequired();
         builder.Property(x => x.ReviewCount).HasColumnName("ReviewCount").IsRequired();
         builder.Property(x => x.ImportStatus).HasMaxLength(40).HasColumnName("ImportStatus").IsRequired();
+        builder.Property(x => x.ImportErrorCode).HasMaxLength(120).HasColumnName("ImportErrorCode");
+        builder.Property(x => x.ImportErrorMessage).HasMaxLength(2000).HasColumnName("ImportErrorMessage");
         builder
             .Property(x => x.ImportedAtUtc)
             .HasColumnType("timestamp with time zone")
