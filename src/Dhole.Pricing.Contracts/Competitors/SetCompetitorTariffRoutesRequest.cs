@@ -6,5 +6,6 @@ namespace Dhole.Pricing.Contracts.Competitors;
 /// </summary>
 public sealed record SetCompetitorTariffRoutesRequest(
     IReadOnlyCollection<Guid> PolIds,
-    Guid PoeId
+    Guid PoeId = default,
+    IReadOnlyCollection<Guid>? PoeIds = null
 );

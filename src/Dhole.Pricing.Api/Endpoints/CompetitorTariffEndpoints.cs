@@ -228,12 +228,22 @@ public static class CompetitorTariffEndpoints
             // (older deployments kept only a volatile in-memory copy of the PDF).
             var payloadExists = await dbContext.CompetitorTariffImportPayloads
                 .AnyAsync(x => x.CompetitorTariffId == id, cancellationToken);
-            if (existing.ImportStatus is "Processed" or "ReviewRequired" or "Legacy"
+            // Re-extract legacy competitor matrices with ALL rows needing
+            // review (e.g. MGF's truncated printed expiry year). Never replace
+            // already approved/usable observations or any manually corrected row.
+            var canReprocessUnreviewed = existing.ImportStatus == "ReviewRequired"
+                && existing.ObservationCount > 0
+                && existing.ReviewCount == existing.ObservationCount
+                && !await dbContext.CompetitorRateObservations
+                    .AnyAsync(x => x.CompetitorTariffId == id
+                        && x.ExtractionConfidence >= 1m, cancellationToken);
+            if (existing.ImportStatus is "Processed" or "Legacy"
+                || (existing.ImportStatus == "ReviewRequired" && !canReprocessUnreviewed)
                 || (existing.ImportStatus == "Processing" && payloadExists
                     && DateTime.UtcNow - existing.ImportedAtUtc < TimeSpan.FromMinutes(2)))
                 return EndpointResults.Ok(Map(existing));
 
-            if (existing.ImportStatus is not ("Processing" or "Failed"))
+            if (existing.ImportStatus is not ("Processing" or "Failed" or "ReviewRequired"))
                 return Results.Conflict(new { code = "CompetitorTariff.CannotRetry", status = existing.ImportStatus });
 
             existing.RetryImport();
@@ -759,7 +769,9 @@ public static class CompetitorTariffEndpoints
             entity.ExtractionConfidence,
             entity.NormalizationConfidence,
             usable,
-            !usable
+            !usable,
+            CompetitorTariffRouteOverride.ReadOriginalPort(entity.RawPayloadJson, "OriginPort"),
+            CompetitorTariffRouteOverride.ReadOriginalPort(entity.RawPayloadJson, "PortOfExit")
         );
     }
 
