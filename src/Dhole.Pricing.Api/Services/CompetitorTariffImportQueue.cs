@@ -16,7 +16,7 @@ public sealed record CompetitorTariffImportWorkItem(
     ShipmentMode ShipmentMode, DateTime? FallbackFrom, DateTime? FallbackTo,
     string OriginalFileName, string? ContentType, string? FileExtension,
     long FileSizeBytes, string FileHash, Guid? RequestedBy,
-    string? RequestedByName, byte[] FileContent, Guid StorageId);
+    string? RequestedByName, byte[] FileContent, Guid StorageId = default);
 
 public sealed class CompetitorExtractionException(
     string code, string? message, Guid? executionId, bool transient)
