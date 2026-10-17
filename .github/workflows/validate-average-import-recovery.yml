@@ -44,6 +44,6 @@ jobs:
           dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile NuGet.Config
           dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --no-restore -c Release --verbosity minimal
           dotnet tool install --tool-path "${RUNNER_TEMP}/ef" dotnet-ef --version 10.0.9
-          "${RUNNER_TEMP}/ef/dotnet-ef" migrations has-pending-model-changes --no-build -c Release \
+          "${RUNNER_TEMP}/ef/dotnet-ef" migrations has-pending-model-changes --no-build --configuration Release \
             --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
             --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj
