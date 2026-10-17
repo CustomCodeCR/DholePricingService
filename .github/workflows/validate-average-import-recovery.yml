@@ -10,7 +10,9 @@ on:
       - 'src/Dhole.Pricing.Api/Endpoints/CompetitorTariffEndpoints.cs'
       - 'src/Dhole.Pricing.Domain/Competitors/Entities/**'
       - 'src/Dhole.Pricing.Persistence/Configurations/Competitors/**'
-      - 'src/Dhole.Pricing.Persistence/Migrations/20261015171500_DurableCompetitorPdfImports.cs'
+      - 'src/Dhole.Pricing.Persistence/Migrations/**'
+      - 'src/Dhole.Pricing.Application/MarketPricing/Normalization/MarketCatalogNormalizer.cs'
+      - 'src/Dhole.Pricing.Infrastructure/GrpcClients/DataExtractionFclPricingGrpcClient.cs'
       - 'tests/Dhole.Pricing.CompetitorPdfTests/**'
       - '.github/workflows/validate-average-import-recovery.yml'
 permissions:
@@ -33,3 +35,15 @@ jobs:
           export NuGetPackageSourceCredentials_github="Username=${GITHUB_ACTOR};Password=${GITHUB_TOKEN};ValidAuthenticationTypes=Basic"
           dotnet restore tests/Dhole.Pricing.CompetitorPdfTests/Dhole.Pricing.CompetitorPdfTests.csproj --configfile NuGet.Config
           dotnet test tests/Dhole.Pricing.CompetitorPdfTests/Dhole.Pricing.CompetitorPdfTests.csproj -c Release --no-restore --verbosity normal
+      - name: Verify EF model snapshot matches migrations (deployment gate)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          export NuGetPackageSourceCredentials_github="Username=${GITHUB_ACTOR};Password=${GITHUB_TOKEN};ValidAuthenticationTypes=Basic"
+          dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile NuGet.Config
+          dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --no-restore -c Release --verbosity minimal
+          dotnet tool install --tool-path "${RUNNER_TEMP}/ef" dotnet-ef --version 10.0.9
+          "${RUNNER_TEMP}/ef/dotnet-ef" migrations has-pending-model-changes --no-build -c Release \
+            --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
+            --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj
