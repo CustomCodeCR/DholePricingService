@@ -78,6 +78,12 @@ internal static class CompetitorTariffRouteOverride
             .Select(x => x.First())
             .ToArray();
         var replacements = new List<CompetitorRateObservation>();
+        if (sourceRows.Length == 1 && polIds.Length == 0)
+            return EndpointResults.BadRequest(
+                "CompetitorTariff.MissingPol",
+                "Seleccione al menos un POL para ampliar una cotización de una sola ruta.",
+                httpContext
+            );
 
         foreach (var source in sourceRows)
         {
@@ -129,7 +135,9 @@ internal static class CompetitorTariffRouteOverride
                     || !normalized.Incoterm.Matched
                     || (source.Mode is ShipmentMode.Fcl or ShipmentMode.Ftl
                         && !normalized.Equipment.Matched)
-                    || !normalized.Success)
+                    || normalized.Issues.Any(issue => issue.IsBlocking
+                        && !(sourceRows.Length > 1
+                            && issue.Code is "missing_pol" or "unresolved_pol" or "unresolved_pol_ambiguous")))
                 {
                     return EndpointResults.BadRequest(
                         "CompetitorTariff.RouteNormalizationFailed",
