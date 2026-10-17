@@ -32,6 +32,7 @@ public sealed class DataExtractionFclPricingGrpcClient(
                 RequestedBy = request.RequestedBy?.ToString() ?? string.Empty,
                 RequestedByName = request.RequestedByName ?? string.Empty,
                 FileContent = ByteString.CopyFrom(request.FileContent),
+                StoragePath = request.StoragePath ?? string.Empty,
             };
             var timeoutSeconds = ResolveTimeoutSeconds(configuration, request);
 
