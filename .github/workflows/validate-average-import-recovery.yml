@@ -8,6 +8,8 @@ on:
     paths:
       - 'src/Dhole.Pricing.Api/Services/CompetitorTariffImportQueue.cs'
       - 'src/Dhole.Pricing.Api/Endpoints/CompetitorTariffEndpoints.cs'
+      - 'src/Dhole.Pricing.Api/Endpoints/CompetitorTariffRouteOverride.cs'
+      - 'src/Dhole.Pricing.Contracts/Competitors/**'
       - 'src/Dhole.Pricing.Domain/Competitors/Entities/**'
       - 'src/Dhole.Pricing.Persistence/Configurations/Competitors/**'
       - 'src/Dhole.Pricing.Persistence/Migrations/**'

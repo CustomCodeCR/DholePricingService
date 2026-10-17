@@ -399,6 +399,15 @@ public sealed class CompetitorTariffImportProcessor(
                 ? "ReviewRequired"
                 : "Processed";
 
+            // Re-imports replace the source's prior unreviewed observations
+            // atomically with the new extraction. Never append duplicate
+            // market samples for the same source PDF after a format fix.
+            var priorRows = await dbContext.CompetitorRateObservations
+                .Where(x => x.CompetitorTariffId == workItem.CompetitorTariffId)
+                .ToArrayAsync(cancellationToken);
+            if (priorRows.Length > 0)
+                dbContext.CompetitorRateObservations.RemoveRange(priorRows);
+
             entity.CompleteImport(
                 observations.Where(x => x.PolId.HasValue).Select(x => x.PolId!.Value).ToArray(),
                 observations.Where(x => x.PoeId.HasValue).Select(x => x.PoeId!.Value).ToArray(),

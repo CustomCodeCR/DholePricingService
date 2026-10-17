@@ -184,6 +184,19 @@ internal sealed class MarketCatalogNormalizer(IPricingConfigCatalogClient catalo
             {
                 return 0.90m;
             }
+
+            // Port catalogs often use "Puerto Moín, Limón, Costa Rica" or
+            // "Port of Shanghai, China" while the source PDF says only
+            // "MOIN"/"SHANGHAI". Match whole words, not arbitrary substrings.
+            // The caller rejects ties (e.g. different terminals with the same
+            // short name), avoiding guessing between ambiguous ports.
+            if (item.CatalogGroupSlug is "pol" or "poe" or "pod" or "ports")
+            {
+                var wholeName = " " + target + " ";
+                if (candidates.Any(candidate =>
+                        (" " + candidate + " ").Contains(wholeName, StringComparison.Ordinal)))
+                    return 0.88m;
+            }
         }
 
         return 0m;
