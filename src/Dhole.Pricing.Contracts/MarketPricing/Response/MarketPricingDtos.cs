@@ -32,7 +32,8 @@ public sealed record MarketBenchmarkObservationDto(
     bool IsOutlier,
     bool WasIncluded,
     string? ExclusionReason,
-    string? OutlierReason
+    string? OutlierReason,
+    Guid? CompetitorTariffId = null
 );
 
 public sealed record MarketBenchmarkDto(
