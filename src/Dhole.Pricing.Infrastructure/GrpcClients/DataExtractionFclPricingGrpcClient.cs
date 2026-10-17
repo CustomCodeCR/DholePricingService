@@ -33,10 +33,7 @@ public sealed class DataExtractionFclPricingGrpcClient(
                 RequestedByName = request.RequestedByName ?? string.Empty,
                 FileContent = ByteString.CopyFrom(request.FileContent),
             };
-            var timeoutSeconds = ReadPositiveInt(
-                configuration["Grpc:Clients:DataExtraction:TimeoutSeconds"],
-                1020
-            );
+            var timeoutSeconds = ResolveTimeoutSeconds(configuration, request);
 
             var response = await client.ExtractFclPricingDataAsync(
                 grpcRequest,
@@ -67,10 +64,7 @@ public sealed class DataExtractionFclPricingGrpcClient(
         }
         catch (RpcException exception) when (exception.StatusCode == StatusCode.DeadlineExceeded)
         {
-            var timeoutSeconds = ReadPositiveInt(
-                configuration["Grpc:Clients:DataExtraction:TimeoutSeconds"],
-                1020
-            );
+            var timeoutSeconds = ResolveTimeoutSeconds(configuration, request);
             return Failure(
                 request,
                 "Grpc.DeadlineExceeded",
@@ -216,6 +210,19 @@ public sealed class DataExtractionFclPricingGrpcClient(
     private static string? EmptyToNull(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static int ResolveTimeoutSeconds(
+        IConfiguration configuration,
+        DataExtractionFclPricingRequest request)
+    {
+        // A failed competitor import must not wait 17 minutes for each of three
+        // gRPC attempts. PDFs take the deterministic extraction path, not AI.
+        if (string.Equals(request.ProfileCode, "COMPETITOR_FCL", StringComparison.OrdinalIgnoreCase))
+            return ReadPositiveInt(
+                configuration["Grpc:Clients:DataExtraction:CompetitorTimeoutSeconds"], 120);
+        return ReadPositiveInt(
+            configuration["Grpc:Clients:DataExtraction:TimeoutSeconds"], 1020);
     }
 
     private static int ReadPositiveInt(string? value, int fallback)
