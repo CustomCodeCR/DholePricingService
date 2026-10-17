@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Services;
@@ -6,6 +7,24 @@ namespace Dhole.Pricing.Application.MarketPricing.Normalization;
 
 internal sealed class MarketCatalogNormalizer(IPricingConfigCatalogClient catalogClient)
 {
+    // This service is scoped to an import. The same Chinese port, carrier and
+    // equipment are otherwise resolved hundreds of times via Config gRPC.
+    // Cache only for the current scope so catalog edits affect the next import.
+    private readonly ConcurrentDictionary<Guid, Lazy<Task<PricingConfigCatalogItem?>>> _idCache = new();
+    private readonly ConcurrentDictionary<string, Lazy<Task<IReadOnlyCollection<PricingConfigCatalogItem>>>> _groupCache =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private Task<PricingConfigCatalogItem?> ResolveIdCachedAsync(Guid id, CancellationToken ct) =>
+        _idCache.GetOrAdd(id, key =>
+            new Lazy<Task<PricingConfigCatalogItem?>>(
+                () => catalogClient.GetActiveByIdAsync(key, ct))).Value;
+
+    private Task<IReadOnlyCollection<PricingConfigCatalogItem>> ResolveGroupCachedAsync(
+        string group, CancellationToken ct) =>
+        _groupCache.GetOrAdd(group, key =>
+            new Lazy<Task<IReadOnlyCollection<PricingConfigCatalogItem>>>(
+                () => catalogClient.GetActiveByGroupAsync(key, ct))).Value;
+
     public async Task<MarketCatalogMatch> ResolveAsync(
         Guid? id,
         string? rawValue,
@@ -17,7 +36,7 @@ internal sealed class MarketCatalogNormalizer(IPricingConfigCatalogClient catalo
     {
         if (id.HasValue && id.Value != Guid.Empty)
         {
-            var item = await catalogClient.GetActiveByIdAsync(id.Value, cancellationToken);
+            var item = await ResolveIdCachedAsync(id.Value, cancellationToken);
             if (
                 item is not null
                 && acceptedGroups.Contains(item.CatalogGroupSlug, StringComparer.OrdinalIgnoreCase)
@@ -99,7 +118,7 @@ internal sealed class MarketCatalogNormalizer(IPricingConfigCatalogClient catalo
 
         foreach (var group in groups.Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            var rows = await catalogClient.GetActiveByGroupAsync(group, cancellationToken);
+            var rows = await ResolveGroupCachedAsync(group, cancellationToken);
             foreach (var row in rows)
             {
                 byId[row.Id] = row;
