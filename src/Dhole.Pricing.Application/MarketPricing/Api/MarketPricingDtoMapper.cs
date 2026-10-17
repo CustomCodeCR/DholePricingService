@@ -199,7 +199,8 @@ internal static class MarketPricingDtoMapper
             observation.IsOutlier,
             observation.WasIncluded,
             observation.ExclusionReason,
-            observation.OutlierReason
+            observation.OutlierReason,
+            entity?.CompetitorTariffId
         );
 
     private static MarketBenchmarkObservationDto ToDto(
@@ -239,6 +240,7 @@ internal static class MarketPricingDtoMapper
             row.IsOutlier,
             row.WasIncluded,
             row.ExclusionReason,
-            row.IsOutlier ? row.ExclusionReason : null
+            row.IsOutlier ? row.ExclusionReason : null,
+            entity?.CompetitorTariffId
         );
 }
