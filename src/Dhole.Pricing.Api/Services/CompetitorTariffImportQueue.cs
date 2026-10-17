@@ -35,7 +35,7 @@ public sealed class CompetitorTariffImportWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<CompetitorTariffImportWorker> logger) : BackgroundService
 {
-    private const int MaxAttempts = 3;
+    private const int MaxAttempts = 2;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
