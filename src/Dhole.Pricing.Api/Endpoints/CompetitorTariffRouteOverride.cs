@@ -1,4 +1,7 @@
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
+using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Abstractions.MarketPricing;
 using Dhole.Pricing.Application.MarketPricing.Normalization;
 using Dhole.Pricing.Contracts.Competitors;
@@ -22,6 +25,7 @@ internal static class CompetitorTariffRouteOverride
         SetCompetitorTariffRoutesRequest request,
         ServiceDbContext dbContext,
         IMarketRateNormalizationService normalizationService,
+        IPricingConfigCatalogClient catalogClient,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -46,6 +50,22 @@ internal static class CompetitorTariffRouteOverride
                 "No se permiten POL duplicados.",
                 httpContext
             );
+
+        // Restrict route normalization to the explicitly selected Config origins.
+        var selectedPols = new List<PricingConfigCatalogItem>(polIds.Length);
+        foreach (var id in polIds)
+        {
+            var item = await catalogClient.GetActiveByIdAsync(id, cancellationToken);
+            if (item is null
+                || !(item.CatalogGroupSlug.Equals("pol", StringComparison.OrdinalIgnoreCase)
+                    || item.CatalogGroupSlug.Equals("ports", StringComparison.OrdinalIgnoreCase)))
+                return EndpointResults.BadRequest(
+                    "CompetitorTariff.InvalidPol",
+                    "Uno de los POL seleccionados no existe o no está activo en Config.",
+                    httpContext
+                );
+            selectedPols.Add(item);
+        }
 
         var tariff = await dbContext.CompetitorTariffs
             .FirstOrDefaultAsync(x => x.Id == competitorTariffId, cancellationToken);
@@ -94,7 +114,7 @@ internal static class CompetitorTariffRouteOverride
             var originalPol = ReadOriginalPort(source.RawPayloadJson, "OriginPort");
             var sourcePolIds = sourceRows.Length == 1
                 ? polIds.Cast<Guid?>().ToArray()
-                : new Guid?[] { source.PolId };
+                : new Guid?[] { MatchSelectedPol(originalPol, source.PolId, selectedPols) };
             foreach (var polId in sourcePolIds)
             {
                 foreach (var poeId in poeIds)
@@ -104,7 +124,7 @@ internal static class CompetitorTariffRouteOverride
                         source.IncotermId ?? tariff.IncotermId,
                         source.IncotermCode,
                         polId,
-                        polId.HasValue ? null : originalPol,
+                        null, // Never silently substitute an unselected origin.
                         poeId,
                         null,
                         null, // POE is the destination endpoint; no POD on this quote.
@@ -245,6 +265,90 @@ internal static class CompetitorTariffRouteOverride
             reviewCount = toReview,
             manuallyOverridden = true
         });
+    }
+
+    // For a multi-origin matrix, match every original source row to its
+    // selected Config POL. An ambiguous/unmatched row remains in review:
+    // the selected origins are NOT copied to other carriers' routes.
+    internal static Guid? MatchSelectedPol(
+        string? originalPol,
+        Guid? existingPolId,
+        IReadOnlyCollection<PricingConfigCatalogItem> selectedPols)
+    {
+        var source = NormalizePort(originalPol);
+        if (source.Length > 0)
+        {
+            var matches = selectedPols.Where(port => PortMatches(source, port)).ToArray();
+            if (matches.Length == 1) return matches[0].Id;
+        }
+        return existingPolId.HasValue && selectedPols.Any(port => port.Id == existingPolId.Value)
+            ? existingPolId : null;
+    }
+
+    private static bool PortMatches(string source, PricingConfigCatalogItem item)
+    {
+        var labels = new[] { item.Name, item.Value, item.Slug, item.Code }
+            .Where(value => !string.IsNullOrWhiteSpace(value));
+        foreach (var label in labels.Concat(ReadPortAliases(item.MetadataJson)))
+        {
+            var candidate = NormalizePort(label);
+            if (candidate.Length == 0) continue;
+            if (candidate == source
+                || candidate.StartsWith(source + " ", StringComparison.Ordinal)
+                || source.StartsWith(candidate + " ", StringComparison.Ordinal)
+                || (" " + candidate + " ").Contains(" " + source + " ", StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
+    private static IReadOnlyCollection<string> ReadPortAliases(string? metadata)
+    {
+        if (string.IsNullOrWhiteSpace(metadata)) return Array.Empty<string>();
+        try
+        {
+            using var doc = JsonDocument.Parse(metadata);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return Array.Empty<string>();
+            var aliases = new List<string>();
+            foreach (var property in doc.RootElement.EnumerateObject())
+            {
+                if (NormalizePort(property.Name).Replace(" ", "", StringComparison.Ordinal)
+                    is not ("ALIAS" or "ALIASES" or "SYNONYM" or "SYNONYMS"
+                        or "ALTERNATENAME" or "ALTERNATENAMES" or "UNLOCODE"))
+                    continue;
+                if (property.Value.ValueKind == JsonValueKind.String)
+                {
+                    var value = property.Value.GetString();
+                    if (!string.IsNullOrWhiteSpace(value)) aliases.Add(value);
+                }
+                else if (property.Value.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var alias in property.Value.EnumerateArray())
+                        if (alias.ValueKind == JsonValueKind.String
+                            && !string.IsNullOrWhiteSpace(alias.GetString()))
+                            aliases.Add(alias.GetString()!);
+                }
+            }
+            return aliases;
+        }
+        catch (JsonException) { return Array.Empty<string>(); }
+    }
+
+    private static string NormalizePort(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var builder = new StringBuilder();
+        var separator = false;
+        foreach (var ch in value.Normalize(NormalizationForm.FormD))
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(ch) == UnicodeCategory.NonSpacingMark)
+                continue;
+            if (!char.IsLetterOrDigit(ch)) { separator = true; continue; }
+            if (separator && builder.Length > 0) builder.Append(' ');
+            builder.Append(char.ToUpperInvariant(ch));
+            separator = false;
+        }
+        return builder.ToString();
     }
 
     internal static string? ReadOriginalPort(string? json, string key)
