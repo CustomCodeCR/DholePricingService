@@ -16,7 +16,7 @@ public sealed record CompetitorTariffImportWorkItem(
     ShipmentMode ShipmentMode, DateTime? FallbackFrom, DateTime? FallbackTo,
     string OriginalFileName, string? ContentType, string? FileExtension,
     long FileSizeBytes, string FileHash, Guid? RequestedBy,
-    string? RequestedByName, byte[] FileContent);
+    string? RequestedByName, byte[] FileContent, Guid StorageId);
 
 public sealed class CompetitorExtractionException(
     string code, string? message, Guid? executionId, bool transient)
@@ -101,7 +101,7 @@ public sealed class CompetitorTariffImportWorker(
             tariff.OriginalFileName ?? "competitor.pdf", payload.ContentType,
             Path.GetExtension(tariff.OriginalFileName),
             payload.FileContent.LongLength, payload.FileHash,
-            payload.RequestedBy, payload.RequestedByName, payload.FileContent);
+            payload.RequestedBy, payload.RequestedByName, payload.FileContent, tariff.StorageId);
         try
         {
             await scope.ServiceProvider.GetRequiredService<CompetitorTariffImportProcessor>()
@@ -194,7 +194,9 @@ public sealed class CompetitorTariffImportProcessor(
                     workItem.ShipmentMode == ShipmentMode.Fcl ? "COMPETITOR_FCL" : null,
                     workItem.RequestedBy,
                     workItem.RequestedByName,
-                    workItem.FileContent
+                    workItem.FileContent,
+                    workItem.StorageId != Guid.Empty
+                        ? $"storage://{workItem.StorageId:D}" : null
                 ),
                 cancellationToken
             );
