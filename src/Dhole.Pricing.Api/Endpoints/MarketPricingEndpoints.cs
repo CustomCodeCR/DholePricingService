@@ -14,6 +14,9 @@ using Dhole.Pricing.Contracts.MarketPricing.Request;
 using Dhole.Pricing.Domain.MarketPricing.Models;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
+using Dhole.Pricing.Domain.MarketPricing.Entities;
+using Dhole.Pricing.Persistence.DbContexts;
+using Microsoft.EntityFrameworkCore;
 
 namespace Dhole.Pricing.Api.Endpoints;
 
@@ -33,6 +36,11 @@ public static class MarketPricingEndpoints
 
         benchmark
             .MapPost("/calculate", CalculateMarketBenchmarkAsync)
+            .RequireScope(PricingConstants.Scopes.MarketBenchmarkCalculate);
+
+        // Read-only coverage explanation; pricing eligibility is never relaxed.
+        benchmark
+            .MapPost("/coverage", DiagnoseMarketCoverageAsync)
             .RequireScope(PricingConstants.Scopes.MarketBenchmarkCalculate);
 
         var rates = app
@@ -152,6 +160,122 @@ public static class MarketPricingEndpoints
         );
 
         return EndpointResults.FromResult(result, httpContext);
+    }
+
+
+    // Show why newly imported competitor PDFs have not reached Average.
+    // The main benchmark remains authoritative: this endpoint never prices,
+    // approves, changes or inserts any observation.
+    private static async Task<IResult> DiagnoseMarketCoverageAsync(
+        CalculateMarketBenchmarkRequest request,
+        ServiceDbContext dbContext,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        if (request.PolId == Guid.Empty || request.IncotermId == Guid.Empty
+            || !TryParseDefinedEnum(request.Mode, out ShipmentMode mode))
+            return EndpointResults.BadRequest(
+                "Pricing.MarketCoverageInvalidKey",
+                "Indique modalidad, Incoterm y POL válidos para diagnosticar Average.",
+                httpContext);
+
+        var referenceDate = ResolveActiveComparisonDate(request.ReferenceDate).Date;
+        var upcomingDate = referenceDate.AddDays(7);
+
+        // Examine recent source documents rather than only the POL-indexed
+        // market candidates. A missing POL must not disappear from diagnostics.
+        var imports = await dbContext.CompetitorTariffs
+            .AsNoTracking()
+            .Where(x => x.ShipmentMode == mode)
+            .OrderByDescending(x => x.ImportedAtUtc)
+            .Take(50)
+            .ToArrayAsync(cancellationToken);
+
+        var ids = imports.Select(x => x.Id).ToArray();
+        var observations = ids.Length == 0
+            ? Array.Empty<CompetitorRateObservation>()
+            : await dbContext.CompetitorRateObservations
+                .AsNoTracking()
+                .Where(x => x.CompetitorTariffId.HasValue
+                    && ids.Contains(x.CompetitorTariffId.Value))
+                .ToArrayAsync(cancellationToken);
+
+        string? Explain(CompetitorRateObservation row)
+        {
+            if (row.ExtractionConfidence <= 0m)
+                return "Pendiente de revisión de extracción, moneda o vigencia";
+            if (row.PolId != request.PolId)
+                return row.PolId.HasValue ? "POL distinto al seleccionado" : "POL sin normalizar";
+            if (request.ContainerTypeId.HasValue && row.ContainerTypeId != request.ContainerTypeId)
+                return row.ContainerTypeId.HasValue ? "Equipo diferente" : "Equipo sin normalizar";
+            if (row.IncotermId != request.IncotermId)
+                return row.IncotermId.HasValue ? "Incoterm diferente" : "Incoterm sin normalizar";
+            if (request.PoeId.HasValue && row.PoeId.HasValue && row.PoeId != request.PoeId)
+                return "POE diferente";
+            if (request.PodId.HasValue && row.PodId.HasValue && row.PodId != request.PodId)
+                return "POD diferente";
+            if (row.ValidTo.Date < referenceDate)
+                return "Tarifa vencida";
+            if (row.ValidFrom.Date > upcomingDate)
+                return "Vigencia todavía no aplicable";
+            if (!string.Equals(row.NormalizedCurrency, "USD", StringComparison.OrdinalIgnoreCase)
+                || (!row.NormalizedAllIn.HasValue && !row.NormalizedOceanFreight.HasValue
+                    && !row.NormalizedAmount.HasValue))
+                return "Monto USD sin normalizar";
+            if (!row.NormalizedAllIn.HasValue)
+                return "Falta total comparable ALL IN";
+            return null;
+        }
+
+        var grouped = observations
+            .Where(x => x.CompetitorTariffId.HasValue)
+            .GroupBy(x => x.CompetitorTariffId!.Value)
+            .ToDictionary(x => x.Key, x => x.ToArray());
+
+        var documents = imports.Select(source =>
+        {
+            var rows = grouped.GetValueOrDefault(source.Id) ?? [];
+            var reasons = rows.Select(Explain).ToArray();
+            var accepted = reasons.Count(reason => reason is null);
+            var commonReason = reasons
+                .Where(reason => reason is not null)
+                .GroupBy(reason => reason!)
+                .OrderByDescending(group => group.Count())
+                .Select(group => group.Key)
+                .FirstOrDefault();
+
+            if (rows.Length == 0)
+                commonReason = source.ImportStatus == "Processing"
+                    ? "Extracción en proceso"
+                    : source.ImportStatus == "Failed"
+                        ? "La extracción falló"
+                        : "Sin observaciones extraídas";
+
+            return new
+            {
+                competitorTariffId = source.Id,
+                competitorCompanyName = source.CompetitorCompanyName,
+                originalFileName = source.OriginalFileName,
+                importStatus = source.ImportStatus,
+                observationCount = rows.Length,
+                matchingPolCount = rows.Count(row => row.PolId == request.PolId),
+                eligibleCount = accepted,
+                mainReason = accepted == rows.Length && rows.Length > 0
+                    ? (string?)null : commonReason,
+            };
+        }).ToArray();
+
+        return EndpointResults.Ok(new
+        {
+            referenceDate,
+            selectedPolId = request.PolId,
+            selectedPoeId = request.PoeId,
+            selectedEquipmentId = request.ContainerTypeId,
+            documentsExamined = documents.Length,
+            eligibleObservations = documents.Sum(x => x.eligibleCount),
+            documents,
+        });
     }
 
     private static async Task<IResult> GetRateMarketBenchmarkAsync(
