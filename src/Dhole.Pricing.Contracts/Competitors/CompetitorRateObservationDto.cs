@@ -30,5 +30,7 @@ public sealed record CompetitorRateObservationDto(
     decimal ExtractionConfidence,
     decimal NormalizationConfidence,
     bool IsUsable,
-    bool NeedsReview
+    bool NeedsReview,
+    string? SourcePol = null,
+    string? SourcePoe = null
 );
