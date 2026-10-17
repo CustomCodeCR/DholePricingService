@@ -26,12 +26,16 @@ internal static class CompetitorTariffRouteOverride
         CancellationToken cancellationToken
     )
     {
-        if (request.PolIds is null || request.PolIds.Count is < 1 or > 25
+        var poeIds = request.PoeIds is { Count: > 0 }
+            ? request.PoeIds.Distinct().ToArray()
+            : request.PoeId != Guid.Empty ? [request.PoeId] : Array.Empty<Guid>();
+        if (request.PolIds is null || request.PolIds.Count > 25
             || request.PolIds.Any(x => x == Guid.Empty)
-            || request.PoeId == Guid.Empty)
+            || poeIds.Length is < 1 or > 10
+            || poeIds.Any(x => x == Guid.Empty))
             return EndpointResults.BadRequest(
                 "CompetitorTariff.InvalidRouteOverride",
-                "Seleccione entre 1 y 25 POL y un POE válido. El POD permanecerá vacío.",
+                "Seleccione hasta 25 POL y entre 1 y 10 POE válidos. El POD permanecerá vacío.",
                 httpContext
             );
 
@@ -77,15 +81,25 @@ internal static class CompetitorTariffRouteOverride
 
         foreach (var source in sourceRows)
         {
-            foreach (var polId in polIds)
+            // Single-row quotes may deliberately expand commercial coverage.
+            // A 96-row MGF matrix already identifies each published POL and
+            // must NEVER be multiplied by all selected origins: prices differ
+            // by carrier and origin.
+            var originalPol = ReadOriginalPort(source.RawPayloadJson, "OriginPort");
+            var sourcePolIds = sourceRows.Length == 1
+                ? polIds.Cast<Guid?>().ToArray()
+                : new Guid?[] { source.PolId };
+            foreach (var polId in sourcePolIds)
             {
+                foreach (var poeId in poeIds)
+                {
                 var normalized = await normalizationService.NormalizeAsync(
                     new MarketRateNormalizationRequest(
                         source.IncotermId ?? tariff.IncotermId,
                         source.IncotermCode,
                         polId,
-                        null,
-                        request.PoeId,
+                        polId.HasValue ? null : originalPol,
+                        poeId,
                         null,
                         null, // POE is the destination endpoint; no POD on this quote.
                         null,
@@ -111,7 +125,7 @@ internal static class CompetitorTariffRouteOverride
                     cancellationToken
                 );
 
-                if (!normalized.Route.Pol.Matched || !normalized.Route.Poe.Matched
+                if ((sourceRows.Length == 1 && !normalized.Route.Pol.Matched) || !normalized.Route.Poe.Matched
                     || !normalized.Incoterm.Matched
                     || (source.Mode is ShipmentMode.Fcl or ShipmentMode.Ftl
                         && !normalized.Equipment.Matched)
@@ -131,8 +145,9 @@ internal static class CompetitorTariffRouteOverride
                     {
                         Kind = "UserSpecifiedCommercialCoverage",
                         OriginalExtractedPol = source.PolName,
-                        PolId = polId,
-                        PoeId = request.PoeId,
+                        PolId = normalized.Route.Pol.Id,
+                        OriginalPol = originalPol,
+                        PoeId = poeId,
                         PodId = (Guid?)null,
                         AppliedAtUtc = DateTime.UtcNow
                     }
@@ -189,6 +204,7 @@ internal static class CompetitorTariffRouteOverride
                 );
 
                 replacements.Add(observation);
+                }
             }
         }
 
@@ -215,12 +231,46 @@ internal static class CompetitorTariffRouteOverride
         {
             competitorTariffId,
             polIds,
-            poeId = request.PoeId,
+            poeIds,
             podId = (Guid?)null,
             observationCount = replacements.Count,
             reviewCount = toReview,
             manuallyOverridden = true
         });
+    }
+
+    private static string? ReadOriginalPort(string? json, string key)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return FindSourceValue(document.RootElement, key, 0);
+        }
+        catch (JsonException) { return null; }
+    }
+
+    private static string? FindSourceValue(JsonElement element, string key, int depth)
+    {
+        if (depth > 4 || element.ValueKind != JsonValueKind.Object) return null;
+        if (element.TryGetProperty(key, out var port)
+            && port.ValueKind == JsonValueKind.String)
+            return port.GetString();
+        foreach (var nestedKey in new[] { "RawJson", "SourceRawPayload" })
+        {
+            if (!element.TryGetProperty(nestedKey, out var child)) continue;
+            if (child.ValueKind == JsonValueKind.Object)
+            {
+                var nested = FindSourceValue(child, key, depth + 1);
+                if (!string.IsNullOrWhiteSpace(nested)) return nested;
+            }
+            else if (child.ValueKind == JsonValueKind.String)
+            {
+                var nested = ReadOriginalPort(child.GetString(), key);
+                if (!string.IsNullOrWhiteSpace(nested)) return nested;
+            }
+        }
+        return null;
     }
 
     private static bool IsUsable(CompetitorRateObservation item) =>
