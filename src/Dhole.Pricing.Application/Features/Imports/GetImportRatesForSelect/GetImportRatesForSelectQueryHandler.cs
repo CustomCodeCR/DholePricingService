@@ -41,9 +41,8 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
 
         var requestedDate = query.QuoteDate?.Date;
 
-        // Sin fecha de carga conservamos el comportamiento histórico del selector.
-        if (!requestedDate.HasValue && exact.Length > 0)
-            return Result.Success<IReadOnlyCollection<ImportRateSelectDto>>(exact);
+        // También sin fecha de carga combinamos las coincidencias normalizadas:
+        // una coincidencia exacta no debe ocultar otras tarifas vigentes.
 
         // Con fecha de carga debemos mostrar TODAS las tarifas cuya fecha de vencimiento
         // sea igual o posterior a la carga, incluso si su vigencia inicia después de esa fecha.
@@ -70,7 +69,6 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             .ThenBy(x => x.ValidFrom)
             .ThenBy(x => x.Freight)
             .ThenByDescending(x => x.ValidTo)
-            .Take(100)
             .ToArray();
 
         return Result.Success<IReadOnlyCollection<ImportRateSelectDto>>(combined);
@@ -134,7 +132,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
                 status,
                 query.Agent,
                 query.Carrier,
-                query.Pol,
+                pol: null,
                 poe: null,
                 pod: null,
                 containerType: null,
@@ -145,7 +143,9 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
                 cancellationToken: cancellationToken
             );
 
-            matches.AddRange(page.Items.Where(rate => PoeContains(rate, poeContains)));
+            matches.AddRange(page.Items.Where(rate =>
+                PolMatches(query.Pol, rate.Pol, rate.PolCode, rate.PolSlug)
+                && PoeContains(rate, poeContains)));
 
             if (page.Items.Count < pageSize)
                 break;
@@ -201,7 +201,7 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
                 status,
                 query.Agent,
                 query.Carrier,
-                query.Pol,
+                pol: null,
                 poe: null,
                 pod: null,
                 containerType: null,
@@ -214,7 +214,8 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
 
             matches.AddRange(
                 page.Items.Where(rate =>
-                    PoeMatches(query.Poe, rate.Poe, rate.PoeCode, rate.PoeSlug)
+                    PolMatches(query.Pol, rate.Pol, rate.PolCode, rate.PolSlug)
+                    && PoeMatches(query.Poe, rate.Poe, rate.PoeCode, rate.PoeSlug)
                 )
             );
 
@@ -272,38 +273,67 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
         return poeCode.Length == 5 && poeCode.StartsWith("pa", StringComparison.Ordinal);
     }
 
+    private static bool PolMatches(
+        string? requestedPol,
+        string? importedPol,
+        string? importedPolCode,
+        string? importedPolSlug
+    ) => PortMatches(requestedPol, importedPol, importedPolCode, importedPolSlug);
+
     private static bool PoeMatches(
         string? requestedPoe,
         string? importedPoe,
         string? importedPoeCode,
         string? importedPoeSlug
+    ) => PortMatches(requestedPoe, importedPoe, importedPoeCode, importedPoeSlug);
+
+    private static bool PortMatches(
+        string? requestedPort,
+        string? importedName,
+        string? importedCode,
+        string? importedSlug
     )
     {
-        if (string.IsNullOrWhiteSpace(requestedPoe)) return true;
+        if (string.IsNullOrWhiteSpace(requestedPort)) return true;
+        var requested = PortSearchValues(requestedPort);
+        if (requested.Length == 0) return true;
 
-        var requestedValues = requestedPoe
-            .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(CanonicalText)
+        var imported = new[] { importedName, importedCode, importedSlug }
             .Where(value => !string.IsNullOrWhiteSpace(value))
+            .SelectMany(value => PortSearchValues(value!))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        if (requestedValues.Length == 0) return true;
-
-        var importedValues = new[] { importedPoe, importedPoeCode, importedPoeSlug }
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(value => CanonicalText(value!))
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
-        return requestedValues.Any(requested =>
-            importedValues.Any(imported =>
-                string.Equals(requested, imported, StringComparison.Ordinal)
-                || requested.Contains(imported, StringComparison.Ordinal)
-                || imported.Contains(requested, StringComparison.Ordinal)
+        return requested.Any(wanted =>
+            imported.Any(actual =>
+                string.Equals(wanted, actual, StringComparison.Ordinal)
+                || wanted.Contains(actual, StringComparison.Ordinal)
+                || actual.Contains(wanted, StringComparison.Ordinal)
             )
         );
+    }
+
+    private static string[] PortSearchValues(string text)
+    {
+        var values = text.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(CanonicalText)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Fuentes antiguas mezclan nombres y UN/LOCODE: equivalencias seguras.
+        if (values.Any(value => value.Contains("shanghai", StringComparison.Ordinal)
+            || value == "cnsha"))
+        {
+            values.Add("shanghai");
+            values.Add("cnsha");
+        }
+        if (values.Any(value => value.Contains("caldera", StringComparison.Ordinal)
+            || value == "crcal"))
+        {
+            values.Add("caldera");
+            values.Add("crcal");
+        }
+        return values.ToArray();
     }
 
     private static bool IsSelectableStatus(ImportRateSelectDto rate) => IsSelectableStatus(rate.Status);
@@ -392,7 +422,10 @@ public sealed class GetImportRatesForSelectQueryHandler(IImportFclRateRepository
             rate.CurrencyId,
             rate.TotalSale,
             rate.TransitDays,
-            rate.SpaceComment
+            rate.SpaceComment,
+            rate.PolCode,
+            rate.PoeCode,
+            rate.PodCode
         );
 
     private static bool PodMatchesOrIsUnassigned(
