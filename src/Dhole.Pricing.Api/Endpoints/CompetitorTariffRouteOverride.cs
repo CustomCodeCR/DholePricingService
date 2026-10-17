@@ -137,7 +137,7 @@ internal static class CompetitorTariffRouteOverride
                         && !normalized.Equipment.Matched)
                     || normalized.Issues.Any(issue => issue.IsBlocking
                         && !(sourceRows.Length > 1
-                            && issue.Code is "missing_pol" or "unresolved_pol" or "unresolved_pol_ambiguous")))
+                            && (issue.Code is "missing_pol" or "unresolved_pol" or "unresolved_pol_ambiguous"))))
                 {
                     return EndpointResults.BadRequest(
                         "CompetitorTariff.RouteNormalizationFailed",
