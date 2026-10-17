@@ -247,7 +247,7 @@ internal static class CompetitorTariffRouteOverride
         });
     }
 
-    private static string? ReadOriginalPort(string? json, string key)
+    internal static string? ReadOriginalPort(string? json, string key)
     {
         if (string.IsNullOrWhiteSpace(json)) return null;
         try
