@@ -759,7 +759,9 @@ public static class CompetitorTariffEndpoints
             entity.ExtractionConfidence,
             entity.NormalizationConfidence,
             usable,
-            !usable
+            !usable,
+            CompetitorTariffRouteOverride.ReadOriginalPort(entity.RawPayloadJson, "OriginPort"),
+            CompetitorTariffRouteOverride.ReadOriginalPort(entity.RawPayloadJson, "PortOfExit")
         );
     }
 
