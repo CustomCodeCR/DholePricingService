@@ -376,8 +376,11 @@ public sealed class GetCostsForSelectQueryHandler(
     {
         var configuredShipmentModes = ConfiguredShipmentModes(cost);
 
-        // No configured mode means wildcard: the cost is intentionally reusable.
-        if (configuredShipmentModes.Count == 0)
+        // No configured mode, or the legacy "Any" sentinel, is a wildcard:
+        // a COSCO Carrier Haulage charge must still match an FCL quote.
+        if (configuredShipmentModes.Count == 0
+            || configuredShipmentModes.Any(mode =>
+                string.Equals(mode, "Any", StringComparison.OrdinalIgnoreCase)))
             return true;
 
         if (!query.ShipmentMode.HasValue)
