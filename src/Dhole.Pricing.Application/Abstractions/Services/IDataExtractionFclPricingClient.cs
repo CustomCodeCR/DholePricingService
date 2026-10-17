@@ -19,7 +19,8 @@ public sealed record DataExtractionFclPricingRequest(
     string? ProfileCode,
     Guid? RequestedBy,
     string? RequestedByName,
-    byte[] FileContent
+    byte[] FileContent,
+    string? StoragePath = null
 );
 
 public sealed record DataExtractionCatalogReference(

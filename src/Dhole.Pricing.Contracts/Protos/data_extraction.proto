@@ -20,6 +20,7 @@ message ExtractFclPricingDataGrpcRequest {
   string requested_by = 9;
   string requested_by_name = 10;
   bytes file_content = 11;
+  string storage_path = 12;
 }
 
 message ExtractFclPricingDataGrpcResponse {
