@@ -66,6 +66,7 @@ app.UseMiddleware<AuditEndpointMiddleware>();
 
 app.MapCostEndpoints();
 app.MapCompetitorTariffEndpoints();
+app.MapCompetitorAnalysisEndpoints();
 app.MapFtlTariffEndpoints();
 app.MapCostRoutePortEndpoints();
 app.MapImportRateEndpoints();
