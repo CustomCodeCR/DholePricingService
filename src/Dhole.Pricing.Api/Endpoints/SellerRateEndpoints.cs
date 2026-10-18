@@ -1,9 +1,10 @@
 using System.Security.Claims;
-using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
 using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.Features.Rates.GetRateById;
+using Dhole.Pricing.Application.Features.Rates.GenerateRateDocument;
+using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Contracts.Rates.Response;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
@@ -20,6 +21,16 @@ public static class SellerRateEndpoints
             .RequireAuthorization()
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
 
+        app.MapGet("/api/pricing/seller-rates/{rateId:guid}", GetOneAsync)
+            .WithTags("Seller rates")
+            .RequireAuthorization()
+            .RequireScope(PricingConstants.Scopes.RateRequestCreate);
+
+        app.MapGet("/api/pricing/seller-rates/{rateId:guid}/document", DownloadAsync)
+            .WithTags("Seller rates")
+            .RequireAuthorization()
+            .RequireScope(PricingConstants.Scopes.RateRequestCreate);
+
         app.MapGet("/api/pricing/seller-rates/dashboard", GetAdminDashboardAsync)
             .WithTags("Seller dashboards")
             .RequireAuthorization();
@@ -31,6 +42,7 @@ public static class SellerRateEndpoints
         ServiceDbContext db,
         IQueryDispatcher dispatcher,
         RateCreatorIdentityService creatorIdentityService,
+        SellerRateAccessService sellerAccess,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -46,7 +58,10 @@ public static class SellerRateEndpoints
             .Select(x => x.RateId!.Value)
             .ToListAsync(cancellationToken);
 
-        var orderedIds = linkedIds.Distinct().ToArray();
+        // Pricing may create and send a rate without a RateRequest. Include only rates
+        // assigned to the authenticated executive via the Auth directory.
+        var assignedIds = await sellerAccess.AssignedRateIdsAsync(currentUserId.Value, cancellationToken);
+        var orderedIds = linkedIds.Concat(assignedIds).Distinct().ToArray();
         if (orderedIds.Length == 0)
             return Results.Ok(Array.Empty<RateDto>());
 
@@ -69,6 +84,49 @@ public static class SellerRateEndpoints
 
         return Results.Ok(enrichedItems);
     }
+    private static async Task<IResult> GetOneAsync(
+        Guid rateId,
+        ServiceDbContext db,
+        IQueryDispatcher dispatcher,
+        SellerRateAccessService sellerAccess,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var userId = httpContext.GetCurrentUserId();
+        if (!userId.HasValue || userId.Value == Guid.Empty) return Results.Unauthorized();
+        var rate = await db.RateHeaders.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
+        if (rate is null) return Results.NotFound();
+        if (!await sellerAccess.CanReadAsync(rate, userId.Value, cancellationToken)) return Results.Forbid();
+
+        var result = await dispatcher.DispatchAsync(new GetRateByIdQuery(rateId), cancellationToken);
+        return result.IsSuccess && result.Value is not null
+            ? Results.Ok(result.Value)
+            : Results.NotFound();
+    }
+
+    private static async Task<IResult> DownloadAsync(
+        Guid rateId,
+        ServiceDbContext db,
+        ICommandDispatcher dispatcher,
+        SellerRateAccessService sellerAccess,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var userId = httpContext.GetCurrentUserId();
+        if (!userId.HasValue || userId.Value == Guid.Empty) return Results.Unauthorized();
+        var rate = await db.RateHeaders.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
+        if (rate is null) return Results.NotFound();
+        if (!await sellerAccess.CanReadAsync(rate, userId.Value, cancellationToken)) return Results.Forbid();
+
+        var result = await dispatcher.DispatchAsync(
+            new GenerateRateDocumentCommand(rateId, null, "pdf"), cancellationToken);
+        return result.IsSuccess
+            ? Results.File(result.Value.Content, result.Value.ContentType, result.Value.FileName)
+            : Results.Problem("No fue posible generar el PDF de la cotización.");
+    }
+
     // Sólo el SuperUsuario o quien tiene permiso view-all puede consultar este resumen.
     // Se proyectan datos de cabecera, sin cargar cada tarifa por separado.
     private static async Task<IResult> GetAdminDashboardAsync(
