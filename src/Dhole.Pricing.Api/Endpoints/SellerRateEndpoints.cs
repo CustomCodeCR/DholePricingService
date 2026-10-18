@@ -82,7 +82,7 @@ public static class SellerRateEndpoints
             cancellationToken
         );
 
-        return Results.Ok(enrichedItems);
+        return Results.Ok(enrichedItems.Select(ToSellerView).ToArray());
     }
     private static async Task<IResult> GetOneAsync(
         Guid rateId,
@@ -101,7 +101,7 @@ public static class SellerRateEndpoints
 
         var result = await dispatcher.DispatchAsync(new GetRateByIdQuery(rateId), cancellationToken);
         return result.IsSuccess && result.Value is not null
-            ? Results.Ok(result.Value)
+            ? Results.Ok(ToSellerView(result.Value))
             : Results.NotFound();
     }
 
@@ -193,6 +193,49 @@ public static class SellerRateEndpoints
             status = rate.Status.ToString(),
         }));
     }
+
+    // Never expose Pricing costs, margins or internal supplier data to a seller.
+    // Seller API returns only the commercial information found in their quotation.
+    private static object ToSellerView(RateDto rate) => new
+    {
+        rate.Id,
+        rate.RateCode,
+        rate.RateName,
+        rate.RevisionNumber,
+        rate.QuoNumber,
+        rate.IdtraNumber,
+        rate.ClientName,
+        rate.ExecutiveName,
+        rate.Status,
+        rate.SellerReceivedAtUtc,
+        rate.SellerReceivedBy,
+        rate.ShipmentMode,
+        rate.ContainerQuantity,
+        rate.ContainerTypeName,
+        rate.PolName,
+        rate.PoeName,
+        rate.PodName,
+        rate.CurrencyName,
+        rate.CurrencyCode,
+        rate.ValidFrom,
+        rate.ValidTo,
+        rate.TotalSaleAmount,
+        rate.Includes,
+        rate.SubjectTo,
+        rate.Excludes,
+        rate.TransitTime,
+        RateDetails = rate.RateDetails
+            .Where(detail => detail.BillToClient)
+            .Select(detail => new
+            {
+                detail.Id,
+                detail.Name,
+                detail.Quantity,
+                detail.CurrencyCode,
+                detail.SaleAmount,
+                detail.BillToClient,
+            }).ToArray(),
+    };
 
     internal static bool IsAdminViewer(ClaimsPrincipal principal, SellerVisibilityService visibility)
     {
