@@ -167,6 +167,7 @@ namespace Dhole.Pricing.Persistence.Migrations
             modelBuilder.Entity("Dhole.Pricing.Domain.Competitors.Entities.CompetitorAnalysisDocument", b =>
                 {
                     b.Property<Guid>("Id")
+                        .ValueGeneratedNever()
                         .HasColumnType("uuid")
                         .HasColumnName("Id");
 
