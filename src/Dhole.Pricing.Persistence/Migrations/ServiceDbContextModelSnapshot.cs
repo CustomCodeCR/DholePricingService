@@ -188,6 +188,12 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("StorageId");
 
+                    b.Property<DateTime?>("ValidFromUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ValidToUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.HasKey("Id")
                         .HasName("PK_CompetitorAnalysisDocuments");
 
