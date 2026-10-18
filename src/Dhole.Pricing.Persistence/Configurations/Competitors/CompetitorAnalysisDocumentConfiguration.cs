@@ -10,11 +10,11 @@ internal sealed class CompetitorAnalysisDocumentConfiguration : IEntityTypeConfi
     {
         builder.ToTable("CompetitorAnalysisDocuments");
         builder.HasKey(x => x.Id).HasName("PK_CompetitorAnalysisDocuments");
-        builder.Property(x => x.Id).ValueGeneratedNever();
-        builder.Property(x => x.StorageId).IsRequired();
-        builder.Property(x => x.OriginalFileName).HasMaxLength(255).IsRequired();
-        builder.Property(x => x.SizeInBytes).IsRequired();
-        builder.Property(x => x.CreatedAtUtc).HasColumnType("timestamp with time zone").IsRequired();
+        builder.Property(x => x.Id).ValueGeneratedNever().HasColumnName("Id");
+        builder.Property(x => x.StorageId).HasColumnName("StorageId").IsRequired();
+        builder.Property(x => x.OriginalFileName).HasColumnName("OriginalFileName").HasMaxLength(255).IsRequired();
+        builder.Property(x => x.SizeInBytes).HasColumnName("SizeInBytes").IsRequired();
+        builder.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAtUtc").HasColumnType("timestamp with time zone").IsRequired();
         builder.HasIndex(x => x.StorageId).IsUnique()
             .HasDatabaseName("UX_CompetitorAnalysisDocuments_StorageId");
         builder.HasIndex(x => x.CreatedAtUtc)
