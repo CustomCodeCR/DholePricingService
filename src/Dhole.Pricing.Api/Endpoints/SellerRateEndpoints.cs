@@ -138,15 +138,13 @@ public static class SellerRateEndpoints
         if (!IsAdminViewer(httpContext.User, visibility))
             return Results.Forbid();
 
-        var linkedRateIds = db.RateRequests
-            .AsNoTracking()
-            .Where(request => request.RateId.HasValue)
-            .Select(request => request.RateId!.Value)
-            .Distinct();
-
+        // Global supervisory dashboard: include manual and other quotations
+        // even when they were not created from a RateRequest.
         var rows = await db.RateHeaders
             .AsNoTracking()
-            .Where(rate => !rate.IsDeleted && linkedRateIds.Contains(rate.Id))
+            .Where(rate => !rate.IsDeleted &&
+                !(rate.RateType == Dhole.Pricing.Domain.Rates.Enums.RateType.Tariff &&
+                  rate.ClientName != null && rate.ClientName.ToLower().Contains("tarifario")))
             .OrderByDescending(rate => rate.CreatedAtUtc)
             .Select(rate => new
             {
