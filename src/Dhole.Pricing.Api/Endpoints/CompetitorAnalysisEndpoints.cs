@@ -48,8 +48,8 @@ public static class CompetitorAnalysisEndpoints
         CancellationToken cancellationToken)
     {
         var fileName = request.OriginalFileName?.Trim() ?? "";
-        if (request.StorageId == Guid.Empty ||
-            fileName.Length is < 6 or > 255 ||
+        if (request.Id == Guid.Empty || request.StorageId == Guid.Empty ||
+            fileName.Length is < 5 or > 255 ||
             !(fileName.EndsWith(".html", StringComparison.OrdinalIgnoreCase)
               || fileName.EndsWith(".htm", StringComparison.OrdinalIgnoreCase)) ||
             fileName.Contains('/') || fileName.Contains('\\') ||
@@ -69,7 +69,7 @@ public static class CompetitorAnalysisEndpoints
 
         var document = new CompetitorAnalysisDocument
         {
-            Id = Guid.NewGuid(),
+            Id = request.Id,
             StorageId = request.StorageId,
             OriginalFileName = fileName,
             SizeInBytes = request.SizeInBytes,
@@ -85,7 +85,7 @@ public static class CompetitorAnalysisEndpoints
 }
 
 public sealed record CreateCompetitorAnalysisRequest(
-    Guid StorageId, string OriginalFileName, long SizeInBytes);
+    Guid Id, Guid StorageId, string OriginalFileName, long SizeInBytes);
 
 public sealed record CompetitorAnalysisDto(
     Guid Id, Guid StorageId, string OriginalFileName, long SizeInBytes, DateTime CreatedAtUtc);
