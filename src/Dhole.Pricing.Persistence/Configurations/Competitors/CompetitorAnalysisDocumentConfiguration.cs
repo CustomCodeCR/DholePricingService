@@ -15,6 +15,8 @@ internal sealed class CompetitorAnalysisDocumentConfiguration : IEntityTypeConfi
         builder.Property(x => x.OriginalFileName).HasColumnName("OriginalFileName").HasMaxLength(255).IsRequired();
         builder.Property(x => x.SizeInBytes).HasColumnName("SizeInBytes").IsRequired();
         builder.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAtUtc").HasColumnType("timestamp with time zone").IsRequired();
+        builder.Property(x => x.ValidFromUtc).HasColumnType("timestamp with time zone");
+        builder.Property(x => x.ValidToUtc).HasColumnType("timestamp with time zone");
         builder.HasIndex(x => x.StorageId).IsUnique()
             .HasDatabaseName("UX_CompetitorAnalysisDocuments_StorageId");
         builder.HasIndex(x => x.CreatedAtUtc)
