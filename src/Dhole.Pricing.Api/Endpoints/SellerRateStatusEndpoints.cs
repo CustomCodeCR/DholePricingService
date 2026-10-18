@@ -18,12 +18,67 @@ public static class SellerRateStatusEndpoints
 {
     public static IEndpointRouteBuilder MapSellerRateStatusEndpoints(this IEndpointRouteBuilder app)
     {
+        app.MapPatch("/api/pricing/seller-rates/{rateId:guid}/received", MarkReceivedAsync)
+            .WithTags("Seller rates")
+            .RequireAuthorization()
+            .RequireScope(PricingConstants.Scopes.RateRequestCreate);
+
         app.MapPatch("/api/pricing/seller-rates/{rateId:guid}/status", SetStatusAsync)
             .WithTags("Seller rates")
             .RequireAuthorization()
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
 
         return app;
+    }
+
+    private static async Task<IResult> MarkReceivedAsync(
+        Guid rateId,
+        ServiceDbContext db,
+        SellerRateAccessService sellerAccess,
+        IPricingAuditService audit,
+        IRateHeaderCacheService cache,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var sellerId = httpContext.GetCurrentUserId();
+        if (!sellerId.HasValue || sellerId.Value == Guid.Empty) return Results.Unauthorized();
+
+        var rate = await db.RateHeaders
+            .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
+        if (rate is null) return Results.NotFound();
+        // Only the explicitly assigned executive can acknowledge; never "Castro Fallas".
+        if (!await sellerAccess.IsAssignedExecutiveAsync(rate, sellerId.Value, cancellationToken))
+            return Results.Forbid();
+        if (rate.SellerReceivedAtUtc.HasValue) return Results.NoContent();
+
+        if (rate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient))
+            return Results.Conflict(new {
+                code = "Pricing.SellerReceiptRequiresSent",
+                message = "Solo puede marcarse Recibida una tarifa enviada al vendedor.",
+            });
+
+        var before = PricingAuditSnapshots.From(rate);
+        rate.MarkReceivedBySeller(sellerId.Value);
+        await audit.PublishAsync(
+            new PricingAuditEvent(
+                EventType: PricingAuditEventTypes.RateHeaderUpdated,
+                Action: PricingAuditActions.Updated,
+                EntityType: PricingAuditEntityTypes.RateHeader,
+                EntityId: rate.Id,
+                ActorUserId: sellerId,
+                Before: before,
+                After: PricingAuditSnapshots.From(rate),
+                Payload: new {
+                    rate.Id,
+                    Source = "SellerReceiptAcknowledgement",
+                    rate.SellerReceivedAtUtc,
+                    rate.SellerReceivedBy,
+                }
+            ),
+            cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await cache.RemoveRateHeaderCacheAsync(rate.Id, cancellationToken);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> SetStatusAsync(
@@ -35,6 +90,7 @@ public static class SellerRateStatusEndpoints
         IPricingAuditService audit,
         IRateHeaderCacheService cache,
         AcceptedRateOpeningsNotificationService openingsNotificationService,
+        SellerRateAccessService sellerAccess,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -59,14 +115,15 @@ public static class SellerRateStatusEndpoints
             .OrderByDescending(x => x.RequestedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (rateRequest is null)
-            return Results.Forbid();
-
         var currentRate = await db.RateHeaders
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
 
         if (currentRate is null)
             return Results.NotFound();
+
+        if (rateRequest is null
+            && !await sellerAccess.IsAssignedExecutiveAsync(currentRate, currentUserId.Value, cancellationToken))
+            return Results.Forbid();
 
         if (currentRate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient))
         {
