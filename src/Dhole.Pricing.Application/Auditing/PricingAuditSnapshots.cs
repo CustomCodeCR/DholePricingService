@@ -132,6 +132,8 @@ public static class PricingAuditSnapshots
         {
             rateHeader.Id,
             rateHeader.RateCode,
+            rateHeader.SellerReceivedAtUtc,
+            rateHeader.SellerReceivedBy,
             rateHeader.RateName,
             rateHeader.RevisionNumber,
 
