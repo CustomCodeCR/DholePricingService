@@ -157,6 +157,8 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.RequiredApproval).IsRequired().HasDefaultValue(false);
 
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
+        builder.Property(x => x.SellerReceivedAtUtc).IsRequired(false);
+        builder.Property(x => x.SellerReceivedBy).IsRequired(false);
 
         builder.Property(x => x.ClosedReason).HasMaxLength(1000).IsRequired(false);
 
