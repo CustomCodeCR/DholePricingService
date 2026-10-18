@@ -164,6 +164,43 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.ToTable("outbox_messages", "pricing");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Domain.Competitors.Entities.CompetitorAnalysisDocument", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("Id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("CreatedAtUtc");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("OriginalFileName");
+
+                    b.Property<long>("SizeInBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("SizeInBytes");
+
+                    b.Property<Guid>("StorageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("StorageId");
+
+                    b.HasKey("Id")
+                        .HasName("PK_CompetitorAnalysisDocuments");
+
+                    b.HasIndex("CreatedAtUtc")
+                        .HasDatabaseName("IX_CompetitorAnalysisDocuments_CreatedAtUtc");
+
+                    b.HasIndex("StorageId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_CompetitorAnalysisDocuments_StorageId");
+
+                    b.ToTable("CompetitorAnalysisDocuments", "pricing");
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Competitors.Entities.CompetitorTariff", b =>
                 {
                     b.Property<Guid>("Id")
