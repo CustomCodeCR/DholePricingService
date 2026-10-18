@@ -103,8 +103,8 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
         // together with rate.view grants read-only system-wide quotation visibility;
         // do not classify that user as restricted to their personal rates.
         var hasGlobalReadAccess =
-            HasScope(scopes, PricingConstants.Scopes.RateRequestViewAll)
-            && HasScope(scopes, PricingConstants.Scopes.RateView);
+            visibilityService.HasScope(user, PricingConstants.Scopes.RateRequestViewAll)
+            && visibilityService.HasScope(user, PricingConstants.Scopes.RateView);
 
         var sellerCapability = sellerRole || hasRequestCreate;
         return sellerCapability && !hasPricingOperatorAccess && !hasGlobalReadAccess;
