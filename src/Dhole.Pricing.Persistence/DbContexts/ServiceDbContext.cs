@@ -20,6 +20,8 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
 {
     private const string SourceService = "DholePricingService";
 
+    public DbSet<CompetitorAnalysisDocument> CompetitorAnalysisDocuments => Set<CompetitorAnalysisDocument>();
+
     public DbSet<CompetitorTariff> CompetitorTariffs => Set<CompetitorTariff>();
 
     public DbSet<CompetitorTariffImportPayload> CompetitorTariffImportPayloads => Set<CompetitorTariffImportPayload>();
