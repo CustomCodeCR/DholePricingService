@@ -247,6 +247,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public decimal MarginPercentage { get; private set; }
     public bool RequiredApproval { get; private set; }
     public RateStatus Status { get; private set; }
+    public DateTime? SellerReceivedAtUtc { get; private set; }
+    public Guid? SellerReceivedBy { get; private set; }
     public string? ClosedReason { get; private set; }
     public DateTime? ClosedAtUtc { get; private set; }
     public Guid? ClosedBy { get; private set; }
@@ -1289,6 +1291,17 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         IdtraNumber = normalized;
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
+    }
+
+    public void MarkReceivedBySeller(Guid sellerUserId)
+    {
+        if (sellerUserId == Guid.Empty || Status is not (RateStatus.Sent or RateStatus.RequestedByClient))
+            throw new InvalidOperationException("Solo se puede confirmar la recepción de una tarifa enviada.");
+        if (SellerReceivedAtUtc.HasValue) return; // Acuse idempotente.
+        SellerReceivedAtUtc = DateTime.UtcNow;
+        SellerReceivedBy = sellerUserId;
+        MarkAsUpdated(DateTime.UtcNow, sellerUserId.ToString());
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, sellerUserId));
     }
 
     public void SetCommercialStatus(
