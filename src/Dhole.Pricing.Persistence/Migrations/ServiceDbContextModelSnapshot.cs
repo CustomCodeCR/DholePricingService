@@ -2599,6 +2599,14 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("excludes");
 
+                    b.Property<DateTime?>("SellerReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("seller_received_at_utc");
+
+                    b.Property<Guid?>("SellerReceivedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("seller_received_by");
+
                     b.Property<string>("ExecutiveName")
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)")
