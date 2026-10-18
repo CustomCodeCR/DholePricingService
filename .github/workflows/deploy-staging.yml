@@ -92,7 +92,7 @@ jobs:
                   --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
                   --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
                   --output-dir Migrations/Diagnostic || true
-                find src/Dhole.Pricing.Persistence/Migrations/Diagnostic -type f -name "*CiModelDriftDiagnostic.cs" -exec sed -n "1,280p" {} \\; || true
+                for diagnostic in src/Dhole.Pricing.Persistence/Migrations/Diagnostic/*CiModelDriftDiagnostic.cs; do if [ -f "$diagnostic" ]; then sed -n "1,280p" "$diagnostic"; fi; done
                 exit 1
               fi
             '
