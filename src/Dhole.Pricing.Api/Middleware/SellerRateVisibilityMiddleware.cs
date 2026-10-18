@@ -99,8 +99,15 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
             || visibilityService.HasScope(user, PricingConstants.Scopes.ImportFclRateReject)
             || visibilityService.HasScope(user, PricingConstants.Scopes.ImportFclRateCreateAsRate);
 
+        // A commercial supervisor may retain the Vendedor role. A view-all scope
+        // together with rate.view grants read-only system-wide quotation visibility;
+        // do not classify that user as restricted to their personal rates.
+        var hasGlobalReadAccess =
+            HasScope(scopes, PricingConstants.Scopes.RateRequestViewAll)
+            && HasScope(scopes, PricingConstants.Scopes.RateView);
+
         var sellerCapability = sellerRole || hasRequestCreate;
-        return sellerCapability && !hasPricingOperatorAccess;
+        return sellerCapability && !hasPricingOperatorAccess && !hasGlobalReadAccess;
     }
 
     private static IEnumerable<string> Split(string value)
