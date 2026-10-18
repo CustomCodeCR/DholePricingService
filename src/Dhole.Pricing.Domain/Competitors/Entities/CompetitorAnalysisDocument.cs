@@ -8,4 +8,6 @@ public sealed class CompetitorAnalysisDocument
     public string OriginalFileName { get; set; } = string.Empty;
     public long SizeInBytes { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime? ValidFromUtc { get; set; }
+    public DateTime? ValidToUtc { get; set; }
 }
