@@ -76,6 +76,7 @@ app.MapImportRateInactivationEndpoints();
 app.MapImportRateReviewQueueEndpoints();
 app.MapCabysEndpoints();
 app.MapRateEndpoints();
+app.MapCommercialRateReportEndpoints();
 app.MapMarketPricingEndpoints();
 app.MapRateCommentEndpoints();
 app.MapRateUpdateEligibilityEndpoints();
