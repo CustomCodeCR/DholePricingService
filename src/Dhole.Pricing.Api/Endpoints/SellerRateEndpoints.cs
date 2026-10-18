@@ -225,7 +225,7 @@ public static class SellerRateEndpoints
         rate.Excludes,
         rate.TransitTime,
         RateDetails = rate.RateDetails
-            .Where(detail => detail.BillToClient)
+            .Where(detail => detail.SaleAmount > 0m)
             .Select(detail => new
             {
                 detail.Id,
