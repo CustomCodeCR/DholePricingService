@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Services;
+using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
@@ -32,6 +33,7 @@ public static class CommercialRateReportEndpoints
         string? status,
         string? search,
         ServiceDbContext db,
+        IPricingConfigCatalogClient configCatalog,
         SellerVisibilityService visibility,
         HttpContext context,
         CancellationToken ct)
@@ -42,13 +44,14 @@ public static class CommercialRateReportEndpoints
         if (!ValidStatus(status))
             return Results.BadRequest(new { message = "El estado indicado no es válido." });
 
-        return Results.Ok(await ReadRowsAsync(db, status, search, ct));
+        return Results.Ok(await ReadRowsAsync(db, configCatalog, status, search, ct));
     }
 
     private static async Task<IResult> ExportAsync(
         string? status,
         string? search,
         ServiceDbContext db,
+        IPricingConfigCatalogClient configCatalog,
         SellerVisibilityService visibility,
         HttpContext context,
         CancellationToken ct)
@@ -59,7 +62,7 @@ public static class CommercialRateReportEndpoints
         if (!ValidStatus(status))
             return Results.BadRequest(new { message = "El estado indicado no es válido." });
 
-        var rows = await ReadRowsAsync(db, status, search, ct);
+        var rows = await ReadRowsAsync(db, configCatalog, status, search, ct);
         return Results.File(
             BuildWorkbook(rows),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -73,7 +76,8 @@ public static class CommercialRateReportEndpoints
         status.Equals("RejectedByClient", StringComparison.OrdinalIgnoreCase);
 
     private static async Task<List<CommercialQuote>> ReadRowsAsync(
-        ServiceDbContext db, string? status, string? search, CancellationToken ct)
+        ServiceDbContext db, IPricingConfigCatalogClient configCatalog,
+        string? status, string? search, CancellationToken ct)
     {
         var query = db.RateHeaders.AsNoTracking()
             .Where(rate => !rate.IsDeleted &&
@@ -122,6 +126,8 @@ public static class CommercialRateReportEndpoints
                 rate.PodName,
                 rate.ContainerTypeName,
                 rate.ContainerQuantity,
+                rate.CurrencyId,
+                rate.CurrencyName,
                 rate.CurrencyCode,
                 rate.TotalSaleAmount,
                 rate.TotalCostAmount,
@@ -136,6 +142,15 @@ public static class CommercialRateReportEndpoints
             })
             .ToListAsync(ct);
 
+        // Moneda de negocio: Config CatalogItem.Value, no el identificador técnico Code.
+        // Consultar el catálogo una sola vez para todo el reporte evita búsquedas por fila.
+        var currencyItems = await configCatalog.GetActiveByGroupAsync(
+            PricingConstants.CatalogSlugs.Currencies, ct);
+        var currencyValues = currencyItems
+            .Where(item => !string.IsNullOrWhiteSpace(item.Value))
+            .GroupBy(item => item.Id)
+            .ToDictionary(group => group.Key, group => group.First().Value!.Trim());
+
         return data.Select(rate => new CommercialQuote(
             rate.Id,
             rate.RateCode,
@@ -149,7 +164,9 @@ public static class CommercialRateReportEndpoints
             rate.PodName,
             rate.ContainerTypeName,
             rate.ContainerQuantity,
-            rate.CurrencyCode,
+            currencyValues.TryGetValue(rate.CurrencyId, out var catalogValue)
+                ? catalogValue
+                : LegacyCurrencyValue(rate.CurrencyName, rate.CurrencyCode),
             rate.TotalSaleAmount,
             rate.TotalCostAmount,
             rate.TotalUtilityAmount,
@@ -177,7 +194,7 @@ public static class CommercialRateReportEndpoints
         string? PodName,
         string ContainerTypeName,
         int ContainerQuantity,
-        string CurrencyCode,
+        string CurrencyValue,
         decimal TotalSaleAmount,
         decimal TotalCostAmount,
         decimal TotalUtilityAmount,
@@ -188,6 +205,21 @@ public static class CommercialRateReportEndpoints
         DateTime? ClosedAtUtc,
         string? ClosedReason,
         string Status);
+
+    private static string LegacyCurrencyValue(string? name, string? code)
+    {
+        // Solo compatibilidad con cotizaciones antiguas cuyo catálogo fue desactivado.
+        // Nunca exponer identificadores sintéticos del tipo CUR-2026-001.
+        foreach (var candidate in new[] { name, code })
+        {
+            var normalized = candidate?.Trim().ToUpperInvariant();
+            if (normalized is "USD" or "CRC" or "EUR") return normalized;
+            if (normalized is not null && (normalized.Contains("DÓLAR") || normalized.Contains("DOLAR") || normalized.Contains("DOLLAR"))) return "USD";
+            if (normalized is not null && (normalized.Contains("COLÓN") || normalized.Contains("COLON"))) return "CRC";
+        }
+
+        return "SIN MONEDA";
+    }
 
     private static byte[] BuildWorkbook(IReadOnlyList<CommercialQuote> rates)
     {
@@ -241,7 +273,7 @@ public static class CommercialRateReportEndpoints
                     rate.RateCode, rate.QuoNumber ?? "", rate.IdtraNumber ?? "", rate.ClientName ?? "",
                     rate.ExecutiveName ?? "", rate.ShipmentMode, rate.PolName, rate.PoeName,
                     rate.PodName ?? "", rate.ContainerTypeName,
-                    rate.ContainerQuantity.ToString(CultureInfo.InvariantCulture), rate.CurrencyCode,
+                    rate.ContainerQuantity.ToString(CultureInfo.InvariantCulture), rate.CurrencyValue,
                     rate.TotalSaleAmount.ToString(CultureInfo.InvariantCulture),
                     rate.TotalCostAmount.ToString(CultureInfo.InvariantCulture),
                     rate.TotalUtilityAmount.ToString(CultureInfo.InvariantCulture),
