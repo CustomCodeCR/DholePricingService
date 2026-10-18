@@ -22,6 +22,7 @@ public sealed class SentRateEmailNotificationService(
     ServiceDbContext db,
     IPricingConfigCatalogClient configCatalog,
     AuthSellerDirectoryService authDirectory,
+    IConfiguration configuration,
     ILogger<SentRateEmailNotificationService> logger)
 {
     private const string NotificationEventName = "notifications.notification.requested";
@@ -97,6 +98,17 @@ public sealed class SentRateEmailNotificationService(
         var client = FirstNonEmpty(rate.ClientName, request?.ClientName) ?? "Cliente";
         var route = string.Join(" → ", new[] { rate.PolName, rate.PoeName, rate.PodName }
             .Where(x => !string.IsNullOrWhiteSpace(x)));
+        // El vendedor accede a su propia tarifa sin buscarla en el listado.
+        var isCastroFallas = SameName(executiveName, "Castro Fallas");
+        var rateRoute = isCastroFallas
+            ? $"/pricing/rates/{rate.Id:D}/wizard?mode=view"
+            : $"/pricing/seller-rates/{rate.Id:D}";
+        var configuredBaseUrl = configuration["Pricing:PublicWebBaseUrl"];
+        var publicBaseUrl = Uri.TryCreate(configuredBaseUrl, UriKind.Absolute, out var configuredUri)
+            && configuredUri.Scheme is "https" or "http"
+            ? configuredUri.GetLeftPart(UriPartial.Authority)
+            : "https://sistema.logisticacastrofallas.com";
+        var rateUrl = publicBaseUrl + rateRoute;
         var emailBody = $"""
             <p>Se adjunta la cotización <strong>{Html(quo)}</strong> lista para remitir al cliente.</p>
             <table style="border-collapse:collapse; width:100%; max-width:740px">
@@ -105,7 +117,9 @@ public sealed class SentRateEmailNotificationService(
               <tr><td style="padding:5px 10px"><strong>Ruta</strong></td><td>{Html(route)}</td></tr>
               <tr><td style="padding:5px 10px"><strong>Modalidad</strong></td><td>{Html(rate.ShipmentMode.ToString())}</td></tr>
             </table>
-            <p>Puede consultar el registro en Dhole Pricing. El PDF comercial se incluye adjunto.</p>
+            <p><a href="{Html(rateUrl)}" style="display:inline-block;padding:12px 18px;background:#eb3a22;color:#fff;text-decoration:none;border-radius:8px;font-weight:700">Abrir tarifa {Html(quo)}</a></p>
+            <p>Acceso directo: <a href="{Html(rateUrl)}">{Html(rateUrl)}</a></p>
+            <p>Inicie sesión en Dhole si se le solicita. El PDF comercial se incluye adjunto.</p>
             """;
 
         await outbox.WriteAsync(
@@ -126,7 +140,8 @@ public sealed class SentRateEmailNotificationService(
                     clientName = client,
                     sellerName = executiveName,
                     action = "open-rate",
-                    route = $"/pricing/rates/{rate.Id}/wizard?mode=view",
+                    route = rateRoute,
+                    url = rateUrl,
                     cc = ccRecipients,
                     attachments = new[]
                     {
