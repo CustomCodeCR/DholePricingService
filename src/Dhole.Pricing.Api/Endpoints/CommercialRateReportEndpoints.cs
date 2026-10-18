@@ -21,7 +21,7 @@ public static class CommercialRateReportEndpoints
         var group = app.MapGroup("/api/pricing/rates")
             .WithTags("Commercial quotations")
             .RequireAuthorization()
-            .RequireScope(PricingConstants.Scopes.RateView);
+            .RequireScope(PricingConstants.Scopes.RateRequestViewAll);
 
         group.MapGet("/commercial-report", GetAsync);
         group.MapGet("/commercial-report.xlsx", ExportAsync);
