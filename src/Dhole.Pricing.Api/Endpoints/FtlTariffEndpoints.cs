@@ -1246,13 +1246,16 @@ public static class FtlTariffEndpoints
     private static IReadOnlyCollection<LtlChargeItemDto> DefaultLtlChargeItems(string commercialProfile)
     {
         var isNvocc = string.Equals(commercialProfile, "Nvocc", StringComparison.OrdinalIgnoreCase);
+        var cartaPorteSale = isNvocc ? 35m : 45m;
         return new LtlChargeItemDto[]
         {
             // Cargos base del tarifario LTL: se aplican automáticamente.
             new("dua", "DUA Export", "CustomsCharge", "PerDocument", "origin_charges", 50m, 60m, true),
+            new("impuesto-dua", "Impuesto DUA", "CustomsCharge", "PerDocument", "origin_charges", 28m, 28m, true),
             new("duca-t", "DUCA-T", "Documentation", "PerDocument", "international_freight", 30m, isNvocc ? 30m : 35m, true),
             new("stuffing", "Stuffing", "OriginCharge", "PerChargeableCbm", "origin_charges", 550m / 60m, 10m, true),
-            new("carta-porte", "Carta Porte", "Documentation", "PerDocument", "international_freight", 0m, isNvocc ? 35m : 45m, true),
+            new("carta-porte", "Carta Porte", "Documentation", "PerDocument", "international_freight", 0m, cartaPorteSale, true),
+            new("manifiesto", "Manifiesto", "Documentation", "PerDocument", "international_freight", 0m, cartaPorteSale, true),
             new("manejos", "Manejos", "AgentCharge", "PerShipment", "origin_charges", 0m, isNvocc ? 25m : 45m, true),
 
             // Opcionales LTL: nunca traen costo/venta predefinidos.
