@@ -484,6 +484,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             throw new InvalidOperationException("La tarifa requiere el flujo de revisión comercial correspondiente.");
 
         RevisionNumber = checked(Math.Max(1, RevisionNumber) + 1);
+        // Cada versión requiere su propia confirmación: no heredar el acuse anterior.
+        SellerReceivedAtUtc = null;
+        SellerReceivedBy = null;
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
     }
@@ -494,6 +497,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             throw new InvalidOperationException("Solo una tarifa aceptada puede iniciar una nueva revisión.");
 
         RevisionNumber = Math.Max(1, RevisionNumber) + 1;
+        SellerReceivedAtUtc = null;
+        SellerReceivedBy = null;
         RequiredApproval = MarginPercentage < MinimumMarginPercentage;
         Status = RequiredApproval ? RateStatus.PendingApproval : RateStatus.Open;
         ClosedReason = null;
@@ -1317,6 +1322,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             (RateStatus.Open, RateStatus.AcceptedByClient) when allowDirectClientDecision => true,
             (RateStatus.Open, RateStatus.RejectedByClient) when allowDirectClientDecision => true,
             (RateStatus.Sent, RateStatus.RequestedByClient) => true,
+            // Una solicitud de cambio ya atendida se vuelve a enviar al vendedor.
+            (RateStatus.RequestedByClient, RateStatus.Sent) => true,
             (RateStatus.Sent, RateStatus.AcceptedByClient) => true,
             (RateStatus.Sent, RateStatus.RejectedByClient) => true,
             (RateStatus.RequestedByClient, RateStatus.AcceptedByClient) => true,
