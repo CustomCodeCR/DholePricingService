@@ -193,7 +193,8 @@ public static class RateRequestEndpoints
                 .ToHashSet();
 
         return Results.Ok(requests
-            .Where(x => !x.RateId.HasValue || !completedRateIds.Contains(x.RateId.Value))
+            .Where(x => RateModificationRequestPayload.IsModification(x.PayloadJson)
+                || !x.RateId.HasValue || !completedRateIds.Contains(x.RateId.Value))
             .Select(ToDto)
             .ToArray());
     }
@@ -225,6 +226,8 @@ public static class RateRequestEndpoints
         var rateExists = await db.RateHeaders.AnyAsync(x => x.Id == request.RateId && !x.IsDeleted, ct);
         if (!rateExists) return Results.BadRequest(new { message = "La tarifa indicada no existe." });
 
+        if (RateModificationRequestPayload.IsModification(entity.PayloadJson))
+            return Results.Conflict(new { message = "Una modificación ya está vinculada a la tarifa original." });
         entity.AttachRate(request.RateId);
         await db.SaveChangesAsync(ct);
         return Results.NoContent();
@@ -247,12 +250,17 @@ public static class RateRequestEndpoints
         if (!RateRequestLeaseEndpoints.HasActiveLease(context, entity))
             return RateRequestLeaseEndpoints.LeaseRequired();
 
+        if (RateModificationRequestPayload.IsModification(entity.PayloadJson))
+            return Results.Conflict(new {
+                message = "Una modificación debe completarse enviando la nueva revisión de la tarifa."
+            });
+
         entity.MarkCompleted(DateTime.UtcNow);
         await db.SaveChangesAsync(ct);
         return Results.NoContent();
     }
 
-    private static async Task QueuePricingRealtimeNotificationAsync(
+    internal static async Task QueuePricingRealtimeNotificationAsync(
         RateRequest request,
         IPricingNotificationRecipientProvider recipientProvider,
         IIntegrationEventOutboxWriter outbox,
@@ -268,8 +276,11 @@ public static class RateRequestEndpoints
         var seller = request.SellerName ?? request.ExecutiveName ?? "Ventas";
         var client = request.ClientName ?? "Cliente sin definir";
         var equipmentText = equipmentType ?? request.ShipmentMode ?? "Equipo sin definir";
-        var subject = "Nueva solicitud de tarifa de Ventas";
-        var body = $"{seller} envió una solicitud para {client}. Ruta: {route}. Contenedor/equipo: {equipmentText}.";
+        var modification = RateModificationRequestPayload.IsModification(request.PayloadJson);
+        var subject = modification ? "Nueva solicitud de modificación de tarifa" : "Nueva solicitud de tarifa de Ventas";
+        var body = modification
+            ? $"{seller} solicitó cambios en la tarifa de {client}. Ruta: {route}. Revise los cambios y genere una nueva revisión."
+            : $"{seller} envió una solicitud para {client}. Ruta: {route}. Contenedor/equipo: {equipmentText}.";
 
         var payload = new
         {
@@ -452,6 +463,7 @@ public static class RateRequestEndpoints
         return new
         {
             request.Id,
+            kind = RateModificationRequestPayload.IsModification(request.PayloadJson) ? "Modification" : "New",
             priority = request.Priority.ToString(),
             status = request.Status.ToString(),
             request.RequestedAtUtc,

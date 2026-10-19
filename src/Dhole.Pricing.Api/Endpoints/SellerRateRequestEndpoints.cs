@@ -1,4 +1,9 @@
+using System.Security.Claims;
 using System.Text.Json;
+using Dhole.Pricing.Application.Abstractions.Messaging;
+using Dhole.Pricing.Application.Abstractions.Services;
+using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
 using Dhole.Pricing.Api.Services;
@@ -27,12 +32,138 @@ public static class SellerRateRequestEndpoints
             .RequireAuthorization()
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
 
+        app.MapPost("/api/pricing/seller-rates/{rateId:guid}/modification-requests", CreateModificationAsync)
+            .WithTags("Seller rate requests")
+            .RequireIdempotency()
+            .RequireAuthorization()
+            .RequireScope(PricingConstants.Scopes.RateRequestCreate);
+
         app.MapGet("/api/pricing/rate-requests/dashboard", GetAdminDashboardAsync)
             .WithTags("Seller dashboards")
             .RequireAuthorization();
 
         return app;
     }
+
+
+    // A modification is a new work item tied to the ORIGINAL quote, never a direct seller edit.
+    // Its revision is captured so Pricing cannot complete it without saving a subsequent revision.
+    private static async Task<IResult> CreateModificationAsync(
+        Guid rateId,
+        CreateSellerRateModificationRequest request,
+        ServiceDbContext db,
+        SellerRateAccessService sellerAccess,
+        IPricingNotificationRecipientProvider recipientProvider,
+        IIntegrationEventOutboxWriter outbox,
+        ILoggerFactory loggerFactory,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var sellerId = httpContext.GetCurrentUserId();
+        if (sellerId is null || sellerId == Guid.Empty) return Results.Unauthorized();
+
+        var rate = await db.RateHeaders.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
+        if (rate is null) return Results.NotFound();
+        if (!await sellerAccess.CanReadAsync(rate, sellerId.Value, cancellationToken))
+            return Results.Forbid();
+
+        if (!rate.SellerReceivedAtUtc.HasValue
+            && rate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient
+                or RateStatus.AcceptedByClient or RateStatus.RejectedByClient or RateStatus.Expired))
+            return Results.Conflict(new {
+                code = "Pricing.RateModificationRequiresGeneratedRate",
+                message = "Solo se pueden solicitar cambios a una cotización que Pricing ya haya entregado al vendedor."
+            });
+        if (rate.Status is RateStatus.Closed or RateStatus.Cancelled)
+            return Results.Conflict(new { message = "No se puede modificar una tarifa cerrada o cancelada." });
+
+        if (!Enum.TryParse<RateRequestPriority>(request.Priority, true, out var priority)
+            || !Enum.IsDefined(priority))
+            return Results.BadRequest(new { message = "Seleccione una prioridad válida." });
+
+        if (request.Items is null || request.Items.Count is < 1 or > 20
+            || request.Items.Any(item =>
+                item is null
+                || item.Action is not ("Add" or "Change" or "Remove")
+                || string.IsNullOrWhiteSpace(item.Field) || item.Field.Length > 200
+                || string.IsNullOrWhiteSpace(item.Details) || item.Details.Length > 2000)
+            || request.Notes?.Length > 4000)
+            return Results.BadRequest(new {
+                message = "Indique entre 1 y 20 cambios, cada uno con acción, concepto y descripción."
+            });
+
+        // Allow one active change request per quotation to avoid simultaneous, conflicting edits.
+        var active = await db.RateRequests.AsNoTracking()
+            .Where(x => x.RateId == rateId && x.Status == RateRequestStatus.Open)
+            .Select(x => new { x.Id, x.PayloadJson })
+            .ToListAsync(cancellationToken);
+        var pending = active.FirstOrDefault(x => RateModificationRequestPayload.IsModification(x.PayloadJson));
+        if (pending is not null)
+            return Results.Conflict(new {
+                code = "Pricing.RateModificationAlreadyOpen",
+                message = "Esta tarifa ya tiene una solicitud de modificación pendiente.",
+                requestId = pending.Id
+            });
+
+        var userName = httpContext.User.FindFirst(ClaimTypes.Name)?.Value
+            ?? httpContext.User.FindFirst("name")?.Value
+            ?? httpContext.User.Identity?.Name;
+        var email = httpContext.User.FindFirst(ClaimTypes.Email)?.Value
+            ?? httpContext.User.FindFirst("email")?.Value;
+        // Reuse the seller identity from the original request when the token has no email.
+        var original = await db.RateRequests.AsNoTracking()
+            .Where(x => x.RateId == rateId && x.SellerUserId == sellerId)
+            .OrderByDescending(x => x.RequestedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+        userName ??= original?.SellerName;
+        email ??= original?.SellerEmail;
+
+        var payload = JsonSerializer.Serialize(new {
+            kind = "Modification",
+            modification = new {
+                sourceRevisionNumber = Math.Max(1, rate.RevisionNumber),
+                items = request.Items.Select(item => new {
+                    action = item.Action,
+                    field = item.Field.Trim(),
+                    details = item.Details.Trim()
+                }).ToArray(),
+                notes = request.Notes?.Trim()
+            },
+            form = new {
+                shipmentMode = rate.ShipmentMode.ToString(),
+                equipmentType = rate.ContainerTypeName,
+                equipmentQuantity = rate.ContainerQuantity,
+                modality = rate.ShipmentMode.ToString()
+            }
+        });
+
+        var entity = RateRequest.Create(priority, sellerId, userName, email,
+            rate.ClientName, rate.ExecutiveName, rate.ShipmentMode.ToString(),
+            rate.PolName, rate.PodName ?? rate.PoeName, payload);
+        entity.SetRoute(rate.PoeId, rate.PoeName, rate.PodId, rate.PodName);
+        entity.AttachRate(rate.Id);
+        db.RateRequests.Add(entity);
+        await db.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await RateRequestEndpoints.QueuePricingRealtimeNotificationAsync(
+                entity, recipientProvider, outbox, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception error)
+        {
+            loggerFactory.CreateLogger("RateModificationNotifications").LogError(
+                error, "La solicitud {RequestId} fue creada pero no se pudo notificar a Pricing.", entity.Id);
+        }
+
+        return Results.Ok(new { id = entity.Id, rateId = rate.Id, status = entity.Status.ToString() });
+    }
+
+    private sealed record RateModificationItem(string Action, string Field, string Details);
+    private sealed record CreateSellerRateModificationRequest(
+        string Priority, List<RateModificationItem>? Items, string? Notes);
 
     private static async Task<IResult> GetMineAsync(
         ServiceDbContext db,
@@ -165,6 +296,7 @@ public static class SellerRateRequestEndpoints
         return new
         {
             request.Id,
+            kind = RateModificationRequestPayload.IsModification(request.PayloadJson) ? "Modification" : "New",
             priority = request.Priority.ToString(),
             status = request.Status.ToString(),
             request.RequestedAtUtc,
