@@ -57,6 +57,10 @@ public static class RateRequestCompletionEndpoints
         if (!RateRequestLeaseEndpoints.HasActiveLease(httpContext, entity))
             return RateRequestLeaseEndpoints.LeaseRequired();
 
+        var isModification = RateModificationRequestPayload.IsModification(entity.PayloadJson);
+        if (isModification && entity.RateId != request.RateId)
+            return Results.Conflict(new { message = "Una modificación debe conservar su tarifa original." });
+
         if (string.IsNullOrWhiteSpace(entity.SellerEmail))
         {
             return Results.BadRequest(new
@@ -72,6 +76,13 @@ public static class RateRequestCompletionEndpoints
 
         if (rate is null)
             return Results.BadRequest(new { message = "La tarifa indicada no existe." });
+
+        if (isModification
+            && rate.RevisionNumber <= RateModificationRequestPayload.SourceRevisionNumber(entity.PayloadJson))
+            return Results.Conflict(new {
+                code = "Pricing.RateModificationRevisionRequired",
+                message = "Primero guarde una nueva revisión con los cambios solicitados antes de completar la solicitud."
+            });
 
         var documentResult = await dispatcher.DispatchAsync(
             new GenerateRateDocumentCommand(request.RateId, null, "pdf"),
@@ -110,7 +121,7 @@ public static class RateRequestCompletionEndpoints
         var sellerDisplayName = entity.SellerName ?? entity.ExecutiveName;
         var emailBody = $"""
             <p>Hola {sellerName},</p>
-            <p>Pricing terminó la tarifa solicitada para <strong>{clientName}</strong>.</p>
+            <p>Pricing { (isModification ? "actualizó" : "terminó") } la tarifa solicitada para <strong>{clientName}</strong>.</p>
             <p><strong>Tarifa:</strong> {quoteNumber}<br />
             <strong>Ruta:</strong> {route}</p>
             <p>Se adjunta la cotización completa en PDF para que pueda enviarla al cliente.</p>
@@ -131,7 +142,7 @@ public static class RateRequestCompletionEndpoints
                 channel = "Email",
                 entityType = "RateRequest",
                 entityId = requestId.ToString(),
-                subject = $"Tarifa Lista - {(string.IsNullOrWhiteSpace(rate.RateName) ? quoteNumberText : rate.RateName.Trim())}",
+                subject = $"{(isModification ? "Tarifa Actualizada" : "Tarifa Lista")} - {(string.IsNullOrWhiteSpace(rate.RateName) ? quoteNumberText : rate.RateName.Trim())}",
                 body = emailBody,
                 payload = new
                 {
@@ -180,8 +191,8 @@ public static class RateRequestCompletionEndpoints
                 channel = "System",
                 entityType = "RateRequest",
                 entityId = requestId.ToString(),
-                subject = "Tarifa solicitada lista",
-                body = $"Pricing terminó la tarifa {quoteNumberText} para {entity.ClientName ?? "el cliente"}.",
+                subject = isModification ? "Modificación de tarifa completada" : "Tarifa solicitada lista",
+                body = $"Pricing {(isModification ? "actualizó" : "terminó")} la tarifa {quoteNumberText} para {entity.ClientName ?? "el cliente"}.",
                 payload = new
                 {
                     rateRequestId = requestId,
