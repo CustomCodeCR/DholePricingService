@@ -38,6 +38,8 @@ public static class SellerRateRequestEndpoints
             .RequireAuthorization()
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
 
+        app.MapModificationSource();
+
         app.MapGet("/api/pricing/rate-requests/dashboard", GetAdminDashboardAsync)
             .WithTags("Seller dashboards")
             .RequireAuthorization();
@@ -46,59 +48,78 @@ public static class SellerRateRequestEndpoints
     }
 
 
-    // A modification is a new work item tied to the ORIGINAL quote, never a direct seller edit.
-    // Its revision is captured so Pricing cannot complete it without saving a subsequent revision.
+
+    public static IEndpointRouteBuilder MapModificationSource(this IEndpointRouteBuilder app)
+    {
+        app.MapGet("/api/pricing/seller-rates/{rateId:guid}/modification-source", GetModificationSourceAsync)
+            .WithTags("Seller rate requests")
+            .RequireAuthorization()
+            .RequireScope(PricingConstants.Scopes.RateRequestCreate);
+        return app;
+    }
+
+    private static async Task<IResult> GetModificationSourceAsync(
+        Guid rateId, ServiceDbContext db, SellerRateAccessService access,
+        HttpContext context, CancellationToken ct)
+    {
+        var userId = context.GetCurrentUserId();
+        if (userId is null || userId == Guid.Empty) return Results.Unauthorized();
+        var rate = await db.RateHeaders.AsNoTracking().Include(x => x.RateServices)
+            .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, ct);
+        if (rate is null) return Results.NotFound();
+        if (!await access.CanReadAsync(rate, userId.Value, ct)) return Results.Forbid();
+        if (!RateModificationWizardSnapshot.IsEligible(rate))
+            return Results.Conflict(new { message = "Esta tarifa no admite solicitudes de modificación." });
+        return Results.Ok(new {
+            rateId = rate.Id,
+            reference = rate.QuoNumber ?? rate.RateCode,
+            revisionNumber = rate.RevisionNumber,
+            form = RateModificationWizardSnapshot.OriginalForm(rate),
+            pickupLocations = RateModificationWizardSnapshot.PickupLocations(rate),
+            names = RateModificationWizardSnapshot.Names(rate),
+        });
+    }
+
     private static async Task<IResult> CreateModificationAsync(
-        Guid rateId,
-        CreateSellerRateModificationRequest request,
-        ServiceDbContext db,
-        SellerRateAccessService sellerAccess,
+        Guid rateId, CreateSellerRateModificationRequest request,
+        ServiceDbContext db, SellerRateAccessService sellerAccess,
         AuthSellerDirectoryService sellerDirectory,
         IPricingNotificationRecipientProvider recipientProvider,
-        IIntegrationEventOutboxWriter outbox,
-        ILoggerFactory loggerFactory,
-        HttpContext httpContext,
-        CancellationToken cancellationToken)
+        IIntegrationEventOutboxWriter outbox, ILoggerFactory loggerFactory,
+        HttpContext httpContext, CancellationToken cancellationToken)
     {
         var sellerId = httpContext.GetCurrentUserId();
         if (sellerId is null || sellerId == Guid.Empty) return Results.Unauthorized();
-
-        var rate = await db.RateHeaders.AsNoTracking()
+        var rate = await db.RateHeaders.Include(x => x.RateServices)
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
         if (rate is null) return Results.NotFound();
         if (!await sellerAccess.CanReadAsync(rate, sellerId.Value, cancellationToken))
             return Results.Forbid();
-
-        if (!rate.SellerReceivedAtUtc.HasValue
-            && rate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient
-                or RateStatus.AcceptedByClient or RateStatus.RejectedByClient or RateStatus.Expired))
-            return Results.Conflict(new {
-                code = "Pricing.RateModificationRequiresGeneratedRate",
-                message = "Solo se pueden solicitar cambios a una cotización que Pricing ya haya entregado al vendedor."
-            });
-        if (rate.Status is RateStatus.Closed or RateStatus.Cancelled)
-            return Results.Conflict(new { message = "No se puede modificar una tarifa cerrada o cancelada." });
-
-        if (!Enum.TryParse<RateRequestPriority>(request.Priority, true, out var priority)
-            || !Enum.IsDefined(priority))
+        if (!RateModificationWizardSnapshot.IsEligible(rate))
+            return Results.Conflict(new { message = "Esta tarifa no admite solicitudes de modificación." });
+        if (!Enum.TryParse<RateRequestPriority>(request.Priority, true, out var priority) || !Enum.IsDefined(priority))
             return Results.BadRequest(new { message = "Seleccione una prioridad válida." });
-
-        if (request.Items is null || request.Items.Count is < 1 or > 20
-            || request.Items.Any(item =>
-                item is null
-                || item.Action is not ("Add" or "Change" or "Remove")
-                || string.IsNullOrWhiteSpace(item.Field) || item.Field.Length > 200
-                || string.IsNullOrWhiteSpace(item.Details) || item.Details.Length > 2000)
-            || request.Notes?.Length > 4000)
-            return Results.BadRequest(new {
-                message = "Indique entre 1 y 20 cambios, cada uno con acción, concepto y descripción."
+        if (request.Payload.ValueKind != JsonValueKind.Object
+            || !request.Payload.TryGetProperty("form", out var form)
+            || form.ValueKind != JsonValueKind.Object
+            || request.Payload.GetRawText().Length > 250000)
+            return Results.BadRequest(new { message = "Envíe el formulario del wizard de Ventas (pantallas 1 a 4)." });
+        if (!request.Payload.TryGetProperty("sourceRevisionNumber", out var sourceRevision)
+            || !sourceRevision.TryGetInt32(out var originalRevision)
+            || originalRevision != rate.RevisionNumber)
+            return Results.Conflict(new {
+                code = "Pricing.RateModificationStaleSource",
+                message = "La tarifa cambió después de abrir el wizard. Actualice los datos y vuelva a comparar."
             });
 
-        // Allow one active change request per quotation to avoid simultaneous, conflicting edits.
+        // Serialised in the same row as the existing RateRequest. The original tariff is unchanged.
+        var comparison = RateModificationWizardSnapshot.Compare(rate, request.Payload);
+        if (comparison.Count == 0)
+            return Results.BadRequest(new { message = "No hay diferencias entre la tarifa original y los cambios del wizard." });
+
         var active = await db.RateRequests.AsNoTracking()
             .Where(x => x.RateId == rateId && x.Status == RateRequestStatus.Open)
-            .Select(x => new { x.Id, x.PayloadJson })
-            .ToListAsync(cancellationToken);
+            .Select(x => new { x.Id, x.PayloadJson }).ToListAsync(cancellationToken);
         var pending = active.FirstOrDefault(x => RateModificationRequestPayload.IsModification(x.PayloadJson));
         if (pending is not null)
             return Results.Conflict(new {
@@ -108,15 +129,12 @@ public static class SellerRateRequestEndpoints
             });
 
         var userName = httpContext.User.FindFirst(ClaimTypes.Name)?.Value
-            ?? httpContext.User.FindFirst("name")?.Value
-            ?? httpContext.User.Identity?.Name;
+            ?? httpContext.User.FindFirst("name")?.Value ?? httpContext.User.Identity?.Name;
         var email = httpContext.User.FindFirst(ClaimTypes.Email)?.Value
             ?? httpContext.User.FindFirst("email")?.Value;
-        // Reuse the seller identity from the original request when the token has no email.
         var original = await db.RateRequests.AsNoTracking()
             .Where(x => x.RateId == rateId && x.SellerUserId == sellerId)
-            .OrderByDescending(x => x.RequestedAtUtc)
-            .FirstOrDefaultAsync(cancellationToken);
+            .OrderByDescending(x => x.RequestedAtUtc).FirstOrDefaultAsync(cancellationToken);
         userName ??= original?.SellerName;
         email ??= original?.SellerEmail;
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(userName))
@@ -127,30 +145,28 @@ public static class SellerRateRequestEndpoints
             userName = !string.IsNullOrWhiteSpace(userName) ? userName
                 : directoryUser?.DisplayName ?? directoryUser?.UserName;
         }
-
         if (string.IsNullOrWhiteSpace(email))
-            return Results.BadRequest(new {
-                code = "Pricing.RateModificationSellerEmailRequired",
-                message = "No fue posible obtener el correo del vendedor desde Auth. No se puede enviar la revisión sin destinatario."
-            });
+            return Results.BadRequest(new { message = "No fue posible identificar el correo del vendedor en Auth." });
 
         var payload = JsonSerializer.Serialize(new {
             kind = "Modification",
             modification = new {
-                sourceRevisionNumber = Math.Max(1, rate.RevisionNumber),
-                items = request.Items.Select(item => new {
-                    action = item.Action,
-                    field = item.Field.Trim(),
-                    details = item.Details.Trim()
-                }).ToArray(),
-                notes = request.Notes?.Trim()
+                sourceRevisionNumber = rate.RevisionNumber,
+                quote = rate.QuoNumber ?? rate.RateCode,
+                changes = comparison,
+                original = RateModificationWizardSnapshot.OriginalForm(rate),
             },
-            form = new {
-                shipmentMode = rate.ShipmentMode.ToString(),
-                equipmentType = rate.ContainerTypeName,
-                equipmentQuantity = rate.ContainerQuantity,
-                modality = rate.ShipmentMode.ToString()
-            }
+            form = form.Clone(),
+            pickupLocations = request.Payload.TryGetProperty("pickupLocations", out var pickups)
+                ? pickups.Clone() : default(JsonElement?),
+            supportEntityId = request.Payload.TryGetProperty("supportEntityId", out var supportId)
+                ? supportId.Clone() : default(JsonElement?),
+            supportDocuments = request.Payload.TryGetProperty("supportDocuments", out var documents)
+                ? documents.Clone() : default(JsonElement?),
+            sellerContext = request.Payload.TryGetProperty("sellerContext", out var sellerContext)
+                ? sellerContext.Clone() : default(JsonElement?),
+            requestContext = request.Payload.TryGetProperty("requestContext", out var requestContext)
+                ? requestContext.Clone() : default(JsonElement?),
         });
 
         var entity = RateRequest.Create(priority, sellerId, userName, email,
@@ -160,7 +176,6 @@ public static class SellerRateRequestEndpoints
         entity.AttachRate(rate.Id);
         db.RateRequests.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
-
         try
         {
             await RateRequestEndpoints.QueuePricingRealtimeNotificationAsync(
@@ -170,15 +185,13 @@ public static class SellerRateRequestEndpoints
         catch (Exception error)
         {
             loggerFactory.CreateLogger("RateModificationNotifications").LogError(
-                error, "La solicitud {RequestId} fue creada pero no se pudo notificar a Pricing.", entity.Id);
+                error, "La solicitud {RequestId} fue creada, pero su alerta no pudo enviarse.", entity.Id);
         }
-
-        return Results.Ok(new { id = entity.Id, rateId = rate.Id, status = entity.Status.ToString() });
+        return Results.Ok(new { id = entity.Id, rateId = rate.Id, status = entity.Status.ToString(),
+            changes = comparison.Count });
     }
 
-    private sealed record RateModificationItem(string Action, string Field, string Details);
-    private sealed record CreateSellerRateModificationRequest(
-        string Priority, List<RateModificationItem>? Items, string? Notes);
+    private sealed record CreateSellerRateModificationRequest(string Priority, JsonElement Payload);
 
     private static async Task<IResult> GetMineAsync(
         ServiceDbContext db,
