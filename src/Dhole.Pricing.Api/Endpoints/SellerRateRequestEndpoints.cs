@@ -70,12 +70,51 @@ public static class SellerRateRequestEndpoints
         if (!await access.CanReadAsync(rate, userId.Value, ct)) return Results.Forbid();
         if (!RateModificationWizardSnapshot.IsEligible(rate))
             return Results.Conflict(new { message = "Esta tarifa no admite solicitudes de modificación." });
-        return Results.Ok(new {
+
+        // Original seller request owns the wizard 1–4 values. Pricing's generated
+        // RateHeader is still the authoritative baseline for the later difference.
+        var linked = await db.RateRequests.AsNoTracking()
+            .Where(x => x.RateId == rateId)
+            .OrderBy(x => x.RequestedAtUtc)
+            .Select(x => new { x.PayloadJson, x.Priority })
+            .ToListAsync(ct);
+        JsonElement? originalRequest = null;
+        string? priority = null;
+        foreach (var entry in linked)
+        {
+            if (RateModificationRequestPayload.IsModification(entry.PayloadJson)) continue;
+            try
+            {
+                using var document = JsonDocument.Parse(entry.PayloadJson);
+                var root = document.RootElement;
+                if (!root.TryGetProperty("form", out var requestForm)
+                    || requestForm.ValueKind != JsonValueKind.Object)
+                    continue;
+                // Keep the first original request, even after later amendments.
+                originalRequest = root.Clone();
+                priority = entry.Priority.ToString();
+                break;
+            }
+            catch (JsonException) { }
+        }
+
+        JsonElement? PayloadField(string name)
+            => originalRequest is { ValueKind: JsonValueKind.Object } source
+                && source.TryGetProperty(name, out var value) ? value.Clone() : null;
+
+        return Results.Ok(new
+        {
             rateId = rate.Id,
             reference = rate.QuoNumber ?? rate.RateCode,
             revisionNumber = rate.RevisionNumber,
-            form = RateModificationWizardSnapshot.OriginalForm(rate),
-            pickupLocations = RateModificationWizardSnapshot.PickupLocations(rate),
+            priority = priority ?? "Green",
+            form = (object)(PayloadField("form") ?? JsonSerializer.SerializeToElement(
+                RateModificationWizardSnapshot.OriginalForm(rate))),
+            pickupLocations = (object)(PayloadField("pickupLocations") ??
+                JsonSerializer.SerializeToElement(RateModificationWizardSnapshot.PickupLocations(rate))),
+            supportEntityId = PayloadField("supportEntityId"),
+            supportDocuments = PayloadField("supportDocuments"),
+            sellerContext = PayloadField("sellerContext"),
             names = RateModificationWizardSnapshot.Names(rate),
         });
     }
