@@ -24,6 +24,10 @@ internal static class RateModificationWizardSnapshot
         ("loadDate", "Fecha de carga lista"),
         ("validTo", "Vigencia"),
         ("clientName", "Cliente"),
+        ("cargoCondition", "Condición de carga"),
+        ("dangerousCargo", "Mercancía peligrosa"),
+        ("nonStackable", "Carga no estibable"),
+        ("overweight", "Sobrepeso"),
         ("cargoValue", "Valor declarado de la carga"),
         ("cargoWeightKg", "Peso de la carga (kg)"),
         ("cargoPackages", "Cantidad de bultos"),
@@ -76,6 +80,24 @@ internal static class RateModificationWizardSnapshot
         return Array.Empty<object>();
     }
 
+    private static string CargoCondition(RateHeader rate)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(rate.PickupLocationsJson ?? "[]");
+            if (document.RootElement.ValueKind == JsonValueKind.Array
+                && document.RootElement.GetArrayLength() > 0)
+            {
+                var pickup = document.RootElement[0];
+                if (pickup.ValueKind == JsonValueKind.Object
+                    && pickup.TryGetProperty("cargoCondition", out var condition))
+                    return condition.ToString();
+            }
+        }
+        catch (JsonException) { }
+        return "";
+    }
+
     public static Dictionary<string, object?> OriginalForm(RateHeader rate)
     {
         var cargo = FirstCargo(rate);
@@ -95,6 +117,10 @@ internal static class RateModificationWizardSnapshot
             ["loadDate"] = rate.ValidFrom.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             ["validTo"] = rate.ValidTo.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             ["clientName"] = rate.ClientName ?? "",
+            ["cargoCondition"] = CargoCondition(rate),
+            ["dangerousCargo"] = false,
+            ["nonStackable"] = false,
+            ["overweight"] = false,
             ["cargoValue"] = rate.CargoValue,
             ["cargoWeightKg"] = CargoDecimal(cargo, "weightKg") is > 0m
                 ? CargoDecimal(cargo, "weightKg") : rate.TotalWeightKg,
