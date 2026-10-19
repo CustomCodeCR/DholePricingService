@@ -120,6 +120,11 @@ public static class RateRequestEndpoints
             ? "{}"
             : request.Payload.GetRawText();
 
+        if (RateModificationRequestPayload.IsModification(payloadJson))
+            return Results.BadRequest(new {
+                message = "Las modificaciones de tarifas existentes deben enviarse desde la opción Solicitar modificación."
+            });
+
         var entity = RateRequest.Create(
             priority,
             sellerUserId,

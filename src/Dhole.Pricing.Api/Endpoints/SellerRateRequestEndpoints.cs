@@ -53,6 +53,7 @@ public static class SellerRateRequestEndpoints
         CreateSellerRateModificationRequest request,
         ServiceDbContext db,
         SellerRateAccessService sellerAccess,
+        AuthSellerDirectoryService sellerDirectory,
         IPricingNotificationRecipientProvider recipientProvider,
         IIntegrationEventOutboxWriter outbox,
         ILoggerFactory loggerFactory,
@@ -118,6 +119,20 @@ public static class SellerRateRequestEndpoints
             .FirstOrDefaultAsync(cancellationToken);
         userName ??= original?.SellerName;
         email ??= original?.SellerEmail;
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(userName))
+        {
+            var directoryUser = await sellerDirectory.GetSalesExecutiveAsync(sellerId.Value, cancellationToken)
+                ?? await sellerDirectory.GetSellerAsync(sellerId.Value, cancellationToken);
+            email = !string.IsNullOrWhiteSpace(email) ? email : directoryUser?.Email;
+            userName = !string.IsNullOrWhiteSpace(userName) ? userName
+                : directoryUser?.DisplayName ?? directoryUser?.UserName;
+        }
+
+        if (string.IsNullOrWhiteSpace(email))
+            return Results.BadRequest(new {
+                code = "Pricing.RateModificationSellerEmailRequired",
+                message = "No fue posible obtener el correo del vendedor desde Auth. No se puede enviar la revisión sin destinatario."
+            });
 
         var payload = JsonSerializer.Serialize(new {
             kind = "Modification",
