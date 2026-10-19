@@ -64,6 +64,9 @@ public static class RateRequestReportingEndpoints
                 x.PodId,
                 x.PodName,
                 x.PayloadJson,
+                x.LockedByUserId,
+                x.LockedByName,
+                x.LockExpiresAtUtc,
             })
             .ToListAsync(cancellationToken);
 
@@ -88,6 +91,9 @@ public static class RateRequestReportingEndpoints
             x.PoeName,
             x.PodId,
             x.PodName,
+            lockedByUserId = x.LockExpiresAtUtc > DateTime.UtcNow ? x.LockedByUserId : null,
+            lockedByName = x.LockExpiresAtUtc > DateTime.UtcNow ? x.LockedByName : null,
+            lockExpiresAtUtc = x.LockExpiresAtUtc > DateTime.UtcNow ? x.LockExpiresAtUtc : null,
             payload = ParsePayload(x.PayloadJson),
         }));
     }
