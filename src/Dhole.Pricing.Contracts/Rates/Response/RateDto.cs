@@ -88,6 +88,7 @@ public sealed record RateDto(
 {    public DateTime? SellerReceivedAtUtc { get; init; }
     public Guid? SellerReceivedBy { get; init; }
     public int? StorageDays { get; init; }
+    public decimal CargoValue { get; init; }
 
     public string? CreatedByUserId { get; init; }
     public string? CreatedByUserName { get; init; }

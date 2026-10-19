@@ -214,6 +214,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
     public ShipmentMode ShipmentMode { get; private set; } = ShipmentMode.Fcl;
     public RateOperationType OperationType { get; private set; } = RateOperationType.TransitDomestic;
+    public decimal CargoValue { get; private set; }
     public int TotalPackages { get; private set; }
     public int? StorageDays { get; private set; }
     public int TotalPallets { get; private set; }
@@ -719,6 +720,13 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                 ClientName
             );
         }
+    }
+
+    public void ConfigureCargoValue(decimal cargoValue)
+    {
+        if (cargoValue < 0m)
+            throw new InvalidOperationException("El valor declarado de la carga no puede ser negativo.");
+        CargoValue = Math.Round(cargoValue, 2, MidpointRounding.AwayFromZero);
     }
 
     /// <summary>

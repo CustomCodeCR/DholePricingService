@@ -155,6 +155,7 @@ internal static class RateMappings
         {
             SellerReceivedAtUtc = rate.SellerReceivedAtUtc,
             SellerReceivedBy = rate.SellerReceivedBy,
+            CargoValue = rate.CargoValue,
             FinalBackupStorageIds = rate.FinalBackupStorageIds,
             PickupLocations = DeserializePickupLocations(rate.PickupLocationsJson),
         };
