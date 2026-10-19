@@ -87,6 +87,14 @@ public static class SellerRateRequestEndpoints
         if (entity.Status != Dhole.Pricing.Domain.Rates.Enums.RateRequestStatus.Open || entity.RateId.HasValue)
             return Results.Conflict(new { message = "La solicitud ya está siendo procesada o fue completada y no puede editarse." });
 
+        if (entity.LockExpiresAtUtc > DateTime.UtcNow)
+            return Results.Conflict(new {
+                code = "Pricing.RateRequestAlreadyClaimed",
+                message = $"La solicitud está siendo atendida por {entity.LockedByName ?? "Pricing"}. Espere a que liberen la reserva.",
+                ownerName = entity.LockedByName,
+                expiresAtUtc = entity.LockExpiresAtUtc,
+            });
+
         if (!Enum.TryParse<Dhole.Pricing.Domain.Rates.Enums.RateRequestPriority>(
                 request.Priority, true, out var priority) || !Enum.IsDefined(priority))
             return Results.BadRequest(new { message = "Seleccione una prioridad válida." });
