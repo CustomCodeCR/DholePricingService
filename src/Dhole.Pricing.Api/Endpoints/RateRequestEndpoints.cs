@@ -208,6 +208,7 @@ public static class RateRequestEndpoints
         Guid id,
         AttachRateRequestRequest request,
         ServiceDbContext db,
+        HttpContext context,
         CancellationToken ct
     )
     {
@@ -218,6 +219,8 @@ public static class RateRequestEndpoints
         if (entity is null) return Results.NotFound();
         if (entity.Status != RateRequestStatus.Open)
             return Results.Conflict(new { message = "La solicitud ya no está abierta." });
+        if (!RateRequestLeaseEndpoints.HasActiveLease(context, entity))
+            return RateRequestLeaseEndpoints.LeaseRequired();
 
         var rateExists = await db.RateHeaders.AnyAsync(x => x.Id == request.RateId && !x.IsDeleted, ct);
         if (!rateExists) return Results.BadRequest(new { message = "La tarifa indicada no existe." });
@@ -232,6 +235,7 @@ public static class RateRequestEndpoints
     private static async Task<IResult> CompleteAsync(
         Guid id,
         ServiceDbContext db,
+        HttpContext context,
         CancellationToken ct
     )
     {
@@ -240,6 +244,8 @@ public static class RateRequestEndpoints
         if (entity.Status == RateRequestStatus.Completed) return Results.NoContent();
         if (entity.Status != RateRequestStatus.Open)
             return Results.Conflict(new { message = "Sólo una solicitud abierta puede completarse." });
+        if (!RateRequestLeaseEndpoints.HasActiveLease(context, entity))
+            return RateRequestLeaseEndpoints.LeaseRequired();
 
         entity.MarkCompleted(DateTime.UtcNow);
         await db.SaveChangesAsync(ct);
@@ -466,6 +472,9 @@ public static class RateRequestEndpoints
             request.PoeName,
             request.PodId,
             request.PodName,
+            lockedByUserId = request.LockExpiresAtUtc > DateTime.UtcNow ? request.LockedByUserId : null,
+            lockedByName = request.LockExpiresAtUtc > DateTime.UtcNow ? request.LockedByName : null,
+            lockExpiresAtUtc = request.LockExpiresAtUtc > DateTime.UtcNow ? request.LockExpiresAtUtc : null,
             payload = document.RootElement.Clone(),
         };
     }

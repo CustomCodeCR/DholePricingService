@@ -33,6 +33,11 @@ internal sealed class RateRequestConfiguration : IEntityTypeConfiguration<RateRe
         builder.Property(x => x.PoeName).HasColumnName("poe_name").HasMaxLength(250);
         builder.Property(x => x.PodId).HasColumnName("pod_id");
         builder.Property(x => x.PodName).HasColumnName("pod_name").HasMaxLength(250);
+        builder.Property(x => x.LockedByUserId).HasColumnName("locked_by_user_id");
+        builder.Property(x => x.LockedByName).HasColumnName("locked_by_name").HasMaxLength(200);
+        builder.Property(x => x.LockToken).HasColumnName("lock_token");
+        builder.Property(x => x.LockedAtUtc).HasColumnName("locked_at_utc");
+        builder.Property(x => x.LockExpiresAtUtc).HasColumnName("lock_expires_at_utc");
         builder.Property(x => x.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb").IsRequired();
 
         builder.HasIndex(x => new { x.Status, x.Priority, x.DueAtUtc, x.RequestedAtUtc });
