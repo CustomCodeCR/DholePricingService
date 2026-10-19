@@ -54,6 +54,9 @@ public static class RateRequestCompletionEndpoints
             return Results.Conflict(new { message = "La solicitud ya fue completada." });
         }
 
+        if (!RateRequestLeaseEndpoints.HasActiveLease(httpContext, entity))
+            return RateRequestLeaseEndpoints.LeaseRequired();
+
         if (string.IsNullOrWhiteSpace(entity.SellerEmail))
         {
             return Results.BadRequest(new

@@ -62,6 +62,11 @@ public sealed class RateRequest : Entity<Guid>
     public Guid? PodId { get; private set; }
     public string? PodName { get; private set; }
     public string PayloadJson { get; private set; } = "{}";
+    public Guid? LockedByUserId { get; private set; }
+    public string? LockedByName { get; private set; }
+    public Guid? LockToken { get; private set; }
+    public DateTime? LockedAtUtc { get; private set; }
+    public DateTime? LockExpiresAtUtc { get; private set; }
 
     public static RateRequest Create(
         RateRequestPriority priority,
