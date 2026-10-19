@@ -503,7 +503,9 @@ public sealed class UpdateRateCommandHandler(
             validTo = sourceFreight.ValidTo;
         }
         var containerQuantity = requestedContainerQuantity;
-        var transitTime = command.TransitTime;
+        var transitTime = command.TransitDays.HasValue
+            ? (command.TransitDays.Value > 0 ? $"{command.TransitDays.Value} días" : null)
+            : command.TransitTime;
 
         var currentServiceIds = rate.RateServices.Select(x => x.ServiceId).OrderBy(x => x).ToArray();
         var requestedServiceIds = (command.Services ?? Array.Empty<RateServiceSelection>())
@@ -660,6 +662,7 @@ public sealed class UpdateRateCommandHandler(
                 command.TotalVolumeCbm,
                 command.ContainerTypeCode
             );
+            rate.ConfigureCargoValue(command.CargoValue ?? rate.CargoValue);
             rate.ConfigureStorageDays(command.StorageDays);
             rate.ConfigureShipment(
                 command.ShipmentMode,

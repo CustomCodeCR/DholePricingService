@@ -465,6 +465,7 @@ public sealed class CreateRateCommandHandler(
                 command.TotalVolumeCbm,
                 command.ContainerTypeCode
             );
+            rate.ConfigureCargoValue(command.CargoValue ?? 0m);
             rate.ConfigureStorageDays(command.StorageDays);
             rate.ConfigureShipment(
                 command.ShipmentMode,
@@ -740,7 +741,9 @@ public sealed class CreateRateCommandHandler(
             command.Includes,
             command.SubjectTo,
             command.Excludes,
-            command.TransitTime,
+            command.TransitDays.HasValue
+                ? (command.TransitDays.Value > 0 ? $"{command.TransitDays.Value} días" : null)
+                : command.TransitTime,
             command.RateType,
             command.CreatedBy
         );
@@ -793,7 +796,9 @@ public sealed class CreateRateCommandHandler(
             command.Includes,
             command.SubjectTo,
             command.Excludes,
-            command.TransitTime,
+            command.TransitDays.HasValue
+                ? (command.TransitDays.Value > 0 ? $"{command.TransitDays.Value} días" : null)
+                : command.TransitTime,
             command.RateType,
             command.CreatedBy
         );

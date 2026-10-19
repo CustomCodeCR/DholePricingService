@@ -102,6 +102,7 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.ExchangeRateManualOverride).IsRequired().HasDefaultValue(false);
         builder.Property(x => x.UseAllInPresentation).IsRequired().HasDefaultValue(false);
 
+        builder.Property(x => x.CargoValue).HasPrecision(18, 2).IsRequired().HasDefaultValue(0m);
         builder.Property(x => x.FreeDays).IsRequired();
 
         builder.Property(x => x.ValidFrom).IsRequired();

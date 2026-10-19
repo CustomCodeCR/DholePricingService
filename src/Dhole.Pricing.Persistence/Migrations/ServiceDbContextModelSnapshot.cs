@@ -2497,6 +2497,13 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("cargo_lines_json");
 
+                    b.Property<decimal>("CargoValue")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("cargo_value");
+
                     b.Property<Guid[]>("FinalBackupStorageIds")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
