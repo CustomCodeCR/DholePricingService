@@ -154,6 +154,8 @@ internal static class RateMappings
             LclGroupAgentCode = rate.LclGroupAgentCode,
             FinalBackupStorageIds = rate.FinalBackupStorageIds,
             PickupLocations = DeserializePickupLocations(rate.PickupLocationsJson),
+            CreatedByUserId = rate.CreatedBy,
+            LastModifiedByUserId = rate.UpdatedBy,
         };
 
         return dto.WithRecalculatedFinancials();

@@ -96,6 +96,12 @@ public sealed record RateDto(
     public string? CreatedByUserId { get; init; }
     public string? CreatedByUserName { get; init; }
     public string? CreatedByDisplayName { get; init; }
+    public string? ReviewedByUserId { get; init; }
+    public string? ReviewedByUserName { get; init; }
+    public string? ReviewedByDisplayName { get; init; }
+    public string? LastModifiedByUserId { get; init; }
+    public string? LastModifiedByUserName { get; init; }
+    public string? LastModifiedByDisplayName { get; init; }
     public IReadOnlyCollection<Guid> FinalBackupStorageIds { get; init; } = [];
     public IReadOnlyCollection<RatePickupLocationDto> PickupLocations { get; init; } = [];
 
