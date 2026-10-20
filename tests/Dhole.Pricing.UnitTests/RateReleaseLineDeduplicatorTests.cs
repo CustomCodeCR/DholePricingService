@@ -11,7 +11,7 @@ public sealed class RateReleaseLineDeduplicatorTests
     private static RateHeader CreateRate()
     {
         return RateHeader.Create(
-            rateCode: "QUO-TEST-RELEASE",
+            rateCode: "QUO-A7K2P-9X4M8Q",
             sourceImportFclRateId: null,
             agentId: Guid.NewGuid(),
             agentName: "Agente",
