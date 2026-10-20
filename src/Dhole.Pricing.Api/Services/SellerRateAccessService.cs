@@ -42,12 +42,50 @@ public sealed class SellerRateAccessService(
 
     public async Task<bool> IsAssignedExecutiveAsync(RateHeader rate, Guid userId, CancellationToken ct)
     {
-        if (rate.IsDeleted || string.IsNullOrWhiteSpace(rate.ExecutiveName)
-            || string.Equals(rate.ExecutiveName, "Castro Fallas", StringComparison.OrdinalIgnoreCase))
-            return false;
+        if (rate.IsDeleted) return false;
 
         var names = await AssignedNamesAsync(userId, ct);
-        return names.Contains(rate.ExecutiveName.Trim(), StringComparer.OrdinalIgnoreCase);
+        if (names.Count == 0) return false;
+        if (!string.IsNullOrWhiteSpace(rate.ExecutiveName)
+            && !string.Equals(rate.ExecutiveName, "Castro Fallas", StringComparison.OrdinalIgnoreCase)
+            && names.Contains(rate.ExecutiveName.Trim(), StringComparer.OrdinalIgnoreCase))
+            return true;
+
+        if (rate.Status is not (RateStatus.Open or RateStatus.PendingApproval
+                or RateStatus.ApprovedByManagement or RateStatus.RejectedByManagement))
+            return false;
+
+        // Keep access to the seller's previously issued offer even if Pricing
+        // temporarily changes the executive shown on the unpublished revision.
+        var published = await db.Set<RateRevision>().AsNoTracking()
+            .Where(revision => revision.RateHeaderId == rate.Id
+                && (revision.Status == "Sent"
+                    || revision.Status == "RequestedByClient"
+                    || revision.Status == "AcceptedByClient"
+                    || revision.Status == "RejectedByClient"
+                    || revision.Status == "Expired"))
+            .Select(revision => revision.SnapshotJson)
+            .ToArrayAsync(ct);
+        foreach (var snapshot in published)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(snapshot);
+                if (!document.RootElement.TryGetProperty("ExecutiveName", out var value)
+                    || value.ValueKind != JsonValueKind.String)
+                    continue;
+                var previousName = value.GetString()?.Trim();
+                if (previousName is not null
+                    && names.Contains(previousName, StringComparer.OrdinalIgnoreCase))
+                    return true;
+            }
+            catch (JsonException)
+            {
+                // Malformed history cannot grant access.
+            }
+        }
+
+        return false;
     }
 
     public async Task<bool> CanReadAsync(RateHeader rate, Guid userId, CancellationToken ct)
