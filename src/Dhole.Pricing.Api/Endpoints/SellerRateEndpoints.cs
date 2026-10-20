@@ -43,6 +43,7 @@ public static class SellerRateEndpoints
         IQueryDispatcher dispatcher,
         RateCreatorIdentityService creatorIdentityService,
         SellerRateAccessService sellerAccess,
+        ILoggerFactory loggerFactory,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -58,10 +59,40 @@ public static class SellerRateEndpoints
             .Select(x => x.RateId!.Value)
             .ToListAsync(cancellationToken);
 
-        // Pricing may create and send a rate without a RateRequest. Include only rates
-        // assigned to the authenticated executive via the Auth directory.
-        var assignedIds = await sellerAccess.AssignedRateIdsAsync(currentUserId.Value, cancellationToken);
-        var orderedIds = linkedIds.Concat(assignedIds).Distinct().ToArray();
+        // A receipt is a persisted, user-ID-based assignment. Preserve visibility
+        // even if the executive display name changes or Auth is unavailable.
+        var receivedIds = await db.RateHeaders
+            .AsNoTracking()
+            .Where(rate => !rate.IsDeleted && rate.SellerReceivedBy == currentUserId.Value)
+            .Select(rate => rate.Id)
+            .ToArrayAsync(cancellationToken);
+
+        // Rates issued directly by Pricing may not have a linked RateRequest.
+        // Auth is only needed to resolve those name-based assignments: an Auth
+        // outage must never hide requests or receipts already linked by user ID.
+        IReadOnlyCollection<Guid> assignedIds;
+        try
+        {
+            assignedIds = await sellerAccess.AssignedRateIdsAsync(currentUserId.Value, cancellationToken);
+        }
+        catch (Exception error) when (error is HttpRequestException
+            || (error is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            loggerFactory.CreateLogger("SellerRateEndpoints").LogWarning(error,
+                "No se pudieron resolver los ejecutivos de Auth para el vendedor {UserId}.",
+                currentUserId.Value);
+
+            if (linkedIds.Count == 0 && receivedIds.Length == 0)
+            {
+                return Results.Problem(
+                    detail: "No se pudieron verificar las tarifas asignadas. Intente nuevamente.",
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
+            assignedIds = Array.Empty<Guid>();
+        }
+
+        var orderedIds = linkedIds.Concat(receivedIds).Concat(assignedIds).Distinct().ToArray();
         if (orderedIds.Length == 0)
             return Results.Ok(Array.Empty<RateDto>());
 
