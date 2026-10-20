@@ -78,8 +78,7 @@ public static class SellerRateEndpoints
         {
             assignedIds = await sellerAccess.AssignedRateIdsAsync(currentUserId.Value, cancellationToken);
         }
-        catch (Exception error) when (error is HttpRequestException
-            || (error is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        catch (Exception error) when (!cancellationToken.IsCancellationRequested)
         {
             loggerFactory.CreateLogger("SellerRateEndpoints").LogWarning(error,
                 "No se pudieron resolver los ejecutivos de Auth para el vendedor {UserId}.",
@@ -268,6 +267,10 @@ public static class SellerRateEndpoints
         return ToHistoricalSellerView(rate, published);
     }
 
+    private sealed record SellerPublishedRateDetail(
+        Guid Id, string Name, decimal Quantity, string? CurrencyCode,
+        decimal SaleAmount, bool BillToClient);
+
     private static object ToHistoricalSellerView(RateDto current, RateRevision published)
     {
         using var document = JsonDocument.Parse(published.SnapshotJson);
@@ -310,15 +313,15 @@ public static class SellerRateEndpoints
         var details = detailsValue.ValueKind == JsonValueKind.Array
             ? detailsValue.EnumerateArray()
                 .Where(item => Amount(item, "SaleAmount") > 0m)
-                .Select(item => new {
-                    Id = Guid.TryParse(Text(item, "Id"), out var detailId) ? detailId : Guid.Empty,
-                    Name = Text(item, "Name") ?? "",
-                    Quantity = Amount(item, "Quantity"),
-                    CurrencyCode = Text(item, "CurrencyCode"),
-                    SaleAmount = Amount(item, "SaleAmount"),
-                    BillToClient = true,
-                }).ToArray()
-            : [];
+                .Select(item => new SellerPublishedRateDetail(
+                    Guid.TryParse(Text(item, "Id"), out var detailId) ? detailId : Guid.Empty,
+                    Text(item, "Name") ?? "",
+                    Amount(item, "Quantity"),
+                    Text(item, "CurrencyCode"),
+                    Amount(item, "SaleAmount"),
+                    true
+                )).ToArray()
+            : Array.Empty<SellerPublishedRateDetail>();
 
         return new
         {
