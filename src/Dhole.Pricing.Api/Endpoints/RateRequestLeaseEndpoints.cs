@@ -41,11 +41,13 @@ public static class RateRequestLeaseEndpoints
         if (name.Length > 200) name = name[..200];
 
         // The conditional UPDATE arbitrates simultaneous claims across all API instances.
-        // Reentry is allowed only with the original user's original tab token.
+        // Normal reentry uses the tab token. Explicit recovery rotates an abandoned
+        // lease only when its owner is the same authenticated user.
         var updated = await db.RateRequests
             .Where(x => x.Id == id && x.Status == RateRequestStatus.Open
                 && (x.LockExpiresAtUtc == null || x.LockExpiresAtUtc <= now
-                    || (x.LockedByUserId == actor.Value && x.LockToken == token)))
+                    || (x.LockedByUserId == actor.Value
+                        && (x.LockToken == token || request.RecoverOwnLease))))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.LockedByUserId, actor.Value)
                 .SetProperty(x => x.LockedByName, name)
@@ -123,5 +125,7 @@ public static class RateRequestLeaseEndpoints
             expiresAtUtc = locked ? current.LockExpiresAtUtc : null
         });
     }
-    private sealed record LeaseRequest(Guid? Token);
+    // A deliberate resume can reclaim ONLY the authenticated user's own lease.
+    // Its token is rotated, invalidating the abandoned tab; other users stay locked.
+    private sealed record LeaseRequest(Guid? Token, bool RecoverOwnLease = false);
 }
