@@ -199,11 +199,16 @@ internal static class RateModificationWizardSnapshot
                     || row.weightKg > 0m || !string.IsNullOrWhiteSpace(row.description))
                 .ToArray();
             if (rows.Length == 0) return requestContext;
-            return JsonSerializer.SerializeToElement(new {
-                consolidatedCargoLines = rows,
-                cargoDimensionStorageUnit = "cm",
-                cargoVolumeUnit = "CBM"
-            });
+            // Preserve seller-specific fields (e.g. port handling and cargo date)
+            // when supplementing an older request with the saved quotation's lines.
+            var merged = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            if (requestContext is { ValueKind: JsonValueKind.Object } original)
+                foreach (var property in original.EnumerateObject())
+                    merged[property.Name] = property.Value.Clone();
+            merged["consolidatedCargoLines"] = rows;
+            merged["cargoDimensionStorageUnit"] = "cm";
+            merged["cargoVolumeUnit"] = "CBM";
+            return JsonSerializer.SerializeToElement(merged);
         }
         catch (JsonException) { return requestContext; }
     }
