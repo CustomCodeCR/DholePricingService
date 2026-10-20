@@ -185,23 +185,21 @@ public static class RateRequestEndpoints
             .Distinct()
             .ToArray();
 
-        var completedRateIds = linkedRateIds.Length == 0
+        // A new request with an existing linked rate is no longer unassigned work.
+        // This also covers PendingApproval / Open quotes awaiting margin authorization;
+        // modification requests deliberately stay visible until their new revision is sent.
+        var linkedExistingRateIds = linkedRateIds.Length == 0
             ? new HashSet<Guid>()
             : (await db.RateHeaders
                 .AsNoTracking()
-                .Where(x => linkedRateIds.Contains(x.Id)
-                    && (x.Status == RateStatus.Sent
-                        || x.Status == RateStatus.Expired
-                        || x.Status == RateStatus.AcceptedByClient
-                        || x.Status == RateStatus.RejectedByClient
-                        || x.Status == RateStatus.Closed))
+                .Where(x => linkedRateIds.Contains(x.Id) && !x.IsDeleted)
                 .Select(x => x.Id)
                 .ToListAsync(ct))
                 .ToHashSet();
 
         return Results.Ok(requests
             .Where(x => RateModificationRequestPayload.IsModification(x.PayloadJson)
-                || !x.RateId.HasValue || !completedRateIds.Contains(x.RateId.Value))
+                || !x.RateId.HasValue || !linkedExistingRateIds.Contains(x.RateId.Value))
             .Select(ToDto)
             .ToArray());
     }
