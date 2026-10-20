@@ -327,12 +327,16 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             ? $"IVA {detail.DestinationTaxRate.ToString("0.##", MoneyCulture)}%: {DetailMoney(detail, LineTax(detail))}"
             : string.Empty;
 
-        var useAllInPresentation = rate.UseAllInPresentation && reportDetails.Length > 0;
+        // Preserve each priced currency rather than merging incompatible totals.
+        // Historic ALL IN quotations without a usable FX snapshot must still render.
+        var useAllInPresentation = rate.UseAllInPresentation
+            && reportDetails.Length > 0
+            && CanConsolidateAllIn(rate, reportDetails, CurrencyIso);
         var allInAmount = useAllInPresentation
-            ? CalculateAllInAmount(rate, reportDetails, ReportQuantity)
+            ? CalculateAllInAmount(rate, reportDetails, CurrencyIso, ReportQuantity)
             : 0m;
         var allInTax = useAllInPresentation
-            ? CalculateAllInAmount(rate, reportDetails, ReportQuantity, LineTax)
+            ? CalculateAllInAmount(rate, reportDetails, CurrencyIso, ReportQuantity, LineTax)
             : 0m;
         var hasDestinationTax = reportDetails.Any(detail => LineTax(detail) > 0m);
 
@@ -603,7 +607,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 validTo = rate.ValidTo.ToString("dd/MM/yyyy"),
                 total = reportTotal,
                 totalAmount = reportTotalAmount,
-                useAllInPresentation = rate.UseAllInPresentation,
+                useAllInPresentation,
+                allInFallbackToDetails = rate.UseAllInPresentation && !useAllInPresentation,
                 includes = commercialTerms.Includes,
                 subjectTo = commercialTerms.SubjectTo,
                 excludes = commercialTerms.Excludes,
@@ -846,9 +851,36 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         return result > 0m ? result : null;
     }
 
-    private static decimal CalculateAllInAmount(RateHeader rate, IReadOnlyCollection<RateDetail> details, Func<RateDetail, decimal>? quantityResolver = null, Func<RateDetail, decimal>? amountResolver = null)
+    private static bool CanConsolidateAllIn(
+        RateHeader rate,
+        IReadOnlyCollection<RateDetail> details,
+        Func<string?, string?, string> currencyIso)
     {
-        var targetCurrency = rate.CurrencyCode.Trim().ToUpperInvariant();
+        var targetCurrency = currencyIso(rate.CurrencyCode, rate.CurrencyName);
+        var exchangeRate = rate.ExchangeRateApplied is > 0m
+            ? rate.ExchangeRateApplied
+            : rate.ExchangeRateSale;
+
+        return details.All(detail =>
+        {
+            var sourceCurrency = currencyIso(detail.CurrencyCode, detail.CurrencyName);
+            if (string.Equals(sourceCurrency, targetCurrency, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return exchangeRate is > 0m
+                && (sourceCurrency is "USD" or "CRC")
+                && (targetCurrency is "USD" or "CRC");
+        });
+    }
+
+    private static decimal CalculateAllInAmount(
+        RateHeader rate,
+        IReadOnlyCollection<RateDetail> details,
+        Func<string?, string?, string> currencyIso,
+        Func<RateDetail, decimal>? quantityResolver = null,
+        Func<RateDetail, decimal>? amountResolver = null)
+    {
+        var targetCurrency = currencyIso(rate.CurrencyCode, rate.CurrencyName);
         var exchangeRate = rate.ExchangeRateApplied is > 0m
             ? rate.ExchangeRateApplied.Value
             : rate.ExchangeRateSale;
@@ -858,7 +890,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         {
             var amount = amountResolver?.Invoke(detail)
                 ?? detail.SaleAmount * (quantityResolver?.Invoke(detail) ?? detail.Quantity);
-            var sourceCurrency = detail.CurrencyCode.Trim().ToUpperInvariant();
+            var sourceCurrency = currencyIso(detail.CurrencyCode, detail.CurrencyName);
 
             if (string.Equals(sourceCurrency, targetCurrency, StringComparison.OrdinalIgnoreCase))
             {
