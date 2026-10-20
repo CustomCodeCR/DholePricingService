@@ -19,6 +19,11 @@ internal sealed class RateRequestConfiguration : IEntityTypeConfiguration<RateRe
         builder.Property(x => x.RequestedAtUtc).HasColumnName("requested_at_utc").IsRequired();
         builder.Property(x => x.DueAtUtc).HasColumnName("due_at_utc").IsRequired();
         builder.Property(x => x.CompletedAtUtc).HasColumnName("completed_at_utc");
+        builder.Property(x => x.CancelledAtUtc).HasColumnName("cancelled_at_utc");
+        builder.Property(x => x.CancelledByUserId).HasColumnName("cancelled_by_user_id");
+        builder.Property(x => x.CancelledByName).HasColumnName("cancelled_by_name").HasMaxLength(200);
+        builder.Property(x => x.CancellationReason).HasColumnName("cancellation_reason").HasMaxLength(40);
+        builder.Property(x => x.CancellationDetails).HasColumnName("cancellation_details").HasMaxLength(500);
         builder.Property(x => x.SlaReminderSentAtUtc).HasColumnName("sla_reminder_sent_at_utc");
         builder.Property(x => x.RateId).HasColumnName("rate_id");
         builder.Property(x => x.SellerUserId).HasColumnName("seller_user_id");

@@ -35,6 +35,8 @@ public static class RateRequestEndpoints
             .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapPost("/{id:guid}/complete", CompleteAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
+        group.MapPost("/{id:guid}/cancel", CancelAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
 
         return app;
     }
@@ -265,6 +267,47 @@ public static class RateRequestEndpoints
         return Results.NoContent();
     }
 
+    private static async Task<IResult> CancelAsync(
+        Guid id,
+        CancelRateRequestRequest request,
+        ServiceDbContext db,
+        HttpContext context,
+        CancellationToken ct)
+    {
+        var actor = context.GetCurrentUserId();
+        if (actor is null || actor == Guid.Empty) return Results.Unauthorized();
+
+        var reason = request.Reason?.Trim() ?? "";
+        if (reason is not ("Duplicate" or "CustomerCancelled" or "SellerCancelled" or "Other"))
+            return Results.BadRequest(new { code = "Pricing.RateRequestInvalidCancellationReason",
+                message = "Seleccione un motivo válido para cancelar la solicitud." });
+
+        var details = request.Details?.Trim();
+        if (details?.Length > 500 || (reason == "Other" && string.IsNullOrWhiteSpace(details)))
+            return Results.BadRequest(new { code = "Pricing.RateRequestInvalidCancellationDetails",
+                message = "Indique los detalles del motivo (máximo 500 caracteres)." });
+
+        var entity = await db.RateRequests.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (entity is null) return Results.NotFound();
+        if (entity.Status == RateRequestStatus.Cancelled) return Results.NoContent();
+        if (entity.Status != RateRequestStatus.Open)
+            return Results.Conflict(new { message = "Sólo pueden cancelarse solicitudes pendientes." });
+        if (!RateRequestLeaseEndpoints.HasActiveLease(context, entity))
+            return RateRequestLeaseEndpoints.LeaseRequired();
+
+        var actorName = context.User.FindFirst(ClaimTypes.Name)?.Value
+            ?? context.User.FindFirst("name")?.Value
+            ?? context.User.Identity?.Name
+            ?? actor.Value.ToString();
+        actorName = actorName.Trim();
+        if (actorName.Length > 200) actorName = actorName[..200];
+
+        // Cancellation only closes the seller's request. Never delete a generated RateHeader.
+        entity.MarkCancelled(reason, details, actor.Value, actorName, DateTime.UtcNow);
+        await db.SaveChangesAsync(ct);
+        return Results.NoContent();
+    }
+
     internal static async Task QueuePricingRealtimeNotificationAsync(
         RateRequest request,
         IPricingNotificationRecipientProvider recipientProvider,
@@ -474,6 +517,11 @@ public static class RateRequestEndpoints
             request.RequestedAtUtc,
             request.DueAtUtc,
             request.CompletedAtUtc,
+            request.CancelledAtUtc,
+            request.CancelledByUserId,
+            request.CancelledByName,
+            request.CancellationReason,
+            request.CancellationDetails,
             request.SlaReminderSentAtUtc,
             request.RateId,
             request.SellerUserId,
@@ -495,6 +543,8 @@ public static class RateRequestEndpoints
             payload = document.RootElement.Clone(),
         };
     }
+
+    private sealed record CancelRateRequestRequest(string? Reason, string? Details);
 
     private sealed record CreateRateRequestRequest(
         string Priority,
