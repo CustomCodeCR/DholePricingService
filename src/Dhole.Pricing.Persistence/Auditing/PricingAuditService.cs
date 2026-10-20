@@ -101,15 +101,16 @@ public sealed class PricingAuditService(ServiceDbContext dbContext) : IPricingAu
                     if (after.TryGetProperty(field, out var value))
                         selected[field] = value.Clone();
                 }
+                var integrationEventId = Guid.NewGuid();
                 dbContext.OutboxMessages.Add(new OutboxMessage
                 {
-                    EventId = Guid.NewGuid(),
+                    EventId = integrationEventId,
                     EventType = integrationEvent,
                     EventName = integrationEvent,
                     SourceService = SourceService,
                     PayloadJson = JsonSerializer.Serialize(new
                     {
-                        eventId = Guid.NewGuid(),
+                        eventId = integrationEventId,
                         rateId,
                         occurredAt,
                         fields = selected,
