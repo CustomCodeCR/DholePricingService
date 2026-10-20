@@ -47,6 +47,11 @@ public sealed class RateRequest : Entity<Guid>
     public DateTime RequestedAtUtc { get; private set; }
     public DateTime DueAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
+    public DateTime? CancelledAtUtc { get; private set; }
+    public Guid? CancelledByUserId { get; private set; }
+    public string? CancelledByName { get; private set; }
+    public string? CancellationReason { get; private set; }
+    public string? CancellationDetails { get; private set; }
     public DateTime? SlaReminderSentAtUtc { get; private set; }
     public Guid? RateId { get; private set; }
     public Guid? SellerUserId { get; private set; }
@@ -148,6 +153,26 @@ public sealed class RateRequest : Entity<Guid>
         if (Status != RateRequestStatus.Open) return;
         Status = RateRequestStatus.Completed;
         CompletedAtUtc = completedAtUtc;
+    }
+
+    public void MarkCancelled(string reason, string? details, Guid actorId, string actorName, DateTime cancelledAtUtc)
+    {
+        if (Status != RateRequestStatus.Open)
+            throw new InvalidOperationException("Sólo pueden cancelarse solicitudes abiertas.");
+
+        Status = RateRequestStatus.Cancelled;
+        CancelledAtUtc = cancelledAtUtc;
+        CancelledByUserId = actorId;
+        CancelledByName = Normalize(actorName);
+        CancellationReason = reason;
+        CancellationDetails = Normalize(details);
+
+        // A cancelled request can never retain an active work lease.
+        LockedByUserId = null;
+        LockedByName = null;
+        LockToken = null;
+        LockedAtUtc = null;
+        LockExpiresAtUtc = null;
     }
 
     public void MarkSlaReminderSent(DateTime sentAtUtc)

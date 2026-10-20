@@ -50,6 +50,11 @@ public static class RateRequestReportingEndpoints
                 x.RequestedAtUtc,
                 x.DueAtUtc,
                 x.CompletedAtUtc,
+                x.CancelledAtUtc,
+                x.CancelledByUserId,
+                x.CancelledByName,
+                x.CancellationReason,
+                x.CancellationDetails,
                 x.RateId,
                 x.SellerUserId,
                 x.SellerName,
@@ -78,6 +83,11 @@ public static class RateRequestReportingEndpoints
             x.RequestedAtUtc,
             x.DueAtUtc,
             x.CompletedAtUtc,
+            x.CancelledAtUtc,
+            x.CancelledByUserId,
+            x.CancelledByName,
+            x.CancellationReason,
+            x.CancellationDetails,
             x.RateId,
             x.SellerUserId,
             x.SellerName,
@@ -201,7 +211,8 @@ public static class RateRequestReportingEndpoints
             {
                 "Solicitud", "Estado", "Prioridad", "Fecha solicitud", "Vence SLA", "Fecha completada",
                 "Vendedor", "Correo vendedor", "Cliente", "Ejecutivo", "Modalidad", "Origen", "POE", "POD",
-                "Tarifa asociada", "Fecha de carga", "Contenedor/Equipo", "Cantidad", "Incoterm", "Servicios"
+                "Tarifa asociada", "Fecha de carga", "Contenedor/Equipo", "Cantidad", "Incoterm", "Servicios",
+                "Fecha cancelación", "Motivo cancelación", "Detalle cancelación", "Cancelada por"
             };
 
             var xml = new StringBuilder();
@@ -220,7 +231,9 @@ public static class RateRequestReportingEndpoints
                     request.SellerName ?? "", request.SellerEmail ?? "", request.ClientName ?? "", request.ExecutiveName ?? "",
                     request.ShipmentMode ?? "", request.OriginName ?? "", request.PoeName ?? "", request.PodName ?? request.DestinationName ?? "",
                     request.RateId?.ToString() ?? "", payload.LoadDate, payload.Equipment, payload.Quantity,
-                    payload.Incoterm, payload.Services
+                    payload.Incoterm, payload.Services,
+                    FormatDate(request.CancelledAtUtc), request.CancellationReason ?? "",
+                    request.CancellationDetails ?? "", request.CancelledByName ?? ""
                 });
             }
 
