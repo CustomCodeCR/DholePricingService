@@ -58,13 +58,13 @@ public sealed class RateReleaseLineDeduplicatorTests
     {
         var rate = CreateRate();
         var currency = rate.CurrencyId;
-        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Release", CostDetailType.CarrierCharge,
+        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Release", CostDetailType.DestinationCharge,
             CostType.Fixed, ChargeBasis.PerShipment, currency, "USD", "USD", 75m, 0m, null, 1m, null);
-        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Release", CostDetailType.CarrierCharge,
+        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Release", CostDetailType.DestinationCharge,
             CostType.Fixed, ChargeBasis.PerShipment, currency, "USD", "USD", 75m, 0m, null, 1m, null);
-        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Manejos", CostDetailType.CarrierCharge,
+        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Manejos", CostDetailType.DestinationCharge,
             CostType.Fixed, ChargeBasis.PerShipment, currency, "USD", "USD", 0m, 55m, null, 1m, null);
-        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Manejos", CostDetailType.CarrierCharge,
+        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Manejos", CostDetailType.DestinationCharge,
             CostType.Fixed, ChargeBasis.PerShipment, currency, "USD", "USD", 50m, 0m, null, 1m, null);
 
         RateReleaseLineDeduplicator.RemoveExactDuplicates(rate, updatedBy: null);
@@ -83,11 +83,11 @@ public sealed class RateReleaseLineDeduplicatorTests
     {
         var rate = CreateRate();
         var currency = rate.CurrencyId;
-        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Release", CostDetailType.CarrierCharge,
+        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Release", CostDetailType.DestinationCharge,
             CostType.Fixed, ChargeBasis.PerShipment, currency, "USD", "USD", 75m, 0m, null, 1m, null);
-        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Release", CostDetailType.CarrierCharge,
+        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Release", CostDetailType.DestinationCharge,
             CostType.Fixed, ChargeBasis.PerShipment, currency, "USD", "USD", 90m, 0m, null, 1m, null);
-        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Release", CostDetailType.CarrierCharge,
+        rate.AddRateDetail(rate.Id, Guid.NewGuid(), "Release", CostDetailType.DestinationCharge,
             CostType.Fixed, ChargeBasis.PerShipment, currency, "USD", "USD", 75m, 0m, "Otro servicio", 1m, null);
 
         RateReleaseLineDeduplicator.RemoveExactDuplicates(rate, updatedBy: null);
