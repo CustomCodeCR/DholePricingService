@@ -1,4 +1,7 @@
 using System.Security.Claims;
+using System.Text.Json;
+using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
 using Dhole.Pricing.Api.Services;
@@ -75,8 +78,7 @@ public static class SellerRateEndpoints
         {
             assignedIds = await sellerAccess.AssignedRateIdsAsync(currentUserId.Value, cancellationToken);
         }
-        catch (Exception error) when (error is HttpRequestException
-            || (error is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        catch (Exception error) when (!cancellationToken.IsCancellationRequested)
         {
             loggerFactory.CreateLogger("SellerRateEndpoints").LogWarning(error,
                 "No se pudieron resolver los ejecutivos de Auth para el vendedor {UserId}.",
@@ -113,7 +115,15 @@ public static class SellerRateEndpoints
             cancellationToken
         );
 
-        return Results.Ok(enrichedItems.Select(ToSellerView).ToArray());
+        var visibleItems = new List<object>(enrichedItems.Count);
+        foreach (var item in enrichedItems)
+        {
+            var published = await ToSellerViewAsync(item, db, cancellationToken);
+            if (published is not null)
+                visibleItems.Add(published);
+        }
+
+        return Results.Ok(visibleItems.ToArray());
     }
     private static async Task<IResult> GetOneAsync(
         Guid rateId,
@@ -131,9 +141,9 @@ public static class SellerRateEndpoints
         if (!await sellerAccess.CanReadAsync(rate, userId.Value, cancellationToken)) return Results.Forbid();
 
         var result = await dispatcher.DispatchAsync(new GetRateByIdQuery(rateId), cancellationToken);
-        return result.IsSuccess && result.Value is not null
-            ? Results.Ok(ToSellerView(result.Value))
-            : Results.NotFound();
+        if (!result.IsSuccess || result.Value is null) return Results.NotFound();
+        var visible = await ToSellerViewAsync(result.Value, db, cancellationToken);
+        return visible is not null ? Results.Ok(visible) : Results.NotFound();
     }
 
     private static async Task<IResult> DownloadAsync(
@@ -150,6 +160,13 @@ public static class SellerRateEndpoints
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
         if (rate is null) return Results.NotFound();
         if (!await sellerAccess.CanReadAsync(rate, userId.Value, cancellationToken)) return Results.Forbid();
+
+        // Generating the PDF for a revision still being priced would expose an
+        // unpublished offer. The prior issued PDF remains in the seller's email.
+        if (IsPricingDraft(rate.Status.ToString()))
+            return Results.Conflict(new {
+                message = "Pricing está preparando una nueva revisión. La última cotización enviada sigue disponible en su correo."
+            });
 
         var result = await dispatcher.DispatchAsync(
             new GenerateRateDocumentCommand(rateId, null, "pdf"), cancellationToken);
@@ -223,6 +240,122 @@ public static class SellerRateEndpoints
         }));
     }
 
+
+    private static bool IsPricingDraft(string status) => status is
+        "Open" or "PendingApproval" or "ApprovedByManagement" or "RejectedByManagement";
+
+    private static async Task<object?> ToSellerViewAsync(
+        RateDto rate, ServiceDbContext db, CancellationToken cancellationToken)
+    {
+        if (!IsPricingDraft(rate.Status))
+            return ToSellerView(rate);
+
+        // A new draft replaces the live header while its previous published
+        // revision is stored in RateRevisions. Never disclose the new draft's
+        // commercial terms to Sales until Pricing explicitly resends it.
+        var published = await db.Set<RateRevision>().AsNoTracking()
+            .Where(revision => revision.RateHeaderId == rate.Id
+                && (revision.Status == "Sent"
+                    || revision.Status == "RequestedByClient"
+                    || revision.Status == "AcceptedByClient"
+                    || revision.Status == "RejectedByClient"
+                    || revision.Status == "Expired"))
+            .OrderByDescending(revision => revision.RevisionNumber)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (published is null) return null; // Never reveal a quote never issued.
+        return ToHistoricalSellerView(rate, published);
+    }
+
+    private sealed record SellerPublishedRateDetail(
+        Guid Id, string Name, decimal Quantity, string? CurrencyCode,
+        decimal SaleAmount, bool BillToClient);
+
+    private static object ToHistoricalSellerView(RateDto current, RateRevision published)
+    {
+        using var document = JsonDocument.Parse(published.SnapshotJson);
+        var previous = document.RootElement;
+
+        static JsonElement Field(JsonElement json, string name)
+            => json.ValueKind == JsonValueKind.Object && json.TryGetProperty(name, out var value)
+                ? value : default;
+        static string? Text(JsonElement json, string name)
+        {
+            var value = Field(json, name);
+            return value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+        }
+        static decimal Amount(JsonElement json, string name)
+        {
+            var value = Field(json, name);
+            return value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var amount)
+                ? amount : 0m;
+        }
+        static int Number(JsonElement json, string name)
+        {
+            var value = Field(json, name);
+            return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var amount)
+                ? amount : 0;
+        }
+        static DateTime Date(JsonElement json, string name, DateTime fallback)
+        {
+            var value = Field(json, name);
+            return value.ValueKind == JsonValueKind.String && value.TryGetDateTime(out var parsed)
+                ? parsed : fallback;
+        }
+
+        var modeValue = Field(previous, "ShipmentMode");
+        var shipmentMode = modeValue.ValueKind == JsonValueKind.Number && modeValue.TryGetInt32(out var modeCode)
+            ? ((ShipmentMode)modeCode).ToString()
+            : modeValue.ValueKind == JsonValueKind.String ? modeValue.GetString() ?? current.ShipmentMode
+            : current.ShipmentMode;
+
+        var detailsValue = Field(previous, "Details");
+        var details = detailsValue.ValueKind == JsonValueKind.Array
+            ? detailsValue.EnumerateArray()
+                .Where(item => Amount(item, "SaleAmount") > 0m)
+                .Select(item => new SellerPublishedRateDetail(
+                    Guid.TryParse(Text(item, "Id"), out var detailId) ? detailId : Guid.Empty,
+                    Text(item, "Name") ?? "",
+                    Amount(item, "Quantity"),
+                    Text(item, "CurrencyCode"),
+                    Amount(item, "SaleAmount"),
+                    true
+                )).ToArray()
+            : Array.Empty<SellerPublishedRateDetail>();
+
+        return new
+        {
+            current.Id,
+            RateCode = Text(previous, "RateCode") ?? current.RateCode,
+            RateName = published.RateName,
+            RevisionNumber = published.RevisionNumber,
+            QuoNumber = published.QuoNumber,
+            IdtraNumber = published.IdtraNumber,
+            ClientName = Text(previous, "ClientName"),
+            ExecutiveName = Text(previous, "ExecutiveName"),
+            Status = published.Status,
+            SellerReceivedAtUtc = (DateTime?)null,
+            SellerReceivedBy = (Guid?)null,
+            ShipmentMode = shipmentMode,
+            ContainerQuantity = Number(previous, "ContainerQuantity"),
+            ContainerTypeName = Text(previous, "ContainerTypeName"),
+            PolName = Text(previous, "PolName"),
+            PoeName = Text(previous, "PoeName"),
+            PodName = Text(previous, "PodName"),
+            CurrencyName = Text(previous, "CurrencyName"),
+            CurrencyCode = Text(previous, "CurrencyCode"),
+            ValidFrom = Date(previous, "ValidFrom", current.ValidFrom),
+            ValidTo = Date(previous, "ValidTo", current.ValidTo),
+            TotalSaleAmount = Amount(previous, "TotalSaleAmount"),
+            Includes = Text(previous, "Includes"),
+            SubjectTo = Text(previous, "SubjectTo"),
+            Excludes = Text(previous, "Excludes"),
+            TransitTime = Text(previous, "TransitTime"),
+            RateDetails = details,
+            RevisionPending = true,
+        };
+    }
+
     // Never expose Pricing costs, margins or internal supplier data to a seller.
     // Seller API returns only the commercial information found in their quotation.
     private static object ToSellerView(RateDto rate) => new
@@ -253,6 +386,7 @@ public static class SellerRateEndpoints
         rate.SubjectTo,
         rate.Excludes,
         rate.TransitTime,
+        RevisionPending = false,
         RateDetails = rate.RateDetails
             .Where(detail => detail.SaleAmount > 0m)
             .Select(detail => new
