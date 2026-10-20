@@ -114,7 +114,8 @@ public static class SellerRateRequestEndpoints
                 JsonSerializer.SerializeToElement(RateModificationWizardSnapshot.PickupLocations(rate))),
             supportEntityId = PayloadField("supportEntityId"),
             supportDocuments = PayloadField("supportDocuments"),
-            sellerContext = PayloadField("sellerContext"),
+            sellerContext = RateModificationWizardSnapshot.SellerCargoContext(
+                rate, PayloadField("sellerContext")),
             names = RateModificationWizardSnapshot.Names(rate),
         });
     }
@@ -151,8 +152,34 @@ public static class SellerRateRequestEndpoints
                 message = "La tarifa cambió después de abrir el wizard. Actualice los datos y vuelva a comparar."
             });
 
+        // Compare the requested cargo against the real quote; fall back to the
+        // original seller request when older quotes have no persisted cargo lines.
+        JsonElement? originalSellerContext = null;
+        var relatedPayloads = await db.RateRequests.AsNoTracking()
+            .Where(x => x.RateId == rateId)
+            .OrderBy(x => x.RequestedAtUtc)
+            .Select(x => x.PayloadJson)
+            .ToListAsync(cancellationToken);
+        foreach (var json in relatedPayloads)
+        {
+            if (RateModificationRequestPayload.IsModification(json)) continue;
+            try
+            {
+                using var document = JsonDocument.Parse(json);
+                var root = document.RootElement;
+                if (root.TryGetProperty("sellerContext", out var context)
+                    && context.ValueKind == JsonValueKind.Object)
+                {
+                    originalSellerContext = context.Clone();
+                    break;
+                }
+            }
+            catch (JsonException) { }
+        }
+
         // Serialised in the same row as the existing RateRequest. The original tariff is unchanged.
-        var comparison = RateModificationWizardSnapshot.Compare(rate, request.Payload);
+        var comparison = RateModificationWizardSnapshot.Compare(
+            rate, request.Payload, originalSellerContext);
         if (comparison.Count == 0)
             return Results.BadRequest(new { message = "No hay diferencias entre la tarifa original y los cambios del wizard." });
 
