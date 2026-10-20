@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
@@ -64,7 +65,7 @@ public sealed class SellerRateAccessService(
 
         // PostgreSQL string equality is case-sensitive; align the list with the
         // case-insensitive check used by IsAssignedExecutiveAsync/GetOneAsync.
-        return await db.RateHeaders.AsNoTracking()
+        var currentIds = await db.RateHeaders.AsNoTracking()
             .Where(rate => !rate.IsDeleted && rate.ExecutiveName != null
                 && names.Contains(rate.ExecutiveName.Trim().ToLower())
                 && (rate.Status != RateStatus.Open
@@ -84,6 +85,44 @@ public sealed class SellerRateAccessService(
                             || revision.Status == "Expired"))))
             .Select(rate => rate.Id)
             .ToArrayAsync(ct);
+
+        // Pricing may change the executive's display name on an unpublished
+        // draft. Resolve the owner from the previously issued revision as well;
+        // only globally unique Auth names can match.
+        var priorPublished = await db.Set<RateRevision>().AsNoTracking()
+            .Where(revision => (revision.Status == "Sent"
+                    || revision.Status == "RequestedByClient"
+                    || revision.Status == "AcceptedByClient"
+                    || revision.Status == "RejectedByClient"
+                    || revision.Status == "Expired")
+                && db.RateHeaders.Any(rate => rate.Id == revision.RateHeaderId
+                    && !rate.IsDeleted
+                    && (rate.Status == RateStatus.Open
+                        || rate.Status == RateStatus.PendingApproval
+                        || rate.Status == RateStatus.ApprovedByManagement
+                        || rate.Status == RateStatus.RejectedByManagement)))
+            .Select(revision => new { revision.RateHeaderId, revision.SnapshotJson })
+            .ToArrayAsync(ct);
+        var oldIds = new List<Guid>();
+        foreach (var published in priorPublished)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(published.SnapshotJson);
+                if (!document.RootElement.TryGetProperty("ExecutiveName", out var value)
+                    || value.ValueKind != JsonValueKind.String)
+                    continue;
+                var executiveName = value.GetString()?.Trim().ToLowerInvariant();
+                if (executiveName is not null && names.Contains(executiveName))
+                    oldIds.Add(published.RateHeaderId);
+            }
+            catch (JsonException)
+            {
+                // A malformed legacy snapshot is never evidence of ownership.
+            }
+        }
+
+        return currentIds.Concat(oldIds).Distinct().ToArray();
     }
 
 }
