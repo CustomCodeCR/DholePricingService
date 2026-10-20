@@ -1,5 +1,6 @@
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
+using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,7 +16,11 @@ public sealed class SellerRateAccessService(
 {
     public async Task<IReadOnlyList<string>> AssignedNamesAsync(Guid userId, CancellationToken ct)
     {
-        var users = await directory.GetSalesExecutivesAsync(ct);
+        // Do not depend on the exact "Vendedor" role: commercial requests
+        // can be assigned to active users with delegated/legacy roles.
+        // Check aliases against the entire Auth directory so an ambiguous
+        // name never grants access to another user's quotation.
+        var users = await directory.GetPricingUsersAsync(ct);
         // Never allow ambiguous display names to give two users access to the same rate.
         // A quotation may store the display name or the login name of the seller.
         // Match either alias, but only if no other Auth user owns the same alias.
@@ -62,10 +67,21 @@ public sealed class SellerRateAccessService(
         return await db.RateHeaders.AsNoTracking()
             .Where(rate => !rate.IsDeleted && rate.ExecutiveName != null
                 && names.Contains(rate.ExecutiveName.Trim().ToLower())
-                && rate.Status != RateStatus.Open
-                && rate.Status != RateStatus.PendingApproval
-                && rate.Status != RateStatus.ApprovedByManagement
-                && rate.Status != RateStatus.RejectedByManagement)
+                && (rate.Status != RateStatus.Open
+                    && rate.Status != RateStatus.PendingApproval
+                    && rate.Status != RateStatus.ApprovedByManagement
+                    && rate.Status != RateStatus.RejectedByManagement
+                    // An already issued quotation must remain discoverable while
+                    // Pricing prepares a new revision. A seller must not see the
+                    // unfinished new version; the endpoint returns the last
+                    // published snapshot instead.
+                    || db.Set<RateRevision>().Any(revision =>
+                        revision.RateHeaderId == rate.Id
+                        && (revision.Status == "Sent"
+                            || revision.Status == "RequestedByClient"
+                            || revision.Status == "AcceptedByClient"
+                            || revision.Status == "RejectedByClient"
+                            || revision.Status == "Expired"))))
             .Select(rate => rate.Id)
             .ToArrayAsync(ct);
     }
