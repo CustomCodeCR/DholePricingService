@@ -219,7 +219,14 @@ public static class SellerRateRequestEndpoints
             modification = new {
                 sourceRevisionNumber = rate.RevisionNumber,
                 quote = rate.QuoNumber ?? rate.RateCode,
-                changes = comparison,
+                // Explicit camelCase also inside PayloadJson (JsonElement is returned
+                // without applying ASP.NET's response naming policy).
+                changes = comparison.Select(change => new {
+                    field = change.Field,
+                    action = change.Action,
+                    original = change.Original,
+                    requested = change.Requested
+                }).ToArray(),
                 original = RateModificationWizardSnapshot.OriginalForm(rate),
             },
             form = form.Clone(),
