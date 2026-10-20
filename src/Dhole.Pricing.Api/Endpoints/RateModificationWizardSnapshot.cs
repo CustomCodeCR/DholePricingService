@@ -207,42 +207,53 @@ internal static class RateModificationWizardSnapshot
                     merged[property.Name] = property.Value.Clone();
             merged["consolidatedCargoLines"] = rows;
             merged["cargoDimensionStorageUnit"] = "cm";
-            merged["cargoVolumeUnit"] = "CBM";
+            if (!merged.ContainsKey("cargoVolumeUnit")) merged["cargoVolumeUnit"] = "CBM";
             return JsonSerializer.SerializeToElement(merged);
         }
         catch (JsonException) { return requestContext; }
     }
 
-    private static string CargoLineSummary(JsonElement row, string? dimensionsUnit)
+    private static string CargoLineSummary(JsonElement row, string? storageUnit,
+        string? dimensionInputUnit = null, string? weightInputUnit = null)
     {
         var units = Number(row, "quantity");
-        var weight = Number(row, "weightKg");
-        var length = Number(row, "length");
-        var width = Number(row, "width");
-        var height = Number(row, "height");
-        // Both sides are compared in centimeters even when the seller used inches.
-        if (string.Equals(dimensionsUnit, "in", StringComparison.OrdinalIgnoreCase))
-        {
-            length *= 2.54m;
-            width *= 2.54m;
-            height *= 2.54m;
-        }
+        var weightKg = Number(row, "weightKg");
+        var lengthCm = Number(row, "length");
+        var widthCm = Number(row, "width");
+        var heightCm = Number(row, "height");
+        // The cargo payload stores measurements in cm or in, independent from
+        // the unit selected for the seller's input. Compare physical quantities.
+        var storageFactor = storageUnit?.ToLowerInvariant() switch {
+            "in" => 2.54m, "m" => 100m, "mm" => 0.1m, _ => 1m
+        };
+        lengthCm *= storageFactor;
+        widthCm *= storageFactor;
+        heightCm *= storageFactor;
+        var displayFactor = dimensionInputUnit?.ToLowerInvariant() switch {
+            "in" => 1m / 2.54m, "m" => 0.01m, "mm" => 10m, _ => 1m
+        };
+        var displayUnit = dimensionInputUnit is "in" or "m" or "mm"
+            ? dimensionInputUnit : "cm";
+        var displayWeight = weightInputUnit == "lb" ? weightKg * 2.2046226218m : weightKg;
+        var displayWeightUnit = weightInputUnit == "lb" ? "lb" : "kg";
         var description = Property(row, "description")?.ToString()?.Trim() ?? "";
         var isStackable = Property(row, "isStackable")?.ToString() ?? "true";
-        return $"{description} · {units:0.##} unidades · {weight:0.##} kg · " +
-            $"{length:0.##} × {width:0.##} × {height:0.##} cm · " +
+        return $"{description} · {units:0.##} unidades · {displayWeight:0.####} {displayWeightUnit} · " +
+            $"{lengthCm * displayFactor:0.####} × {widthCm * displayFactor:0.####} × {heightCm * displayFactor:0.####} {displayUnit} · " +
             $"Estibable: {isStackable}";
     }
 
-    private static List<string> CargoLines(JsonElement? context)
+    private static List<string> CargoLines(JsonElement? context, bool displaySellerUnits = false)
     {
         if (context is not { ValueKind: JsonValueKind.Object } objectContext) return [];
         var rows = Property(objectContext, "consolidatedCargoLines");
         if (rows is not { ValueKind: JsonValueKind.Array } cargoRows) return [];
-        var unit = Property(objectContext, "cargoDimensionStorageUnit")?.ToString();
+        var storageUnit = Property(objectContext, "cargoDimensionStorageUnit")?.ToString();
+        var inputUnit = displaySellerUnits ? Property(objectContext, "cargoDimensionInputUnit")?.ToString() : null;
+        var weightUnit = displaySellerUnits ? Property(objectContext, "cargoWeightInputUnit")?.ToString() : null;
         return cargoRows.EnumerateArray()
             .Where(row => row.ValueKind == JsonValueKind.Object)
-            .Select(row => CargoLineSummary(row, unit)).ToList();
+            .Select(row => CargoLineSummary(row, storageUnit, inputUnit, weightUnit)).ToList();
     }
 
     public static object Names(RateHeader rate) => new {
@@ -310,8 +321,11 @@ internal static class RateModificationWizardSnapshot
         if (payload.TryGetProperty("sellerContext", out var requestedSellerContext)
             && requestedSellerContext.ValueKind == JsonValueKind.Object)
         {
-            var sourceLines = CargoLines(SellerCargoContext(rate, originalSellerContext));
+            var originalContext = SellerCargoContext(rate, originalSellerContext);
+            var sourceLines = CargoLines(originalContext);
             var requestedLines = CargoLines(requestedSellerContext);
+            var originalDisplay = CargoLines(originalContext, displaySellerUnits: true);
+            var requestedDisplay = CargoLines(requestedSellerContext, displaySellerUnits: true);
             for (var index = 0; index < Math.Max(sourceLines.Count, requestedLines.Count); index++)
             {
                 var previous = index < sourceLines.Count ? sourceLines[index] : null;
@@ -319,7 +333,17 @@ internal static class RateModificationWizardSnapshot
                 if (previous == proposed) continue;
                 changes.Add(new Change($"Carga / paquete {index + 1}",
                     previous is null ? "Agregar" : proposed is null ? "Eliminar" : "Modificar",
-                    previous ?? "—", proposed ?? "—"));
+                    index < originalDisplay.Count ? originalDisplay[index] : "—",
+                    index < requestedDisplay.Count ? requestedDisplay[index] : "—"));
+            }
+            var formerVolumeUnit = originalContext is { ValueKind: JsonValueKind.Object } previousContext
+                ? Property(previousContext, "cargoVolumeUnit")?.ToString() : null;
+            var newVolumeUnit = Property(requestedSellerContext, "cargoVolumeUnit")?.ToString();
+            if (!string.IsNullOrWhiteSpace(formerVolumeUnit)
+                && !string.IsNullOrWhiteSpace(newVolumeUnit)
+                && !string.Equals(formerVolumeUnit, newVolumeUnit, StringComparison.OrdinalIgnoreCase))
+            {
+                changes.Add(new Change("Unidad de volumen", "Modificar", formerVolumeUnit, newVolumeUnit));
             }
         }
         if (payload.TryGetProperty("pickupLocations", out var pickups)
