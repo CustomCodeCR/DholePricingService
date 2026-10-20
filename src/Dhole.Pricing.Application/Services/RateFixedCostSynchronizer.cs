@@ -30,6 +30,9 @@ public sealed class RateFixedCostSynchronizer(
         bool preserveExplicitFixedDetails = false
     )
     {
+        // Clean historical identical Release rows when a rate is next saved.
+        RateReleaseLineDeduplicator.RemoveExactDuplicates(rate, updatedBy);
+
         // Las tarifas LCL coloader no usan una naviera propia. Pricing normaliza
         // CarrierId vacío a la referencia interna "No aplica (LCL)" (CarrierCode=LCL).
         // Las líneas del tarifario del coloader y las agregadas manualmente son la
@@ -209,6 +212,24 @@ public sealed class RateFixedCostSynchronizer(
                 : Math.Max(saleAmount * quantity, minimumSaleAmount);
             var effectiveCostAmount = quantity > 0m ? effectiveCostTotal / quantity : effectiveCostTotal;
             var effectiveSaleAmount = quantity > 0m ? effectiveSaleTotal / quantity : effectiveSaleTotal;
+
+            // Two distinct CostIds may represent the same Release charge for the same
+            // shipment. Keep the explicit/persisted line instead of billing it twice.
+            if (RateReleaseLineDeduplicator.HasEquivalent(
+                rate,
+                cost.Name,
+                cost.ChargeBasis,
+                targetCurrencyCode,
+                effectiveCostAmount,
+                effectiveSaleAmount,
+                cost.Notes,
+                quantity,
+                hasExistingAmount ? existingAmount.BillToClient : null,
+                hasExistingAmount && existingAmount.ApplyDestinationTax,
+                hasExistingAmount ? existingAmount.DestinationTaxRate : 0m))
+            {
+                continue;
+            }
 
             var synchronizedDetail = rate.AddRateDetail(
                 rate.Id,
