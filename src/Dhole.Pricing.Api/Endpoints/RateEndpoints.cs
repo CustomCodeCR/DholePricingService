@@ -5,6 +5,7 @@ using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
 using Dhole.Pricing.Api.Services;
+using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Features.Rates.ApproveRateMargin;
 using Dhole.Pricing.Application.Features.Rates.CreateRate;
@@ -853,6 +854,9 @@ public static class RateEndpoints
         Guid rateId,
         ICommandDispatcher dispatcher,
         LowMarginApprovedNotificationService lowMarginApprovedNotificationService,
+        ServiceDbContext db,
+        IIntegrationEventOutboxWriter outbox,
+        ILoggerFactory loggerFactory,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -869,6 +873,13 @@ public static class RateEndpoints
                 rateId,
                 approvedBy,
                 cancellationToken
+            );
+
+            // Creation already linked the pending-approval quote to its seller request.
+            // Once approved, send the PDF and close the request without needing an
+            // operator to reclaim the lease or manually mark the request completed.
+            await RateRequestCompletionEndpoints.TryCompleteApprovedRateAsync(
+                rateId, db, dispatcher, outbox, httpContext, loggerFactory, cancellationToken
             );
         }
 
