@@ -424,6 +424,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             )
             {
                 CreatedByUserId = x.CreatedBy,
+                LastModifiedByUserId = x.UpdatedBy,
             })
             .ToListAsync(cancellationToken);
 
@@ -694,6 +695,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.ValidFrom,
                 x.ValidTo,
                 x.CreatedBy,
+                x.UpdatedBy,
             })
             .ToListAsync(cancellationToken);
 
@@ -719,6 +721,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             )
             {
                 CreatedByUserId = x.CreatedBy,
+                LastModifiedByUserId = x.UpdatedBy,
             })
             .ToList();
 
