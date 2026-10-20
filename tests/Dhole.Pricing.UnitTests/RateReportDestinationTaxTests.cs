@@ -147,6 +147,64 @@ public sealed class RateReportDestinationTaxTests
         Assert.IsFalse(items.Any(row => row.GetProperty("notes").GetString()?.Contains("NavieraId:") == true));
     }
 
+    [TestMethod]
+    public void AllInWithoutExchangeRate_RendersSeparateCurrencies()
+    {
+        var rate = CreateRate();
+        rate.ConfigureCommercialPresentation(true);
+        AddLine(rate, "Flete USD", 100m);
+        rate.AddRateDetail(rate.Id, null, "Cargos destino CRC",
+            CostDetailType.DestinationCharge, CostType.Variable, ChargeBasis.PerShipment,
+            Guid.NewGuid(), "CRC", "CRC", 0m, 1000m, null, 1m, null);
+
+        using var data = Report(rate);
+        Assert.IsFalse(data.RootElement.GetProperty("rate").GetProperty("useAllInPresentation").GetBoolean());
+        Assert.IsTrue(data.RootElement.GetProperty("rate").GetProperty("allInFallbackToDetails").GetBoolean());
+        Assert.AreEqual(2, data.RootElement.GetProperty("items").GetArrayLength());
+        var totals = data.RootElement.GetProperty("currencyTotals").EnumerateArray().ToArray();
+        Assert.AreEqual(100m, totals.Single(x => x.GetProperty("currencyCode").GetString() == "USD")
+            .GetProperty("amount").GetDecimal());
+        Assert.AreEqual(1000m, totals.Single(x => x.GetProperty("currencyCode").GetString() == "CRC")
+            .GetProperty("amount").GetDecimal());
+    }
+
+    [TestMethod]
+    public void AllInWithExchangeRate_ConvertsAndKeepsSingleLine()
+    {
+        var rate = CreateRate();
+        rate.ConfigureCommercialPresentation(true);
+        rate.ConfigureExchangeRateSnapshot(
+            purchase: 495m, sale: 500m, applied: 500m, rateDate: DateTime.UtcNow.Date,
+            capturedAtUtc: DateTime.UtcNow, source: "Manual", manualOverride: true, updatedBy: null);
+        AddLine(rate, "Flete USD", 100m);
+        rate.AddRateDetail(rate.Id, null, "Cargos destino CRC",
+            CostDetailType.DestinationCharge, CostType.Variable, ChargeBasis.PerShipment,
+            Guid.NewGuid(), "CRC", "CRC", 0m, 1000m, null, 1m, null);
+
+        using var data = Report(rate);
+        Assert.IsTrue(data.RootElement.GetProperty("rate").GetProperty("useAllInPresentation").GetBoolean());
+        Assert.IsFalse(data.RootElement.GetProperty("rate").GetProperty("allInFallbackToDetails").GetBoolean());
+        var items = data.RootElement.GetProperty("items");
+        Assert.AreEqual(1, items.GetArrayLength());
+        Assert.AreEqual("ALL IN", items[0].GetProperty("description").GetString());
+        Assert.AreEqual(102m, items[0].GetProperty("lineTotalAmount").GetDecimal());
+    }
+
+    [TestMethod]
+    public void AllInWithHistoricalCurrencyCode_UsesCurrencyName()
+    {
+        var rate = CreateRate();
+        rate.ConfigureCommercialPresentation(true);
+        rate.AddRateDetail(rate.Id, null, "Flete código histórico",
+            CostDetailType.Freight, CostType.Variable, ChargeBasis.PerShipment,
+            rate.CurrencyId, "USD", "LEGACY", 0m, 150m, null, 1m, null);
+
+        using var data = Report(rate);
+        Assert.IsTrue(data.RootElement.GetProperty("rate").GetProperty("useAllInPresentation").GetBoolean());
+        Assert.AreEqual(150m, data.RootElement.GetProperty("items")[0]
+            .GetProperty("lineTotalAmount").GetDecimal());
+    }
+
     private static RateDetail AddLine(RateHeader rate, string name, decimal sale) =>
         rate.AddRateDetail(
             rate.Id, null, name, CostDetailType.DestinationCharge, CostType.Variable,

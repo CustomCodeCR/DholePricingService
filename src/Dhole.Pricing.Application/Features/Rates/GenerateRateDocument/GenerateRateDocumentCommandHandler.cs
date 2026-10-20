@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
 using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Commands;
 using Dhole.Pricing.Application.Abstractions.Reports;
@@ -13,7 +14,8 @@ public sealed class GenerateRateDocumentCommandHandler(
     IRateHeaderRepository rateHeaders,
     IRateCommentStore rateComments,
     IRateReportDataFactory dataFactory,
-    IPricingReportsClient reportsClient)
+    IPricingReportsClient reportsClient,
+    ILogger<GenerateRateDocumentCommandHandler> logger)
     : ICommandHandler<GenerateRateDocumentCommand, Result<GeneratedRateDocumentDto>>
 {
     private const string PricingFclClientQuoteTemplateCode = "pricing-fcl-client-quote";
@@ -23,61 +25,64 @@ public sealed class GenerateRateDocumentCommandHandler(
         GenerateRateDocumentCommand command,
         CancellationToken cancellationToken = default)
     {
-        var rate = await rateHeaders.GetByIdWithDetailsAsync(command.RateId, cancellationToken);
-        if (rate is null || rate.IsDeleted)
-            return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.RateHeaderNotFound);
-
-        // Los documentos comerciales solo pueden generarse cuando la tarifa ya superó
-        // el flujo de aprobación. Esta validación vive en Application para que no pueda
-        // omitirse llamando directamente al endpoint de documentos.
-        //
-        // Open representa una tarifa que no requirió aprobación manual (margen >= mínimo)
-        // o que fue autoaprobada por un usuario autorizado. Los estados posteriores también
-        // provienen de una tarifa ya habilitada comercialmente.
-        if (!CanGenerateCommercialDocument(rate.Status, rate.RequiredApproval))
-        {
-            var error = rate.RequiredApproval || rate.Status == RateStatus.PendingApproval
-                ? PricingErrors.RateLowMarginRequiresApproval
-                : PricingErrors.RateInvalidStatus;
-
-            return Result.Failure<GeneratedRateDocumentDto>(error);
-        }
-
-        var format = string.IsNullOrWhiteSpace(command.Format)
-            ? "pdf"
-            : command.Format.Trim().ToLowerInvariant();
-
-        if (format is not ("pdf" or "xlsx" or "csv"))
-            return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.UnsupportedReportFormat);
-
-        // FCL y LCL tienen contratos visuales distintos. LCL no expone naviera ni
-        // un contenedor interno de compatibilidad; FCL conserva su plantilla propia.
-        var templateCode = rate.ShipmentMode == ShipmentMode.Lcl
-            ? PricingLclClientQuoteTemplateCode
-            : PricingFclClientQuoteTemplateCode;
-
-        var fileName = rate.QuoNumber ?? rate.RateCode;
-        var comments = await rateComments.GetAsync(rate.Id, cancellationToken);
-        var dataJson = AddRateComments(dataFactory.CreateDataJson(rate), comments);
-
+        var stage = "load-rate";
         try
         {
+            var rate = await rateHeaders.GetByIdWithDetailsAsync(command.RateId, cancellationToken);
+            if (rate is null || rate.IsDeleted)
+                return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.RateHeaderNotFound);
+
+            // La cotización comercial requiere estar habilitada para su emisión.
+            if (!CanGenerateCommercialDocument(rate.Status, rate.RequiredApproval))
+            {
+                var error = rate.RequiredApproval || rate.Status == RateStatus.PendingApproval
+                    ? PricingErrors.RateLowMarginRequiresApproval
+                    : PricingErrors.RateInvalidStatus;
+                return Result.Failure<GeneratedRateDocumentDto>(error);
+            }
+
+            var format = string.IsNullOrWhiteSpace(command.Format)
+                ? "pdf"
+                : command.Format.Trim().ToLowerInvariant();
+
+            if (format is not ("pdf" or "xlsx" or "csv"))
+                return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.UnsupportedReportFormat);
+
+            var templateCode = rate.ShipmentMode == ShipmentMode.Lcl
+                ? PricingLclClientQuoteTemplateCode
+                : PricingFclClientQuoteTemplateCode;
+
+            stage = "build-payload";
+            var fileName = rate.QuoNumber ?? rate.RateCode;
+            var comments = await rateComments.GetAsync(rate.Id, cancellationToken);
+            var dataJson = AddRateComments(dataFactory.CreateDataJson(rate), comments);
+
+            stage = "call-reports-service";
             var document = await reportsClient.GenerateAsync(
-                templateCode,
-                format,
-                dataJson,
-                fileName,
-                "Tarifa",
-                cancellationToken);
+                templateCode, format, dataJson, fileName, "Tarifa", cancellationToken);
             return Result.Success(document);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException exception)
         {
+            logger.LogError(exception,
+                "Reports Service rechazó el documento de tarifa {RateId} en {Stage}",
+                command.RateId, stage);
             return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.ReportGenerationFailed);
         }
-        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        catch (TaskCanceledException exception) when (!cancellationToken.IsCancellationRequested)
         {
+            logger.LogError(exception,
+                "Reports Service agotó el tiempo al generar la tarifa {RateId} en {Stage}",
+                command.RateId, stage);
             return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.ReportGenerationTimedOut);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            // Log exception and stage, never the private commercial report payload.
+            logger.LogError(exception,
+                "Falló la generación del documento para tarifa {RateId} en {Stage}",
+                command.RateId, stage);
+            return Result.Failure<GeneratedRateDocumentDto>(PricingErrors.ReportGenerationFailed);
         }
     }
 
