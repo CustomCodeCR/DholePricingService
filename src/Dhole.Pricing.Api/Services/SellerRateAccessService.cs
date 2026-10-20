@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
+using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,7 +17,11 @@ public sealed class SellerRateAccessService(
 {
     public async Task<IReadOnlyList<string>> AssignedNamesAsync(Guid userId, CancellationToken ct)
     {
-        var users = await directory.GetSalesExecutivesAsync(ct);
+        // Do not depend on the exact "Vendedor" role: commercial requests
+        // can be assigned to active users with delegated/legacy roles.
+        // Check aliases against the entire Auth directory so an ambiguous
+        // name never grants access to another user's quotation.
+        var users = await directory.GetPricingUsersAsync(ct);
         // Never allow ambiguous display names to give two users access to the same rate.
         // A quotation may store the display name or the login name of the seller.
         // Match either alias, but only if no other Auth user owns the same alias.
@@ -36,12 +42,50 @@ public sealed class SellerRateAccessService(
 
     public async Task<bool> IsAssignedExecutiveAsync(RateHeader rate, Guid userId, CancellationToken ct)
     {
-        if (rate.IsDeleted || string.IsNullOrWhiteSpace(rate.ExecutiveName)
-            || string.Equals(rate.ExecutiveName, "Castro Fallas", StringComparison.OrdinalIgnoreCase))
-            return false;
+        if (rate.IsDeleted) return false;
 
         var names = await AssignedNamesAsync(userId, ct);
-        return names.Contains(rate.ExecutiveName.Trim(), StringComparer.OrdinalIgnoreCase);
+        if (names.Count == 0) return false;
+        if (!string.IsNullOrWhiteSpace(rate.ExecutiveName)
+            && !string.Equals(rate.ExecutiveName, "Castro Fallas", StringComparison.OrdinalIgnoreCase)
+            && names.Contains(rate.ExecutiveName.Trim(), StringComparer.OrdinalIgnoreCase))
+            return true;
+
+        if (rate.Status is not (RateStatus.Open or RateStatus.PendingApproval
+                or RateStatus.ApprovedByManagement or RateStatus.RejectedByManagement))
+            return false;
+
+        // Keep access to the seller's previously issued offer even if Pricing
+        // temporarily changes the executive shown on the unpublished revision.
+        var published = await db.Set<RateRevision>().AsNoTracking()
+            .Where(revision => revision.RateHeaderId == rate.Id
+                && (revision.Status == "Sent"
+                    || revision.Status == "RequestedByClient"
+                    || revision.Status == "AcceptedByClient"
+                    || revision.Status == "RejectedByClient"
+                    || revision.Status == "Expired"))
+            .Select(revision => revision.SnapshotJson)
+            .ToArrayAsync(ct);
+        foreach (var snapshot in published)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(snapshot);
+                if (!document.RootElement.TryGetProperty("ExecutiveName", out var value)
+                    || value.ValueKind != JsonValueKind.String)
+                    continue;
+                var previousName = value.GetString()?.Trim();
+                if (previousName is not null
+                    && names.Contains(previousName, StringComparer.OrdinalIgnoreCase))
+                    return true;
+            }
+            catch (JsonException)
+            {
+                // Malformed history cannot grant access.
+            }
+        }
+
+        return false;
     }
 
     public async Task<bool> CanReadAsync(RateHeader rate, Guid userId, CancellationToken ct)
@@ -59,15 +103,64 @@ public sealed class SellerRateAccessService(
 
         // PostgreSQL string equality is case-sensitive; align the list with the
         // case-insensitive check used by IsAssignedExecutiveAsync/GetOneAsync.
-        return await db.RateHeaders.AsNoTracking()
+        var currentIds = await db.RateHeaders.AsNoTracking()
             .Where(rate => !rate.IsDeleted && rate.ExecutiveName != null
                 && names.Contains(rate.ExecutiveName.Trim().ToLower())
-                && rate.Status != RateStatus.Open
-                && rate.Status != RateStatus.PendingApproval
-                && rate.Status != RateStatus.ApprovedByManagement
-                && rate.Status != RateStatus.RejectedByManagement)
+                && (rate.Status != RateStatus.Open
+                    && rate.Status != RateStatus.PendingApproval
+                    && rate.Status != RateStatus.ApprovedByManagement
+                    && rate.Status != RateStatus.RejectedByManagement
+                    // An already issued quotation must remain discoverable while
+                    // Pricing prepares a new revision. A seller must not see the
+                    // unfinished new version; the endpoint returns the last
+                    // published snapshot instead.
+                    || db.Set<RateRevision>().Any(revision =>
+                        revision.RateHeaderId == rate.Id
+                        && (revision.Status == "Sent"
+                            || revision.Status == "RequestedByClient"
+                            || revision.Status == "AcceptedByClient"
+                            || revision.Status == "RejectedByClient"
+                            || revision.Status == "Expired"))))
             .Select(rate => rate.Id)
             .ToArrayAsync(ct);
+
+        // Pricing may change the executive's display name on an unpublished
+        // draft. Resolve the owner from the previously issued revision as well;
+        // only globally unique Auth names can match.
+        var priorPublished = await db.Set<RateRevision>().AsNoTracking()
+            .Where(revision => (revision.Status == "Sent"
+                    || revision.Status == "RequestedByClient"
+                    || revision.Status == "AcceptedByClient"
+                    || revision.Status == "RejectedByClient"
+                    || revision.Status == "Expired")
+                && db.RateHeaders.Any(rate => rate.Id == revision.RateHeaderId
+                    && !rate.IsDeleted
+                    && (rate.Status == RateStatus.Open
+                        || rate.Status == RateStatus.PendingApproval
+                        || rate.Status == RateStatus.ApprovedByManagement
+                        || rate.Status == RateStatus.RejectedByManagement)))
+            .Select(revision => new { revision.RateHeaderId, revision.SnapshotJson })
+            .ToArrayAsync(ct);
+        var oldIds = new List<Guid>();
+        foreach (var published in priorPublished)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(published.SnapshotJson);
+                if (!document.RootElement.TryGetProperty("ExecutiveName", out var value)
+                    || value.ValueKind != JsonValueKind.String)
+                    continue;
+                var executiveName = value.GetString()?.Trim().ToLowerInvariant();
+                if (executiveName is not null && names.Contains(executiveName))
+                    oldIds.Add(published.RateHeaderId);
+            }
+            catch (JsonException)
+            {
+                // A malformed legacy snapshot is never evidence of ownership.
+            }
+        }
+
+        return currentIds.Concat(oldIds).Distinct().ToArray();
     }
 
 }
