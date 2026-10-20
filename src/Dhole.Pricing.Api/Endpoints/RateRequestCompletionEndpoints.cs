@@ -27,13 +27,65 @@ public static class RateRequestCompletionEndpoints
         return app;
     }
 
-    private static async Task<IResult> CompleteAsync(
+    private static Task<IResult> CompleteAsync(
         Guid requestId,
         CompleteRateRequest request,
         ServiceDbContext db,
         ICommandDispatcher dispatcher,
         IIntegrationEventOutboxWriter outbox,
         HttpContext httpContext,
+        CancellationToken cancellationToken
+    ) => CompleteCoreAsync(requestId, request, db, dispatcher, outbox, httpContext,
+        requireLease: true, cancellationToken);
+
+    // The approval endpoint can finish an already-linked request without a user lease.
+    // Never infer an association: only requests explicitly linked during rate creation qualify.
+    internal static async Task TryCompleteApprovedRateAsync(
+        Guid rateId,
+        ServiceDbContext db,
+        ICommandDispatcher dispatcher,
+        IIntegrationEventOutboxWriter outbox,
+        HttpContext httpContext,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
+    {
+        var requestIds = await db.RateRequests.AsNoTracking()
+            .Where(x => x.RateId == rateId && x.Status == RateRequestStatus.Open)
+            .Select(x => x.Id)
+            .ToArrayAsync(cancellationToken);
+
+        foreach (var requestId in requestIds)
+        {
+            try
+            {
+                var result = await CompleteCoreAsync(
+                    requestId, new CompleteRateRequest(rateId), db, dispatcher, outbox,
+                    httpContext, requireLease: false, cancellationToken);
+                if (result is IStatusCodeHttpResult status && status.StatusCode >= 400)
+                {
+                    loggerFactory.CreateLogger("RateRequestCompletion").LogWarning(
+                        "La tarifa {RateId} fue aprobada, pero la solicitud {RequestId} sigue pendiente. HTTP {Status}.",
+                        rateId, requestId, status.StatusCode);
+                }
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                // Approval is already committed; never report it as failed due to a PDF/email issue.
+                loggerFactory.CreateLogger("RateRequestCompletion").LogError(
+                    error, "No se pudo finalizar la solicitud {RequestId} de la tarifa aprobada {RateId}.",
+                    requestId, rateId);
+            }
+        }
+    }
+
+    private static async Task<IResult> CompleteCoreAsync(
+        Guid requestId,
+        CompleteRateRequest request,
+        ServiceDbContext db,
+        ICommandDispatcher dispatcher,
+        IIntegrationEventOutboxWriter outbox,
+        HttpContext httpContext,
+        bool requireLease,
         CancellationToken cancellationToken
     )
     {
@@ -54,8 +106,12 @@ public static class RateRequestCompletionEndpoints
             return Results.Conflict(new { message = "La solicitud ya fue completada." });
         }
 
-        if (!RateRequestLeaseEndpoints.HasActiveLease(httpContext, entity))
+        if (requireLease && !RateRequestLeaseEndpoints.HasActiveLease(httpContext, entity))
             return RateRequestLeaseEndpoints.LeaseRequired();
+
+        // Automated completion may only touch a request already explicitly linked to this rate.
+        if (!requireLease && entity.RateId != request.RateId)
+            return Results.Conflict(new { message = "La solicitud no está vinculada a esta tarifa." });
 
         var isModification = RateModificationRequestPayload.IsModification(entity.PayloadJson);
         if (isModification && entity.RateId != request.RateId)
@@ -83,6 +139,19 @@ public static class RateRequestCompletionEndpoints
                 code = "Pricing.RateModificationRevisionRequired",
                 message = "Primero guarde una nueva revisión con los cambios solicitados antes de completar la solicitud."
             });
+
+        if (entity.RateId.HasValue && entity.RateId != request.RateId)
+            return Results.Conflict(new { message = "La solicitud ya está vinculada a otra tarifa." });
+
+        // A low-margin quote exists but cannot produce its PDF until authorized.
+        // Save its explicit relationship NOW, rather than losing it when PDF generation fails.
+        // The margin approval endpoint will finish this linked request automatically.
+        if (!isModification && rate.Status == RateStatus.PendingApproval)
+        {
+            entity.AttachRate(request.RateId);
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.Accepted(value: new { status = "AwaitingMarginApproval", rateId = request.RateId });
+        }
 
         var documentResult = await dispatcher.DispatchAsync(
             new GenerateRateDocumentCommand(request.RateId, null, "pdf"),
