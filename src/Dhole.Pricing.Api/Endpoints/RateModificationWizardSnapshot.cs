@@ -138,6 +138,108 @@ internal static class RateModificationWizardSnapshot
         };
     }
 
+    private static JsonElement? Property(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object) return null;
+        foreach (var property in element.EnumerateObject())
+        {
+            if (property.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                return property.Value;
+        }
+        return null;
+    }
+
+    private static decimal Number(JsonElement element, string name)
+    {
+        var value = Property(element, name);
+        if (!value.HasValue) return 0m;
+        return decimal.TryParse(value.Value.ToString(), NumberStyles.Number,
+            CultureInfo.InvariantCulture, out var result) ? result : 0m;
+    }
+
+    private static bool HasCargoLines(JsonElement? context)
+    {
+        if (context is not { ValueKind: JsonValueKind.Object } objectContext) return false;
+        var rows = Property(objectContext, "consolidatedCargoLines");
+        return rows is { ValueKind: JsonValueKind.Array } array
+            && array.GetArrayLength() > 0
+            && array.EnumerateArray().Any(row =>
+                Number(row, "length") > 0m || Number(row, "width") > 0m
+                || Number(row, "height") > 0m || Number(row, "weightKg") > 0m);
+    }
+
+    // Historic requests may only contain the top-level seller form. Recover the
+    // quote's persisted cargo lines rather than displaying a zero-filled editor.
+    // Dimensions in RateHeader.CargoLinesJson are always normalized to centimeters.
+    public static JsonElement? SellerCargoContext(RateHeader rate, JsonElement? requestContext)
+    {
+        if (HasCargoLines(requestContext)) return requestContext!.Value.Clone();
+        if (string.IsNullOrWhiteSpace(rate.CargoLinesJson)) return requestContext;
+        try
+        {
+            using var document = JsonDocument.Parse(rate.CargoLinesJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Array) return requestContext;
+
+            var rows = document.RootElement.EnumerateArray()
+                .Where(x => x.ValueKind == JsonValueKind.Object)
+                .Select((row, index) => new {
+                    key = "saved-quote-" + index,
+                    description = Property(row, "description")?.ToString() ?? "",
+                    quantity = Math.Max(1, (int)Math.Min(int.MaxValue, Math.Truncate(
+                        Number(row, "packages") > 0m ? Number(row, "packages") :
+                        Number(row, "pallets") > 0m ? Number(row, "pallets") : 1m))),
+                    weightKg = Number(row, "weightKg"),
+                    length = Number(row, "lengthCm"),
+                    width = Number(row, "widthCm"),
+                    height = Number(row, "heightCm"),
+                    isStackable = !bool.TryParse(Property(row, "isStackable")?.ToString(), out var stackable)
+                        || stackable
+                })
+                .Where(row => row.length > 0m || row.width > 0m || row.height > 0m
+                    || row.weightKg > 0m || !string.IsNullOrWhiteSpace(row.description))
+                .ToArray();
+            if (rows.Length == 0) return requestContext;
+            return JsonSerializer.SerializeToElement(new {
+                consolidatedCargoLines = rows,
+                cargoDimensionStorageUnit = "cm",
+                cargoVolumeUnit = "CBM"
+            });
+        }
+        catch (JsonException) { return requestContext; }
+    }
+
+    private static string CargoLineSummary(JsonElement row, string? dimensionsUnit)
+    {
+        var units = Number(row, "quantity");
+        var weight = Number(row, "weightKg");
+        var length = Number(row, "length");
+        var width = Number(row, "width");
+        var height = Number(row, "height");
+        // Both sides are compared in centimeters even when the seller used inches.
+        if (string.Equals(dimensionsUnit, "in", StringComparison.OrdinalIgnoreCase))
+        {
+            length *= 2.54m;
+            width *= 2.54m;
+            height *= 2.54m;
+        }
+        var description = Property(row, "description")?.ToString()?.Trim() ?? "";
+        var isStackable = Property(row, "isStackable")?.ToString() ?? "true";
+        return $"{description} · {units:0.##} unidades · {weight:0.##} kg · " +
+            $"{length:0.##} × {width:0.##} × {height:0.##} cm · " +
+            $"Estibable: {isStackable}";
+    }
+
+    private static List<string> CargoLines(JsonElement? context)
+    {
+        if (context is not { ValueKind: JsonValueKind.Object } objectContext) return [];
+        var rows = Property(objectContext, "consolidatedCargoLines");
+        if (rows is not { ValueKind: JsonValueKind.Array } cargoRows) return [];
+        var unit = Property(objectContext, "cargoDimensionStorageUnit")?.ToString();
+        return cargoRows.EnumerateArray()
+            .Where(row => row.ValueKind == JsonValueKind.Object)
+            .Select(row => CargoLineSummary(row, unit)).ToList();
+    }
+
     public static object Names(RateHeader rate) => new {
         originName = rate.PolName,
         destinationName = rate.PoeName,
@@ -181,7 +283,8 @@ internal static class RateModificationWizardSnapshot
 
     public sealed record Change(string Field, string Action, string Original, string Requested);
 
-    public static List<Change> Compare(RateHeader rate, JsonElement payload)
+    public static List<Change> Compare(RateHeader rate, JsonElement payload,
+        JsonElement? originalSellerContext = null)
     {
         var original = JsonSerializer.SerializeToElement(OriginalForm(rate));
         var current = payload.GetProperty("form");
@@ -198,6 +301,21 @@ internal static class RateModificationWizardSnapshot
             var isEmpty = string.IsNullOrWhiteSpace(Comparable(requested));
             changes.Add(new Change(label, wasEmpty ? "Agregar" : isEmpty ? "Eliminar" : "Modificar",
                 Friendly(key, originalValue, oldNames), Friendly(key, requested, display)));
+        }
+        if (payload.TryGetProperty("sellerContext", out var requestedSellerContext)
+            && requestedSellerContext.ValueKind == JsonValueKind.Object)
+        {
+            var sourceLines = CargoLines(SellerCargoContext(rate, originalSellerContext));
+            var requestedLines = CargoLines(requestedSellerContext);
+            for (var index = 0; index < Math.Max(sourceLines.Count, requestedLines.Count); index++)
+            {
+                var previous = index < sourceLines.Count ? sourceLines[index] : null;
+                var proposed = index < requestedLines.Count ? requestedLines[index] : null;
+                if (previous == proposed) continue;
+                changes.Add(new Change($"Carga / paquete {index + 1}",
+                    previous is null ? "Agregar" : proposed is null ? "Eliminar" : "Modificar",
+                    previous ?? "—", proposed ?? "—"));
+            }
         }
         if (payload.TryGetProperty("pickupLocations", out var pickups)
             && JsonSerializer.Serialize(PickupLocations(rate)) != JsonSerializer.Serialize(pickups))
