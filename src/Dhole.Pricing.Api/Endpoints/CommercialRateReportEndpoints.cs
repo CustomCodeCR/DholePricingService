@@ -32,6 +32,8 @@ public static class CommercialRateReportEndpoints
     private static async Task<IResult> GetAsync(
         string? status,
         string? search,
+        string? month,
+        string? seller,
         ServiceDbContext db,
         IPricingConfigCatalogClient configCatalog,
         SellerVisibilityService visibility,
@@ -44,12 +46,17 @@ public static class CommercialRateReportEndpoints
         if (!ValidStatus(status))
             return Results.BadRequest(new { message = "El estado indicado no es válido." });
 
-        return Results.Ok(await ReadRowsAsync(db, configCatalog, status, search, ct));
+        if (!TryParseMonth(month, out var monthStart))
+            return Results.BadRequest(new { message = "El mes debe tener el formato AAAA-MM." });
+
+        return Results.Ok(await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, ct));
     }
 
     private static async Task<IResult> ExportAsync(
         string? status,
         string? search,
+        string? month,
+        string? seller,
         ServiceDbContext db,
         IPricingConfigCatalogClient configCatalog,
         SellerVisibilityService visibility,
@@ -62,7 +69,10 @@ public static class CommercialRateReportEndpoints
         if (!ValidStatus(status))
             return Results.BadRequest(new { message = "El estado indicado no es válido." });
 
-        var rows = await ReadRowsAsync(db, configCatalog, status, search, ct);
+        if (!TryParseMonth(month, out var monthStart))
+            return Results.BadRequest(new { message = "El mes debe tener el formato AAAA-MM." });
+
+        var rows = await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, ct);
         return Results.File(
             BuildWorkbook(rows),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -75,9 +85,24 @@ public static class CommercialRateReportEndpoints
         status.Equals("AcceptedByClient", StringComparison.OrdinalIgnoreCase) ||
         status.Equals("RejectedByClient", StringComparison.OrdinalIgnoreCase);
 
+    private static bool TryParseMonth(string? month, out DateTime? monthStart)
+    {
+        monthStart = null;
+        if (string.IsNullOrWhiteSpace(month)) return true;
+
+        if (month.Length != 7 ||
+            !DateTime.TryParseExact(month + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var date) ||
+            (date.Year == 9999 && date.Month == 12))
+            return false;
+
+        monthStart = DateTime.SpecifyKind(date, DateTimeKind.Utc);
+        return true;
+    }
+
     private static async Task<List<CommercialQuote>> ReadRowsAsync(
         ServiceDbContext db, IPricingConfigCatalogClient configCatalog,
-        string? status, string? search, CancellationToken ct)
+        string? status, string? search, string? seller, DateTime? monthStart, CancellationToken ct)
     {
         var query = db.RateHeaders.AsNoTracking()
             .Where(rate => !rate.IsDeleted &&
@@ -96,6 +121,23 @@ public static class CommercialRateReportEndpoints
             query = query.Where(rate => rate.Status == RateStatus.AcceptedByClient);
         else if (status?.Equals("RejectedByClient", StringComparison.OrdinalIgnoreCase) == true)
             query = query.Where(rate => rate.Status == RateStatus.RejectedByClient || rate.Status == RateStatus.Closed);
+
+        // Filtrar por mes de creación mediante un rango, sin funciones sobre la columna.
+        if (monthStart is { } from)
+        {
+            var until = from.AddMonths(1);
+            query = query.Where(rate => rate.CreatedAtUtc >= from && rate.CreatedAtUtc < until);
+        }
+
+        if (!string.IsNullOrWhiteSpace(seller))
+        {
+            var sellerName = seller.Trim().ToLowerInvariant();
+            if (sellerName == "__unassigned__")
+                query = query.Where(rate => rate.ExecutiveName == null || rate.ExecutiveName.Trim() == "");
+            else
+                query = query.Where(rate =>
+                    rate.ExecutiveName != null && rate.ExecutiveName.Trim().ToLower() == sellerName);
+        }
 
         var needle = search?.Trim().ToLowerInvariant();
         if (!string.IsNullOrWhiteSpace(needle))
