@@ -100,4 +100,7 @@ public sealed record CreateRateCommand(
     public int? StorageDays { get; init; }
     public decimal? CargoValue { get; init; }
     public int? TransitDays { get; init; }
+    public Guid? LclGroupAgentId { get; init; }
+    public string? LclGroupAgentName { get; init; }
+    public string? LclGroupAgentCode { get; init; }
 }

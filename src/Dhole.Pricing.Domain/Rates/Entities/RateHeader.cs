@@ -161,6 +161,11 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string? AgentName { get; private set; } = string.Empty;
     public string? AgentCode { get; private set; } = string.Empty;
 
+    // Agente de Grupo Castro Fallas elegido para LCL; distinto del agente / coloader.
+    public Guid? LclGroupAgentId { get; private set; }
+    public string? LclGroupAgentName { get; private set; }
+    public string? LclGroupAgentCode { get; private set; }
+
     public Guid? CarrierId { get; private set; }
     public string? CarrierName { get; private set; } = string.Empty;
     public string? CarrierCode { get; private set; } = string.Empty;
@@ -257,6 +262,13 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public IReadOnlyCollection<RateDetail> RateDetails => _rateDetails.AsReadOnly();
     public IReadOnlyCollection<RateService> RateServices => _rateServices.AsReadOnly();
     public IReadOnlyCollection<RateContainerAllocation> RateContainers => _rateContainers.AsReadOnly();
+
+    public void ConfigureLclGroupAgent(Guid? agentId, string? agentName, string? agentCode)
+    {
+        LclGroupAgentId = agentId is { } value && value != Guid.Empty ? value : null;
+        LclGroupAgentName = LclGroupAgentId.HasValue ? agentName?.Trim() : null;
+        LclGroupAgentCode = LclGroupAgentId.HasValue ? agentCode?.Trim() : null;
+    }
 
     public static RateHeader Create(
         string rateCode,

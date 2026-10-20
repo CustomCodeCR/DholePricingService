@@ -104,6 +104,16 @@ public sealed class CreateRateCommandHandler(
                     "La naviera", PricingConstants.CatalogSlugs.Carriers));
             }
 
+            PricingConfigCatalogItem? lclGroupAgent = null;
+            if (command.ShipmentMode == ShipmentMode.Lcl && command.LclGroupAgentId is { } groupAgentId && groupAgentId != Guid.Empty)
+            {
+                lclGroupAgent = await configCatalog.GetActiveInGroupAsync(
+                    groupAgentId, PricingConstants.CatalogSlugs.Agents, cancellationToken);
+                if (lclGroupAgent is null)
+                    return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
+                        "El agente de Grupo Castro Fallas", PricingConstants.CatalogSlugs.Agents));
+            }
+
             var pol = await configCatalog.GetActiveInGroupAsync(
                 command.PolId, PricingConstants.CatalogSlugs.Pol, cancellationToken);
             if (pol is null)
@@ -210,6 +220,9 @@ public sealed class CreateRateCommandHandler(
             var primaryContainer = normalizedContainers[0];
             command = command with
             {
+                LclGroupAgentId = lclGroupAgent?.Id,
+                LclGroupAgentName = lclGroupAgent?.SnapshotName(),
+                LclGroupAgentCode = lclGroupAgent?.Code,
                 AgentId = landWithoutProvider
                     ? LandInternalAgentId
                     : ownLclWithoutAgent ? OwnLclInternalAgentId : agent?.Id,
@@ -468,6 +481,7 @@ public sealed class CreateRateCommandHandler(
                 command.PickupLongitude
             );
             rate.ConfigurePickupLocations(command.PickupLocationsJson);
+            rate.ConfigureLclGroupAgent(command.LclGroupAgentId, command.LclGroupAgentName, command.LclGroupAgentCode);
             rate.ConfigureExecutive(command.ExecutiveName);
             rate.ConfigureCommercialPresentation(command.UseAllInPresentation, command.CreatedBy);
             rate.ConfigureFinalBackupStorageIds(command.FinalBackupStorageIds);

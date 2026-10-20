@@ -2493,6 +2493,20 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(250)")
                         .HasColumnName("agent_name");
 
+                    b.Property<string>("LclGroupAgentCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("lcl_group_agent_code");
+
+                    b.Property<Guid?>("LclGroupAgentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lcl_group_agent_id");
+
+                    b.Property<string>("LclGroupAgentName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("lcl_group_agent_name");
+
                     b.Property<string>("CargoLinesJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("cargo_lines_json");

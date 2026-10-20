@@ -101,6 +101,9 @@ public sealed record UpdateRateCommand(
     public int? StorageDays { get; init; }
     public decimal? CargoValue { get; init; }
     public int? TransitDays { get; init; }
+    public Guid? LclGroupAgentId { get; init; }
+    public string? LclGroupAgentName { get; init; }
+    public string? LclGroupAgentCode { get; init; }
 
     // El middleware de edición neutraliza temporalmente SourceImportFclRateId en la entidad
     // para permitir cambiar la fuente/estructura. Conservamos el valor pedido por Web como

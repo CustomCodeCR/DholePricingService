@@ -89,6 +89,9 @@ public sealed record RateDto(
     public Guid? SellerReceivedBy { get; init; }
     public int? StorageDays { get; init; }
     public decimal CargoValue { get; init; }
+    public Guid? LclGroupAgentId { get; init; }
+    public string? LclGroupAgentName { get; init; }
+    public string? LclGroupAgentCode { get; init; }
 
     public string? CreatedByUserId { get; init; }
     public string? CreatedByUserName { get; init; }

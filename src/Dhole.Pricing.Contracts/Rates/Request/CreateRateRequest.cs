@@ -66,4 +66,5 @@ public sealed record CreateRateRequest(
     public int? StorageDays { get; init; }
     public decimal? CargoValue { get; init; }
     public int? TransitDays { get; init; }
+    public Guid? LclGroupAgentId { get; init; }
 }

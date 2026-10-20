@@ -46,6 +46,9 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.AgentName).HasMaxLength(250).IsRequired();
 
         builder.Property(x => x.AgentCode).HasMaxLength(80).IsRequired();
+        builder.Property(x => x.LclGroupAgentId).IsRequired(false);
+        builder.Property(x => x.LclGroupAgentName).HasMaxLength(250).IsRequired(false);
+        builder.Property(x => x.LclGroupAgentCode).HasMaxLength(80).IsRequired(false);
 
         builder.Property(x => x.CarrierId).IsRequired();
 

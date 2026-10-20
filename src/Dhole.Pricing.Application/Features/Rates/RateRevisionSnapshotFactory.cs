@@ -21,7 +21,8 @@ internal static class RateRevisionSnapshotFactory
         {
             rate.Id, rate.RateCode, rate.RateName, rate.RevisionNumber, rate.Status,
             rate.ClientName, rate.ExecutiveName, rate.IdtraNumber, rate.QuoNumber,
-            rate.AgentId, rate.AgentName, rate.AgentCode, rate.CarrierId, rate.CarrierName, rate.CarrierCode,
+            rate.AgentId, rate.AgentName, rate.AgentCode,
+            rate.LclGroupAgentId, rate.LclGroupAgentName, rate.LclGroupAgentCode, rate.CarrierId, rate.CarrierName, rate.CarrierCode,
             rate.PolId, rate.PolName, rate.PolCode, rate.PoeId, rate.PoeName, rate.PoeCode,
             rate.PodId, rate.PodName, rate.PodCode, rate.ContainerTypeId, rate.ContainerTypeName, rate.ContainerTypeCode,
             rate.IncotermId, rate.IncotermName, rate.IncotermCode, rate.WarehouseId, rate.PickupAddress, rate.PickupLatitude, rate.PickupLongitude,

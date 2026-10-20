@@ -114,6 +114,7 @@ public sealed class DuplicateRateCommandHandler(
                 );
 
                 appliedRate.ConfigureTariffSource(source.Id, source.RevisionNumber);
+                appliedRate.ConfigureLclGroupAgent(source.LclGroupAgentId, source.LclGroupAgentName, source.LclGroupAgentCode);
                 appliedRate.ConfigureExecutive(
                     string.IsNullOrWhiteSpace(command.ExecutiveName)
                         ? source.ExecutiveName
@@ -371,6 +372,7 @@ public sealed class DuplicateRateCommandHandler(
                 source.RateType,
                 command.CreatedBy
             );
+            duplicate.ConfigureLclGroupAgent(source.LclGroupAgentId, source.LclGroupAgentName, source.LclGroupAgentCode);
             duplicate.ConfigureExecutive(source.ExecutiveName);
             var duplicateAppliedExchangeRate = currentExchangeRate?.Sale ?? source.ExchangeRateApplied;
             if (duplicateAppliedExchangeRate is > 0m)
