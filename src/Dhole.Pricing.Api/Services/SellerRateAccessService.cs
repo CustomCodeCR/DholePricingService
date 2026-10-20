@@ -17,14 +17,18 @@ public sealed class SellerRateAccessService(
     {
         var users = await directory.GetSalesExecutivesAsync(ct);
         // Never allow ambiguous display names to give two users access to the same rate.
+        // A quotation may store the display name or the login name of the seller.
+        // Match either alias, but only if no other Auth user owns the same alias.
         var names = users
-            .Select(u => new { u.UserId, Name = FirstNonEmpty(u.DisplayName, u.UserName) })
-            .Where(u => !string.IsNullOrWhiteSpace(u.Name)
-                && !string.Equals(u.Name, "Castro Fallas", StringComparison.OrdinalIgnoreCase))
-            .GroupBy(u => u.Name!, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(u => new[] { u.DisplayName, u.UserName }
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => new { u.UserId, Name = name!.Trim() }))
+            .Where(u => !string.Equals(u.Name, "Castro Fallas", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(u => u.Name, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Select(u => u.UserId).Distinct().Count() == 1)
             .Where(group => group.First().UserId == userId)
             .Select(group => group.Key)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
         return names;
@@ -37,7 +41,7 @@ public sealed class SellerRateAccessService(
             return false;
 
         var names = await AssignedNamesAsync(userId, ct);
-        return names.Contains(rate.ExecutiveName, StringComparer.OrdinalIgnoreCase);
+        return names.Contains(rate.ExecutiveName.Trim(), StringComparer.OrdinalIgnoreCase);
     }
 
     public async Task<bool> CanReadAsync(RateHeader rate, Guid userId, CancellationToken ct)
@@ -49,12 +53,15 @@ public sealed class SellerRateAccessService(
 
     public async Task<IReadOnlyCollection<Guid>> AssignedRateIdsAsync(Guid userId, CancellationToken ct)
     {
-        var names = await AssignedNamesAsync(userId, ct);
-        if (names.Count == 0) return Array.Empty<Guid>();
+        var names = (await AssignedNamesAsync(userId, ct))
+            .Select(name => name.ToLowerInvariant()).ToArray();
+        if (names.Length == 0) return Array.Empty<Guid>();
 
+        // PostgreSQL string equality is case-sensitive; align the list with the
+        // case-insensitive check used by IsAssignedExecutiveAsync/GetOneAsync.
         return await db.RateHeaders.AsNoTracking()
             .Where(rate => !rate.IsDeleted && rate.ExecutiveName != null
-                && names.Contains(rate.ExecutiveName)
+                && names.Contains(rate.ExecutiveName.Trim().ToLower())
                 && rate.Status != RateStatus.Open
                 && rate.Status != RateStatus.PendingApproval
                 && rate.Status != RateStatus.ApprovedByManagement
@@ -63,6 +70,4 @@ public sealed class SellerRateAccessService(
             .ToArrayAsync(ct);
     }
 
-    private static string? FirstNonEmpty(params string?[] names)
-        => names.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
 }
