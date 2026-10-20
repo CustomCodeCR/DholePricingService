@@ -142,6 +142,7 @@ public static class PricingAuditSnapshots
             rateHeader.SourceTariffRevisionNumber,
 
             rateHeader.AgentId,
+            rateHeader.LclGroupAgentId, rateHeader.LclGroupAgentName, rateHeader.LclGroupAgentCode,
             rateHeader.AgentName,
             rateHeader.AgentCode,
 

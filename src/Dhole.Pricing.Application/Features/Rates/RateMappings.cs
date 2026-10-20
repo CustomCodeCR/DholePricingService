@@ -149,6 +149,9 @@ internal static class RateMappings
             SellerReceivedAtUtc = rate.SellerReceivedAtUtc,
             SellerReceivedBy = rate.SellerReceivedBy,
             CargoValue = rate.CargoValue,
+            LclGroupAgentId = rate.LclGroupAgentId,
+            LclGroupAgentName = rate.LclGroupAgentName,
+            LclGroupAgentCode = rate.LclGroupAgentCode,
             FinalBackupStorageIds = rate.FinalBackupStorageIds,
             PickupLocations = DeserializePickupLocations(rate.PickupLocationsJson),
         };

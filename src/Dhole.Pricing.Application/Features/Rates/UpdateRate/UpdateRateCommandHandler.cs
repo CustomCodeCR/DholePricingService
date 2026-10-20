@@ -126,6 +126,16 @@ public sealed class UpdateRateCommandHandler(
                     "La naviera", PricingConstants.CatalogSlugs.Carriers));
             }
 
+            PricingConfigCatalogItem? lclGroupAgent = null;
+            if (command.ShipmentMode == ShipmentMode.Lcl && command.LclGroupAgentId is { } groupAgentId && groupAgentId != Guid.Empty)
+            {
+                lclGroupAgent = await configCatalog.GetActiveInGroupAsync(
+                    groupAgentId, PricingConstants.CatalogSlugs.Agents, cancellationToken);
+                if (lclGroupAgent is null)
+                    return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
+                        "El agente de Grupo Castro Fallas", PricingConstants.CatalogSlugs.Agents));
+            }
+
             var pol = await configCatalog.GetActiveInGroupAsync(
                 command.PolId, PricingConstants.CatalogSlugs.Pol, cancellationToken);
             if (pol is null)
@@ -232,6 +242,9 @@ public sealed class UpdateRateCommandHandler(
             var normalizedPrimaryContainer = normalizedContainers[0];
             command = command with
             {
+                LclGroupAgentId = command.ShipmentMode == ShipmentMode.Lcl ? lclGroupAgent?.Id ?? rate.LclGroupAgentId : null,
+                LclGroupAgentName = command.ShipmentMode == ShipmentMode.Lcl ? lclGroupAgent?.SnapshotName() ?? rate.LclGroupAgentName : null,
+                LclGroupAgentCode = command.ShipmentMode == ShipmentMode.Lcl ? lclGroupAgent?.Code ?? rate.LclGroupAgentCode : null,
                 AgentId = agent?.Id ?? OwnLclInternalAgentId,
                 AgentName = agent?.SnapshotName() ?? OwnLclInternalAgentName,
                 AgentCode = agent?.Code ?? OwnLclInternalAgentCode,
@@ -585,6 +598,7 @@ public sealed class UpdateRateCommandHandler(
                 command.RateType,
                 command.UpdatedBy
             );
+            rate.ConfigureLclGroupAgent(command.LclGroupAgentId, command.LclGroupAgentName, command.LclGroupAgentCode);
             rate.ConfigureExecutive(command.ExecutiveName);
             rate.ConfigureCommercialPresentation(command.UseAllInPresentation, command.UpdatedBy);
             if (command.FinalBackupStorageIds is not null)
