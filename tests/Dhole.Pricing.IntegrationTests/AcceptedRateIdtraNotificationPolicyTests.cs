@@ -30,6 +30,17 @@ public sealed class AcceptedRateIdtraNotificationPolicyTests
     }
 
     [TestMethod]
+    public void SellerNotificationHasNoIntroductoryStatement()
+    {
+        Assert.AreEqual(
+            string.Empty,
+            AcceptedRateOpeningsNotificationService.AcceptanceIntroHtmlFor(RateAcceptanceActor.Seller));
+        StringAssert.Contains(
+            AcceptedRateOpeningsNotificationService.AcceptanceIntroHtmlFor(RateAcceptanceActor.Pricing),
+            "Pricing confirmó la aceptación");
+    }
+
+    [TestMethod]
     public void NotificationIsOnlyForAcceptedRatesWithoutIdtra()
     {
         Assert.IsTrue(AcceptedRateOpeningsNotificationService.HasPendingIdtra(
