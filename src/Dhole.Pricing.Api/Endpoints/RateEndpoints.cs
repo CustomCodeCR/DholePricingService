@@ -887,7 +887,8 @@ public static class RateEndpoints
                 request.ApplyTariff,
                 request.ClientName,
                 request.ExecutiveName,
-                request.IdtraNumber
+                request.IdtraNumber,
+                request.IdenticalCopy
             ),
             cancellationToken
         );

@@ -37,10 +37,10 @@ public sealed class DuplicateRateCommandHandler(
             return Result.Failure<Guid>(PricingErrors.RateHeaderNotFound);
         }
 
-        if (command.ApplyTariff)
+        if (command.ApplyTariff || command.IdenticalCopy)
         {
             var tariffApplicationDate = DateTime.UtcNow.Date;
-            if (
+            if (command.ApplyTariff && (
                 source.RateType != RateType.Tariff
                 || source.ClientName?.Contains("TARIFARIO", StringComparison.OrdinalIgnoreCase) != true
                 || source.Status is not (
@@ -52,7 +52,7 @@ public sealed class DuplicateRateCommandHandler(
                 )
                 || source.ValidFrom.Date > tariffApplicationDate
                 || source.ValidTo.Date < tariffApplicationDate
-            )
+            ))
             {
                 return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);
             }
@@ -61,7 +61,7 @@ public sealed class DuplicateRateCommandHandler(
                 ? source.ClientName
                 : command.ClientName.Trim();
 
-            if (string.IsNullOrWhiteSpace(appliedClientName))
+            if (command.ApplyTariff && string.IsNullOrWhiteSpace(appliedClientName))
             {
                 return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);
             }
@@ -109,11 +109,14 @@ public sealed class DuplicateRateCommandHandler(
                     source.SubjectTo,
                     source.Excludes,
                     source.TransitTime,
-                    RateType.Tariff,
+                    command.IdenticalCopy ? source.RateType : RateType.Tariff,
                     command.CreatedBy
                 );
 
-                appliedRate.ConfigureTariffSource(source.Id, source.RevisionNumber);
+                if (command.ApplyTariff)
+                    appliedRate.ConfigureTariffSource(source.Id, source.RevisionNumber);
+                else if (source.SourceTariffRateId is { } originId && source.SourceTariffRevisionNumber is { } originRevision)
+                    appliedRate.ConfigureTariffSource(originId, originRevision);
                 appliedRate.ConfigureLclGroupAgent(source.LclGroupAgentId, source.LclGroupAgentName, source.LclGroupAgentCode);
                 appliedRate.ConfigureExecutive(
                     string.IsNullOrWhiteSpace(command.ExecutiveName)
@@ -126,6 +129,9 @@ public sealed class DuplicateRateCommandHandler(
                     source.PickupLatitude,
                     source.PickupLongitude
                 );
+                appliedRate.ConfigureCargoValue(source.CargoValue);
+                appliedRate.ConfigureStorageDays(source.StorageDays);
+                appliedRate.ConfigureFinalBackupStorageIds(source.FinalBackupStorageIds);
 
                 var sourceAppliedExchangeRate = source.ExchangeRateApplied ?? source.ExchangeRateSale;
                 if (sourceAppliedExchangeRate is > 0m)
@@ -170,7 +176,8 @@ public sealed class DuplicateRateCommandHandler(
                     source.TotalVolumeCbm,
                     source.KgPerCbm,
                     source.CargoLinesJson,
-                    command.CreatedBy
+                    command.CreatedBy,
+                    source.ChargeableQuantity
                 );
                 appliedRate.SetOperationType(source.OperationType, command.CreatedBy);
                 appliedRate.ConfigureServices(
@@ -218,7 +225,8 @@ public sealed class DuplicateRateCommandHandler(
                 // pero nace como una QUO abierta para el cliente. La aceptación ocurre
                 // después sobre la QUO hija y nunca sobre el tarifario maestro.
                 appliedRate.SetAmounts(command.CreatedBy);
-                appliedRate.PrepareTariffApplication(command.CreatedBy);
+                if (command.ApplyTariff)
+                    appliedRate.PrepareTariffApplication(command.CreatedBy);
             }
             catch (InvalidOperationException)
             {
@@ -237,8 +245,10 @@ public sealed class DuplicateRateCommandHandler(
                     After: PricingAuditSnapshots.From(appliedRate),
                     Payload: new
                     {
-                        AppliedFromTariffRateHeaderId = source.Id,
-                        SourceTariffRevisionNumber = source.RevisionNumber,
+                        AppliedFromTariffRateHeaderId = command.ApplyTariff ? source.Id : (Guid?)null,
+                        SourceTariffRevisionNumber = command.ApplyTariff ? source.RevisionNumber : source.SourceTariffRevisionNumber,
+                        CopyMode = command.IdenticalCopy ? "Identical" : "ApplyTariff",
+                        CommercialStatusReset = command.IdenticalCopy,
                         NewRateHeaderId = appliedRate.Id,
                         SourceQuoNumber = source.QuoNumber ?? source.RateCode,
                         NewQuoNumber = appliedRate.QuoNumber ?? appliedRate.RateCode,
