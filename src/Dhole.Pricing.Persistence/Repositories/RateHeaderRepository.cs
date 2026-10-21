@@ -262,7 +262,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         DateTime? validFrom = null,
         DateTime? validTo = null,
         CancellationToken cancellationToken = default,
-        IReadOnlyCollection<string>? executiveNames = null
+        IReadOnlyCollection<string>? executiveNames = null,
+        RateMultiSelectFilters? multiFilters = null
     )
     {
         var query = ApplyFilters(
@@ -289,6 +290,42 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             validTo,
             executiveNames
         );
+
+        if (multiFilters is not null)
+        {
+            var statuses = multiFilters.Statuses.ToArray();
+            if (statuses.Length > 0)
+            {
+                // Keep the existing "No aceptadas" grouping compatible with Closed rates.
+                if (statuses.Contains(RateStatus.RejectedByClient))
+                    statuses = statuses.Append(RateStatus.Closed).Distinct().ToArray();
+                query = query.Where(rate => statuses.Contains(rate.Status));
+            }
+
+            var agentIds = multiFilters.AgentIds.ToArray();
+            if (agentIds.Length > 0) query = query.Where(rate => rate.AgentId.HasValue && agentIds.Contains(rate.AgentId.Value));
+
+            var carrierIds = multiFilters.CarrierIds.ToArray();
+            if (carrierIds.Length > 0) query = query.Where(rate => rate.CarrierId.HasValue && carrierIds.Contains(rate.CarrierId.Value));
+
+            var polIds = multiFilters.PolIds.ToArray();
+            if (polIds.Length > 0) query = query.Where(rate => polIds.Contains(rate.PolId));
+
+            var poeIds = multiFilters.PoeIds.ToArray();
+            if (poeIds.Length > 0) query = query.Where(rate => poeIds.Contains(rate.PoeId));
+
+            var podIds = multiFilters.PodIds.ToArray();
+            if (podIds.Length > 0) query = query.Where(rate => rate.PodId.HasValue && podIds.Contains(rate.PodId.Value));
+
+            var containerIds = multiFilters.ContainerTypeIds.ToArray();
+            if (containerIds.Length > 0)
+                query = query.Where(rate =>
+                    containerIds.Contains(rate.ContainerTypeId)
+                    || rate.RateContainers.Any(container => containerIds.Contains(container.ContainerTypeId)));
+
+            var currencyIds = multiFilters.CurrencyIds.ToArray();
+            if (currencyIds.Length > 0) query = query.Where(rate => currencyIds.Contains(rate.CurrencyId));
+        }
 
         var total = await query.CountAsync(cancellationToken);
 
