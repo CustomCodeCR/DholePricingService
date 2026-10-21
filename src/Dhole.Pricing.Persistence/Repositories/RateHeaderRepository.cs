@@ -261,7 +261,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         DateTime? quoteDate = null,
         DateTime? validFrom = null,
         DateTime? validTo = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<string>? executiveNames = null
     )
     {
         var query = ApplyFilters(
@@ -285,7 +286,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             requiredApproval,
             quoteDate,
             validFrom,
-            validTo
+            validTo,
+            executiveNames
         );
 
         var total = await query.CountAsync(cancellationToken);
@@ -782,9 +784,23 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         bool? requiredApproval,
         DateTime? quoteDate,
         DateTime? validFrom,
-        DateTime? validTo
+        DateTime? validTo,
+        IReadOnlyCollection<string>? executiveNames = null
     )
     {
+        var normalizedExecutives = executiveNames?
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name.Trim().ToLowerInvariant())
+            .Distinct()
+            .ToArray() ?? Array.Empty<string>();
+
+        if (normalizedExecutives.Length > 0)
+        {
+            query = query.Where(x =>
+                x.ExecutiveName != null && normalizedExecutives.Contains(x.ExecutiveName.Trim().ToLower())
+            );
+        }
+
         if (!string.IsNullOrWhiteSpace(search))
         {
             var value = NormalizeSearchValue(search);
