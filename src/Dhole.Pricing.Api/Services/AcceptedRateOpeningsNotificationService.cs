@@ -18,14 +18,20 @@ public sealed class AcceptedRateOpeningsNotificationService(
     ServiceDbContext db,
     ILogger<AcceptedRateOpeningsNotificationService> logger)
 {
-    private const string SellerRecipient = "pricingcf@castrofallas.com";
-    private const string PricingRecipient = "aperturatramite@grupocastrofallas.com";
+    private const string OpeningRecipient = "aperturatramite@grupocastrofallas.com";
+    private const string SellerAcceptanceCc = "pricingcf@castrofallas.com";
     private const string NotificationEventName = "notifications.notification.requested";
 
     public static string RecipientFor(RateAcceptanceActor actor) => actor switch
     {
-        RateAcceptanceActor.Seller => SellerRecipient,
-        RateAcceptanceActor.Pricing => PricingRecipient,
+        RateAcceptanceActor.Seller or RateAcceptanceActor.Pricing => OpeningRecipient,
+        _ => throw new ArgumentOutOfRangeException(nameof(actor), actor, null),
+    };
+
+    public static string[] CopyRecipientsFor(RateAcceptanceActor actor) => actor switch
+    {
+        RateAcceptanceActor.Seller => [SellerAcceptanceCc],
+        RateAcceptanceActor.Pricing => [],
         _ => throw new ArgumentOutOfRangeException(nameof(actor), actor, null),
     };
 
@@ -64,8 +70,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
             }
 
             var recipientEmail = RecipientFor(actor);
-            var recipientName = actor == RateAcceptanceActor.Seller
-                ? "Pricing Castro Fallas" : "Apertura de Trámite";
+            var recipientName = "Apertura de Trámite";
 
             var request = await db.RateRequests
                 .AsNoTracking()
@@ -96,7 +101,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
             var quoteNumber = rate.QuoNumber ?? rate.RateCode;
             var acceptanceOrigin = actor == RateAcceptanceActor.Seller ? "Vendedor" : "Pricing";
             var noticeText = actor == RateAcceptanceActor.Seller
-                ? "El vendedor confirmó la aceptación de esta cotización. Pricing debe asignar el IDTRA."
+                ? "El vendedor confirmó la aceptación de esta cotización. Apertura de Trámite debe asignar el IDTRA; Pricing recibe copia."
                 : "Pricing confirmó la aceptación de esta cotización. Apertura de Trámite debe asignar el IDTRA.";
             var rateUrl = $"https://sistema.logisticacastrofallas.com/pricing/rates/{rate.Id:D}/wizard?mode=view";
             var polText = string.IsNullOrWhiteSpace(rate.PolName) ? "—" : rate.PolName;
@@ -211,6 +216,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
                         acceptanceOrigin,
                         idtraPending = true,
                         rateUrl,
+                        cc = CopyRecipientsFor(actor),
                         quo = quoteNumber,
                         seller = sellerText,
                         client = clientText,
