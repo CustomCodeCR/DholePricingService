@@ -36,7 +36,9 @@ public sealed class GetRatesQueryHandler(IRateHeaderRepository rateHeaders)
             query.QuoteDate,
             query.ValidFrom,
             query.ValidTo,
-            cancellationToken
+            cancellationToken,
+            query.ExecutiveNames,
+            query.MultiFilters
         );
 
         return Result.Success(result);

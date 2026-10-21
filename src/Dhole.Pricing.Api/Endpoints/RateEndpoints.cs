@@ -1,3 +1,4 @@
+using Dhole.Pricing.Application.Abstractions.Repositories;
 using System.Data;
 using System.Security.Claims;
 using CustomCodeFramework.Core.Pagination;
@@ -289,6 +290,32 @@ public static class RateEndpoints
         return EndpointResults.Ok(dashboard);
     }
 
+    private static Guid[] ReadGuidOptions(HttpContext context, string key)
+    {
+        var ids = new HashSet<Guid>();
+        foreach (var raw in context.Request.Query[key])
+        {
+            if (!Guid.TryParse(raw, out var id) || id == Guid.Empty)
+                throw new BadHttpRequestException($"Invalid {key} value.", 400);
+            ids.Add(id);
+        }
+
+        return ids.ToArray();
+    }
+
+    private static RateStatus[] ReadStatusOptions(HttpContext context)
+    {
+        var statuses = new HashSet<RateStatus>();
+        foreach (var raw in context.Request.Query["statuses"])
+        {
+            if (!Enum.TryParse<RateStatus>(raw, true, out var status) || !Enum.IsDefined(status))
+                throw new BadHttpRequestException("Invalid statuses value.", 400);
+            statuses.Add(status);
+        }
+
+        return statuses.ToArray();
+    }
+
     private static async Task<IResult> GetRatesAsync(
         int? pageNumber,
         int? pageSize,
@@ -340,7 +367,18 @@ public static class RateEndpoints
                 requiredApproval,
                 quoteDate,
                 validFrom,
-                validTo
+                validTo,
+                httpContext.Request.Query["executiveNames"].ToArray(),
+                new RateMultiSelectFilters(
+                    ReadStatusOptions(httpContext),
+                    ReadGuidOptions(httpContext, "agentIds"),
+                    ReadGuidOptions(httpContext, "carrierIds"),
+                    ReadGuidOptions(httpContext, "polIds"),
+                    ReadGuidOptions(httpContext, "poeIds"),
+                    ReadGuidOptions(httpContext, "podIds"),
+                    ReadGuidOptions(httpContext, "containerTypeIds"),
+                    ReadGuidOptions(httpContext, "currencyIds")
+                )
             ),
             cancellationToken
         );
