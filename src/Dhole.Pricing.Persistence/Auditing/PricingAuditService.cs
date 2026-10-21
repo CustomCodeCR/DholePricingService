@@ -122,6 +122,26 @@ public sealed class PricingAuditService(ServiceDbContext dbContext) : IPricingAu
                     ErrorMessage = null,
                     CreatedAtUtc = DateTime.UtcNow,
                 });
+                // Queue the exact accepted revision in the same SaveChanges transaction as
+                // the state transition. No HTTP call or credential is used here.
+                if (integrationEvent == "pricing.rate.accepted_by_client" &&
+                    StringProp(after, "idtraNumber") is { Length: > 0 } idtra &&
+                    !string.IsNullOrWhiteSpace(idtra) &&
+                    after.TryGetProperty("revisionNumber", out var rev) &&
+                    rev.TryGetInt32(out var revisionNumber) && revisionNumber > 0)
+                {
+                    dbContext.DynamicsQuoteSyncJobs.Add(new DynamicsQuoteSyncJob
+                    {
+                        Id = Guid.NewGuid(),
+                        EventId = integrationEventId,
+                        RateId = rateId,
+                        RevisionNumber = revisionNumber,
+                        PayloadJson = after.GetRawText(),
+                        Status = "Pending",
+                        NextAttemptAtUtc = DateTime.UtcNow,
+                        CreatedAtUtc = DateTime.UtcNow
+                    });
+                }
             }
         }
 
