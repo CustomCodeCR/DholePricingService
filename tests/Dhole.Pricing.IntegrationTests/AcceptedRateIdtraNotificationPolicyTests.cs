@@ -38,6 +38,13 @@ public sealed class AcceptedRateIdtraNotificationPolicyTests
             RateStatus.AcceptedByClient, " "));
         Assert.IsFalse(AcceptedRateOpeningsNotificationService.HasPendingIdtra(
             RateStatus.AcceptedByClient, "IDTRA-123"));
+        // IDTRA presentado junto con la aceptación: no generar ni preparar email.
+        Assert.IsFalse(AcceptedRateOpeningsNotificationService.HasPendingIdtra(
+            RateStatus.AcceptedByClient, null, "IDTRA-123"));
+        Assert.IsFalse(AcceptedRateOpeningsNotificationService.HasPendingIdtra(
+            RateStatus.AcceptedByClient, " ", "  IDTRA-2026-009  "));
+        Assert.IsTrue(AcceptedRateOpeningsNotificationService.HasPendingIdtra(
+            RateStatus.AcceptedByClient, null, " "));
         Assert.IsFalse(AcceptedRateOpeningsNotificationService.HasPendingIdtra(
             RateStatus.Sent, null));
     }
