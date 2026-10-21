@@ -340,7 +340,8 @@ public static class RateEndpoints
                 requiredApproval,
                 quoteDate,
                 validFrom,
-                validTo
+                validTo,
+                httpContext.Request.Query["executiveNames"].ToArray()
             ),
             cancellationToken
         );
