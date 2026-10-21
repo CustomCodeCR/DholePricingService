@@ -1,0 +1,26 @@
+name: Pricing rate multi-select API
+
+on:
+  pull_request:
+    branches: [master, develop]
+    paths:
+      - 'src/Dhole.Pricing.Api/Endpoints/RateEndpoints.cs'
+      - 'src/Dhole.Pricing.Application/Features/Rates/GetRates/**'
+      - 'src/Dhole.Pricing.Application/Abstractions/Repositories/IRateHeaderRepository.cs'
+      - 'src/Dhole.Pricing.Application/Abstractions/Repositories/RateMultiSelectFilters.cs'
+      - 'src/Dhole.Pricing.Persistence/Repositories/RateHeaderRepository.cs'
+      - '.github/workflows/pricing-rate-multiselect.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-pricing-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build Pricing API
+        run: dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configuration Release
