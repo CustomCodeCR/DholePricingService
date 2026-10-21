@@ -5,10 +5,10 @@ using System.Text.RegularExpressions;
 
 namespace Dhole.Pricing.Api.Services;
 
-internal sealed record DynamicsCrudOption(string Label, JsonElement Value);
-internal sealed record DynamicsCrudField(string Name, string Target, string Type,
+public sealed record DynamicsCrudOption(string Label, JsonElement Value);
+public sealed record DynamicsCrudField(string Name, string Target, string Type,
     string DataverseType, bool Required, IReadOnlyList<DynamicsCrudOption>? Options);
-internal sealed record DynamicsCrudSchema(string Name, int Version, string EntityName,
+public sealed record DynamicsCrudSchema(string Name, int Version, string EntityName,
     string Operation, string ConnectionCode, IReadOnlyList<DynamicsCrudField> Fields);
 
 /// <summary>
@@ -16,7 +16,7 @@ internal sealed record DynamicsCrudSchema(string Name, int Version, string Entit
 /// contract. Choice values always come from the API schema, not list positions.
 /// Unknown mandatory fields/equipment fail closed instead of creating a wrong Quote.
 /// </summary>
-internal static class DynamicsQuotePayloadBuilder
+public static class DynamicsQuotePayloadBuilder
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
