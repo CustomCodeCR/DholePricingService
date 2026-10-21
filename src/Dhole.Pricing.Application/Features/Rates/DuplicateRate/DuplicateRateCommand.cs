@@ -11,5 +11,6 @@ public sealed record DuplicateRateCommand(
     bool ApplyTariff = false,
     string? ClientName = null,
     string? ExecutiveName = null,
-    string? IdtraNumber = null
+    string? IdtraNumber = null,
+    bool IdenticalCopy = false
 ) : ICommand<Result<Guid>>;

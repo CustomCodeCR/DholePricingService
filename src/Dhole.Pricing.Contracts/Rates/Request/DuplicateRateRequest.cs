@@ -6,5 +6,6 @@ public sealed record DuplicateRateRequest(
     bool ApplyTariff = false,
     string? ClientName = null,
     string? ExecutiveName = null,
-    string? IdtraNumber = null
+    string? IdtraNumber = null,
+    bool IdenticalCopy = false
 );
