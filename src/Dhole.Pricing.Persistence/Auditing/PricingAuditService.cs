@@ -83,9 +83,16 @@ public sealed class PricingAuditService(ServiceDbContext dbContext) : IPricingAu
                 value.GetBoolean();
 
             string? integrationEvent = null;
-            if (StringProp(after,"status") == "AcceptedByClient" &&
-                StringProp(before,"status") != "AcceptedByClient")
+            var acceptedNow = StringProp(after, "status") == "AcceptedByClient";
+            var idtraAssignedAfterAcceptance =
+                acceptedNow &&
+                StringProp(before, "status") == "AcceptedByClient" &&
+                string.IsNullOrWhiteSpace(StringProp(before, "idtraNumber")) &&
+                !string.IsNullOrWhiteSpace(StringProp(after, "idtraNumber"));
+            if (acceptedNow && StringProp(before, "status") != "AcceptedByClient")
                 integrationEvent = "pricing.rate.accepted_by_client";
+            else if (idtraAssignedAfterAcceptance)
+                integrationEvent = "pricing.rate.idtra_assigned";
             else if (auditEvent.EventType == PricingAuditEventTypes.RateHeaderApprovalChanged &&
                 BoolProp(before,"requiredApproval") && !BoolProp(after,"requiredApproval"))
                 integrationEvent = "pricing.rate.margin_approved";
@@ -124,7 +131,8 @@ public sealed class PricingAuditService(ServiceDbContext dbContext) : IPricingAu
                 });
                 // Queue the exact accepted revision in the same SaveChanges transaction as
                 // the state transition. No HTTP call or credential is used here.
-                if (integrationEvent == "pricing.rate.accepted_by_client" &&
+                if ((integrationEvent == "pricing.rate.accepted_by_client" ||
+                     integrationEvent == "pricing.rate.idtra_assigned") &&
                     StringProp(after, "idtraNumber") is { Length: > 0 } idtra &&
                     !string.IsNullOrWhiteSpace(idtra) &&
                     after.TryGetProperty("revisionNumber", out var rev) &&
