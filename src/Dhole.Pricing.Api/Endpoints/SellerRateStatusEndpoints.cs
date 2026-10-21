@@ -143,7 +143,8 @@ public static class SellerRateStatusEndpoints
             });
         }
 
-        if (status == RateStatus.AcceptedByClient && string.IsNullOrWhiteSpace(currentRate.IdtraNumber))
+        if (AcceptedRateOpeningsNotificationService.HasPendingIdtra(
+            status, currentRate.IdtraNumber, request.IdtraNumber))
         {
             var capacity = await rateHeaders.GetOwnLclCapacityForRateAsync(
                 currentRate.Id,
@@ -196,7 +197,7 @@ public static class SellerRateStatusEndpoints
                 rateId,
                 status,
                 request.Reason,
-                null,
+                status == RateStatus.AcceptedByClient ? request.IdtraNumber : null,
                 currentUserId
             ),
             cancellationToken
