@@ -93,8 +93,11 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
         {
             entity.ToTable("DynamicsQuoteSyncJobs");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.RateId, x.RevisionNumber }).IsUnique();
-            entity.HasIndex(x => x.EventId).IsUnique();
+            entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.HasIndex(x => new { x.RateId, x.RevisionNumber })
+                .IsUnique().HasDatabaseName("UX_DynamicsQuoteSyncJobs_RateRevision");
+            entity.HasIndex(x => x.EventId)
+                .IsUnique().HasDatabaseName("UX_DynamicsQuoteSyncJobs_Event");
             entity.Property(x => x.Status).HasMaxLength(32);
             entity.Property(x => x.LastError).HasMaxLength(500);
         });
