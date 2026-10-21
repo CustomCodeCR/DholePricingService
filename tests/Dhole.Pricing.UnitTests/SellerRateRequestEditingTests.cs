@@ -57,7 +57,7 @@ public sealed class SellerRateRequestEditingTests
             shipmentMode: "Lcl",
             originName: "Miami",
             destinationName: "San José",
-            payloadJson: "{\\"form\\":{\\"modality\\":\\"Air\\",\\"shipmentMode\\":\\"LCL\\"}}");
+            payloadJson: "{\"form\":{\"modality\":\"Air\",\"shipmentMode\":\"LCL\"}}");
 
         var poeId = Guid.NewGuid();
         request.SetRoute(poeId, "San José", podId: null, podName: null);
@@ -69,7 +69,7 @@ public sealed class SellerRateRequestEditingTests
         Assert.IsNull(request.PodName);
 
         request.UpdateSubmission(RateRequestPriority.Yellow, "Cliente", "Vendedor",
-            "Lcl", "Miami", "San José", "{\\"form\\":{\\"modality\\":\\"Air\\"}}");
+            "Lcl", "Miami", "San José", "{\"form\":{\"modality\":\"Air\"}}");
         request.SetRoute(poeId, "San José", podId: null, podName: null);
         Assert.AreEqual(poeId, request.PoeId);
         Assert.IsNull(request.PodId);
