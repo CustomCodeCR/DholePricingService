@@ -1,0 +1,94 @@
+using System.Text.Json;
+using Dhole.Pricing.Api.Services;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Dhole.Pricing.IntegrationTests;
+
+[TestClass]
+public sealed class DynamicsQuotePayloadBuilderTests
+{
+    private const string Schema = """
+        {
+          "name":"crear_oferta","version":1,"entityName":"quote",
+          "operation":"create","connectionCode":"principal",
+          "fields":[
+            {"name":"name","target":"name","type":"string","dataverseType":"String","required":true,"options":[]},
+            {"name":"effectivefrom","target":"effectivefrom","type":"datetime","dataverseType":"DateTime","required":false,"options":[]},
+            {"name":"msdyn_invoicesetuptotals","target":"msdyn_invoicesetuptotals","type":"decimal","dataverseType":"Money","required":true,"options":[]},
+            {"name":"new_equipo","target":"new_equipo","type":"integer","dataverseType":"Picklist","required":true,
+             "options":[{"label":"LCL","value":100000000},{"label":"40 HC FCL","value":100000005}]},
+            {"name":"new_flete","target":"new_flete","type":"decimal","dataverseType":"Money","required":true,"options":[]},
+            {"name":"new_monto9","target":"new_monto9","type":"decimal","dataverseType":"Money","required":true,"options":[]},
+            {"name":"new_categoriatarifa","target":"new_categoriatarifa","type":"integer","dataverseType":"Picklist","required":true,
+             "options":[{"label":"Predeterminada","value":100000000}]},
+            {"name":"new_idtraasignado","target":"new_idtraasignado","type":"string","dataverseType":"String","required":false,"options":[]},
+            {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}
+          ]
+        }
+        """;
+
+    private const string Accepted = """
+        {
+          "status":"AcceptedByClient","revisionNumber":2,
+          "idtraNumber":"IDTRA-2026-045","rateCode":"QUO-2026-003",
+          "rateName":"Oferta 40HC","clientName":"Cliente Prueba",
+          "shipmentMode":"Fcl","containerTypeName":"40 HC",
+          "containerTypeCode":"40HC","containerQuantity":2,
+          "currencyCode":"USD","totalCostAmount":1800.75,
+          "totalSaleAmount":2400.25,
+          "validFrom":"2026-10-20T00:00:00Z",
+          "validTo":"2026-11-20T00:00:00Z",
+          "containers":[{"containerTypeName":"40 HC","containerTypeCode":"40HC","quantity":2}]
+        }
+        """;
+
+    [TestMethod]
+    public void MapsApprovedQuoteWithoutGuessingEquipmentOrPrice()
+    {
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(Accepted, schema)));
+        var inputs = doc.RootElement.GetProperty("inputs");
+        Assert.AreEqual("principal", doc.RootElement.GetProperty("connectionCode").GetString());
+        Assert.AreEqual(1800.75m, inputs.GetProperty("new_flete").GetDecimal());
+        Assert.AreEqual(1800.75m, inputs.GetProperty("new_monto9").GetDecimal());
+        Assert.AreEqual(2400.25m, inputs.GetProperty("msdyn_invoicesetuptotals").GetDecimal());
+        Assert.AreEqual(100000005, inputs.GetProperty("new_equipo").GetInt32());
+        Assert.AreEqual(100000000, inputs.GetProperty("new_categoriatarifa").GetInt32());
+        Assert.AreEqual("IDTRA-2026-045", inputs.GetProperty("new_idtraasignado").GetString());
+        Assert.AreEqual("2 x 40 HC", inputs.GetProperty("new_cantidadequipos").GetString());
+    }
+
+    [TestMethod]
+    public void LclUsesItsOwnDynamicsOption()
+    {
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
+        var lcl = Accepted.Replace("\"shipmentMode\":\"Fcl\"", "\"shipmentMode\":\"Lcl\"");
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(lcl, schema)));
+        Assert.AreEqual(100000000, doc.RootElement.GetProperty("inputs")
+            .GetProperty("new_equipo").GetInt32());
+    }
+
+    [TestMethod]
+    public void UnapprovedOrIdtraMissingNeverProducesAPayload()
+    {
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            DynamicsQuotePayloadBuilder.Build(
+                Accepted.Replace("AcceptedByClient", "PendingApproval"), schema));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            DynamicsQuotePayloadBuilder.Build(
+                Accepted.Replace("IDTRA-2026-045", ""), schema));
+    }
+
+    [TestMethod]
+    public void UnknownEquipmentFailsInsteadOfPickingAnArbitraryCode()
+    {
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            DynamicsQuotePayloadBuilder.Build(
+                Accepted.Replace("40 HC", "20 Flat Rack")
+                    .Replace("40HC", "20FLAT"), schema));
+    }
+}
