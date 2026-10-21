@@ -59,14 +59,6 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateClosureReasonIsRequired);
         }
 
-        if (command.Status == RateStatus.AcceptedByClient
-            && rate.Status != RateStatus.AcceptedByClient
-            && string.IsNullOrWhiteSpace(command.IdtraNumber)
-            && string.IsNullOrWhiteSpace(rate.IdtraNumber))
-        {
-            return Result.Failure(PricingErrors.RateIdtraRequiredForAcceptance);
-        }
-
         var before = PricingAuditSnapshots.From(rate);
 
         try
