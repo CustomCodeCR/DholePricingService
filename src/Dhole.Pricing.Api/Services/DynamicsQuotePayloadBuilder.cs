@@ -41,8 +41,10 @@ public static class DynamicsQuotePayloadBuilder
         if (cost < 0 || sale < 0) throw new InvalidOperationException("Invalid rate totals.");
         var values = new Dictionary<string, object>(StringComparer.Ordinal);
         var fields = schema.Fields.ToDictionary(x => x.Target, StringComparer.Ordinal);
-        foreach (var required in new[] { "name", "new_equipo", "new_flete",
-                     "new_monto9", "msdyn_invoicesetuptotals" })
+        foreach (var required in new[] { "name", "customeridtype", "new_equipo", "new_flete",
+                     "new_monto9", "msdyn_invoicesetuptotals",
+                     "new_categoriatarifa", "new_preestado", "new_proyecctoespecifico",
+                     "new_tipodecliente", "new_idtraasignado" })
             if (!fields.ContainsKey(required))
                 throw new InvalidOperationException("Published CRUD template is missing " + required);
 
@@ -58,9 +60,12 @@ public static class DynamicsQuotePayloadBuilder
                 "new_flete" or "new_monto9" => cost,
                 "new_equipo" => Equipment(rate, field),
                 "new_cantidadequipos" => Quantity(rate),
-                // Existing Dataverse business defaults supplied by Pricing.
-                "new_categoriatarifa" or "new_preestado" or
-                "new_proyecctoespecifico" or "new_tipodecliente" => 100000000,
+                // Exact choices configured by the business for crear_oferta.
+                "customeridtype" => "quote",
+                "new_categoriatarifa" => 100000001,
+                "new_preestado" => 100000003,
+                "new_proyecctoespecifico" => 100000004,
+                "new_tipodecliente" => 100000000,
                 "new_idtraasignado" => String(rate, "idtraNumber"),
                 "new_pol" => String(rate, "polName"),
                 "new_poe" => String(rate, "poeName"),
