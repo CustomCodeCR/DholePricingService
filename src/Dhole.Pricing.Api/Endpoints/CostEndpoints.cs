@@ -73,6 +73,11 @@ public static class CostEndpoints
         string[]? portRole,
         string[]? currencyId,
         string[]? isActive,
+        string[]? shipmentMode,
+        string[]? incotermId,
+        string[]? serviceId,
+        string[]? chargeBasis,
+        string[]? operationalCondition,
         IQueryDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -89,7 +94,12 @@ public static class CostEndpoints
                 ParseGuidList(portId),
                 ParseEnumList<CostPortRole>(portRole),
                 ParseGuidList(currencyId),
-                ParseBoolList(isActive)
+                ParseBoolList(isActive),
+                ParseEnumList<ShipmentMode>(shipmentMode),
+                ParseGuidList(incotermId),
+                ParseGuidList(serviceId),
+                ParseEnumList<ChargeBasis>(chargeBasis),
+                SplitMultiValues(operationalCondition).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
             ),
             cancellationToken
         );

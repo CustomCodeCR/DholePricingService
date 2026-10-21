@@ -109,6 +109,11 @@ public sealed class CostRepository(ServiceDbContext dbContext)
         IReadOnlyCollection<CostPortRole>? portRoles = null,
         IReadOnlyCollection<Guid>? currencyIds = null,
         IReadOnlyCollection<bool>? activeStates = null,
+        IReadOnlyCollection<ShipmentMode>? shipmentModes = null,
+        IReadOnlyCollection<Guid>? incotermIds = null,
+        IReadOnlyCollection<Guid>? serviceIds = null,
+        IReadOnlyCollection<ChargeBasis>? chargeBases = null,
+        IReadOnlyCollection<string>? operationalConditions = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -142,6 +147,11 @@ public sealed class CostRepository(ServiceDbContext dbContext)
             portRoles,
             currencyIds,
             activeStates,
+            shipmentModes,
+            incotermIds,
+            serviceIds,
+            chargeBases,
+            operationalConditions,
             selectionMatches.CarrierCostIds,
             selectionMatches.AgentCostIds,
             selectionMatches.PortCostIds
@@ -480,6 +490,11 @@ public sealed class CostRepository(ServiceDbContext dbContext)
         IReadOnlyCollection<CostPortRole>? portRoles,
         IReadOnlyCollection<Guid>? currencyIds,
         IReadOnlyCollection<bool>? activeStates,
+        IReadOnlyCollection<ShipmentMode>? shipmentModes,
+        IReadOnlyCollection<Guid>? incotermIds,
+        IReadOnlyCollection<Guid>? serviceIds,
+        IReadOnlyCollection<ChargeBasis>? chargeBases,
+        IReadOnlyCollection<string>? operationalConditions,
         IReadOnlyCollection<Guid>? selectedCarrierCostIds,
         IReadOnlyCollection<Guid>? selectedAgentCostIds,
         IReadOnlyCollection<Guid>? selectedPortCostIds
@@ -560,6 +575,46 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 var active = values[0];
                 query = query.Where(x => x.IsActive == active);
             }
+        }
+
+        if (shipmentModes is { Count: > 0 })
+        {
+            var values = shipmentModes.Distinct().ToArray();
+            var mask = values.Aggregate(0, (current, mode) => current | (1 << ((int)mode - 1)));
+            // Sin modalidad configurada = aplica a cualquier modalidad.
+            query = query.Where(x =>
+                (x.ShipmentModeMask != 0 && (x.ShipmentModeMask & mask) != 0)
+                || (x.ShipmentModeMask == 0 && (!x.ShipmentMode.HasValue || values.Contains(x.ShipmentMode.Value)))
+            );
+        }
+
+        if (incotermIds is { Count: > 0 })
+        {
+            var values = incotermIds.Distinct().ToArray();
+            // Sin Incoterms asignados = costo válido para cualquier Incoterm.
+            query = query.Where(x =>
+                !x.Incoterms.Any() || x.Incoterms.Any(i => values.Contains(i.IncotermId))
+            );
+        }
+
+        if (serviceIds is { Count: > 0 })
+        {
+            var values = serviceIds.Distinct().ToArray();
+            query = query.Where(x => x.Services.Any(service => values.Contains(service.ServiceId)));
+        }
+
+        if (chargeBases is { Count: > 0 })
+        {
+            var values = chargeBases.Distinct().ToArray();
+            query = query.Where(x => values.Contains(x.ChargeBasis));
+        }
+
+        if (operationalConditions is { Count: > 0 })
+        {
+            var values = operationalConditions.Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            if (values.Length > 0)
+                query = query.Where(x => x.OperationalConditions.Any(condition => values.Contains(condition)));
         }
 
         return query;
