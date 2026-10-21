@@ -153,6 +153,8 @@ internal static class RateMappings
                 .ToList()
         )
         {
+            PendingReapproval = rate.PendingReapproval,
+            ReapprovalReason = rate.ReapprovalReason,
             SellerReceivedAtUtc = rate.SellerReceivedAtUtc,
             SellerReceivedBy = rate.SellerReceivedBy,
             CargoValue = rate.CargoValue,

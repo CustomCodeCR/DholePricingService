@@ -308,6 +308,9 @@ public static class RateEndpoints
         var statuses = new HashSet<RateStatus>();
         foreach (var raw in context.Request.Query["statuses"])
         {
+            // Categoría virtual: no representa un estado del dominio RateStatus.
+            if (string.Equals(raw, "PendingReapproval", StringComparison.OrdinalIgnoreCase))
+                continue;
             if (!Enum.TryParse<RateStatus>(raw, true, out var status) || !Enum.IsDefined(status))
                 throw new BadHttpRequestException("Invalid statuses value.", 400);
             statuses.Add(status);
@@ -377,7 +380,9 @@ public static class RateEndpoints
                     ReadGuidOptions(httpContext, "poeIds"),
                     ReadGuidOptions(httpContext, "podIds"),
                     ReadGuidOptions(httpContext, "containerTypeIds"),
-                    ReadGuidOptions(httpContext, "currencyIds")
+                    ReadGuidOptions(httpContext, "currencyIds"),
+                    httpContext.Request.Query["statuses"].Any(value =>
+                        string.Equals(value, "PendingReapproval", StringComparison.OrdinalIgnoreCase))
                 )
             ),
             cancellationToken

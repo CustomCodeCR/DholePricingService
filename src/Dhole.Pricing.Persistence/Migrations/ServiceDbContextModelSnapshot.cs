@@ -2882,6 +2882,16 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDefaultValue("Tariff")
                         .HasColumnName("rate_type");
 
+                    b.Property<bool>("PendingReapproval")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("pending_reapproval");
+
+                    b.Property<string>("ReapprovalReason")
+                        .HasColumnType("text")
+                        .HasColumnName("reapproval_reason");
+
                     b.Property<bool>("RequiredApproval")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

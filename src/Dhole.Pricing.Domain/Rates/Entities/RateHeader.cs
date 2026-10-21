@@ -252,6 +252,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public decimal TotalUtilityCrc { get; private set; }
     public decimal MarginPercentage { get; private set; }
     public bool RequiredApproval { get; private set; }
+    // Se conserva independientemente del estado de aprobación de margen.
+    public bool PendingReapproval { get; private set; }
+    public string? ReapprovalReason { get; private set; }
     public RateStatus Status { get; private set; }
     public DateTime? SellerReceivedAtUtc { get; private set; }
     public Guid? SellerReceivedBy { get; private set; }
@@ -490,12 +493,14 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     /// Accepted quotes use BeginRevision so the approved snapshot is preserved
     /// and the new draft goes through the existing approval flow.
     /// </summary>
-    public void AdvanceRevision(Guid? updatedBy)
+    public void AdvanceRevision(Guid? updatedBy, string? updateReason = null)
     {
         if (Status == RateStatus.AcceptedByClient || Status == RateStatus.Closed)
             throw new InvalidOperationException("La tarifa requiere el flujo de revisión comercial correspondiente.");
 
         RevisionNumber = checked(Math.Max(1, RevisionNumber) + 1);
+        if (PendingReapproval && !string.IsNullOrWhiteSpace(updateReason))
+            ReapprovalReason = updateReason.Trim();
         // Cada versión requiere su propia confirmación: no heredar el acuse anterior.
         SellerReceivedAtUtc = null;
         SellerReceivedBy = null;
@@ -503,12 +508,14 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
     }
 
-    public void BeginRevision(Guid? updatedBy)
+    public void BeginRevision(Guid? updatedBy, string modificationReason)
     {
         if (Status != RateStatus.AcceptedByClient)
             throw new InvalidOperationException("Solo una tarifa aceptada puede iniciar una nueva revisión.");
 
         RevisionNumber = Math.Max(1, RevisionNumber) + 1;
+        PendingReapproval = true;
+        ReapprovalReason = modificationReason.Trim();
         SellerReceivedAtUtc = null;
         SellerReceivedBy = null;
         RequiredApproval = MarginPercentage < MinimumMarginPercentage;
@@ -1405,6 +1412,11 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         Status = status;
         RequiredApproval = false;
+        if (status is RateStatus.AcceptedByClient or RateStatus.RejectedByClient or RateStatus.Closed or RateStatus.Cancelled)
+        {
+            PendingReapproval = false;
+            ReapprovalReason = null;
+        }
 
         if (isClosing || status == RateStatus.RejectedByClient)
         {

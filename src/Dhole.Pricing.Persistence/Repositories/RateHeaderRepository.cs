@@ -294,12 +294,15 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         if (multiFilters is not null)
         {
             var statuses = multiFilters.Statuses.ToArray();
-            if (statuses.Length > 0)
+            if (statuses.Length > 0 || multiFilters.IncludePendingReapproval)
             {
-                // Keep the existing "No aceptadas" grouping compatible with Closed rates.
+                // La re-aprobación es una categoría comercial distinta: no mezcla
+                // revisiones previamente aceptadas con las categorías normales.
                 if (statuses.Contains(RateStatus.RejectedByClient))
                     statuses = statuses.Append(RateStatus.Closed).Distinct().ToArray();
-                query = query.Where(rate => statuses.Contains(rate.Status));
+                query = query.Where(rate =>
+                    (statuses.Contains(rate.Status) && !rate.PendingReapproval)
+                    || (multiFilters.IncludePendingReapproval && rate.PendingReapproval));
             }
 
             var agentIds = multiFilters.AgentIds.ToArray();
@@ -469,6 +472,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             {
                 CreatedByUserId = x.CreatedBy,
                 LastModifiedByUserId = x.UpdatedBy,
+                PendingReapproval = x.PendingReapproval,
+                ReapprovalReason = x.ReapprovalReason,
             })
             .ToListAsync(cancellationToken);
 

@@ -85,7 +85,10 @@ public sealed record RateDto(
     IReadOnlyCollection<RateDetailDto> RateDetails,
     IReadOnlyCollection<RateServiceDto> Services
 )
-{    public DateTime? SellerReceivedAtUtc { get; init; }
+{
+    public bool PendingReapproval { get; init; }
+    public string? ReapprovalReason { get; init; }
+    public DateTime? SellerReceivedAtUtc { get; init; }
     public Guid? SellerReceivedBy { get; init; }
     public int? StorageDays { get; init; }
     public decimal CargoValue { get; init; }
