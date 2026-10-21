@@ -206,7 +206,9 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.PodId,
                 x.PodName,
                 x.PodCode,
-                x.ShipmentMode.HasValue ? x.ShipmentMode.Value.ToString() : null,
+                x.ShipmentMode.HasValue
+                    ? (x.ShipmentMode.Value == ShipmentMode.Air ? nameof(ShipmentMode.AirConsol) : x.ShipmentMode.Value.ToString())
+                    : null,
                 x.ChargeBasis.ToString(),
                 x.MinimumCostAmount,
                 x.MinimumSaleAmount,
@@ -302,7 +304,9 @@ public sealed class CostRepository(ServiceDbContext dbContext)
                 x.PodId,
                 x.PodName,
                 x.PodCode,
-                x.ShipmentMode.HasValue ? x.ShipmentMode.Value.ToString() : null,
+                x.ShipmentMode.HasValue
+                    ? (x.ShipmentMode.Value == ShipmentMode.Air ? nameof(ShipmentMode.AirConsol) : x.ShipmentMode.Value.ToString())
+                    : null,
                 x.ChargeBasis.ToString(),
                 x.MinimumCostAmount,
                 x.MinimumSaleAmount,
@@ -375,10 +379,14 @@ public sealed class CostRepository(ServiceDbContext dbContext)
     )
     {
         if (shipmentModeMask == 0)
-            return legacyShipmentMode.HasValue ? [legacyShipmentMode.Value.ToString()] : [];
+            return legacyShipmentMode.HasValue
+                ? [ShipmentModeNormalization.Normalize(legacyShipmentMode.Value).ToString()]
+                : [];
 
         return Enum.GetValues<ShipmentMode>()
             .Where(mode => (shipmentModeMask & (1 << ((int)mode - 1))) != 0)
+            .Select(ShipmentModeNormalization.Normalize)
+            .Distinct()
             .Select(mode => mode.ToString())
             .ToArray();
     }

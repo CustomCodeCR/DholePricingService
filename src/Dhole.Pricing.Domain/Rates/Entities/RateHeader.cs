@@ -782,6 +782,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         if (shipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl && kgPerCbm <= 0m)
             throw new InvalidOperationException("El factor KG/CBM debe ser mayor que cero para LCL/LTL.");
 
+        shipmentMode = ShipmentModeNormalization.Normalize(shipmentMode);
         ShipmentMode = shipmentMode;
         TotalPackages = totalPackages;
         TotalPallets = totalPallets;
