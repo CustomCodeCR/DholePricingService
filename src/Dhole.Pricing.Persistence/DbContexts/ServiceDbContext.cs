@@ -91,15 +91,28 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
 
         modelBuilder.Entity<DynamicsQuoteSyncJob>(entity =>
         {
+            // Legacy migration intentionally creates quoted PascalCase columns.
+            // Pin each column name: global snake_case convention must not rename
+            // the physical schema used by the durable delivery worker.
             entity.ToTable("DynamicsQuoteSyncJobs");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.HasKey(x => x.Id).HasName("DynamicsQuoteSyncJobs_pkey");
+            entity.Property(x => x.Id).ValueGeneratedNever().HasColumnName("Id");
+            entity.Property(x => x.RateId).HasColumnName("RateId");
+            entity.Property(x => x.RevisionNumber).HasColumnName("RevisionNumber");
+            entity.Property(x => x.EventId).HasColumnName("EventId");
+            entity.Property(x => x.PayloadJson).HasColumnName("PayloadJson");
+            entity.Property(x => x.Status).HasColumnName("Status").HasMaxLength(32);
+            entity.Property(x => x.Attempts).HasColumnName("Attempts");
+            entity.Property(x => x.NextAttemptAtUtc).HasColumnName("NextAttemptAtUtc");
+            entity.Property(x => x.LeaseExpiresAtUtc).HasColumnName("LeaseExpiresAtUtc");
+            entity.Property(x => x.LastError).HasColumnName("LastError").HasMaxLength(500);
+            entity.Property(x => x.ResponseJson).HasColumnName("ResponseJson");
+            entity.Property(x => x.CreatedAtUtc).HasColumnName("CreatedAtUtc");
+            entity.Property(x => x.CompletedAtUtc).HasColumnName("CompletedAtUtc");
             entity.HasIndex(x => new { x.RateId, x.RevisionNumber })
                 .IsUnique().HasDatabaseName("UX_DynamicsQuoteSyncJobs_RateRevision");
             entity.HasIndex(x => x.EventId)
                 .IsUnique().HasDatabaseName("UX_DynamicsQuoteSyncJobs_Event");
-            entity.Property(x => x.Status).HasMaxLength(32);
-            entity.Property(x => x.LastError).HasMaxLength(500);
         });
 
         modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
