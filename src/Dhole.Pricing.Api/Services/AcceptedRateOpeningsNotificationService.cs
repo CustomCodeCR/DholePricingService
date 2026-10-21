@@ -35,14 +35,6 @@ public sealed class AcceptedRateOpeningsNotificationService(
         _ => throw new ArgumentOutOfRangeException(nameof(actor), actor, null),
     };
 
-    public static string AcceptanceIntroHtmlFor(RateAcceptanceActor actor) => actor switch
-    {
-        RateAcceptanceActor.Seller => string.Empty,
-        RateAcceptanceActor.Pricing =>
-            "<p><strong>Pricing confirmó la aceptación de esta cotización. Apertura de Trámite debe asignar el IDTRA.</strong></p>",
-        _ => throw new ArgumentOutOfRangeException(nameof(actor), actor, null),
-    };
-
     public static bool HasPendingIdtra(RateStatus status, string? idtraNumber)
         => status == RateStatus.AcceptedByClient && string.IsNullOrWhiteSpace(idtraNumber);
 
@@ -174,7 +166,6 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 servicesText = "—";
 
             var emailBody = $"""
-                {AcceptanceIntroHtmlFor(actor)}
                 <p>Hay una nueva tarifa aceptada con <strong>IDTRA pendiente de asignación</strong>.
                    Se adjunta el PDF de la cotización para continuar con el trámite.</p>
                 <table style="border-collapse:collapse; width:100%; max-width:820px">
