@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Net;
 using System.Text.Json;
 using Dhole.Pricing.Api.Services;
@@ -23,12 +24,13 @@ public static class DynamicsQuoteDiagnosticsEndpoints
 
         group.MapGet("/{rateId:guid}/dynamics-sync", GetOneAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
-        group.MapGet("/dynamics-sync/issues", GetIssuesAsync)
-            .RequireScope(PricingConstants.Scopes.RateApproveLowMargin);
+        // Dynamics administrators inspect integration errors from the Dynamics
+        // operations console. The handler verifies either Dynamics admin scope
+        // or the existing Pricing margin-approval scope.
+        group.MapGet("/dynamics-sync/issues", GetIssuesAsync);
         group.MapPost("/{rateId:guid}/dynamics-sync/retry", RetryPreWriteAsync)
             .RequireScope(PricingConstants.Scopes.RateApproveLowMargin);
-        group.MapGet("/{rateId:guid}/dynamics-sync/validate", ValidateAsync)
-            .RequireScope(PricingConstants.Scopes.RateApproveLowMargin);
+        group.MapGet("/{rateId:guid}/dynamics-sync/validate", ValidateAsync);
         return app;
     }
 
@@ -66,8 +68,9 @@ public static class DynamicsQuoteDiagnosticsEndpoints
     }
 
     private static async Task<IResult> GetIssuesAsync(
-        ServiceDbContext db, CancellationToken cancellationToken)
+        HttpContext http, ServiceDbContext db, CancellationToken cancellationToken)
     {
+        if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
         var failures = await db.DynamicsQuoteSyncJobs.AsNoTracking()
             .Where(x => x.Status == "NeedsAttention" || x.Status == "Retry")
             .OrderByDescending(x => x.CreatedAtUtc)
@@ -130,9 +133,10 @@ public static class DynamicsQuoteDiagnosticsEndpoints
     }
 
     private static async Task<IResult> ValidateAsync(
-        Guid rateId, ServiceDbContext db, IHttpClientFactory clients,
+        Guid rateId, HttpContext http, ServiceDbContext db, IHttpClientFactory clients,
         IConfiguration configuration, CancellationToken cancellationToken)
     {
+        if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
         var job = await db.DynamicsQuoteSyncJobs.AsNoTracking()
             .Where(x => x.RateId == rateId)
             .OrderByDescending(x => x.CreatedAtUtc)
@@ -189,6 +193,24 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 noPostExecuted = true
             });
         }
+    }
+
+    private static bool CanInspectQuoteSync(ClaimsPrincipal user)
+    {
+        if (user.Identity?.IsAuthenticated != true) return false;
+        var scopes = user.Claims
+            .Where(claim => claim.Type.Equals("scope", StringComparison.OrdinalIgnoreCase) ||
+                            claim.Type.Equals("scp", StringComparison.OrdinalIgnoreCase) ||
+                            claim.Type.Equals("scopes", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(claim => claim.Value.Split([' ', ',', ';'],
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return scopes.Contains(PricingConstants.Scopes.RateApproveLowMargin) ||
+               scopes.Contains("dynamics.admin") ||
+               scopes.Contains("dynamics.security.admin") ||
+               scopes.Contains("dynamics.*") ||
+               scopes.Contains("pricing.*") ||
+               scopes.Contains("*");
     }
 
     private static bool CanRetry(string status, string? diagnosticJson)
