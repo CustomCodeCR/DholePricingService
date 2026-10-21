@@ -20,7 +20,15 @@ public sealed class DynamicsQuotePayloadBuilderTests
             {"name":"new_flete","target":"new_flete","type":"decimal","dataverseType":"Money","required":true,"options":[]},
             {"name":"new_monto9","target":"new_monto9","type":"decimal","dataverseType":"Money","required":true,"options":[]},
             {"name":"new_categoriatarifa","target":"new_categoriatarifa","type":"integer","dataverseType":"Picklist","required":true,
-             "options":[{"label":"Predeterminada","value":100000000}]},
+             "options":[{"label":"Categoría","value":100000001}]},
+            {"name":"new_preestado","target":"new_preestado","type":"integer","dataverseType":"Picklist","required":true,
+             "options":[{"label":"Preestado","value":100000003}]},
+            {"name":"new_proyecctoespecifico","target":"new_proyecctoespecifico","type":"integer","dataverseType":"Picklist","required":true,
+             "options":[{"label":"Proyecto","value":100000004}]},
+            {"name":"new_tipodecliente","target":"new_tipodecliente","type":"integer","dataverseType":"Picklist","required":true,
+             "options":[{"label":"Cliente","value":100000000}]},
+            {"name":"customeridtype","target":"customeridtype","type":"string","dataverseType":"EntityName","required":true,
+             "options":[{"label":"Quote","value":"quote"}]},
             {"name":"new_idtraasignado","target":"new_idtraasignado","type":"string","dataverseType":"String","required":false,"options":[]},
             {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}
           ]
@@ -54,7 +62,11 @@ public sealed class DynamicsQuotePayloadBuilderTests
         Assert.AreEqual(1800.75m, inputs.GetProperty("new_monto9").GetDecimal());
         Assert.AreEqual(2400.25m, inputs.GetProperty("msdyn_invoicesetuptotals").GetDecimal());
         Assert.AreEqual(100000005, inputs.GetProperty("new_equipo").GetInt32());
-        Assert.AreEqual(100000000, inputs.GetProperty("new_categoriatarifa").GetInt32());
+        Assert.AreEqual(100000001, inputs.GetProperty("new_categoriatarifa").GetInt32());
+        Assert.AreEqual(100000003, inputs.GetProperty("new_preestado").GetInt32());
+        Assert.AreEqual(100000004, inputs.GetProperty("new_proyecctoespecifico").GetInt32());
+        Assert.AreEqual(100000000, inputs.GetProperty("new_tipodecliente").GetInt32());
+        Assert.AreEqual("quote", inputs.GetProperty("customeridtype").GetString());
         Assert.AreEqual("IDTRA-2026-045", inputs.GetProperty("new_idtraasignado").GetString());
         Assert.AreEqual("2 x 40 HC", inputs.GetProperty("new_cantidadequipos").GetString());
     }
