@@ -772,7 +772,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         decimal totalVolumeCbm,
         decimal kgPerCbm,
         string? cargoLinesJson,
-        Guid? updatedBy
+        Guid? updatedBy,
+        decimal? chargeableQuantityOverride = null
     )
     {
         if (totalPackages < 0 || totalPallets < 0 || totalWeightKg < 0m || totalVolumeCbm < 0m)
@@ -820,6 +821,12 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             ShipmentMode.Ftl or ShipmentMode.Fcl => Math.Max(ContainerQuantity, 1),
             _ => 1m,
         };
+
+        // La duplicación idéntica conserva la cantidad cobrable registrada,
+        // incluso cuando difiere del cálculo por peso y volumen (por ejemplo,
+        // carga no apilable). Las llamadas existentes siguen calculándola normalmente.
+        if (chargeableQuantityOverride.HasValue && shipmentMode is (ShipmentMode.Lcl or ShipmentMode.Ltl))
+            ChargeableQuantity = chargeableQuantityOverride.Value;
 
         if (shipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl && ChargeableQuantity <= 0m)
             throw new InvalidOperationException("La carga LCL/LTL debe tener peso o volumen cobrable.");
