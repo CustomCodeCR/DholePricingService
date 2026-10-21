@@ -11,5 +11,6 @@ public sealed record RateMultiSelectFilters(
     IReadOnlyCollection<Guid> PoeIds,
     IReadOnlyCollection<Guid> PodIds,
     IReadOnlyCollection<Guid> ContainerTypeIds,
-    IReadOnlyCollection<Guid> CurrencyIds
+    IReadOnlyCollection<Guid> CurrencyIds,
+    bool IncludePendingReapproval = false
 );

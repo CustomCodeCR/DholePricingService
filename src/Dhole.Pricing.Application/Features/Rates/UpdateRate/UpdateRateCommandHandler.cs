@@ -870,9 +870,9 @@ public sealed class UpdateRateCommandHandler(
         );
 
         if (commercialStatusBeforeUpdate == RateStatus.AcceptedByClient)
-            rate.BeginRevision(command.UpdatedBy);
+            rate.BeginRevision(command.UpdatedBy, command.UpdateReason);
         else
-            rate.AdvanceRevision(command.UpdatedBy);
+            rate.AdvanceRevision(command.UpdatedBy, command.UpdateReason);
 
         await audit.PublishAsync(
             new PricingAuditEvent(
