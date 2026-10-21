@@ -4,6 +4,7 @@ using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Contracts.Costs.Response;
+using Dhole.Pricing.Domain.Rates.Enums;
 
 namespace Dhole.Pricing.Application.Features.Costs.GetCostsForSelect;
 
@@ -386,9 +387,10 @@ public sealed class GetCostsForSelectQueryHandler(
         if (!query.ShipmentMode.HasValue)
             return !requireConfiguredContext;
 
-        return configuredShipmentModes.Contains(
-            query.ShipmentMode.Value.ToString(),
-            StringComparer.OrdinalIgnoreCase
+        // Historical costs stored Air; new quotes use AirConsol. Both must match.
+        return configuredShipmentModes.Any(mode =>
+            Enum.TryParse<ShipmentMode>(mode, ignoreCase: true, out var configuredMode)
+            && ShipmentModeNormalization.AreEquivalent(configuredMode, query.ShipmentMode.Value)
         );
     }
 

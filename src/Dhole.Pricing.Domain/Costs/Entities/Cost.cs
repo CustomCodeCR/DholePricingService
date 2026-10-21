@@ -453,6 +453,7 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
     public void ConfigureShipmentModes(IReadOnlyCollection<ShipmentMode>? shipmentModes)
     {
         var normalized = (shipmentModes ?? Array.Empty<ShipmentMode>())
+            .Select(ShipmentModeNormalization.Normalize)
             .Distinct()
             .OrderBy(mode => (int)mode)
             .ToArray();
@@ -466,26 +467,29 @@ public sealed class Cost : SoftDeletableAggregateRoot<Guid>
 
     public bool AppliesToShipmentMode(ShipmentMode shipmentMode)
     {
+        var aliases = ShipmentModeNormalization.ExpandAliases([shipmentMode]);
         if (ShipmentModeMask == 0)
-            return !ShipmentMode.HasValue || ShipmentMode.Value == shipmentMode;
+            return !ShipmentMode.HasValue || aliases.Contains(ShipmentMode.Value);
 
-        return (ShipmentModeMask & ShipmentModeBit(shipmentMode)) != 0;
+        return aliases.Any(mode => (ShipmentModeMask & ShipmentModeBit(mode)) != 0);
     }
 
     public IReadOnlyCollection<ShipmentMode> GetShipmentModes()
     {
         if (ShipmentModeMask == 0)
-            return ShipmentMode.HasValue ? [ShipmentMode.Value] : [];
+            return ShipmentMode.HasValue ? [ShipmentModeNormalization.Normalize(ShipmentMode.Value)] : [];
 
         return Enum.GetValues<ShipmentMode>()
             .Where(mode => (ShipmentModeMask & ShipmentModeBit(mode)) != 0)
+            .Select(ShipmentModeNormalization.Normalize)
+            .Distinct()
             .ToArray();
     }
 
     public static int BuildShipmentModeMask(IEnumerable<ShipmentMode>? shipmentModes)
     {
         var mask = 0;
-        foreach (var mode in (shipmentModes ?? Array.Empty<ShipmentMode>()).Distinct())
+        foreach (var mode in (shipmentModes ?? Array.Empty<ShipmentMode>()).Select(ShipmentModeNormalization.Normalize).Distinct())
         {
             if (!Enum.IsDefined(mode))
                 throw new InvalidOperationException("La modalidad del costo no es válida.");

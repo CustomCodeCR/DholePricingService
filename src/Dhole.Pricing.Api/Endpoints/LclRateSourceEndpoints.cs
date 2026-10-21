@@ -40,7 +40,8 @@ public static class LclRateSourceEndpoints
         CancellationToken cancellationToken)
     {
         var effectiveDate = (quoteDate ?? DateTime.UtcNow).Date;
-        var isAir = string.Equals(modality, "Air", StringComparison.OrdinalIgnoreCase);
+        // Air is a legacy request alias of the canonical AirConsol modality.
+        var isAir = ShipmentModeNormalization.IsAir(modality);
         var expectedImportedMode = isAir
             ? ImportedShipmentMode.AirLclColoader
             : ImportedShipmentMode.LclColoader;
