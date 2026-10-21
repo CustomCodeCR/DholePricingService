@@ -35,6 +35,14 @@ public sealed class AcceptedRateOpeningsNotificationService(
         _ => throw new ArgumentOutOfRangeException(nameof(actor), actor, null),
     };
 
+    public static string AcceptanceIntroHtmlFor(RateAcceptanceActor actor) => actor switch
+    {
+        RateAcceptanceActor.Seller => string.Empty,
+        RateAcceptanceActor.Pricing =>
+            "<p><strong>Pricing confirmó la aceptación de esta cotización. Apertura de Trámite debe asignar el IDTRA.</strong></p>",
+        _ => throw new ArgumentOutOfRangeException(nameof(actor), actor, null),
+    };
+
     public static bool HasPendingIdtra(RateStatus status, string? idtraNumber)
         => status == RateStatus.AcceptedByClient && string.IsNullOrWhiteSpace(idtraNumber);
 
@@ -100,9 +108,6 @@ public sealed class AcceptedRateOpeningsNotificationService(
             var clientText = rate.ClientName ?? request?.ClientName ?? "Cliente";
             var quoteNumber = rate.QuoNumber ?? rate.RateCode;
             var acceptanceOrigin = actor == RateAcceptanceActor.Seller ? "Vendedor" : "Pricing";
-            var noticeText = actor == RateAcceptanceActor.Seller
-                ? "El vendedor confirmó la aceptación de esta cotización. Apertura de Trámite debe asignar el IDTRA; Pricing recibe copia."
-                : "Pricing confirmó la aceptación de esta cotización. Apertura de Trámite debe asignar el IDTRA.";
             var rateUrl = $"https://sistema.logisticacastrofallas.com/pricing/rates/{rate.Id:D}/wizard?mode=view";
             var polText = string.IsNullOrWhiteSpace(rate.PolName) ? "—" : rate.PolName;
             var poeText = string.IsNullOrWhiteSpace(rate.PoeName) ? "—" : rate.PoeName;
@@ -169,7 +174,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 servicesText = "—";
 
             var emailBody = $"""
-                <p><strong>{Html(noticeText)}</strong></p>
+                {AcceptanceIntroHtmlFor(actor)}
                 <p>Hay una nueva tarifa aceptada con <strong>IDTRA pendiente de asignación</strong>.
                    Se adjunta el PDF de la cotización para continuar con el trámite.</p>
                 <table style="border-collapse:collapse; width:100%; max-width:820px">
