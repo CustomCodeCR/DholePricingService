@@ -61,6 +61,8 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
 
     public DbSet<RateComparisonDetail> RateComparisonDetails => Set<RateComparisonDetail>();
 
+    public DbSet<DynamicsQuoteSyncJob> DynamicsQuoteSyncJobs => Set<DynamicsQuoteSyncJob>();
+
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
@@ -86,6 +88,16 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ServiceDbContext).Assembly);
+
+        modelBuilder.Entity<DynamicsQuoteSyncJob>(entity =>
+        {
+            entity.ToTable("DynamicsQuoteSyncJobs");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.RateId, x.RevisionNumber }).IsUnique();
+            entity.HasIndex(x => x.EventId).IsUnique();
+            entity.Property(x => x.Status).HasMaxLength(32);
+            entity.Property(x => x.LastError).HasMaxLength(500);
+        });
 
         modelBuilder.ApplyConfiguration(new OutboxMessageConfiguration());
         modelBuilder.ApplyConfiguration(new InboxMessageConfiguration());
