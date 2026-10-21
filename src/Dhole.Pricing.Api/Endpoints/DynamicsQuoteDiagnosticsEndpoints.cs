@@ -28,8 +28,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         // operations console. The handler verifies either Dynamics admin scope
         // or the existing Pricing margin-approval scope.
         group.MapGet("/dynamics-sync/issues", GetIssuesAsync);
-        group.MapPost("/{rateId:guid}/dynamics-sync/retry", RetryPreWriteAsync)
-            .RequireScope(PricingConstants.Scopes.RateApproveLowMargin);
+        group.MapPost("/{rateId:guid}/dynamics-sync/retry", RetryPreWriteAsync);
         group.MapGet("/{rateId:guid}/dynamics-sync/validate", ValidateAsync);
         return app;
     }
@@ -90,8 +89,9 @@ public static class DynamicsQuoteDiagnosticsEndpoints
     }
 
     private static async Task<IResult> RetryPreWriteAsync(
-        Guid rateId, ServiceDbContext db, CancellationToken cancellationToken)
+        Guid rateId, HttpContext http, ServiceDbContext db, CancellationToken cancellationToken)
     {
+        if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
         var rate = await db.RateHeaders.AsNoTracking()
             .Where(x => x.Id == rateId && !x.IsDeleted)
             .Select(x => new { x.Status, x.RevisionNumber, x.IdtraNumber })
@@ -224,7 +224,14 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 posted.ValueKind == JsonValueKind.False &&
                 root.TryGetProperty("stage", out var stage) &&
                 stage.ValueKind == JsonValueKind.String &&
-                stage.GetString() is "schema" or "mapping";
+                (stage.GetString() is "schema" or "mapping" ||
+                 stage.GetString() == "execute" &&
+                 root.TryGetProperty("providerCode", out var provider) &&
+                 provider.GetString() is ("quote_total_field_not_authorized" or
+                    "quote_id_read_not_authorized" or "quote_detail_relationship_missing" or
+                    "write_grant_denied" or "table_denied" or "field_denied" or
+                    "crud_template_inactive" or "crud_template_scope_denied" or
+                    "template_mapping_field_denied" or "quote_creation_key_required"));
         }
         catch (JsonException) { return false; }
     }

@@ -35,6 +35,28 @@ public sealed class DynamicsQuoteDeliveryWorker(
         }
 
         await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+        // Repair only historic failures that explicitly prove no POST was
+        // attempted. Legacy unclassified failures remain untouched.
+        try
+        {
+            await using var retryScope = scopes.CreateAsyncScope();
+            var retryDb = retryScope.ServiceProvider.GetRequiredService<ServiceDbContext>();
+            await retryDb.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE pricing."DynamicsQuoteSyncJobs"
+                   SET "Status" = 'Retry',
+                       "NextAttemptAtUtc" = now(),
+                       "LastError" = NULL
+                 WHERE "Status" = 'NeedsAttention'
+                   AND "LastError" LIKE '%Published CRUD template is missing msdyn_invoicesetuptotals%'
+                   AND "ResponseJson"::jsonb->>'postAttempted' = 'false'
+                """, stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning("Could not enqueue previously diagnosed pre-write failures: {ErrorType}.",
+                ex.GetType().Name);
+        }
         while (!stoppingToken.IsCancellationRequested)
         {
             try { await ProcessNextAsync(apiKey, stoppingToken); }
@@ -122,11 +144,29 @@ public sealed class DynamicsQuoteDeliveryWorker(
             var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
             stage = "mapping";
             var body = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema);
+            using var source = JsonDocument.Parse(job.PayloadJson);
+            if (!source.RootElement.TryGetProperty("totalSaleAmount", out var saleElement) ||
+                !saleElement.TryGetDecimal(out var totalSaleAmount) || totalSaleAmount < 0)
+                throw new InvalidOperationException("Rate snapshot has no valid totalSaleAmount.");
+
+            // Two separately idempotent Dataverse writes: create Quote header
+            // and create its one write-in quotedetail for the standard totalamount.
+            // Never send the sale amount as a directly writable totalamount.
+            var inputJson = JsonSerializer.SerializeToElement(body, Json)
+                .GetProperty("inputs");
+            var payload = new
+            {
+                connectionCode = "principal",
+                dholeRateId = job.RateId,
+                totalSaleAmount,
+                inputs = inputJson
+            };
             stage = "execute";
 
-            using var execute = new HttpRequestMessage(HttpMethod.Post, Url + "/execute")
+            using var execute = new HttpRequestMessage(HttpMethod.Post,
+                Url + "/execute-with-total")
             {
-                Content = JsonContent.Create(body, options: Json)
+                Content = JsonContent.Create(payload, options: Json)
             };
             execute.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
             execute.Headers.TryAddWithoutValidation("Idempotency-Key",
@@ -138,6 +178,15 @@ public sealed class DynamicsQuoteDeliveryWorker(
                 httpStatus = result.StatusCode;
                 (providerCode, providerTitle) = DynamicsQuoteFailureDiagnostics.ReadProviderError(
                     await result.Content.ReadAsStringAsync(ct));
+                // The connector explicitly guarantees these failures are
+                // BEFORE header creation. Safe to retry after fixing grants;
+                // a failure after header creation has a distinct reconciliation code.
+                if (providerCode is "quote_total_field_not_authorized" or
+                    "quote_id_read_not_authorized" or "quote_detail_relationship_missing" or
+                    "write_grant_denied" or "table_denied" or "field_denied" or
+                    "crud_template_inactive" or "crud_template_scope_denied" or
+                    "template_mapping_field_denied" or "quote_creation_key_required")
+                    postAttempted = false;
                 throw new DeliveryException(
                     "Template execution HTTP " + (int)result.StatusCode,
                     // An ambiguous/409 response may mean the write was applied remotely.

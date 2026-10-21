@@ -15,6 +15,8 @@ public sealed record DynamicsCrudSchema(string Name, int Version, string EntityN
 /// Translates an immutable Pricing acceptance snapshot into the active Dhole CRUD
 /// contract. Choice values always come from the API schema, not list positions.
 /// Unknown mandatory fields/equipment fail closed instead of creating a wrong Quote.
+/// The standard totalamount is calculated by Dataverse from quotedetail, not
+/// from msdyn_invoicesetuptotals, which may be absent from an active template.
 /// </summary>
 public static class DynamicsQuotePayloadBuilder
 {
@@ -42,7 +44,7 @@ public static class DynamicsQuotePayloadBuilder
         var values = new Dictionary<string, object>(StringComparer.Ordinal);
         var fields = schema.Fields.ToDictionary(x => x.Target, StringComparer.Ordinal);
         foreach (var required in new[] { "name", "customeridtype", "new_equipo", "new_flete",
-                     "new_monto9", "msdyn_invoicesetuptotals",
+                     "new_monto9",
                      "new_categoriatarifa", "new_preestado", "new_proyecctoespecifico",
                      "new_tipodecliente", "new_idtraasignado" })
             if (!fields.ContainsKey(required))

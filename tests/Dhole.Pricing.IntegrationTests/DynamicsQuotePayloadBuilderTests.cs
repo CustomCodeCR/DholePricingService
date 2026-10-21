@@ -95,6 +95,24 @@ public sealed class DynamicsQuotePayloadBuilderTests
     }
 
     [TestMethod]
+    public void MissingInvoiceSetupTotalsDoesNotBlockStandardQuoteLineTotal()
+    {
+        // invoice setup totals is not the same as the standard quote.totalamount.
+        var withoutInvoiceSetupField = Schema.Replace(
+            """{"name":"msdyn_invoicesetuptotals","target":"msdyn_invoicesetuptotals","type":"decimal","dataverseType":"Money","required":true,"options":[]},""",
+            "");
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(withoutInvoiceSetupField);
+        using var mapped = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(Accepted, schema)));
+        var inputs = mapped.RootElement.GetProperty("inputs");
+        Assert.AreEqual(1800.75m, inputs.GetProperty("new_flete").GetDecimal());
+        Assert.AreEqual(1800.75m, inputs.GetProperty("new_monto9").GetDecimal());
+        Assert.IsFalse(inputs.TryGetProperty("msdyn_invoicesetuptotals", out _));
+        Assert.AreEqual("IDTRA-2026-045",
+            inputs.GetProperty("new_idtraasignado").GetString());
+    }
+
+    [TestMethod]
     public void UnknownEquipmentFailsInsteadOfPickingAnArbitraryCode()
     {
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
