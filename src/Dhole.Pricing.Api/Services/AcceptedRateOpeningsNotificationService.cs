@@ -10,16 +10,32 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Dhole.Pricing.Api.Services;
 
+public enum RateAcceptanceActor { Seller, Pricing }
+
 public sealed class AcceptedRateOpeningsNotificationService(
     ICommandDispatcher dispatcher,
     IIntegrationEventOutboxWriter outbox,
     ServiceDbContext db,
     ILogger<AcceptedRateOpeningsNotificationService> logger)
 {
-    private const string OpeningsEmail = "aperturas@grupocastrofallas.com";
+    private const string SellerRecipient = "pricingcf@castrofallas.com";
+    private const string PricingRecipient = "aperturatramite@grupocastrofallas.com";
     private const string NotificationEventName = "notifications.notification.requested";
 
-    public async Task QueueAsync(Guid rateId, CancellationToken cancellationToken = default)
+    public static string RecipientFor(RateAcceptanceActor actor) => actor switch
+    {
+        RateAcceptanceActor.Seller => SellerRecipient,
+        RateAcceptanceActor.Pricing => PricingRecipient,
+        _ => throw new ArgumentOutOfRangeException(nameof(actor), actor, null),
+    };
+
+    public static bool HasPendingIdtra(RateStatus status, string? idtraNumber)
+        => status == RateStatus.AcceptedByClient && string.IsNullOrWhiteSpace(idtraNumber);
+
+    public async Task QueueAsync(
+        Guid rateId,
+        RateAcceptanceActor actor,
+        CancellationToken cancellationToken = default)
     {
         try
         {
@@ -37,6 +53,19 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 );
                 return;
             }
+
+            // La aceptación debe estar persistida y el IDTRA todavía sin asignar.
+            if (!HasPendingIdtra(rate.Status, rate.IdtraNumber))
+            {
+                logger.LogInformation(
+                    "No corresponde notificar IDTRA pendiente para tarifa {RateId}; estado {Status}, tiene IDTRA {HasIdtra}.",
+                    rate.Id, rate.Status, !string.IsNullOrWhiteSpace(rate.IdtraNumber));
+                return;
+            }
+
+            var recipientEmail = RecipientFor(actor);
+            var recipientName = actor == RateAcceptanceActor.Seller
+                ? "Pricing Castro Fallas" : "Apertura de Trámite";
 
             var request = await db.RateRequests
                 .AsNoTracking()
@@ -65,6 +94,11 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 ?? "Ventas";
             var clientText = rate.ClientName ?? request?.ClientName ?? "Cliente";
             var quoteNumber = rate.QuoNumber ?? rate.RateCode;
+            var acceptanceOrigin = actor == RateAcceptanceActor.Seller ? "Vendedor" : "Pricing";
+            var noticeText = actor == RateAcceptanceActor.Seller
+                ? "El vendedor confirmó la aceptación de esta cotización. Pricing debe asignar el IDTRA."
+                : "Pricing confirmó la aceptación de esta cotización. Apertura de Trámite debe asignar el IDTRA.";
+            var rateUrl = $"https://sistema.logisticacastrofallas.com/pricing/rates/{rate.Id:D}/wizard?mode=view";
             var polText = string.IsNullOrWhiteSpace(rate.PolName) ? "—" : rate.PolName;
             var poeText = string.IsNullOrWhiteSpace(rate.PoeName) ? "—" : rate.PoeName;
             var podText = rate.PodName ?? request?.PodName ?? "—";
@@ -130,19 +164,31 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 servicesText = "—";
 
             var emailBody = $"""
-                <p>Se confirmó una tarifa aprobada por el cliente. Se adjunta el PDF de la QUO aceptada para solicitar la apertura.</p>
+                <p><strong>{Html(noticeText)}</strong></p>
+                <p>Hay una nueva tarifa aceptada con <strong>IDTRA pendiente de asignación</strong>.
+                   Se adjunta el PDF de la cotización para continuar con el trámite.</p>
                 <table style="border-collapse:collapse; width:100%; max-width:820px">
+                  <tr><td style="padding:5px 10px"><strong>QUO</strong></td><td style="padding:5px 10px">{Html(quoteNumber)}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Código de tarifa</strong></td><td style="padding:5px 10px">{Html(rate.RateCode)}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Revisión</strong></td><td style="padding:5px 10px">{rate.RevisionNumber}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Aceptada por</strong></td><td style="padding:5px 10px">{Html(acceptanceOrigin)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Vendedor</strong></td><td style="padding:5px 10px">{Html(sellerText)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Cliente</strong></td><td style="padding:5px 10px">{Html(clientText)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Ruta (POL → POE → POD)</strong></td><td style="padding:5px 10px">{Html(routeText)}</td></tr>
-                  <tr><td style="padding:5px 10px"><strong>Tipo</strong></td><td style="padding:5px 10px">{Html(transportTypeText)}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Tipo de transporte</strong></td><td style="padding:5px 10px">{Html(transportTypeText)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Tipo de carga</strong></td><td style="padding:5px 10px">{Html(cargoTypeText)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Equipo</strong></td><td style="padding:5px 10px">{equipmentHtml}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Incoterm</strong></td><td style="padding:5px 10px">{Html(incotermText)}</td></tr>
-                  <tr><td style="padding:5px 10px"><strong>Servicio</strong></td><td style="padding:5px 10px">{Html(servicesText)}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Servicios</strong></td><td style="padding:5px 10px">{Html(servicesText)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Tipo de operación</strong></td><td style="padding:5px 10px">{Html(operationTypeText)}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Vigencia</strong></td><td style="padding:5px 10px">{rate.ValidFrom:dd/MM/yyyy} - {rate.ValidTo:dd/MM/yyyy}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Peso / volumen</strong></td><td style="padding:5px 10px">{rate.TotalWeightKg:0.###} kg / {rate.TotalVolumeCbm:0.###} m³</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Estado</strong></td><td style="padding:5px 10px">Aceptada por el cliente</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>IDTRA</strong></td><td style="padding:5px 10px"><strong>PENDIENTE DE ASIGNAR</strong></td></tr>
                 </table>
-                <p>Favor continuar con el proceso de apertura correspondiente.</p>
+                <p><a href="{Html(rateUrl)}">Consultar tarifa en Dhole</a></p>
+                <p>Favor registrar el IDTRA en la tarifa y continuar con el proceso correspondiente.</p>
+                <p><strong>Adjunto:</strong> PDF comercial de la cotización aceptada.</p>
                 """;
 
             var document = documentResult.Value;
@@ -151,15 +197,20 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 NotificationEventName,
                 new
                 {
-                    notificationType = "pricing.rate.accepted.opening-request",
+                    notificationType = "pricing.rate.accepted.idtra-pending",
                     channel = "Email",
                     entityType = "RateHeader",
                     entityId = rate.Id.ToString(),
-                    subject = $"Solicitud de apertura - {quoteNumber} - {clientText}",
+                    subject = $"IDTRA pendiente de asignar - {quoteNumber} - {clientText}",
                     body = emailBody,
                     payload = new
                     {
                         rateId = rate.Id,
+                        rateCode = rate.RateCode,
+                        revisionNumber = rate.RevisionNumber,
+                        acceptanceOrigin,
+                        idtraPending = true,
+                        rateUrl,
                         quo = quoteNumber,
                         seller = sellerText,
                         client = clientText,
@@ -191,21 +242,23 @@ public sealed class AcceptedRateOpeningsNotificationService(
                         new
                         {
                             userId = (string?)null,
-                            address = OpeningsEmail,
-                            displayName = "Aperturas",
+                            address = recipientEmail,
+                            displayName = recipientName,
                         },
                     },
                 },
-                $"pricing-openings:{rate.Id:N}:rev:{rate.RevisionNumber}",
+                $"pricing-idtra-pending:{rate.Id:N}:rev:{rate.RevisionNumber}:actor:{actor}",
                 cancellationToken
             );
 
             await db.SaveChangesAsync(cancellationToken);
 
             logger.LogInformation(
-                "Se encoló correo de solicitud de apertura para tarifa {RateId} / {QuoteNumber}.",
+                "Se encoló correo de IDTRA pendiente para tarifa {RateId} / {QuoteNumber}, origen {AcceptanceOrigin}, destinatario {Recipient}.",
                 rate.Id,
-                quoteNumber
+                quoteNumber,
+                acceptanceOrigin,
+                recipientEmail
             );
         }
         catch (Exception exception) when (exception is not OperationCanceledException)

@@ -187,7 +187,7 @@ public static class SellerRateStatusEndpoints
 
             await db.SaveChangesAsync(cancellationToken);
             await cache.RemoveRateHeaderCacheAsync(currentRate.Id, cancellationToken);
-            await openingsNotificationService.QueueAsync(currentRate.Id, cancellationToken);
+            await openingsNotificationService.QueueAsync(currentRate.Id, RateAcceptanceActor.Seller, cancellationToken);
             return Results.NoContent();
         }
 
@@ -203,7 +203,7 @@ public static class SellerRateStatusEndpoints
         );
 
         if (result.IsSuccess && status == RateStatus.AcceptedByClient)
-            await openingsNotificationService.QueueAsync(rateId, cancellationToken);
+            await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Seller, cancellationToken);
 
         return EndpointResults.FromResult(result, httpContext);
     }
