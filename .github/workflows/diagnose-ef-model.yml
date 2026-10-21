@@ -33,6 +33,7 @@ jobs:
                 --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
                 --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
                 --context ServiceDbContext
+              dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --no-restore --configuration Release --verbosity minimal
               /tmp/ef/dotnet-ef migrations has-pending-model-changes \
                 --no-build --configuration Release \
                 --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
