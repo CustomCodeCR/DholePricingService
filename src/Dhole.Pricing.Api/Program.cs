@@ -64,6 +64,15 @@ builder.Services.AddScoped<LowMarginApprovedNotificationService>();
 builder.Services.AddScoped<CompetitorTariffImportProcessor>();
 builder.Services.AddHostedService<CompetitorTariffImportWorker>();
 builder.Services.AddHostedService<ManualImportExtractionWorker>();
+builder.Services.AddHostedService<DynamicsQuoteDeliveryWorker>();
+builder.Services.AddHttpClient("DynamicsQuoteSync", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(45);
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AllowAutoRedirect = false
+});
+
 builder.Services.AddHttpClient("DholeAI", client =>
 {
     var baseAddress = builder.Configuration["AI:Client:BaseAddress"] ?? "http://ai-api:5206/";
