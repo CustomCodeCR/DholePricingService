@@ -1,4 +1,5 @@
 using CustomCodeFramework.Core.Pagination;
+using Dhole.Pricing.Application.Abstractions.Repositories;
 using CustomCodeFramework.Core.Results;
 using CustomCodeFramework.Cqrs.Queries;
 using Dhole.Pricing.Contracts.Rates.Response;
@@ -28,5 +29,6 @@ public sealed record GetRatesQuery(
     DateTime? QuoteDate = null,
     DateTime? ValidFrom = null,
     DateTime? ValidTo = null,
-    IReadOnlyCollection<string>? ExecutiveNames = null
+    IReadOnlyCollection<string>? ExecutiveNames = null,
+    RateMultiSelectFilters? MultiFilters = null
 ) : IQuery<Result<PagedResult<RateDto>>>;
