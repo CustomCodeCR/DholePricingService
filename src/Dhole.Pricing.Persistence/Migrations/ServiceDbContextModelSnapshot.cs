@@ -164,6 +164,65 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.ToTable("outbox_messages", "pricing");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Persistence.Auditing.DynamicsQuoteSyncJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedNever()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("LeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("RateId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResponseJson")
+                        .HasColumnType("text");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DynamicsQuoteSyncJobs_Event");
+
+                    b.HasIndex("RateId", "RevisionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DynamicsQuoteSyncJobs_RateRevision");
+
+                    b.ToTable("DynamicsQuoteSyncJobs", "pricing");
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Competitors.Entities.CompetitorAnalysisDocument", b =>
                 {
                     b.Property<Guid>("Id")
