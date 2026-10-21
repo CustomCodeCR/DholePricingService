@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: investigate/ef-diff-20261021
       - name: Generate model changes using official EF tooling
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
