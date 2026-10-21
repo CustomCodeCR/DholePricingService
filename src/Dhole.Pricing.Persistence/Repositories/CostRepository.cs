@@ -579,7 +579,8 @@ public sealed class CostRepository(ServiceDbContext dbContext)
 
         if (shipmentModes is { Count: > 0 })
         {
-            var values = shipmentModes.Distinct().ToArray();
+            // Include both historical Air and canonical AirConsol bits for either query.
+            var values = ShipmentModeNormalization.ExpandAliases(shipmentModes).ToArray();
             var mask = values.Aggregate(0, (current, mode) => current | (1 << ((int)mode - 1)));
             // Sin modalidad configurada = aplica a cualquier modalidad.
             query = query.Where(x =>

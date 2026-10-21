@@ -686,8 +686,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             .Where(x => x.Status == RateStatus.AcceptedByClient)
             .GroupBy(x => new
             {
-                ShipmentMode = x.ShipmentMode == ShipmentMode.AirConsol
-                    ? ShipmentMode.Air
+                ShipmentMode = x.ShipmentMode == ShipmentMode.Air
+                    ? ShipmentMode.AirConsol
                     : x.ShipmentMode,
                 x.CurrencyId,
                 x.CurrencyCode,
