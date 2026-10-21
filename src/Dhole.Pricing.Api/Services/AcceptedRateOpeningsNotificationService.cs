@@ -35,8 +35,13 @@ public sealed class AcceptedRateOpeningsNotificationService(
         _ => throw new ArgumentOutOfRangeException(nameof(actor), actor, null),
     };
 
-    public static bool HasPendingIdtra(RateStatus status, string? idtraNumber)
-        => status == RateStatus.AcceptedByClient && string.IsNullOrWhiteSpace(idtraNumber);
+    public static bool HasPendingIdtra(
+        RateStatus status,
+        string? idtraNumber,
+        string? idtraProvidedOnAcceptance = null)
+        => status == RateStatus.AcceptedByClient
+           && string.IsNullOrWhiteSpace(idtraNumber)
+           && string.IsNullOrWhiteSpace(idtraProvidedOnAcceptance);
 
     public async Task QueueAsync(
         Guid rateId,
