@@ -14,6 +14,7 @@ public enum ChargeBasis
     PerKg = 20,
     Per100Kg = 21,
     PerTon = 22,
+    PerLb = 23,
     PerPallet = 30,
     PerPackage = 31,
     PerDocument = 40,
