@@ -773,7 +773,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         decimal kgPerCbm,
         string? cargoLinesJson,
         Guid? updatedBy,
-        decimal? chargeableQuantityOverride = null
+        decimal? chargeableVolumeCbm = null
     )
     {
         if (totalPackages < 0 || totalPallets < 0 || totalWeightKg < 0m || totalVolumeCbm < 0m)
@@ -782,6 +782,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         if (shipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl && kgPerCbm <= 0m)
             throw new InvalidOperationException("El factor KG/CBM debe ser mayor que cero para LCL/LTL.");
 
+        shipmentMode = ShipmentModeNormalization.Normalize(shipmentMode);
         ShipmentMode = shipmentMode;
         TotalPackages = totalPackages;
         TotalPallets = totalPallets;
@@ -803,30 +804,37 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             FreeDays = 0;
         }
 
-        var cargoChargeableQuantity = Math.Max(TotalVolumeCbm, TotalWeightKg / KgPerCbm);
-        // Miami LCL is billed in CFT, with a monetary freight minimum instead
-        // of an artificial 1-CBM (35.315-CFT) volume minimum.
+        // TotalVolumeCbm remains the physical volume. Non-stackable cargo can reserve
+        // more vertical space, so chargeableVolumeCbm is calculated per cargo line and
+        // is used only for the commercial chargeable quantity.
+        var effectiveChargeableVolumeCbm = chargeableVolumeCbm.HasValue
+            ? Math.Max(chargeableVolumeCbm.Value, 0m)
+            : TotalVolumeCbm;
+        var cargoChargeableQuantity = Math.Max(
+            effectiveChargeableVolumeCbm,
+            TotalWeightKg / KgPerCbm
+        );
+        // The own maritime Miami matrix charges freight in CFT with a MONETARY
+        // minimum. Converting an artificial 1-CBM floor into 35.315 CFT produces
+        // an incorrect freight line in the client PDF. Keep actual chargeable
+        // volume in the header; the matrix's PerChargeableCft detail remains
+        // authoritative for the exact Miami weight/volume and LITTLE rules.
         var isMiamiLcl = shipmentMode == ShipmentMode.Lcl &&
             (string.Equals(PolCode?.Trim(), "MIA", StringComparison.OrdinalIgnoreCase)
              || string.Equals(PolCode?.Trim(), "USMIA", StringComparison.OrdinalIgnoreCase)
              || (PolName?.Contains("Miami", StringComparison.OrdinalIgnoreCase) ?? false));
+
         ChargeableQuantity = shipmentMode switch
         {
             ShipmentMode.Lcl when isMiamiLcl => cargoChargeableQuantity,
-            // Other LCL origins retain their commercial 1-CBM minimum.
-            ShipmentMode.Lcl => cargoChargeableQuantity > 0m
+            // Other consolidated modes retain their standard 1-CBM minimum.
+            // Keep zero to reject shipments without chargeable volume/weight.
+            ShipmentMode.Lcl or ShipmentMode.Ltl => cargoChargeableQuantity > 0m
                 ? Math.Max(1m, cargoChargeableQuantity)
                 : 0m,
-            ShipmentMode.Ltl => cargoChargeableQuantity,
             ShipmentMode.Ftl or ShipmentMode.Fcl => Math.Max(ContainerQuantity, 1),
             _ => 1m,
         };
-
-        // La duplicación idéntica conserva la cantidad cobrable registrada,
-        // incluso cuando difiere del cálculo por peso y volumen (por ejemplo,
-        // carga no apilable). Las llamadas existentes siguen calculándola normalmente.
-        if (chargeableQuantityOverride.HasValue && shipmentMode is (ShipmentMode.Lcl or ShipmentMode.Ltl))
-            ChargeableQuantity = chargeableQuantityOverride.Value;
 
         if (shipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl && ChargeableQuantity <= 0m)
             throw new InvalidOperationException("La carga LCL/LTL debe tener peso o volumen cobrable.");
@@ -875,12 +883,18 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                 ? Math.Max(chargeableCbm, 1m)
                 : Math.Max(chargeableCbm, 0.001m),
             ChargeBasis.PerCft => Math.Max(TotalVolumeCbm * 35.31466672148859m, 0.001m),
-            // CFT freight retains its explicit commercial quantity from the matrix.
-            // In particular, 12.076 CFT must not become the 1-CBM floor of 35.315 CFT.
+            // CFT charges calculated by the Miami/air LCL quote must keep their
+            // explicitly selected billable quantity. Their minimum is monetary,
+            // not an artificial 1-CBM volume floor (35.315 CFT).
+            // This also preserves volume-only quantities for Miami LITTLE.
             ChargeBasis.PerChargeableCft => requestedQuantity > 0m
                 ? requestedQuantity
                 : (ShipmentMode == ShipmentMode.Lcl
-                    ? Math.Max(chargeableCbm, 0.001m)
+                    ? Math.Max(
+                        kgPerCbmOverride is > 0m
+                            ? chargeableCbm
+                            : Math.Max(TotalVolumeCbm, TotalWeightKg / Math.Max(KgPerCbm, 1m)),
+                        0.001m)
                     : ShipmentMode == ShipmentMode.Ltl
                         ? Math.Max(chargeableCbm, 1m)
                         : Math.Max(chargeableCbm, 0.001m)) * 35.31466672148859m,
@@ -1522,9 +1536,46 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         {
             ShipmentMode.Lcl => $"LCL · {ChargeableQuantity:0.###} CBM cobrable",
             ShipmentMode.Ltl => $"LTL · {ChargeableQuantity:0.###} CBM cobrable",
-            ShipmentMode.Ftl => $"{Math.Max(ContainerQuantity, 1)} x FTL",
+            ShipmentMode.Ftl => BuildLandEquipmentDescription(),
             _ => BuildContainerDescription(),
         };
+    }
+
+    private string BuildLandEquipmentDescription()
+    {
+        if (_rateContainers.Count == 0)
+        {
+            return $"{Math.Max(ContainerQuantity, 1)}x{CompactLandEquipmentLabel(ContainerTypeName, ContainerTypeCode)}";
+        }
+
+        return string.Join(
+            " + ",
+            _rateContainers
+                .OrderBy(x => x.ContainerTypeName)
+                .ThenBy(x => x.ContainerTypeCode)
+                .Select(x => $"{x.Quantity}x{CompactLandEquipmentLabel(x.ContainerTypeName, x.ContainerTypeCode)}")
+        );
+    }
+
+    private static string CompactLandEquipmentLabel(string? name, string? code)
+    {
+        var source = $"{code} {name}";
+        var match = System.Text.RegularExpressions.Regex.Match(
+            source,
+            @"(?<!\d)(24|26|48|53)(?!\d)",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant
+        );
+
+        if (match.Success)
+            return match.Groups[1].Value;
+
+        if (!string.IsNullOrWhiteSpace(name))
+            return name.Trim();
+
+        if (!string.IsNullOrWhiteSpace(code))
+            return code.Trim();
+
+        return "FTL";
     }
 
     private string BuildContainerDescription()

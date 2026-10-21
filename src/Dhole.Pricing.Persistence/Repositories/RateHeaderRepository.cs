@@ -404,7 +404,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.TransitTime,
                 x.UseAllInPresentation,
                 x.RateType.ToString(),
-                x.ShipmentMode.ToString(),
+                (x.ShipmentMode == ShipmentMode.Air ? ShipmentMode.AirConsol : x.ShipmentMode).ToString(),
                 x.OperationType.ToString(),
                 x.TotalPackages,
                 x.TotalPallets,
@@ -709,7 +709,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             .OrderBy(x => x.ShipmentMode)
             .ThenBy(x => x.CurrencyCode)
             .Select(x => new PricingAcceptedModeSummaryDto(
-                x.ShipmentMode.ToString(),
+                (x.ShipmentMode == ShipmentMode.Air ? ShipmentMode.AirConsol : x.ShipmentMode).ToString(),
                 x.CurrencyCode,
                 x.CurrencyName,
                 x.RateCount,
