@@ -210,7 +210,8 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.HasKey("Id");
+                    b.HasKey("Id")
+                        .HasName("DynamicsQuoteSyncJobs_pkey");
 
                     b.HasIndex("EventId")
                         .IsUnique()
