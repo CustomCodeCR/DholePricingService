@@ -164,69 +164,9 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.ToTable("outbox_messages", "pricing");
                 });
 
-            modelBuilder.Entity("Dhole.Pricing.Persistence.Auditing.DynamicsQuoteSyncJob", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedNever()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Attempts")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("EventId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("LastError")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime?>("LeaseExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("NextAttemptAtUtc")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PayloadJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("RateId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ResponseJson")
-                        .HasColumnType("text");
-
-                    b.Property<int>("RevisionNumber")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("EventId")
-                        .IsUnique()
-                        .HasDatabaseName("UX_DynamicsQuoteSyncJobs_Event");
-
-                    b.HasIndex("RateId", "RevisionNumber")
-                        .IsUnique()
-                        .HasDatabaseName("UX_DynamicsQuoteSyncJobs_RateRevision");
-
-                    b.ToTable("DynamicsQuoteSyncJobs", "pricing");
-                });
-
             modelBuilder.Entity("Dhole.Pricing.Domain.Competitors.Entities.CompetitorAnalysisDocument", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedNever()
                         .HasColumnType("uuid")
                         .HasColumnName("Id");
 
@@ -249,10 +189,12 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnName("StorageId");
 
                     b.Property<DateTime?>("ValidFromUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ValidFromUtc");
 
                     b.Property<DateTime?>("ValidToUtc")
-                        .HasColumnType("timestamp with time zone");
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ValidToUtc");
 
                     b.HasKey("Id")
                         .HasName("PK_CompetitorAnalysisDocuments");
@@ -273,7 +215,7 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("Id");
 
-                    b.Property<Guid[]>("CarrierIds")
+                    b.PrimitiveCollection<Guid[]>("CarrierIds")
                         .IsRequired()
                         .HasColumnType("uuid[]")
                         .HasColumnName("CarrierIds");
@@ -321,17 +263,17 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("OriginalFileName");
 
-                    b.Property<Guid[]>("PodIds")
+                    b.PrimitiveCollection<Guid[]>("PodIds")
                         .IsRequired()
                         .HasColumnType("uuid[]")
                         .HasColumnName("PodIds");
 
-                    b.Property<Guid[]>("PoeIds")
+                    b.PrimitiveCollection<Guid[]>("PoeIds")
                         .IsRequired()
                         .HasColumnType("uuid[]")
                         .HasColumnName("PoeIds");
 
-                    b.Property<Guid[]>("PolIds")
+                    b.PrimitiveCollection<Guid[]>("PolIds")
                         .IsRequired()
                         .HasColumnType("uuid[]")
                         .HasColumnName("PolIds");
@@ -438,611 +380,6 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDatabaseName("IX_CompetitorPayloads_NextAttempt_Lease");
 
                     b.ToTable("CompetitorTariffImportPayloads", "pricing");
-                });
-
-            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.AutoPricingProfile", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)")
-                        .HasColumnName("code");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<decimal>("CompetitiveCeilingPercentile")
-                        .HasPrecision(9, 4)
-                        .HasColumnType("numeric(9,4)")
-                        .HasColumnName("competitive_ceiling_percentile");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
-                    b.Property<decimal>("MaximumMarketDeviation")
-                        .HasPrecision(9, 4)
-                        .HasColumnType("numeric(9,4)")
-                        .HasColumnName("maximum_market_deviation");
-
-                    b.Property<decimal>("MinimumConfidenceForAutoApply")
-                        .HasPrecision(9, 4)
-                        .HasColumnType("numeric(9,4)")
-                        .HasColumnName("minimum_confidence_for_auto_apply");
-
-                    b.Property<decimal>("MinimumConfidenceForSuggestion")
-                        .HasPrecision(9, 4)
-                        .HasColumnType("numeric(9,4)")
-                        .HasColumnName("minimum_confidence_for_suggestion");
-
-                    b.Property<int>("MinimumCompetitorCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("minimum_competitor_count");
-
-                    b.Property<int>("MinimumObservationCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("minimum_observation_count");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(160)
-                        .HasColumnType("character varying(160)")
-                        .HasColumnName("name");
-
-                    b.Property<decimal>("TargetPercentile")
-                        .HasPrecision(9, 4)
-                        .HasColumnType("numeric(9,4)")
-                        .HasColumnName("target_percentile");
-
-                    b.Property<DateTime?>("UpdatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at_utc");
-
-                    b.HasKey("Id")
-                        .HasName("PK_AutoPricingProfiles");
-
-                    b.HasIndex("Code")
-                        .IsUnique()
-                        .HasDatabaseName("UX_AutoPricingProfiles_Code");
-
-                    b.HasIndex("IsActive")
-                        .HasDatabaseName("IX_AutoPricingProfiles_IsActive");
-
-                    b.ToTable("AutoPricingProfiles", "pricing");
-                });
-
-            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.ChargePricingRule", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<int>("AdjustmentPriority")
-                        .HasColumnType("integer")
-                        .HasColumnName("adjustment_priority");
-
-                    b.Property<string>("AdjustmentStrategy")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("adjustment_strategy");
-
-                    b.Property<bool>("CanAutoAdjust")
-                        .HasColumnType("boolean")
-                        .HasColumnName("can_auto_adjust");
-
-                    b.Property<string>("ChargeCode")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)")
-                        .HasColumnName("charge_code");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_active");
-
-                    b.Property<decimal?>("MaximumAdjustmentAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("maximum_adjustment_amount");
-
-                    b.Property<decimal?>("MaximumMarkup")
-                        .HasPrecision(9, 4)
-                        .HasColumnType("numeric(9,4)")
-                        .HasColumnName("maximum_markup");
-
-                    b.Property<decimal>("MinimumMarkup")
-                        .HasPrecision(9, 4)
-                        .HasColumnType("numeric(9,4)")
-                        .HasColumnName("minimum_markup");
-
-                    b.HasKey("Id")
-                        .HasName("PK_ChargePricingRules");
-
-                    b.HasIndex("ChargeCode")
-                        .IsUnique()
-                        .HasDatabaseName("UX_ChargePricingRules_ChargeCode");
-
-                    b.HasIndex("IsActive", "AdjustmentPriority")
-                        .HasDatabaseName("IX_ChargePricingRules_Active_Priority");
-
-                    b.ToTable("ChargePricingRules", "pricing");
-                });
-
-            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.CompetitorRateObservation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid?>("CarrierId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("carrier_id");
-
-                    b.Property<string>("CarrierCode")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)")
-                        .HasColumnName("carrier_code");
-
-                    b.Property<string>("CarrierName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("carrier_name");
-
-                    b.Property<Guid?>("CompetitorCompanyId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("competitor_company_id");
-
-                    b.Property<string>("CompetitorCompanyName")
-                        .IsRequired()
-                        .HasMaxLength(250)
-                        .HasColumnType("character varying(250)")
-                        .HasColumnName("competitor_company_name");
-
-                    b.Property<Guid?>("CompetitorTariffId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("competitor_tariff_id");
-
-                    b.Property<Guid?>("ContainerTypeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("container_type_id");
-
-                    b.Property<string>("ContainerTypeCode")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)")
-                        .HasColumnName("container_type_code");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("currency");
-
-                    b.Property<decimal?>("DestinationCharges")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("destination_charges");
-
-                    b.Property<DateTime?>("ExchangeRateDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("exchange_rate_date");
-
-                    b.Property<decimal?>("ExchangeRate")
-                        .HasPrecision(18, 8)
-                        .HasColumnType("numeric(18,8)")
-                        .HasColumnName("exchange_rate");
-
-                    b.Property<decimal>("ExtractionConfidence")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)")
-                        .HasColumnName("extraction_confidence");
-
-                    b.Property<Guid?>("IncotermId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("incoterm_id");
-
-                    b.Property<string>("IncotermCode")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("incoterm_code");
-
-                    b.Property<decimal?>("InlandCharges")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("inland_charges");
-
-                    b.Property<DateTime>("ImportedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("imported_at_utc");
-
-                    b.Property<string>("Mode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("mode");
-
-                    b.Property<decimal?>("NormalizedAllIn")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("normalized_all_in");
-
-                    b.Property<decimal?>("NormalizedAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("normalized_amount");
-
-                    b.Property<string>("NormalizedCurrency")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("normalized_currency");
-
-                    b.Property<decimal>("NormalizationConfidence")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)")
-                        .HasColumnName("normalization_confidence");
-
-                    b.Property<decimal?>("NormalizedOceanFreight")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("normalized_ocean_freight");
-
-                    b.Property<decimal?>("OceanFreight")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("ocean_freight");
-
-                    b.Property<decimal?>("OriginCharges")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("origin_charges");
-
-                    b.Property<decimal?>("OriginalAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("original_amount");
-
-                    b.Property<decimal?>("OtherCharges")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("other_charges");
-
-                    b.Property<Guid?>("PodId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pod_id");
-
-                    b.Property<string>("PodCode")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)")
-                        .HasColumnName("pod_code");
-
-                    b.Property<string>("PodName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("pod_name");
-
-                    b.Property<Guid?>("PoeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("poe_id");
-
-                    b.Property<string>("PoeCode")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)")
-                        .HasColumnName("poe_code");
-
-                    b.Property<string>("PoeName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("poe_name");
-
-                    b.Property<Guid?>("PolId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pol_id");
-
-                    b.Property<string>("PolCode")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)")
-                        .HasColumnName("pol_code");
-
-                    b.Property<string>("PolName")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("pol_name");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer")
-                        .HasColumnName("quantity");
-
-                    b.Property<string>("RateBasis")
-                        .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("rate_basis");
-
-                    b.Property<string>("RawPayloadJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("raw_payload_json");
-
-                    b.Property<Guid?>("SourceDocumentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("source_document_id");
-
-                    b.Property<Guid?>("SourceImportId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("source_import_id");
-
-                    b.Property<DateTime>("ValidFrom")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("valid_from");
-
-                    b.Property<DateTime>("ValidTo")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("valid_to");
-
-                    b.HasKey("Id")
-                        .HasName("PK_CompetitorRateObservations");
-
-                    b.HasIndex("CompetitorCompanyId")
-                        .HasDatabaseName("IX_CompetitorRateObservations_CompetitorCompanyId");
-
-                    b.HasIndex("CompetitorTariffId")
-                        .HasDatabaseName("IX_CompetitorRateObservations_CompetitorTariffId");
-
-                    b.HasIndex("ValidFrom", "ValidTo")
-                        .HasDatabaseName("IX_CompetitorRateObservations_Validity");
-
-                    b.HasIndex("Mode", "IncotermId", "PolId", "PoeId", "PodId", "ContainerTypeId", "CarrierId")
-                        .HasDatabaseName("IX_CompetitorRateObservations_MarketKey");
-
-                    b.ToTable("CompetitorRateObservations", "pricing");
-                });
-
-            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.PricingMarketDecision", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AlgorithmVersion")
-                        .IsRequired()
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)")
-                        .HasColumnName("algorithm_version");
-
-                    b.Property<decimal?>("Average")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("average");
-
-                    b.Property<DateTime>("CalculatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("calculated_at_utc");
-
-                    b.Property<Guid?>("ComparisonCarrierId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("comparison_carrier_id");
-
-                    b.Property<Guid?>("ComparisonContainerTypeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("comparison_container_type_id");
-
-                    b.Property<Guid?>("ComparisonIncotermId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("comparison_incoterm_id");
-
-                    b.Property<string>("ComparisonMode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("comparison_mode");
-
-                    b.Property<Guid?>("ComparisonPodId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("comparison_pod_id");
-
-                    b.Property<Guid?>("ComparisonPoeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("comparison_poe_id");
-
-                    b.Property<Guid>("ComparisonPolId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("comparison_pol_id");
-
-                    b.Property<int>("CompetitorCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("competitor_count");
-
-                    b.Property<decimal?>("CompetitiveCeiling")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("competitive_ceiling");
-
-                    b.Property<decimal>("ConfidenceScore")
-                        .HasPrecision(9, 4)
-                        .HasColumnType("numeric(9,4)")
-                        .HasColumnName("confidence_score");
-
-                    b.Property<decimal>("CostTotal")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("cost_total");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<decimal>("FinalSaleTotal")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("final_sale_total");
-
-                    b.Property<decimal?>("Median")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("median");
-
-                    b.Property<int>("ObservationCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("observation_count");
-
-                    b.Property<decimal>("OriginalSaleTotal")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("original_sale_total");
-
-                    b.Property<decimal?>("P25")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("p25");
-
-                    b.Property<decimal?>("P40")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("p40");
-
-                    b.Property<decimal?>("P50")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("p50");
-
-                    b.Property<decimal?>("P60")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("p60");
-
-                    b.Property<decimal?>("P65")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("p65");
-
-                    b.Property<decimal?>("P75")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("p75");
-
-                    b.Property<Guid>("RateId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("rate_id");
-
-                    b.Property<DateTime?>("ReviewedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reviewed_at_utc");
-
-                    b.Property<Guid?>("ReviewedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("reviewed_by_user_id");
-
-                    b.Property<decimal>("SuggestedSaleTotal")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("suggested_sale_total");
-
-                    b.Property<decimal?>("TargetMarketPrice")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("target_market_price");
-
-                    b.Property<bool>("WasAutoApplied")
-                        .HasColumnType("boolean")
-                        .HasColumnName("was_auto_applied");
-
-                    b.Property<bool>("WasManuallyModified")
-                        .HasColumnType("boolean")
-                        .HasColumnName("was_manually_modified");
-
-                    b.Property<decimal?>("WeightedAverage")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("weighted_average");
-
-                    b.HasKey("Id")
-                        .HasName("PK_PricingMarketDecisions");
-
-                    b.HasIndex("RateId", "CalculatedAtUtc")
-                        .HasDatabaseName("IX_PricingMarketDecisions_Rate_CalculatedAt");
-
-                    b.HasIndex("ComparisonMode", "ComparisonIncotermId", "ComparisonPolId", "ComparisonPoeId", "ComparisonPodId", "ComparisonContainerTypeId", "ComparisonCarrierId")
-                        .HasDatabaseName("IX_PricingMarketDecisions_MarketKey");
-
-                    b.ToTable("PricingMarketDecisions", "pricing");
-                });
-
-            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.PricingMarketDecisionObservation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<decimal>("ComparabilityScore")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)")
-                        .HasColumnName("comparability_score");
-
-                    b.Property<Guid?>("CompetitorCompanyId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("competitor_company_id");
-
-                    b.Property<Guid>("CompetitorRateObservationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("competitor_rate_observation_id");
-
-                    b.Property<string>("ExclusionReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("exclusion_reason");
-
-                    b.Property<decimal>("FinalWeight")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)")
-                        .HasColumnName("final_weight");
-
-                    b.Property<bool>("IsOutlier")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_outlier");
-
-                    b.Property<decimal?>("NormalizedAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("normalized_amount");
-
-                    b.Property<decimal?>("OriginalAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("original_amount");
-
-                    b.Property<Guid>("PricingMarketDecisionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pricing_market_decision_id");
-
-                    b.Property<decimal>("RecencyWeight")
-                        .HasPrecision(9, 6)
-                        .HasColumnType("numeric(9,6)")
-                        .HasColumnName("recency_weight");
-
-                    b.Property<bool>("WasIncluded")
-                        .HasColumnType("boolean")
-                        .HasColumnName("was_included");
-
-                    b.HasKey("Id")
-                        .HasName("PK_PricingMarketDecisionObservations");
-
-                    b.HasIndex("CompetitorRateObservationId")
-                        .HasDatabaseName("IX_PricingMarketDecisionObservations_ObservationId");
-
-                    b.HasIndex("PricingMarketDecisionId", "CompetitorRateObservationId")
-                        .IsUnique()
-                        .HasDatabaseName("UX_PricingMarketDecisionObservations_Decision_Observation");
-
-                    b.ToTable("PricingMarketDecisionObservations", "pricing");
                 });
 
             modelBuilder.Entity("Dhole.Pricing.Domain.Costs.Entities.Cost", b =>
@@ -1157,10 +494,6 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("numeric(18,4)")
                         .HasColumnName("kg_per_cbm");
 
-                    b.Property<string>("PricingRulesJson")
-                        .HasColumnType("text")
-                        .HasColumnName("pricing_rules_json");
-
                     b.Property<decimal?>("MinimumCostAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
@@ -1181,7 +514,7 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("notes");
 
-                    b.Property<string[]>("OperationalConditions")
+                    b.PrimitiveCollection<string[]>("OperationalConditions")
                         .IsRequired()
                         .HasColumnType("text[]")
                         .HasColumnName("operational_conditions");
@@ -1246,6 +579,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasColumnName("port_role");
+
+                    b.Property<string>("PricingRulesJson")
+                        .HasColumnType("text")
+                        .HasColumnName("pricing_rules_json");
 
                     b.Property<decimal>("SaleAmount")
                         .HasPrecision(18, 2)
@@ -1680,17 +1017,17 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("raw_data_json");
 
-                    b.Property<string>("SourceType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("source_type");
-
                     b.Property<string>("ShipmentMode")
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("shipment_mode");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("source_type");
 
                     b.Property<string>("SourceUrl")
                         .HasMaxLength(1000)
@@ -1767,9 +1104,61 @@ namespace Dhole.Pricing.Persistence.Migrations
             modelBuilder.Entity("Dhole.Pricing.Domain.Imports.Entities.ManualImportExtractionJob", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedNever()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempt_count");
+
+                    b.Property<string>("ClientRequestKey")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("client_request_key");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<string>("ContentType")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("content_type");
+
+                    b.Property<string>("CorrelationId")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("correlation_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("error_message");
+
+                    b.Property<byte[]>("FileContent")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("file_content");
+
+                    b.Property<DateTime?>("LeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_expires_at_utc");
+
+                    b.Property<string>("OriginalFileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("original_file_name");
+
+                    b.Property<string>("ProfileSlug")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("profile_slug");
 
                     b.Property<Guid>("RequestedBy")
                         .HasColumnType("uuid")
@@ -1780,37 +1169,9 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(300)")
                         .HasColumnName("requested_by_name");
 
-                    b.Property<string>("ClientRequestKey")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("client_request_key");
-
-                    b.Property<string>("OriginalFileName")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("original_file_name");
-
-                    b.Property<string>("ContentType")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("content_type");
-
-                    b.Property<string>("ProfileSlug")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("profile_slug");
-
-                    b.Property<string>("CorrelationId")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)")
-                        .HasColumnName("correlation_id");
-
-                    b.Property<byte[]>("FileContent")
-                        .IsRequired()
-                        .HasColumnType("bytea")
-                        .HasColumnName("file_content");
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("result_json");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1818,38 +1179,13 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("status");
 
-                    b.Property<int>("AttemptCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("attempt_count");
-
-                    b.Property<DateTime?>("LeaseExpiresAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("lease_expires_at_utc");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<DateTime?>("CompletedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at_utc");
-
-                    b.Property<string>("ResultJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("result_json");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasMaxLength(4000)
-                        .HasColumnType("character varying(4000)")
-                        .HasColumnName("error_message");
-
                     b.HasKey("Id")
                         .HasName("pk_manual_import_extraction_jobs");
 
                     b.HasIndex("RequestedBy", "ClientRequestKey")
                         .IsUnique()
-                        .HasFilter("client_request_key IS NOT NULL")
-                        .HasDatabaseName("ix_manual_import_jobs_request_key");
+                        .HasDatabaseName("ix_manual_import_jobs_request_key")
+                        .HasFilter("client_request_key IS NOT NULL");
 
                     b.HasIndex("Status", "LeaseExpiresAtUtc", "CreatedAtUtc")
                         .HasDatabaseName("ix_manual_import_jobs_queue");
@@ -1993,6 +1329,611 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDatabaseName("ix_pricing_extraction_jobs_queue");
 
                     b.ToTable("PricingImportFromExtractionJobs", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.AutoPricingProfile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("code");
+
+                    b.Property<decimal>("CompetitiveCeilingPercentile")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("competitive_ceiling_percentile");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<decimal>("MaximumMarketDeviation")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("maximum_market_deviation");
+
+                    b.Property<int>("MinimumCompetitorCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("minimum_competitor_count");
+
+                    b.Property<decimal>("MinimumConfidenceForAutoApply")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("minimum_confidence_for_auto_apply");
+
+                    b.Property<decimal>("MinimumConfidenceForSuggestion")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("minimum_confidence_for_suggestion");
+
+                    b.Property<int>("MinimumObservationCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("minimum_observation_count");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("TargetPercentile")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("target_percentile");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.HasKey("Id")
+                        .HasName("PK_AutoPricingProfiles");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AutoPricingProfiles_Code");
+
+                    b.HasIndex("IsActive")
+                        .HasDatabaseName("IX_AutoPricingProfiles_IsActive");
+
+                    b.ToTable("AutoPricingProfiles", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.ChargePricingRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("AdjustmentPriority")
+                        .HasColumnType("integer")
+                        .HasColumnName("adjustment_priority");
+
+                    b.Property<string>("AdjustmentStrategy")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("adjustment_strategy");
+
+                    b.Property<bool>("CanAutoAdjust")
+                        .HasColumnType("boolean")
+                        .HasColumnName("can_auto_adjust");
+
+                    b.Property<string>("ChargeCode")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("charge_code");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<decimal?>("MaximumAdjustmentAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("maximum_adjustment_amount");
+
+                    b.Property<decimal?>("MaximumMarkup")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("maximum_markup");
+
+                    b.Property<decimal>("MinimumMarkup")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("minimum_markup");
+
+                    b.HasKey("Id")
+                        .HasName("PK_ChargePricingRules");
+
+                    b.HasIndex("ChargeCode")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ChargePricingRules_ChargeCode");
+
+                    b.HasIndex("IsActive", "AdjustmentPriority")
+                        .HasDatabaseName("IX_ChargePricingRules_Active_Priority");
+
+                    b.ToTable("ChargePricingRules", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.CompetitorRateObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CarrierCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("carrier_code");
+
+                    b.Property<Guid?>("CarrierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("carrier_id");
+
+                    b.Property<string>("CarrierName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("carrier_name");
+
+                    b.Property<Guid?>("CompetitorCompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("competitor_company_id");
+
+                    b.Property<string>("CompetitorCompanyName")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("competitor_company_name");
+
+                    b.Property<Guid?>("CompetitorTariffId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("competitor_tariff_id");
+
+                    b.Property<string>("ContainerTypeCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("container_type_code");
+
+                    b.Property<Guid?>("ContainerTypeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("container_type_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("currency");
+
+                    b.Property<decimal?>("DestinationCharges")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("destination_charges");
+
+                    b.Property<decimal?>("ExchangeRate")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("numeric(18,8)")
+                        .HasColumnName("exchange_rate");
+
+                    b.Property<DateTime?>("ExchangeRateDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("exchange_rate_date");
+
+                    b.Property<decimal>("ExtractionConfidence")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("extraction_confidence");
+
+                    b.Property<DateTime>("ImportedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("imported_at_utc");
+
+                    b.Property<string>("IncotermCode")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("incoterm_code");
+
+                    b.Property<Guid?>("IncotermId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("incoterm_id");
+
+                    b.Property<decimal?>("InlandCharges")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("inland_charges");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("mode");
+
+                    b.Property<decimal>("NormalizationConfidence")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("normalization_confidence");
+
+                    b.Property<decimal?>("NormalizedAllIn")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("normalized_all_in");
+
+                    b.Property<decimal?>("NormalizedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("normalized_amount");
+
+                    b.Property<string>("NormalizedCurrency")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("normalized_currency");
+
+                    b.Property<decimal?>("NormalizedOceanFreight")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("normalized_ocean_freight");
+
+                    b.Property<decimal?>("OceanFreight")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("ocean_freight");
+
+                    b.Property<decimal?>("OriginCharges")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("origin_charges");
+
+                    b.Property<decimal?>("OriginalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("original_amount");
+
+                    b.Property<decimal?>("OtherCharges")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("other_charges");
+
+                    b.Property<string>("PodCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("pod_code");
+
+                    b.Property<Guid?>("PodId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pod_id");
+
+                    b.Property<string>("PodName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pod_name");
+
+                    b.Property<string>("PoeCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("poe_code");
+
+                    b.Property<Guid?>("PoeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("poe_id");
+
+                    b.Property<string>("PoeName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("poe_name");
+
+                    b.Property<string>("PolCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("pol_code");
+
+                    b.Property<Guid?>("PolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pol_id");
+
+                    b.Property<string>("PolName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("pol_name");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("RateBasis")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("rate_basis");
+
+                    b.Property<string>("RawPayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("raw_payload_json");
+
+                    b.Property<Guid?>("SourceDocumentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_document_id");
+
+                    b.Property<Guid?>("SourceImportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_import_id");
+
+                    b.Property<DateTime>("ValidFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_from");
+
+                    b.Property<DateTime>("ValidTo")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("valid_to");
+
+                    b.HasKey("Id")
+                        .HasName("PK_CompetitorRateObservations");
+
+                    b.HasIndex("CompetitorCompanyId")
+                        .HasDatabaseName("IX_CompetitorRateObservations_CompetitorCompanyId");
+
+                    b.HasIndex("CompetitorTariffId")
+                        .HasDatabaseName("IX_CompetitorRateObservations_CompetitorTariffId");
+
+                    b.HasIndex("ValidFrom", "ValidTo")
+                        .HasDatabaseName("IX_CompetitorRateObservations_Validity");
+
+                    b.HasIndex("Mode", "IncotermId", "PolId", "PoeId", "PodId", "ContainerTypeId", "CarrierId")
+                        .HasDatabaseName("IX_CompetitorRateObservations_MarketKey");
+
+                    b.ToTable("CompetitorRateObservations", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.PricingMarketDecision", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AlgorithmVersion")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("algorithm_version");
+
+                    b.Property<decimal?>("Average")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("average");
+
+                    b.Property<DateTime>("CalculatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("calculated_at_utc");
+
+                    b.Property<Guid?>("ComparisonCarrierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparison_carrier_id");
+
+                    b.Property<Guid?>("ComparisonContainerTypeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparison_container_type_id");
+
+                    b.Property<Guid?>("ComparisonIncotermId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparison_incoterm_id");
+
+                    b.Property<string>("ComparisonMode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("comparison_mode");
+
+                    b.Property<Guid?>("ComparisonPodId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparison_pod_id");
+
+                    b.Property<Guid?>("ComparisonPoeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparison_poe_id");
+
+                    b.Property<Guid>("ComparisonPolId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("comparison_pol_id");
+
+                    b.Property<decimal?>("CompetitiveCeiling")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("competitive_ceiling");
+
+                    b.Property<int>("CompetitorCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("competitor_count");
+
+                    b.Property<decimal>("ConfidenceScore")
+                        .HasPrecision(9, 4)
+                        .HasColumnType("numeric(9,4)")
+                        .HasColumnName("confidence_score");
+
+                    b.Property<decimal>("CostTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("cost_total");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<decimal>("FinalSaleTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("final_sale_total");
+
+                    b.Property<decimal?>("Median")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("median");
+
+                    b.Property<int>("ObservationCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("observation_count");
+
+                    b.Property<decimal>("OriginalSaleTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("original_sale_total");
+
+                    b.Property<decimal?>("P25")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("p25");
+
+                    b.Property<decimal?>("P40")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("p40");
+
+                    b.Property<decimal?>("P50")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("p50");
+
+                    b.Property<decimal?>("P60")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("p60");
+
+                    b.Property<decimal?>("P65")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("p65");
+
+                    b.Property<decimal?>("P75")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("p75");
+
+                    b.Property<Guid>("RateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rate_id");
+
+                    b.Property<DateTime?>("ReviewedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at_utc");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_user_id");
+
+                    b.Property<decimal>("SuggestedSaleTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("suggested_sale_total");
+
+                    b.Property<decimal?>("TargetMarketPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("target_market_price");
+
+                    b.Property<bool>("WasAutoApplied")
+                        .HasColumnType("boolean")
+                        .HasColumnName("was_auto_applied");
+
+                    b.Property<bool>("WasManuallyModified")
+                        .HasColumnType("boolean")
+                        .HasColumnName("was_manually_modified");
+
+                    b.Property<decimal?>("WeightedAverage")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("weighted_average");
+
+                    b.HasKey("Id")
+                        .HasName("PK_PricingMarketDecisions");
+
+                    b.HasIndex("RateId", "CalculatedAtUtc")
+                        .HasDatabaseName("IX_PricingMarketDecisions_Rate_CalculatedAt");
+
+                    b.HasIndex("ComparisonMode", "ComparisonIncotermId", "ComparisonPolId", "ComparisonPoeId", "ComparisonPodId", "ComparisonContainerTypeId", "ComparisonCarrierId")
+                        .HasDatabaseName("IX_PricingMarketDecisions_MarketKey");
+
+                    b.ToTable("PricingMarketDecisions", "pricing");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.PricingMarketDecisionObservation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("ComparabilityScore")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("comparability_score");
+
+                    b.Property<Guid?>("CompetitorCompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("competitor_company_id");
+
+                    b.Property<Guid>("CompetitorRateObservationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("competitor_rate_observation_id");
+
+                    b.Property<string>("ExclusionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("exclusion_reason");
+
+                    b.Property<decimal>("FinalWeight")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("final_weight");
+
+                    b.Property<bool>("IsOutlier")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_outlier");
+
+                    b.Property<decimal?>("NormalizedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("normalized_amount");
+
+                    b.Property<decimal?>("OriginalAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("original_amount");
+
+                    b.Property<Guid>("PricingMarketDecisionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pricing_market_decision_id");
+
+                    b.Property<decimal>("RecencyWeight")
+                        .HasPrecision(9, 6)
+                        .HasColumnType("numeric(9,6)")
+                        .HasColumnName("recency_weight");
+
+                    b.Property<bool>("WasIncluded")
+                        .HasColumnType("boolean")
+                        .HasColumnName("was_included");
+
+                    b.HasKey("Id")
+                        .HasName("PK_PricingMarketDecisionObservations");
+
+                    b.HasIndex("CompetitorRateObservationId")
+                        .HasDatabaseName("IX_PricingMarketDecisionObservations_ObservationId");
+
+                    b.HasIndex("PricingMarketDecisionId", "CompetitorRateObservationId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_PricingMarketDecisionObservations_Decision_Observation");
+
+                    b.ToTable("PricingMarketDecisionObservations", "pricing");
                 });
 
             modelBuilder.Entity("Dhole.Pricing.Domain.News.Entities.LogisticsNews", b =>
@@ -2388,6 +2329,7 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.Property<string>("UnitWeightsKgJson")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("text")
                         .HasDefaultValue("[]")
                         .HasColumnName("unit_weights_kg_json");
@@ -2552,20 +2494,6 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(250)")
                         .HasColumnName("agent_name");
 
-                    b.Property<string>("LclGroupAgentCode")
-                        .HasMaxLength(80)
-                        .HasColumnType("character varying(80)")
-                        .HasColumnName("lcl_group_agent_code");
-
-                    b.Property<Guid?>("LclGroupAgentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("lcl_group_agent_id");
-
-                    b.Property<string>("LclGroupAgentName")
-                        .HasMaxLength(250)
-                        .HasColumnType("character varying(250)")
-                        .HasColumnName("lcl_group_agent_name");
-
                     b.Property<string>("CargoLinesJson")
                         .HasColumnType("jsonb")
                         .HasColumnName("cargo_lines_json");
@@ -2576,13 +2504,6 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasDefaultValue(0m)
                         .HasColumnName("cargo_value");
-
-                    b.Property<Guid[]>("FinalBackupStorageIds")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid[]")
-                        .HasDefaultValueSql("'{}'::uuid[]")
-                        .HasColumnName("final_backup_storage_ids");
 
                     b.Property<string>("CarrierCode")
                         .IsRequired()
@@ -2698,12 +2619,6 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("exchange_rate_manual_override");
 
-                    b.Property<bool>("UseAllInPresentation")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("use_all_in_presentation");
-
                     b.Property<decimal?>("ExchangeRatePurchase")
                         .HasPrecision(18, 6)
                         .HasColumnType("numeric(18,6)")
@@ -2723,18 +2638,17 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("excludes");
 
-                    b.Property<DateTime?>("SellerReceivedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("seller_received_at_utc");
-
-                    b.Property<Guid?>("SellerReceivedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("seller_received_by");
-
                     b.Property<string>("ExecutiveName")
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)")
                         .HasColumnName("executive_name");
+
+                    b.PrimitiveCollection<Guid[]>("FinalBackupStorageIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("final_backup_storage_ids")
+                        .HasDefaultValueSql("'{}'::uuid[]");
 
                     b.Property<int>("FreeDays")
                         .HasColumnType("integer")
@@ -2774,6 +2688,20 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDefaultValue(500m)
                         .HasColumnName("kg_per_cbm");
 
+                    b.Property<string>("LclGroupAgentCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("lcl_group_agent_code");
+
+                    b.Property<Guid?>("LclGroupAgentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lcl_group_agent_id");
+
+                    b.Property<string>("LclGroupAgentName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("lcl_group_agent_name");
+
                     b.Property<decimal>("MarginPercentage")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
@@ -2787,10 +2715,6 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDefaultValue("TransitDomestic")
                         .HasColumnName("operation_type");
 
-                    b.Property<Guid?>("WarehouseId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("warehouse_id");
-
                     b.Property<string>("PickupAddress")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)")
@@ -2801,14 +2725,14 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("numeric(10,7)")
                         .HasColumnName("pickup_latitude");
 
+                    b.Property<string>("PickupLocationsJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("pickup_locations_json");
+
                     b.Property<decimal?>("PickupLongitude")
                         .HasPrecision(10, 7)
                         .HasColumnType("numeric(10,7)")
                         .HasColumnName("pickup_longitude");
-
-                    b.Property<string>("PickupLocationsJson")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("pickup_locations_json");
 
                     b.Property<string>("PodCode")
                         .HasMaxLength(80)
@@ -2893,6 +2817,14 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDefaultValue(1)
                         .HasColumnName("revision_number");
 
+                    b.Property<DateTime?>("SellerReceivedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("seller_received_at_utc");
+
+                    b.Property<Guid?>("SellerReceivedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("seller_received_by");
+
                     b.Property<string>("ShipmentMode")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2919,6 +2851,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("status");
 
+                    b.Property<int?>("StorageDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("storage_days");
+
                     b.Property<string>("SubjectTo")
                         .HasColumnType("text")
                         .HasColumnName("subject_to");
@@ -2937,10 +2873,6 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("total_cost_usd");
-
-                    b.Property<int?>("StorageDays")
-                        .HasColumnType("integer")
-                        .HasColumnName("storage_days");
 
                     b.Property<int>("TotalPackages")
                         .ValueGeneratedOnAdd()
@@ -3011,6 +2943,12 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("updated_by");
 
+                    b.Property<bool>("UseAllInPresentation")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("use_all_in_presentation");
+
                     b.Property<DateTime>("ValidFrom")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("valid_from");
@@ -3018,6 +2956,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.Property<DateTime>("ValidTo")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("valid_to");
+
+                    b.Property<Guid?>("WarehouseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("warehouse_id");
 
                     b.HasKey("Id")
                         .HasName("p_k_rate_headers");
@@ -3033,8 +2975,6 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.HasIndex("IdtraNumber");
 
                     b.HasIndex("IncotermId");
-
-                    b.HasIndex("WarehouseId");
 
                     b.HasIndex("PodId");
 
@@ -3066,6 +3006,8 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasIndex("ValidTo");
 
+                    b.HasIndex("WarehouseId");
+
                     b.HasIndex("AgentId", "CarrierId", "PolId", "PoeId", "PodId", "ContainerTypeId", "CurrencyId", "Status", "ValidFrom", "ValidTo")
                         .HasDatabaseName("ix_rate_headers_valid_lookup");
 
@@ -3077,6 +3019,29 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("CancellationDetails")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cancellation_details");
+
+                    b.Property<string>("CancellationReason")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("cancellation_reason");
+
+                    b.Property<DateTime?>("CancelledAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at_utc");
+
+                    b.Property<string>("CancelledByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("cancelled_by_name");
+
+                    b.Property<Guid?>("CancelledByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cancelled_by_user_id");
 
                     b.Property<string>("ClientName")
                         .HasMaxLength(250)
@@ -3101,6 +3066,27 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("executive_name");
 
+                    b.Property<DateTime?>("LockExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lock_expires_at_utc");
+
+                    b.Property<Guid?>("LockToken")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lock_token");
+
+                    b.Property<DateTime?>("LockedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("locked_at_utc");
+
+                    b.Property<string>("LockedByName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("locked_by_name");
+
+                    b.Property<Guid?>("LockedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("locked_by_user_id");
+
                     b.Property<string>("OriginName")
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)")
@@ -3110,6 +3096,24 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("payload_json");
+
+                    b.Property<Guid?>("PodId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pod_id");
+
+                    b.Property<string>("PodName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("pod_name");
+
+                    b.Property<Guid?>("PoeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("poe_id");
+
+                    b.Property<string>("PoeName")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)")
+                        .HasColumnName("poe_name");
 
                     b.Property<string>("Priority")
                         .IsRequired()
@@ -3156,6 +3160,10 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("p_k_rate_requests");
+
+                    b.HasIndex("PodId");
+
+                    b.HasIndex("PoeId");
 
                     b.HasIndex("RateId");
 
@@ -3296,6 +3304,78 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.ToTable("RateTermItems", "pricing");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Persistence.Auditing.DynamicsQuoteSyncJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTime?>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at_utc");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("event_id");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTime?>("LeaseExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_expires_at_utc");
+
+                    b.Property<DateTime>("NextAttemptAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("next_attempt_at_utc");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload_json");
+
+                    b.Property<Guid>("RateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rate_id");
+
+                    b.Property<string>("ResponseJson")
+                        .HasColumnType("text")
+                        .HasColumnName("response_json");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("revision_number");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id")
+                        .HasName("p_k_dynamics_quote_sync_jobs");
+
+                    b.HasIndex("EventId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DynamicsQuoteSyncJobs_Event");
+
+                    b.HasIndex("RateId", "RevisionNumber")
+                        .IsUnique()
+                        .HasDatabaseName("UX_DynamicsQuoteSyncJobs_RateRevision");
+
+                    b.ToTable("DynamicsQuoteSyncJobs", "pricing");
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Competitors.Entities.CompetitorTariffImportPayload", b =>
                 {
                     b.HasOne("Dhole.Pricing.Domain.Competitors.Entities.CompetitorTariff", null)
@@ -3304,6 +3384,26 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("CompetitorTariffImportPayloads_CompetitorTariffId_fkey");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.Costs.Entities.CostIncoterm", b =>
+                {
+                    b.HasOne("Dhole.Pricing.Domain.Costs.Entities.Cost", null)
+                        .WithMany("Incoterms")
+                        .HasForeignKey("CostId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_cost_incoterms_costs_cost_id");
+                });
+
+            modelBuilder.Entity("Dhole.Pricing.Domain.Costs.Entities.CostService", b =>
+                {
+                    b.HasOne("Dhole.Pricing.Domain.Costs.Entities.Cost", null)
+                        .WithMany("Services")
+                        .HasForeignKey("CostId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("f_k_cost_service_costs_cost_id");
                 });
 
             modelBuilder.Entity("Dhole.Pricing.Domain.MarketPricing.Entities.CompetitorRateObservation", b =>
@@ -3330,26 +3430,6 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("FK_PricingMarketDecisionObservations_Decisions");
-                });
-
-            modelBuilder.Entity("Dhole.Pricing.Domain.Costs.Entities.CostIncoterm", b =>
-                {
-                    b.HasOne("Dhole.Pricing.Domain.Costs.Entities.Cost", null)
-                        .WithMany("Incoterms")
-                        .HasForeignKey("CostId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("f_k_cost_incoterms_costs_cost_id");
-                });
-
-            modelBuilder.Entity("Dhole.Pricing.Domain.Costs.Entities.CostService", b =>
-                {
-                    b.HasOne("Dhole.Pricing.Domain.Costs.Entities.Cost", null)
-                        .WithMany("Services")
-                        .HasForeignKey("CostId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("f_k_cost_service_costs_cost_id");
                 });
 
             modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateComparisonDetail", b =>
