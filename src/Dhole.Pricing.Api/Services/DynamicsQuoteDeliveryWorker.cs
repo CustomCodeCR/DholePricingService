@@ -1,0 +1,175 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Dhole.Pricing.Persistence.DbContexts;
+using Microsoft.EntityFrameworkCore;
+
+namespace Dhole.Pricing.Api.Services;
+
+/// <summary>
+/// Claims accepted-rate revisions atomically, then calls the narrowly scoped Dhole
+/// Dynamics template with one stable idempotency key per acceptance. No API key or
+/// Dataverse write is placed in a Pricing request, audit event, or source file.
+/// </summary>
+public sealed class DynamicsQuoteDeliveryWorker(
+    IServiceScopeFactory scopes, IHttpClientFactory clients,
+    IConfiguration configuration, ILogger<DynamicsQuoteDeliveryWorker> logger)
+    : BackgroundService
+{
+    private const int MaxAttempts = 10;
+    private const string Url =
+        "https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta";
+    private static readonly TimeSpan Poll = TimeSpan.FromSeconds(10);
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        // A missing secret must preserve queued approvals instead of issuing
+        // unauthenticated requests or accidentally creating malformed Quotes.
+        if (!configuration.GetValue("DynamicsQuoteSync:Enabled", true)) return;
+        var apiKey = configuration["DynamicsQuoteSync:ApiKey"];
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            logger.LogWarning("Dynamics quote synchronization is awaiting its backend API key.");
+            return;
+        }
+
+        await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try { await ProcessNextAsync(apiKey, stoppingToken); }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (Exception ex)
+            {
+                logger.LogError("Dynamics quote worker iteration failed ({Type}).",
+                    ex.GetType().Name);
+            }
+            try { await Task.Delay(Poll, stoppingToken); }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+        }
+    }
+
+    private async Task ProcessNextAsync(string apiKey, CancellationToken ct)
+    {
+        Guid? jobId = null;
+        await using (var claimScope = scopes.CreateAsyncScope())
+        {
+            var db = claimScope.ServiceProvider.GetRequiredService<ServiceDbContext>();
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE pricing."DynamicsQuoteSyncJobs"
+                   SET "Status" = 'NeedsAttention',
+                       "LastError" = 'Previous delivery timed out after maximum attempts.',
+                       "LeaseExpiresAtUtc" = NULL
+                 WHERE "Status" = 'Processing' AND "Attempts" >= 10
+                   AND "LeaseExpiresAtUtc" < now()
+                """, ct);
+            await db.Database.OpenConnectionAsync(ct);
+            try
+            {
+                await using var command = db.Database.GetDbConnection().CreateCommand();
+                command.CommandText =
+                    """
+                    UPDATE pricing."DynamicsQuoteSyncJobs"
+                       SET "Status" = 'Processing',
+                           "Attempts" = "Attempts" + 1,
+                           "LeaseExpiresAtUtc" = now() + interval '3 minutes'
+                     WHERE "Id" = (
+                         SELECT "Id" FROM pricing."DynamicsQuoteSyncJobs"
+                          WHERE (("Status" IN ('Pending','Retry')
+                                  AND "NextAttemptAtUtc" <= now())
+                              OR ("Status" = 'Processing'
+                                  AND "LeaseExpiresAtUtc" < now()))
+                            AND "Attempts" < 10
+                          ORDER BY "CreatedAtUtc"
+                          LIMIT 1 FOR UPDATE SKIP LOCKED
+                     )
+                    RETURNING "Id"
+                    """;
+                jobId = await command.ExecuteScalarAsync(ct) is Guid id ? id : null;
+            }
+            finally { await db.Database.CloseConnectionAsync(); }
+        }
+
+        if (jobId is null) return;
+        await using var scope = scopes.CreateAsyncScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
+        var job = await dbContext.DynamicsQuoteSyncJobs
+            .SingleAsync(x => x.Id == jobId, ct);
+
+        try
+        {
+            var client = clients.CreateClient("DynamicsQuoteSync");
+            using var schemaRequest = new HttpRequestMessage(HttpMethod.Get,
+                Url + "/schema?connectionCode=principal");
+            schemaRequest.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+            using var schemaResponse = await client.SendAsync(schemaRequest, ct);
+            if (!schemaResponse.IsSuccessStatusCode)
+                throw new DeliveryException(
+                    "Schema request HTTP " + (int)schemaResponse.StatusCode,
+                    Transient(schemaResponse.StatusCode));
+            var schemaText = await schemaResponse.Content.ReadAsStringAsync(ct);
+            var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
+            var body = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema);
+
+            using var execute = new HttpRequestMessage(HttpMethod.Post, Url + "/execute")
+            {
+                Content = JsonContent.Create(body, options: Json)
+            };
+            execute.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+            execute.Headers.TryAddWithoutValidation("Idempotency-Key",
+                "dhole-pricing-quote-" + job.RateId.ToString("N") + "-v" + job.RevisionNumber);
+            using var result = await client.SendAsync(execute, ct);
+            if (!result.IsSuccessStatusCode)
+                throw new DeliveryException(
+                    "Template execution HTTP " + (int)result.StatusCode,
+                    // A 409 may mean the write was applied remotely. Reconciliation
+                    // is required, never a new idempotency key.
+                    Transient(result.StatusCode) && result.StatusCode != HttpStatusCode.Conflict);
+            var response = await result.Content.ReadAsStringAsync(ct);
+            using var parsed = JsonDocument.Parse(response);
+            if (parsed.RootElement.TryGetProperty("state", out var state) &&
+                state.GetString() == "succeeded")
+            {
+                job.Status = "Completed";
+                job.ResponseJson = response.Length > 2000 ? response[..2000] : response;
+                job.LastError = null;
+                job.CompletedAtUtc = DateTime.UtcNow;
+                job.LeaseExpiresAtUtc = null;
+                await dbContext.SaveChangesAsync(ct);
+                logger.LogInformation(
+                    "Dynamics quote synchronized for Pricing rate {RateId} revision {Revision}.",
+                    job.RateId, job.RevisionNumber);
+                return;
+            }
+            throw new DeliveryException("Dynamics did not confirm a succeeded write.", false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            var retryable = ex is HttpRequestException or TaskCanceledException ||
+                ex is DeliveryException { CanRetry: true };
+            job.Status = retryable && job.Attempts < MaxAttempts ? "Retry" : "NeedsAttention";
+            job.LastError = ex is DeliveryException delivery ? delivery.Message :
+                ex is HttpRequestException or TaskCanceledException
+                    ? "Network timeout contacting the Dynamics connector."
+                    : "CRM mapping or response requires review (" + ex.GetType().Name + ").";
+            if (job.LastError.Length > 500) job.LastError = job.LastError[..500];
+            job.LeaseExpiresAtUtc = null;
+            job.NextAttemptAtUtc = DateTime.UtcNow.AddSeconds(
+                Math.Min(3600, Math.Pow(2, Math.Min(job.Attempts, 10)) * 10));
+            await dbContext.SaveChangesAsync(ct);
+            logger.LogWarning("Dynamics quote {RateId} revision {Revision} delivery: {Status}, attempt {Attempt}.",
+                job.RateId, job.RevisionNumber, job.Status, job.Attempts);
+        }
+    }
+
+    private static bool Transient(HttpStatusCode code) =>
+        code == HttpStatusCode.TooManyRequests || (int)code >= 500;
+
+    private sealed class DeliveryException(string message, bool canRetry)
+        : Exception(message)
+    {
+        public bool CanRetry { get; } = canRetry;
+    }
+}
