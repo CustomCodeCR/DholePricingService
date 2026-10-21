@@ -97,6 +97,11 @@ public sealed class DynamicsQuoteDeliveryWorker(
         var job = await dbContext.DynamicsQuoteSyncJobs
             .SingleAsync(x => x.Id == jobId, ct);
 
+        var stage = "schema";
+        var postAttempted = false;
+        HttpStatusCode? httpStatus = null;
+        string? providerCode = null;
+        string? providerTitle = null;
         try
         {
             var client = clients.CreateClient("DynamicsQuoteSync");
@@ -105,12 +110,19 @@ public sealed class DynamicsQuoteDeliveryWorker(
             schemaRequest.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
             using var schemaResponse = await client.SendAsync(schemaRequest, ct);
             if (!schemaResponse.IsSuccessStatusCode)
+            {
+                httpStatus = schemaResponse.StatusCode;
+                (providerCode, providerTitle) = DynamicsQuoteFailureDiagnostics.ReadProviderError(
+                    await schemaResponse.Content.ReadAsStringAsync(ct));
                 throw new DeliveryException(
                     "Schema request HTTP " + (int)schemaResponse.StatusCode,
                     Transient(schemaResponse.StatusCode));
+            }
             var schemaText = await schemaResponse.Content.ReadAsStringAsync(ct);
             var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
+            stage = "mapping";
             var body = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema);
+            stage = "execute";
 
             using var execute = new HttpRequestMessage(HttpMethod.Post, Url + "/execute")
             {
@@ -119,13 +131,19 @@ public sealed class DynamicsQuoteDeliveryWorker(
             execute.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
             execute.Headers.TryAddWithoutValidation("Idempotency-Key",
                 "dhole-pricing-quote-" + job.RateId.ToString("N") + "-v" + job.RevisionNumber);
+            postAttempted = true;
             using var result = await client.SendAsync(execute, ct);
             if (!result.IsSuccessStatusCode)
+            {
+                httpStatus = result.StatusCode;
+                (providerCode, providerTitle) = DynamicsQuoteFailureDiagnostics.ReadProviderError(
+                    await result.Content.ReadAsStringAsync(ct));
                 throw new DeliveryException(
                     "Template execution HTTP " + (int)result.StatusCode,
-                    // A 409 may mean the write was applied remotely. Reconciliation
-                    // is required, never a new idempotency key.
+                    // An ambiguous/409 response may mean the write was applied remotely.
+                    // Never generate a new idempotency key.
                     Transient(result.StatusCode) && result.StatusCode != HttpStatusCode.Conflict);
+            }
             var response = await result.Content.ReadAsStringAsync(ct);
             using var parsed = JsonDocument.Parse(response);
             if (parsed.RootElement.TryGetProperty("state", out var state) &&
@@ -150,17 +168,18 @@ public sealed class DynamicsQuoteDeliveryWorker(
             var retryable = ex is HttpRequestException or TaskCanceledException ||
                 ex is DeliveryException { CanRetry: true };
             job.Status = retryable && job.Attempts < MaxAttempts ? "Retry" : "NeedsAttention";
-            job.LastError = ex is DeliveryException delivery ? delivery.Message :
-                ex is HttpRequestException or TaskCanceledException
-                    ? "Network timeout contacting the Dynamics connector."
-                    : "CRM mapping or response requires review (" + ex.GetType().Name + ").";
-            if (job.LastError.Length > 500) job.LastError = job.LastError[..500];
+            var (error, diagnostic) = DynamicsQuoteFailureDiagnostics.Format(
+                stage, ex, postAttempted, httpStatus, providerCode, providerTitle);
+            job.LastError = error;
+            job.ResponseJson = diagnostic;
             job.LeaseExpiresAtUtc = null;
             job.NextAttemptAtUtc = DateTime.UtcNow.AddSeconds(
                 Math.Min(3600, Math.Pow(2, Math.Min(job.Attempts, 10)) * 10));
             await dbContext.SaveChangesAsync(ct);
-            logger.LogWarning("Dynamics quote {RateId} revision {Revision} delivery: {Status}, attempt {Attempt}.",
-                job.RateId, job.RevisionNumber, job.Status, job.Attempts);
+            logger.LogWarning(
+                "Dynamics quote {RateId} revision {Revision}: {Status}, attempt {Attempt}, stage {Stage}, HTTP {HttpStatus}, code {ErrorCode}, postAttempted {PostAttempted}; {Error}.",
+                job.RateId, job.RevisionNumber, job.Status, job.Attempts, stage,
+                (int?)httpStatus, providerCode, postAttempted, job.LastError);
         }
     }
 
