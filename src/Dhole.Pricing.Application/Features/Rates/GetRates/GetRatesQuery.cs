@@ -27,5 +27,6 @@ public sealed record GetRatesQuery(
     bool? RequiredApproval = null,
     DateTime? QuoteDate = null,
     DateTime? ValidFrom = null,
-    DateTime? ValidTo = null
+    DateTime? ValidTo = null,
+    IReadOnlyCollection<string>? ExecutiveNames = null
 ) : IQuery<Result<PagedResult<RateDto>>>;
