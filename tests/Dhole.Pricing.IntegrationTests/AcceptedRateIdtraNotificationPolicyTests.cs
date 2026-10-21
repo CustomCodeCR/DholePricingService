@@ -8,16 +8,25 @@ namespace Dhole.Pricing.IntegrationTests;
 public sealed class AcceptedRateIdtraNotificationPolicyTests
 {
     [TestMethod]
-    public void SellerAcceptanceGoesToPricing()
-        => Assert.AreEqual(
-            "pricingcf@castrofallas.com",
+    public void SellerAcceptanceGoesToAperturaWithPricingInCopy()
+    {
+        Assert.AreEqual(
+            "aperturatramite@grupocastrofallas.com",
             AcceptedRateOpeningsNotificationService.RecipientFor(RateAcceptanceActor.Seller));
+        CollectionAssert.AreEqual(
+            new[] { "pricingcf@castrofallas.com" },
+            AcceptedRateOpeningsNotificationService.CopyRecipientsFor(RateAcceptanceActor.Seller));
+    }
 
     [TestMethod]
-    public void PricingAcceptanceGoesToAperturaTramite()
-        => Assert.AreEqual(
+    public void PricingAcceptanceGoesToAperturaTramiteWithoutCopy()
+    {
+        Assert.AreEqual(
             "aperturatramite@grupocastrofallas.com",
             AcceptedRateOpeningsNotificationService.RecipientFor(RateAcceptanceActor.Pricing));
+        Assert.HasCount(0,
+            AcceptedRateOpeningsNotificationService.CopyRecipientsFor(RateAcceptanceActor.Pricing));
+    }
 
     [TestMethod]
     public void NotificationIsOnlyForAcceptedRatesWithoutIdtra()
