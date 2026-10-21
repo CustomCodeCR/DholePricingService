@@ -24,8 +24,9 @@ public sealed class AcceptedRateIdtraNotificationPolicyTests
         Assert.AreEqual(
             "aperturatramite@grupocastrofallas.com",
             AcceptedRateOpeningsNotificationService.RecipientFor(RateAcceptanceActor.Pricing));
-        Assert.HasCount(0,
-            AcceptedRateOpeningsNotificationService.CopyRecipientsFor(RateAcceptanceActor.Pricing));
+        Assert.AreEqual(
+            0,
+            AcceptedRateOpeningsNotificationService.CopyRecipientsFor(RateAcceptanceActor.Pricing).Length);
     }
 
     [TestMethod]
