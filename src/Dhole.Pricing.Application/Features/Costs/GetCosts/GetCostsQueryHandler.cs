@@ -25,6 +25,11 @@ public sealed class GetCostsQueryHandler(ICostRepository costs)
             query.PortRoles,
             query.CurrencyIds,
             query.ActiveStates,
+            query.ShipmentModes,
+            query.IncotermIds,
+            query.ServiceIds,
+            query.ChargeBases,
+            query.OperationalConditions,
             cancellationToken
         );
 

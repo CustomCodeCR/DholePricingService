@@ -3,6 +3,7 @@ using CustomCodeFramework.Persistence.Abstractions;
 using Dhole.Pricing.Contracts.Costs.Response;
 using Dhole.Pricing.Domain.Costs.Entities;
 using Dhole.Pricing.Domain.Costs.Enums;
+using Dhole.Pricing.Domain.Rates.Enums;
 
 namespace Dhole.Pricing.Application.Abstractions.Repositories;
 
@@ -52,6 +53,11 @@ public interface ICostRepository : IRepository<Cost, Guid>
         IReadOnlyCollection<CostPortRole>? portRoles = null,
         IReadOnlyCollection<Guid>? currencyIds = null,
         IReadOnlyCollection<bool>? activeStates = null,
+        IReadOnlyCollection<ShipmentMode>? shipmentModes = null,
+        IReadOnlyCollection<Guid>? incotermIds = null,
+        IReadOnlyCollection<Guid>? serviceIds = null,
+        IReadOnlyCollection<ChargeBasis>? chargeBases = null,
+        IReadOnlyCollection<string>? operationalConditions = null,
         CancellationToken cancellationToken = default
     );
 
