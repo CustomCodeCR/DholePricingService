@@ -44,6 +44,38 @@ public sealed class SellerRateRequestEditingTests
     }
 
     [TestMethod]
+    public void AirLclRequest_AcceptsMissingPodAndKeepsPoe()
+    {
+        // Air LCL uses POE as its destination; a final maritime POD is optional.
+        var request = RateRequest.Create(
+            RateRequestPriority.Green,
+            sellerUserId: Guid.NewGuid(),
+            sellerName: "Vendedor",
+            sellerEmail: "seller@example.com",
+            clientName: "Cliente",
+            executiveName: "Vendedor",
+            shipmentMode: "Lcl",
+            originName: "Miami",
+            destinationName: "San José",
+            payloadJson: "{\\"form\\":{\\"modality\\":\\"Air\\",\\"shipmentMode\\":\\"LCL\\"}}");
+
+        var poeId = Guid.NewGuid();
+        request.SetRoute(poeId, "San José", podId: null, podName: null);
+
+        Assert.AreEqual("Lcl", request.ShipmentMode);
+        Assert.AreEqual(poeId, request.PoeId);
+        Assert.AreEqual("San José", request.PoeName);
+        Assert.IsNull(request.PodId);
+        Assert.IsNull(request.PodName);
+
+        request.UpdateSubmission(RateRequestPriority.Yellow, "Cliente", "Vendedor",
+            "Lcl", "Miami", "San José", "{\\"form\\":{\\"modality\\":\\"Air\\"}}");
+        request.SetRoute(poeId, "San José", podId: null, podName: null);
+        Assert.AreEqual(poeId, request.PoeId);
+        Assert.IsNull(request.PodId);
+    }
+
+    [TestMethod]
     public void UpdateSubmission_RejectsRequestsLinkedToPricing()
     {
         var request = NewRequest();
