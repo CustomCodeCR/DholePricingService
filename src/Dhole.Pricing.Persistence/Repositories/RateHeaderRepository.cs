@@ -330,7 +330,12 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         var total = await query.CountAsync(cancellationToken);
 
         var items = await query
-            .OrderByDescending(x => x.CreatedAtUtc)
+            // Accepted quotes awaiting an IDTRA must appear before all other rates,
+            // before pagination is applied, regardless of the selected status filters.
+            .OrderByDescending(x =>
+                x.Status == RateStatus.AcceptedByClient
+                && (x.IdtraNumber == null || x.IdtraNumber.Trim() == string.Empty))
+            .ThenByDescending(x => x.CreatedAtUtc)
             .ThenBy(x => x.AgentName)
             .ThenBy(x => x.CarrierName)
             .ThenBy(x => x.PolName)
