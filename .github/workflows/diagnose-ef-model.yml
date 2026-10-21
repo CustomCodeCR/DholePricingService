@@ -1,0 +1,51 @@
+name: Diagnose Pricing EF model drift (temporary)
+on:
+  push:
+    branches: [investigate/ef-diff-20261021]
+permissions:
+  contents: write
+  packages: read
+jobs:
+  generate-model-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate model changes using official EF tooling
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/src" -w /src \
+            -e HOME=/tmp -e DOTNET_CLI_HOME=/tmp \
+            -e GITHUB_ACTOR="$GITHUB_ACTOR" -e GITHUB_TOKEN="$GITHUB_TOKEN" \
+            mcr.microsoft.com/dotnet/sdk:10.0 \
+            bash -lc '
+              set -euo pipefail
+              export NuGetPackageSourceCredentials_github="Username=$GITHUB_ACTOR;Password=$GITHUB_TOKEN;ValidAuthenticationTypes=Basic"
+              dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile /src/NuGet.Config
+              dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --no-restore --configuration Release
+              dotnet tool install --tool-path /tmp/ef dotnet-ef --version 10.0.9
+              /tmp/ef/dotnet-ef migrations add DiagnosticModelDiff20261021 \
+                --no-build --configuration Release \
+                --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
+                --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
+                --context ServiceDbContext
+              /tmp/ef/dotnet-ef migrations has-pending-model-changes \
+                --no-build --configuration Release \
+                --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
+                --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
+                --context ServiceDbContext
+            '
+      - name: Publish generated diff ONLY to diagnostic branch
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Dhole.Pricing.Persistence/Migrations/
+          if git diff --cached --quiet; then
+            echo "No pending changes found."
+          else
+            git commit -m "diagnostic: EF-generated migration and model snapshot (review only)"
+            git push origin HEAD:investigate/ef-diff-20261021
+          fi
