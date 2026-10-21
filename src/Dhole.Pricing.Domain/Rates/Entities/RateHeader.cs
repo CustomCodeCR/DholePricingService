@@ -1388,11 +1388,6 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             );
         }
 
-        if (status == RateStatus.AcceptedByClient && string.IsNullOrWhiteSpace(IdtraNumber))
-        {
-            throw new InvalidOperationException("Para aceptar la tarifa debe registrar el IDTRA.");
-        }
-
         if (status == RateStatus.RejectedByClient && string.IsNullOrWhiteSpace(reason))
         {
             throw new InvalidOperationException("El motivo de no aceptación del cliente es obligatorio.");
