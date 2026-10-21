@@ -1041,7 +1041,7 @@ public static class RateEndpoints
         );
 
         if (result.IsSuccess && status == RateStatus.AcceptedByClient)
-            await openingsNotificationService.QueueAsync(rateId, cancellationToken);
+            await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Pricing, cancellationToken);
 
         return EndpointResults.FromResult(result, httpContext);
     }
