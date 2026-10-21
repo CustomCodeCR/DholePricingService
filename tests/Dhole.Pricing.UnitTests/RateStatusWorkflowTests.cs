@@ -123,6 +123,42 @@ public sealed class RateStatusWorkflowTests
     }
 
     [TestMethod]
+    public void SentRate_CanBeAcceptedWithoutIdtra_AndAssignedLater()
+    {
+        var rate = CreateRate();
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+
+        rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
+
+        Assert.AreEqual(RateStatus.AcceptedByClient, rate.Status);
+        Assert.IsNull(rate.IdtraNumber);
+
+        rate.SetIdtraNumber("IDTRA-2026-00127", updatedBy: null);
+
+        Assert.AreEqual(RateStatus.AcceptedByClient, rate.Status);
+        Assert.AreEqual("IDTRA-2026-00127", rate.IdtraNumber);
+    }
+
+    [TestMethod]
+    public void OpenRate_CanBeAcceptedDirectlyWithoutIdtra_WhenAuthorized()
+    {
+        var rate = CreateRate();
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+
+        rate.SetCommercialStatus(
+            RateStatus.AcceptedByClient,
+            reason: null,
+            updatedBy: null,
+            allowDirectClientDecision: true);
+
+        Assert.AreEqual(RateStatus.AcceptedByClient, rate.Status);
+        Assert.IsNull(rate.IdtraNumber);
+    }
+
+    [TestMethod]
     public void SentRate_CanBeMarkedRequestedByClient_WithoutClientDecision()
     {
         var rate = CreateRate();
