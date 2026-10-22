@@ -86,15 +86,42 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             .OrderByDescending(x => x.CreatedAtUtc)
             .Take(100)
             .ToListAsync(cancellationToken);
+        // The job is immutable, but the linked rate may have been deleted,
+        // reapproved, or advanced to a newer revision since it was queued.
+        // Surface that state so an operator never sees an unexplained 404.
+        var rateIds = failures.Select(x => x.RateId).Distinct().ToArray();
+        var currentRates = await db.RateHeaders.IgnoreQueryFilters().AsNoTracking()
+            .Where(x => rateIds.Contains(x.Id))
+            .Select(x => new { x.Id, x.Status, x.RevisionNumber, x.IdtraNumber, x.IsDeleted })
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+
         return Results.Ok(new
         {
             totalShown = failures.Count,
-            issues = failures.Select(x => new
+            issues = failures.Select(x =>
             {
-                x.RateId, x.RevisionNumber, x.Status, x.Attempts,
-                x.LastError, error = Diagnostic(x.ResponseJson),
-                x.CreatedAtUtc, x.NextAttemptAtUtc,
-                retryableWithoutDuplicateRisk = CanRetry(x.Status, x.ResponseJson)
+                currentRates.TryGetValue(x.RateId, out var rate);
+                var retryBlockReason = rate is null
+                    ? "La tarifa original no existe en Pricing."
+                    : rate.IsDeleted
+                        ? "La tarifa fue eliminada; no se puede enviar a Dynamics."
+                        : rate.Status != RateStatus.AcceptedByClient
+                            ? "La tarifa ya no está aceptada por el cliente."
+                            : string.IsNullOrWhiteSpace(rate.IdtraNumber)
+                                ? "La tarifa no tiene IDTRA asignado."
+                                : rate.RevisionNumber != x.RevisionNumber
+                                    ? "La incidencia pertenece a una revisión anterior; revisá la versión actual."
+                                    : null;
+                return new
+                {
+                    x.RateId, x.RevisionNumber, x.Status, x.Attempts,
+                    x.LastError, error = Diagnostic(x.ResponseJson),
+                    x.CreatedAtUtc, x.NextAttemptAtUtc,
+                    currentRateRevision = rate?.RevisionNumber,
+                    retryBlockReason,
+                    retryableWithoutDuplicateRisk =
+                        retryBlockReason is null && CanRetry(x.Status, x.ResponseJson)
+                };
             })
         });
     }
@@ -254,20 +281,55 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         IHttpClientFactory clients, IConfiguration configuration, CancellationToken cancellationToken)
     {
         if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
-        var rate = await db.RateHeaders.AsNoTracking()
-            .Where(x => x.Id == rateId && !x.IsDeleted)
-            .Select(x => new { x.Status, x.RevisionNumber, x.IdtraNumber })
+        var rate = await db.RateHeaders.IgnoreQueryFilters().AsNoTracking()
+            .Where(x => x.Id == rateId)
+            .Select(x => new { x.Status, x.RevisionNumber, x.IdtraNumber, x.IsDeleted })
             .SingleOrDefaultAsync(cancellationToken);
-        if (rate is null) return Results.NotFound(new { code = "rate_not_found" });
-
-        if (rate.Status.ToString() != "AcceptedByClient" ||
+        if (rate is null)
+            return Results.NotFound(new
+            {
+                code = "rate_not_found",
+                message = "La tarifa no existe en la base de Pricing que atiende este reintento."
+            });
+        if (rate.IsDeleted)
+            return Results.Conflict(new
+            {
+                code = "rate_deleted_cannot_retry",
+                message = "La tarifa está eliminada y no se puede sincronizar con Dynamics."
+            });
+        if (rate.Status != RateStatus.AcceptedByClient ||
             string.IsNullOrWhiteSpace(rate.IdtraNumber))
-            return Results.Conflict(new { code = "rate_no_longer_accepted" });
+            return Results.Conflict(new
+            {
+                code = "rate_no_longer_accepted",
+                message = "La tarifa debe permanecer aceptada y tener IDTRA para reintentar."
+            });
 
         var job = await db.DynamicsQuoteSyncJobs.AsNoTracking()
             .Where(x => x.RateId == rateId && x.RevisionNumber == rate.RevisionNumber)
             .SingleOrDefaultAsync(cancellationToken);
-        if (job is null) return Results.NotFound(new { code = "sync_job_not_found" });
+        if (job is null)
+        {
+            var priorRevisions = await db.DynamicsQuoteSyncJobs.AsNoTracking()
+                .Where(x => x.RateId == rateId)
+                .OrderByDescending(x => x.RevisionNumber)
+                .Select(x => x.RevisionNumber)
+                .Take(10)
+                .ToArrayAsync(cancellationToken);
+            return priorRevisions.Length > 0
+                ? Results.Conflict(new
+                {
+                    code = "sync_revision_changed",
+                    message = "La incidencia corresponde a otra revisión. No se reintentará una oferta desactualizada.",
+                    currentRevision = rate.RevisionNumber,
+                    jobRevisions = priorRevisions
+                })
+                : Results.NotFound(new
+                {
+                    code = "sync_job_not_found",
+                    message = "La tarifa existe, pero no tiene un trabajo de sincronización en Pricing."
+                });
+        }
 
         // Never replay old/uncategorized or post-attempt failures. An HTTP
         // timeout or 409 might have successfully written to Dataverse.
