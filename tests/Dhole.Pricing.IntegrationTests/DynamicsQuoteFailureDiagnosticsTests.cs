@@ -55,6 +55,31 @@ public sealed class DynamicsQuoteFailureDiagnosticsTests
     }
 
     [TestMethod]
+    public void LookupFailureIdentifiesRelationshipWithoutLeakingClientOrIdtra()
+    {
+        var provider = """
+            {"type":"about:blank","title":"Quote rejected",
+             "code":"lookup_name_not_found","lookupInput":"new_idtra1",
+             "lookupSearchField":"title","untrustedName":"SECRET-CLIENT"}
+            """;
+        var (input, field) = DynamicsQuoteFailureDiagnostics.ReadProviderLookup(provider);
+        Assert.AreEqual("new_idtra1", input);
+        Assert.AreEqual("title", field);
+        var (description, diagnostic) = DynamicsQuoteFailureDiagnostics.Format(
+            "execute", new HttpRequestException("SECRET-CLIENT"), false,
+            HttpStatusCode.NotFound, "lookup_name_not_found", "Quote rejected",
+            input, field);
+        StringAssert.Contains(description, "new_idtra1");
+        StringAssert.Contains(description, "title");
+        Assert.IsFalse(diagnostic.Contains("SECRET-CLIENT", StringComparison.Ordinal));
+        using var parsed = JsonDocument.Parse(diagnostic);
+        Assert.AreEqual("new_idtra1",
+            parsed.RootElement.GetProperty("lookupInput").GetString());
+        Assert.AreEqual("title",
+            parsed.RootElement.GetProperty("lookupSearchField").GetString());
+    }
+
+    [TestMethod]
     public void ReadsOnlyAllowlistedFieldsFromRemoteErrors()
     {
         var (code, title) = DynamicsQuoteFailureDiagnostics.ReadProviderError(
