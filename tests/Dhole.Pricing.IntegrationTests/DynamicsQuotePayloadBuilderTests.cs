@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Dhole.Pricing.Api.Services;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -153,6 +154,41 @@ public sealed class DynamicsQuotePayloadBuilderTests
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         Assert.ThrowsExactly<InvalidOperationException>(() =>
             DynamicsQuotePayloadBuilder.Build(Accepted, schema));
+    }
+
+    [TestMethod]
+    public void SingleMetadataChoiceIsUsedWhenOldDefaultIsNotAvailable()
+    {
+        var altered = Schema.Replace("100000001", "100000000", StringComparison.Ordinal)
+            .Replace("100000003", "100000000", StringComparison.Ordinal)
+            .Replace("100000004", "100000000", StringComparison.Ordinal);
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(altered);
+        using var parsed = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(Accepted, schema)));
+        var inputs = parsed.RootElement.GetProperty("inputs");
+        Assert.AreEqual(100000000, inputs.GetProperty("new_categoriatarifa").GetInt32());
+        Assert.AreEqual(100000000, inputs.GetProperty("new_preestado").GetInt32());
+        Assert.AreEqual(100000000, inputs.GetProperty("new_proyecctoespecifico").GetInt32());
+    }
+
+    [TestMethod]
+    public void AmbiguousMetadataChoicesRequireExplicitOptionConfiguration()
+    {
+        var altered = Schema.Replace(
+            """{"label":"Categoría","value":100000001}""",
+            """{"label":"Categoría A","value":100000000},{"label":"Categoría B","value":100000002}""",
+            StringComparison.Ordinal);
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(altered);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            DynamicsQuotePayloadBuilder.Build(Accepted, schema));
+        var options = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string,string?> {
+                ["DynamicsQuoteSync:Choices:new_categoriatarifa"] = "100000002"
+            }).Build();
+        using var parsed = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(Accepted, schema, options)));
+        Assert.AreEqual(100000002, parsed.RootElement.GetProperty("inputs")
+            .GetProperty("new_categoriatarifa").GetInt32());
     }
 
     [TestMethod]

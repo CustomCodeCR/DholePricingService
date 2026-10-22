@@ -26,7 +26,7 @@ public static class DynamicsQuotePayloadBuilder
         JsonSerializer.Deserialize<DynamicsCrudSchema>(response, Json)
         ?? throw new InvalidOperationException("Empty Dynamics CRUD schema.");
 
-    public static object Build(string acceptedSnapshot, DynamicsCrudSchema schema)
+    public static object Build(string acceptedSnapshot, DynamicsCrudSchema schema, IConfiguration? configuration = null)
     {
         if (schema.Name != "crear_oferta" || schema.EntityName != "quote" ||
             schema.Operation != "create" || schema.ConnectionCode != "principal" ||
@@ -75,10 +75,10 @@ public static class DynamicsQuotePayloadBuilder
                 "new_cantidadequipos" => Quantity(rate),
                 // Exact choices configured by the business for crear_oferta.
                 "customeridtype" => "quote",
-                "new_categoriatarifa" => 100000001,
-                "new_preestado" => 100000003,
-                "new_proyecctoespecifico" => 100000004,
-                "new_tipodecliente" => 100000000,
+                "new_categoriatarifa" => ConfiguredChoice(field, 100000001, configuration),
+                "new_preestado" => ConfiguredChoice(field, 100000003, configuration),
+                "new_proyecctoespecifico" => ConfiguredChoice(field, 100000004, configuration),
+                "new_tipodecliente" => ConfiguredChoice(field, 100000000, configuration),
                 "new_idtraasignado" => String(rate, "idtraNumber"),
                 // The mapped target is a trusted navigation property in the
                 // published schema, never an arbitrary caller-provided OData key.
@@ -122,6 +122,28 @@ public static class DynamicsQuotePayloadBuilder
             values[field.Name] = value;
         }
         return new { connectionCode = "principal", inputs = values };
+    }
+
+    private static int ConfiguredChoice(DynamicsCrudField field, int preferred,
+        IConfiguration? configuration)
+    {
+        var setting = configuration?["DynamicsQuoteSync:Choices:" + field.Target];
+        if (!string.IsNullOrWhiteSpace(setting))
+        {
+            if (!int.TryParse(setting, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                    out var specified))
+                throw new InvalidOperationException("Invalid Dynamics choice setting for " + field.Target);
+            return specified; // Verified against live Dataverse schema options in Build.
+        }
+        var approved = (field.Options ?? [])
+            .Where(option => option.Value.ValueKind == JsonValueKind.Number &&
+                             option.Value.TryGetInt32(out _))
+            .Select(option => option.Value.GetInt32()).Distinct().ToArray();
+        if (approved.Contains(preferred)) return preferred;
+        if (approved.Length == 1) return approved[0];
+        throw new InvalidOperationException("Dynamics choice for " + field.Target +
+            " is ambiguous or unavailable. Configure DynamicsQuoteSync:Choices:" +
+            field.Target + " using a valid option from the active schema.");
     }
 
     private static string? String(JsonElement rate, string name) =>
