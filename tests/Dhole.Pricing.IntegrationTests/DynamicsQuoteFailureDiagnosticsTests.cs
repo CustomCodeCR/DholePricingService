@@ -49,6 +49,7 @@ public sealed class DynamicsQuoteFailureDiagnosticsTests
     {
         Assert.IsTrue(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure("lookup_name_not_found"));
         Assert.IsTrue(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure("crud_key_invalid"));
+        Assert.IsTrue(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure("production_writes_not_approved"));
         Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure("quote_total_partial_requires_reconciliation"));
         Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure("write_pending_reconciliation"));
     }
