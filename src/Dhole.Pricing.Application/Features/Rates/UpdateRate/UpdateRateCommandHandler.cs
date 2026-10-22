@@ -8,6 +8,7 @@ using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Application.Services;
 using Dhole.Pricing.Domain.Costs.Enums;
+using Dhole.Pricing.Domain.Rates;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
@@ -291,12 +292,26 @@ public sealed class UpdateRateCommandHandler(
             .Distinct()
             .ToHashSet();
 
+        // CIF/CFR/CPT/CIP/DAP/DPU/DDP do not quote international freight.
+        // On edits, remove a historical freight detail even when the wizard sends
+        // no freight rows; preserve every unrelated destination/agent charge.
+        var excludesQuotedFreight = RateQuotedFreightPolicy.ExcludesQuotedFreight(
+            command.IncotermCode, command.IncotermName);
+        if (excludesQuotedFreight)
+        {
+            foreach (var oldFreight in existingDetails.Values.Where(detail =>
+                detail.CostDetailType == CostDetailType.Freight))
+            {
+                removedIds.Add(oldFreight.Id);
+            }
+        }
+
         // An FCL update sends the complete freight distribution for its current
         // equipment. Older equipment freight must never survive a replacement
         // just because the route, carrier and other costs stayed unchanged.
         // This is intentionally limited to Freight: other persisted charges
         // still follow the explicit removal/synchronization rules.
-        if (command.ShipmentMode == ShipmentMode.Fcl
+        if (!excludesQuotedFreight && command.ShipmentMode == ShipmentMode.Fcl
             && extraDetails.Any(detail => detail.CostDetailType == CostDetailType.Freight))
         {
             var retainedFreightIds = extraDetails
@@ -455,7 +470,8 @@ public sealed class UpdateRateCommandHandler(
             return Result.Failure(PricingErrors.RateImportedStructureLocked);
         }
 
-        if (!HasValidFreightDistribution(rate, command.ShipmentMode, extraDetails, containerSpecs))
+        if (!HasValidFreightDistribution(rate, command.ShipmentMode, extraDetails, containerSpecs,
+                command.IncotermCode, command.IncotermName))
         {
             return Result.Failure(PricingErrors.RateInvalidFreightDistribution);
         }
@@ -1203,9 +1219,17 @@ public sealed class UpdateRateCommandHandler(
         RateHeader rate,
         ShipmentMode shipmentMode,
         IReadOnlyCollection<UpsertRateExtraDetailCommandItem> details,
-        IReadOnlyCollection<RateContainerAllocationSpec> containers
+        IReadOnlyCollection<RateContainerAllocationSpec> containers,
+        string? incotermCode,
+        string? incotermName
     )
     {
+        // La distribución de flete sólo existe si ese Incoterm cotiza flete.
+        // Una edición CIF manual debe guardar exactamente los cargos de destino,
+        // sin requerir filas Freight por tipo o cantidad de contenedor.
+        if (RateQuotedFreightPolicy.ExcludesQuotedFreight(incotermCode, incotermName))
+            return !details.Any(detail => detail.CostDetailType == CostDetailType.Freight);
+
         if (rate.SourceImportFclRateId.HasValue) return true;
         if (shipmentMode != ShipmentMode.Fcl) return true;
 
