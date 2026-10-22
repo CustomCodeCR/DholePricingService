@@ -226,6 +226,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             // Do not copy arbitrary upstream response text into the admin API.
             return new(enabled,
                 codeText is "DYNAMICS_QUOTE_WRITES_READY" or "production_writes_not_approved"
+                    or "production_quote_writes_not_approved"
                     ? codeText : "DYNAMICS_PREFLIGHT_UNKNOWN",
                 enabled ? "La política del conector permite crear QUO."
                     : "Producción todavía rechaza las escrituras de QUO. Se requiere autorización del cambio.");
