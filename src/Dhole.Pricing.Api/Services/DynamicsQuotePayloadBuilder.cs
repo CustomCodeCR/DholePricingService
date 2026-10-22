@@ -60,7 +60,7 @@ public static class DynamicsQuotePayloadBuilder
                 "effectiveto" => Date(rate, "validTo"),
                 "msdyn_invoicesetuptotals" => sale,
                 "new_flete" or "new_monto9" => cost,
-                "new_equipo" => Equipment(rate, field),
+                "new_equipo" => EquipmentForSchema(rate, field),
                 "new_cantidadequipos" => Quantity(rate),
                 // Exact choices configured by the business for crear_oferta.
                 "customeridtype" => "quote",
@@ -69,6 +69,14 @@ public static class DynamicsQuotePayloadBuilder
                 "new_proyecctoespecifico" => 100000004,
                 "new_tipodecliente" => 100000000,
                 "new_idtraasignado" => String(rate, "idtraNumber"),
+                // The mapped target is a trusted navigation property in the
+                // published schema, never an arbitrary caller-provided OData key.
+                var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
+                    target.Contains("customerid", StringComparison.OrdinalIgnoreCase)
+                    => String(rate, "clientName"),
+                var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
+                    target.Contains("idtra", StringComparison.OrdinalIgnoreCase)
+                    => String(rate, "idtraNumber"),
                 "new_pol" => String(rate, "polName"),
                 "new_poe" => String(rate, "poeName"),
                 "new_pod" => String(rate, "podName"),
@@ -87,9 +95,12 @@ public static class DynamicsQuotePayloadBuilder
             }
             if (field.DataverseType is "Picklist" or "Status" or "State")
             {
-                if (value is not int integer || field.Options is null ||
-                    !field.Options.Any(o => o.Value.ValueKind == JsonValueKind.Number &&
-                        o.Value.TryGetInt32(out var number) && number == integer))
+                if (field.Options is null || !field.Options.Any(option =>
+                    field.Type == "string" && value is string label &&
+                        Normalize(option.Label) == Normalize(label) ||
+                    field.Type == "integer" && value is int integer &&
+                        option.Value.ValueKind == JsonValueKind.Number &&
+                        option.Value.TryGetInt32(out var number) && number == integer))
                     throw new InvalidOperationException("Invalid Dynamics choice for " + field.Target);
             }
             values[field.Name] = value;
@@ -137,6 +148,18 @@ public static class DynamicsQuotePayloadBuilder
             countValue.TryGetInt32(out var amount) ? amount : 1;
         return qty.ToString(CultureInfo.InvariantCulture) + " x " +
             (String(rate, "containerTypeName") ?? String(rate, "shipmentMode") ?? "Equipo");
+    }
+
+    private static object EquipmentForSchema(JsonElement rate, DynamicsCrudField field)
+    {
+        var numeric = Equipment(rate, field);
+        if (field.Type == "integer") return numeric;
+        if (field.Type != "string")
+            throw new InvalidOperationException("Unsupported equipment schema type.");
+        var option = (field.Options ?? []).SingleOrDefault(o =>
+            o.Value.ValueKind == JsonValueKind.Number &&
+            o.Value.TryGetInt32(out var code) && code == numeric);
+        return option?.Label ?? throw new InvalidOperationException("Dynamics equipment label missing.");
     }
 
     private static int Equipment(JsonElement rate, DynamicsCrudField field)
