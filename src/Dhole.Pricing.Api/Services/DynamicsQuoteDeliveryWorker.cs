@@ -167,6 +167,8 @@ public sealed class DynamicsQuoteDeliveryWorker(
         HttpStatusCode? httpStatus = null;
         string? providerCode = null;
         string? providerTitle = null;
+        string? providerLookupInput = null;
+        string? providerLookupSearchField = null;
         try
         {
             var client = clients.CreateClient("DynamicsQuoteSync");
@@ -219,8 +221,11 @@ public sealed class DynamicsQuoteDeliveryWorker(
             if (!result.IsSuccessStatusCode)
             {
                 httpStatus = result.StatusCode;
-                (providerCode, providerTitle) = DynamicsQuoteFailureDiagnostics.ReadProviderError(
-                    await result.Content.ReadAsStringAsync(ct));
+                var providerResponse = await result.Content.ReadAsStringAsync(ct);
+                (providerCode, providerTitle) =
+                    DynamicsQuoteFailureDiagnostics.ReadProviderError(providerResponse);
+                (providerLookupInput, providerLookupSearchField) =
+                    DynamicsQuoteFailureDiagnostics.ReadProviderLookup(providerResponse);
                 // The connector explicitly guarantees these failures are
                 // BEFORE header creation. Safe to retry after fixing grants;
                 // a failure after header creation has a distinct reconciliation code.
@@ -257,7 +262,8 @@ public sealed class DynamicsQuoteDeliveryWorker(
                 ex is DeliveryException { CanRetry: true };
             job.Status = retryable && job.Attempts < MaxAttempts ? "Retry" : "NeedsAttention";
             var (error, diagnostic) = DynamicsQuoteFailureDiagnostics.Format(
-                stage, ex, postAttempted, httpStatus, providerCode, providerTitle);
+                stage, ex, postAttempted, httpStatus, providerCode, providerTitle,
+                providerLookupInput, providerLookupSearchField);
             job.LastError = error;
             job.ResponseJson = diagnostic;
             job.LeaseExpiresAtUtc = null;
