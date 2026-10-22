@@ -143,7 +143,7 @@ public sealed class DynamicsQuoteDeliveryWorker(
             var schemaText = await schemaResponse.Content.ReadAsStringAsync(ct);
             var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
             stage = "mapping";
-            var body = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema);
+            var body = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema, configuration);
             using var source = JsonDocument.Parse(job.PayloadJson);
             if (!source.RootElement.TryGetProperty("totalSaleAmount", out var saleElement) ||
                 !saleElement.TryGetDecimal(out var totalSaleAmount) || totalSaleAmount < 0)

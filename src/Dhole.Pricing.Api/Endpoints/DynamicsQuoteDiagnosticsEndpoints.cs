@@ -271,7 +271,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 });
             }
             var schema = DynamicsQuotePayloadBuilder.ReadSchema(text);
-            _ = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema);
+            _ = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema, configuration);
             return Results.Ok(new
             {
                 valid = true, stage = "mapping", code = "DYNAMICS_MAPPING_VALID",
