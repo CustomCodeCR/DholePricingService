@@ -281,9 +281,24 @@ public sealed class UpdateRateCommandHandler(
         }
 
         var existingDetails = rate.RateDetails.ToDictionary(x => x.Id);
+        var excludesQuotedFreight = RateQuotedFreightPolicy.ExcludesQuotedFreight(
+            command.IncotermCode, command.IncotermName);
+        var previousFreightDetailIds = existingDetails.Values
+            .Where(detail => detail.CostDetailType == CostDetailType.Freight)
+            .Select(detail => detail.Id)
+            .ToHashSet();
+
+        // Stale CIF snapshots can still send a Freight row that must be deleted.
+        // Preserve all destination/agent charges, resetting an accidental
+        // reference to the removed Freight detail so it can be inserted.
+        IReadOnlyCollection<UpsertRateExtraDetailCommandItem> requestedDetails =
+            command.ExtraDetails ?? Array.Empty<UpsertRateExtraDetailCommandItem>();
+        if (excludesQuotedFreight)
+            requestedDetails = RateDetailUpdateInputNormalizer.WithoutQuotedFreight(
+                requestedDetails, previousFreightDetailIds);
 
         var extraDetails = RateDetailUpdateInputNormalizer.Normalize(
-            command.ExtraDetails ?? Array.Empty<UpsertRateExtraDetailCommandItem>(),
+            requestedDetails,
             existingDetails.ToDictionary(pair => pair.Key, pair => pair.Value.CostId)
         );
 
@@ -295,16 +310,8 @@ public sealed class UpdateRateCommandHandler(
         // CIF/CFR/CPT/CIP/DAP/DPU/DDP do not quote international freight.
         // On edits, remove a historical freight detail even when the wizard sends
         // no freight rows; preserve every unrelated destination/agent charge.
-        var excludesQuotedFreight = RateQuotedFreightPolicy.ExcludesQuotedFreight(
-            command.IncotermCode, command.IncotermName);
         if (excludesQuotedFreight)
-        {
-            foreach (var oldFreight in existingDetails.Values.Where(detail =>
-                detail.CostDetailType == CostDetailType.Freight))
-            {
-                removedIds.Add(oldFreight.Id);
-            }
-        }
+            removedIds.UnionWith(previousFreightDetailIds);
 
         // An FCL update sends the complete freight distribution for its current
         // equipment. Older equipment freight must never survive a replacement
