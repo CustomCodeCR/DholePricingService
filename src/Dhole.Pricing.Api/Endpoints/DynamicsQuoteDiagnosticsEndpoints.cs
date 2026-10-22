@@ -347,12 +347,61 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 });
             }
             var schema = DynamicsQuotePayloadBuilder.ReadSchema(text);
-            _ = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema, configuration);
+            var body = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema, configuration);
+            // Validate each exact-name lookup using the same active
+            // template and approved read grants as execute-with-total.
+            // This POST is a READ-ONLY preview: no quote is created.
+            using var lookupRequest = new HttpRequestMessage(HttpMethod.Post,
+                "https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta/validate-lookups")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(body),
+                    System.Text.Encoding.UTF8, "application/json")
+            };
+            lookupRequest.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+            using var lookupResult = await clients.CreateClient("DynamicsQuoteSync")
+                .SendAsync(lookupRequest, cancellationToken);
+            var lookupJson = await lookupResult.Content.ReadAsStringAsync(cancellationToken);
+            if (!lookupResult.IsSuccessStatusCode)
+            {
+                var (providerCode, _) =
+                    DynamicsQuoteFailureDiagnostics.ReadProviderError(lookupJson);
+                // Only schema identifiers are shown. Never return actual
+                // customer names, IDTRA values, or raw upstream bodies.
+                string? searchInput = null;
+                string? searchField = null;
+                if (lookupJson.Length <= 8192)
+                {
+                    using var detail = JsonDocument.Parse(lookupJson);
+                    static string? Field(JsonElement x, string name) =>
+                        x.ValueKind == JsonValueKind.Object &&
+                        x.TryGetProperty(name, out var value) &&
+                        value.ValueKind == JsonValueKind.String &&
+                        System.Text.RegularExpressions.Regex.IsMatch(
+                            value.GetString() ?? "", @"^[A-Za-z][A-Za-z0-9_]{0,79}$")
+                            ? value.GetString() : null;
+                    searchInput = Field(detail.RootElement, "lookupInput");
+                    searchField = Field(detail.RootElement, "lookupSearchField");
+                }
+                return Results.Ok(new
+                {
+                    valid = false, stage = "lookup",
+                    code = providerCode ?? "DYNAMICS_LOOKUP_VALIDATION_FAILED",
+                    httpStatus = (int)lookupResult.StatusCode,
+                    lookupInput = searchInput, lookupSearchField = searchField,
+                    message = providerCode == "lookup_name_not_found"
+                        ? "No existe un registro relacionado con el valor exacto enviado por Dhole. Revisá el campo de búsqueda indicado y el valor correspondiente en Dynamics."
+                        : providerCode == "lookup_name_ambiguous"
+                        ? "La búsqueda devolvió varios registros. Debe existir un único registro coincidente."
+                        : "No se pudieron comprobar los vínculos de la oferta en Dynamics.",
+                    noPostExecuted = true
+                });
+            }
             return Results.Ok(new
             {
-                valid = true, stage = "mapping", code = "DYNAMICS_MAPPING_VALID",
-                schemaVersion = schema.Version,
-                message = "La plantilla activa acepta el mapeo de esta tarifa. No se ejecutó ningún POST."
+                valid = true, stage = "lookup",
+                code = "DYNAMICS_LOOKUPS_VALID", schemaVersion = schema.Version,
+                message = "El mapeo y los registros relacionados existen. No se creó ninguna QUO.",
+                noPostExecuted = true
             });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
