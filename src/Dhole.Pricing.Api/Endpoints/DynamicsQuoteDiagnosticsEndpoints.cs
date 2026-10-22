@@ -34,6 +34,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         // operations console. The handler verifies either Dynamics admin scope
         // or the existing Pricing margin-approval scope.
         group.MapGet("/dynamics-sync/issues", GetIssuesAsync);
+        group.MapGet("/dynamics-sync/write-readiness", GetReadinessAsync);
         group.MapPost("/{rateId:guid}/dynamics-sync/retry", RetryPreWriteAsync);
         // Explicitly queue an already accepted rate with IDTRA if it predated
         // the integration or the acceptance event was not recorded. Does not
@@ -187,8 +188,69 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             });
     }
 
+
+    private sealed record QuoteReadiness(bool Ready, string Code, string Message);
+
+    private static async Task<QuoteReadiness> CheckQuoteReadinessAsync(
+        IHttpClientFactory clients, IConfiguration configuration, CancellationToken ct)
+    {
+        var apiKey = configuration["DynamicsQuoteSync:ApiKey"];
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return new(false, "DYNAMICS_API_KEY_MISSING",
+                "Falta configurar DynamicsQuoteSync__ApiKey en el servicio de Pricing.");
+
+        const string url = "https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta/write-readiness?connectionCode=principal";
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+            using var response = await clients.CreateClient("DynamicsQuoteSync")
+                .SendAsync(request, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                var (code, title) = DynamicsQuoteFailureDiagnostics.ReadProviderError(body);
+                return new(false, code ?? "DYNAMICS_PREFLIGHT_HTTP_" + (int)response.StatusCode,
+                    title ?? "El conector no autorizó la comprobación de QUO.");
+            }
+            using var json = JsonDocument.Parse(body);
+            var root = json.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("ready", out var ready) ||
+                ready.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                return new(false, "DYNAMICS_PREFLIGHT_INVALID",
+                    "El conector no devolvió una confirmación válida de escrituras.");
+            var enabled = ready.GetBoolean();
+            var codeText = root.TryGetProperty("code", out var value) &&
+                value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+            // Do not copy arbitrary upstream response text into the admin API.
+            return new(enabled,
+                codeText is "DYNAMICS_QUOTE_WRITES_READY" or "production_writes_not_approved"
+                    ? codeText : "DYNAMICS_PREFLIGHT_UNKNOWN",
+                enabled ? "La política del conector permite crear QUO."
+                    : "Producción todavía rechaza las escrituras de QUO. Se requiere autorización del cambio.");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception)
+        {
+            return new(false, "DYNAMICS_PREFLIGHT_UNAVAILABLE",
+                "No se pudo comprobar la autorización del conector. No se reintentó la tarifa.");
+        }
+    }
+
+    private static async Task<IResult> GetReadinessAsync(
+        HttpContext http, IHttpClientFactory clients, IConfiguration configuration,
+        CancellationToken cancellationToken)
+    {
+        if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
+        var check = await CheckQuoteReadinessAsync(clients, configuration, cancellationToken);
+        return Results.Ok(new { ready = check.Ready, code = check.Code,
+            message = check.Message, noPostExecuted = true });
+    }
+
     private static async Task<IResult> RetryPreWriteAsync(
-        Guid rateId, HttpContext http, ServiceDbContext db, CancellationToken cancellationToken)
+        Guid rateId, HttpContext http, ServiceDbContext db,
+        IHttpClientFactory clients, IConfiguration configuration, CancellationToken cancellationToken)
     {
         if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
         var rate = await db.RateHeaders.AsNoTracking()
@@ -214,6 +276,19 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             {
                 code = "sync_reconciliation_required",
                 detail = "No se puede garantizar que Dynamics no haya procesado el POST anterior."
+            });
+
+        // A successful mapping preview does not imply Dataverse writes are
+        // approved. Fail before changing the job so policy-denied retries do
+        // not silently bounce back to NeedsAttention with another HTTP 403.
+        var readiness = await CheckQuoteReadinessAsync(clients, configuration, cancellationToken);
+        if (!readiness.Ready)
+            return Results.Conflict(new
+            {
+                code = "dynamics_quote_writes_not_ready",
+                providerCode = readiness.Code,
+                message = readiness.Message,
+                retryQueued = false
             });
 
         var changed = await db.DynamicsQuoteSyncJobs
