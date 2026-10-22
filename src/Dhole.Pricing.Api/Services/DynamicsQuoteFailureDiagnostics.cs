@@ -25,6 +25,7 @@ public static class DynamicsQuoteFailureDiagnostics
             "table_denied" or "field_denied" or "crud_template_inactive" or
             "crud_template_scope_denied" or "template_mapping_field_denied" or
             "quote_creation_key_required" or "crud_key_invalid" or
+            "production_writes_not_approved" or
             "lookup_name_not_found" or "lookup_name_ambiguous" or
             "lookup_name_field_not_authorized" or "lookup_relation_not_approved" or
             "preview_lookup_target_denied" or "choice_label_not_found" or
