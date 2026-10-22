@@ -9,6 +9,25 @@ namespace Dhole.Pricing.Application.Features.Rates.UpdateRate;
 /// </summary>
 public static class RateDetailUpdateInputNormalizer
 {
+    /// <summary>
+    /// On CFR-DDP edits, historical freight must be removed even if it is still
+    /// included in a stale browser snapshot. Strip only true Freight detail rows;
+    /// a destination/agent charge accidentally carrying a historical Freight ID
+    /// is a NEW detail, not an update to the Freight detail being removed.
+    /// Preserve all other CostIds, amounts, quantities and client billing data.
+    /// </summary>
+    public static IReadOnlyList<UpsertRateExtraDetailCommandItem> WithoutQuotedFreight(
+        IReadOnlyCollection<UpsertRateExtraDetailCommandItem> requested,
+        IReadOnlySet<Guid> persistedFreightDetailIds)
+    {
+        return requested
+            .Where(detail => detail.CostDetailType != Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Freight)
+            .Select(detail => detail.Id is Guid id && persistedFreightDetailIds.Contains(id)
+                ? detail with { Id = null }
+                : detail)
+            .ToArray();
+    }
+
     public static IReadOnlyList<UpsertRateExtraDetailCommandItem> Normalize(
         IReadOnlyCollection<UpsertRateExtraDetailCommandItem> requested,
         IReadOnlyDictionary<Guid, Guid?> persistedCostIds)
