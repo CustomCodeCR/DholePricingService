@@ -19,6 +19,7 @@ public sealed class DynamicsQuoteDeliveryWorker(
     private const int MaxAttempts = 10;
     private const string Url =
         "https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta";
+    private static readonly TimeSpan ReadinessInterval = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan Poll = TimeSpan.FromSeconds(10);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -57,9 +58,25 @@ public sealed class DynamicsQuoteDeliveryWorker(
             logger.LogWarning("Could not enqueue previously diagnosed pre-write failures: {ErrorType}.",
                 ex.GetType().Name);
         }
+        var quoteWritesReady = false;
+        var nextReadinessCheckUtc = DateTime.MinValue;
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await ProcessNextAsync(apiKey, stoppingToken); }
+            // Keep approved acceptance jobs queued without consuming attempts
+            // while the connector is still in production read-only mode.
+            if (DateTime.UtcNow >= nextReadinessCheckUtc)
+            {
+                quoteWritesReady = await ProbeWriteReadinessAsync(apiKey, stoppingToken);
+                nextReadinessCheckUtc = DateTime.UtcNow.Add(ReadinessInterval);
+                if (!quoteWritesReady)
+                    logger.LogWarning(
+                        "Dynamics quote queue paused: production write approval or connector readiness is missing.");
+            }
+            try
+            {
+                if (quoteWritesReady)
+                    await ProcessNextAsync(apiKey, stoppingToken);
+            }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex)
             {
@@ -68,6 +85,32 @@ public sealed class DynamicsQuoteDeliveryWorker(
             }
             try { await Task.Delay(Poll, stoppingToken); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+        }
+    }
+
+    private async Task<bool> ProbeWriteReadinessAsync(string apiKey, CancellationToken ct)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                Url + "/write-readiness?connectionCode=principal");
+            request.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+            using var response = await clients.CreateClient("DynamicsQuoteSync")
+                .SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode) return false;
+            using var body = JsonDocument.Parse(
+                await response.Content.ReadAsStringAsync(ct));
+            var root = body.RootElement;
+            return root.ValueKind == JsonValueKind.Object &&
+                root.TryGetProperty("ready", out var value) &&
+                value.ValueKind == JsonValueKind.True;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception)
+        {
+            // Failed health checks must not dispatch writes. No tokens or
+            // HTTP bodies from the remote service are logged.
+            return false;
         }
     }
 
