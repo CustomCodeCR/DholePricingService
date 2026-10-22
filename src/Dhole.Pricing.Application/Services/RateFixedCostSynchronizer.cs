@@ -117,6 +117,13 @@ public sealed class RateFixedCostSynchronizer(
         var hasExplicitFreight = rate.RateDetails.Any(x =>
             x.CostDetailType == CostDetailType.Freight && !x.CostId.HasValue
         );
+        // Los Incoterms CFR, CIF, CPT, CIP, DAP, DPU y DDP no deben incorporar
+        // flete automático aunque Transporte Internacional siga seleccionado.
+        var excludesQuotedFreight = System.Text.RegularExpressions.Regex.IsMatch(
+            $"{rate.IncotermCode} {rate.IncotermName}",
+            @"(?<![A-Za-z])(?:CFR|CIF|CPT|CIP|DAP|DPU|DDP)(?![A-Za-z])",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
         var exchangeRateSale = rate.ExchangeRateApplied is > 0m
             ? rate.ExchangeRateApplied.Value
             : rate.ExchangeRateSale is > 0m
@@ -128,6 +135,7 @@ public sealed class RateFixedCostSynchronizer(
         {
             activeFixedCostSelections.TryGetValue(cost.Id, out var selection);
             return MatchesRate(cost, rate, selection)
+                && !(excludesQuotedFreight && cost.CostDetailType == CostDetailType.Freight)
                 && !(hasExplicitFreight && cost.CostDetailType == CostDetailType.Freight)
                 && (!preserveExplicitFixedDetails || !existingAmounts.ContainsKey(cost.Id));
         }))
