@@ -15,6 +15,21 @@ public static class DynamicsQuoteFailureDiagnostics
         @"(?i)\b(api[-_ ]?key|password|authorization|bearer|token|secret|connectionstring)\b\s*[:=]\s*[^\s,;]+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    // Reject codes raised before the Dataverse Quote write; never treat
+    // ambiguous network outcomes or partially created Quotes as safe retries.
+    public static bool IsConfirmedPreWriteFailure(string? providerCode) =>
+        providerCode is "quote_total_field_not_authorized" or
+            "quote_id_read_not_authorized" or "quote_detail_relationship_missing" or
+            "quote_lookup_target_not_authorized" or
+            "quote_lookup_name_field_not_authorized" or "write_grant_denied" or
+            "table_denied" or "field_denied" or "crud_template_inactive" or
+            "crud_template_scope_denied" or "template_mapping_field_denied" or
+            "quote_creation_key_required" or "crud_key_invalid" or
+            "lookup_name_not_found" or "lookup_name_ambiguous" or
+            "lookup_name_field_not_authorized" or "lookup_relation_not_approved" or
+            "preview_lookup_target_denied" or "choice_label_not_found" or
+            "choice_label_ambiguous";
+
     public static (string LastError, string DiagnosticJson) Format(
         string stage, Exception exception, bool postAttempted,
         HttpStatusCode? httpStatus = null, string? providerCode = null, string? providerTitle = null)

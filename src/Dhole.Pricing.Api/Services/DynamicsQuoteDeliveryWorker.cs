@@ -181,11 +181,7 @@ public sealed class DynamicsQuoteDeliveryWorker(
                 // The connector explicitly guarantees these failures are
                 // BEFORE header creation. Safe to retry after fixing grants;
                 // a failure after header creation has a distinct reconciliation code.
-                if (providerCode is "quote_total_field_not_authorized" or
-                    "quote_id_read_not_authorized" or "quote_detail_relationship_missing" or
-                    "write_grant_denied" or "table_denied" or "field_denied" or
-                    "crud_template_inactive" or "crud_template_scope_denied" or
-                    "template_mapping_field_denied" or "quote_creation_key_required")
+                if (DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure(providerCode))
                     postAttempted = false;
                 throw new DeliveryException(
                     "Template execution HTTP " + (int)result.StatusCode,

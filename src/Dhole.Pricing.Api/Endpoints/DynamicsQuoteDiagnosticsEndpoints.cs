@@ -326,11 +326,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 (stage.GetString() is "schema" or "mapping" ||
                  stage.GetString() == "execute" &&
                  root.TryGetProperty("providerCode", out var provider) &&
-                 provider.GetString() is ("quote_total_field_not_authorized" or
-                    "quote_id_read_not_authorized" or "quote_detail_relationship_missing" or
-                    "write_grant_denied" or "table_denied" or "field_denied" or
-                    "crud_template_inactive" or "crud_template_scope_denied" or
-                    "template_mapping_field_denied" or "quote_creation_key_required"));
+                 DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure(
+                     provider.GetString()));
         }
         catch (JsonException) { return false; }
     }
