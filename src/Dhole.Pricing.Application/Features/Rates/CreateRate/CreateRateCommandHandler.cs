@@ -10,6 +10,7 @@ using Dhole.Pricing.Application.Services;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
+using Dhole.Pricing.Domain.Rates;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
@@ -972,22 +973,9 @@ public sealed class CreateRateCommandHandler(
         };
     }
 
-    // El comprador no cotiza flete internacional desde CFR hasta DDP.
-    // Una tarifa manual de estos Incoterms se crea sin seleccionar tarifario ni
-    // adjuntar una linea Freight, incluso cuando contiene varios contenedores.
-    private static bool ExcludesQuotedFreight(CreateRateCommand command)
-    {
-        var incoterm = $"{command.IncotermCode} {command.IncotermName}";
-        return System.Text.RegularExpressions.Regex.IsMatch(
-            incoterm,
-            @"(?<![A-Za-z])(?:CFR|CIF|CPT|CIP|DAP|DPU|DDP)(?![A-Za-z])",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase
-                | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
-    }
-
     private static bool HasValidFreightDistribution(CreateRateCommand command)
     {
-        if (ExcludesQuotedFreight(command))
+        if (RateQuotedFreightPolicy.ExcludesQuotedFreight(command.IncotermCode, command.IncotermName))
             return !command.SourceImportFclRateId.HasValue
                 && !command.Details.Any(detail => detail.CostDetailType == CostDetailType.Freight);
 
