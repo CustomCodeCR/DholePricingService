@@ -25,11 +25,28 @@ public static class DynamicsQuoteFailureDiagnostics
             "table_denied" or "field_denied" or "crud_template_inactive" or
             "crud_template_scope_denied" or "template_mapping_field_denied" or
             "quote_creation_key_required" or "crud_key_invalid" or
-            "production_writes_not_approved" or
+            "production_writes_not_approved" or "production_quote_writes_not_approved" or
             "lookup_name_not_found" or "lookup_name_ambiguous" or
             "lookup_name_field_not_authorized" or "lookup_relation_not_approved" or
             "preview_lookup_target_denied" or "choice_label_not_found" or
             "choice_label_ambiguous";
+
+    // A definitive policy rejection happens in the HTTP middleware before
+    // template execution and BEFORE any Dataverse write or idempotency claim.
+    // For migrated records, this exact code + HTTP 403 is proof of safety
+    // even if the old worker recorded postAttempted=true.
+    public static bool IsConfirmedPolicyDenial(JsonElement diagnostic) =>
+        diagnostic.ValueKind == JsonValueKind.Object &&
+        diagnostic.TryGetProperty("httpStatus", out var http) &&
+        http.ValueKind == JsonValueKind.Number && http.TryGetInt32(out var code) &&
+        code == 403 &&
+        diagnostic.TryGetProperty("stage", out var stage) &&
+        stage.ValueKind == JsonValueKind.String &&
+        stage.GetString() == "execute" &&
+        diagnostic.TryGetProperty("providerCode", out var provider) &&
+        provider.ValueKind == JsonValueKind.String &&
+        provider.GetString() is ("production_writes_not_approved" or
+            "production_quote_writes_not_approved");
 
     public static (string LastError, string DiagnosticJson) Format(
         string stage, Exception exception, bool postAttempted,

@@ -206,8 +206,9 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             .SingleOrDefaultAsync(cancellationToken);
         if (job is null) return Results.NotFound(new { code = "sync_job_not_found" });
 
-        // Never replay old/uncategorized or post-attempt failures. An HTTP
-        // timeout or 409 might have successfully written to Dataverse.
+        // Never replay ambiguous writes. A 403 with the exact connector
+        // production-write policy code is a verified pre-write rejection,
+        // including old worker records that marked every POST as attempted.
         if (!CanRetry(job.Status, job.ResponseJson))
             return Results.Conflict(new
             {
@@ -319,6 +320,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         {
             using var doc = JsonDocument.Parse(diagnosticJson ?? "{}");
             var root = doc.RootElement;
+            if (DynamicsQuoteFailureDiagnostics.IsConfirmedPolicyDenial(root))
+                return true;
             return root.TryGetProperty("postAttempted", out var posted) &&
                 posted.ValueKind == JsonValueKind.False &&
                 root.TryGetProperty("stage", out var stage) &&
