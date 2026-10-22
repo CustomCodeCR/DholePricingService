@@ -33,7 +33,8 @@ public static class DynamicsQuoteFailureDiagnostics
 
     public static (string LastError, string DiagnosticJson) Format(
         string stage, Exception exception, bool postAttempted,
-        HttpStatusCode? httpStatus = null, string? providerCode = null, string? providerTitle = null)
+        HttpStatusCode? httpStatus = null, string? providerCode = null, string? providerTitle = null,
+        string? lookupInput = null, string? lookupSearchField = null)
     {
         var code = exception switch
         {
@@ -61,12 +62,26 @@ public static class DynamicsQuoteFailureDiagnostics
                     "DYNAMICS_RESPONSE_INVALID" => "La respuesta del conector no es JSON válido.",
                     _ => "La operación no pudo confirmarse."
                 };
+        // A Dataverse lookup failure is actionable only when the name of the
+        // relationship and its verified search column are visible to operators.
+        // Never persist the customer's name, IDTRA value, or raw HTTP body.
+        lookupInput = SafeIdentifier(lookupInput);
+        lookupSearchField = SafeIdentifier(lookupSearchField);
+        if (providerCode == "lookup_name_not_found" && lookupInput is not null)
+            description = $"Dynamics no encontró un registro para {lookupInput}" +
+                (lookupSearchField is null ? "." : $" en el campo {lookupSearchField}.") +
+                " Revisá el registro relacionado y el mapeo antes de reintentar.";
+        else if (providerCode == "lookup_name_ambiguous" && lookupInput is not null)
+            description = $"Dynamics encontró varios registros para {lookupInput}" +
+                (lookupSearchField is null ? "." : $" en el campo {lookupSearchField}.") +
+                " Se necesita una coincidencia única.";
         var display = Safe($"[{code}] {stage}: {description}", 500);
         var json = JsonSerializer.Serialize(new
         {
             code, stage, message = description,
             httpStatus = (int?)httpStatus,
             providerCode = Safe(providerCode, 100),
+            lookupInput, lookupSearchField,
             postAttempted,
             action = postAttempted
                 ? "Revisar/conciliar la operación en Dynamics antes de reintentar."
@@ -83,6 +98,34 @@ public static class DynamicsQuoteFailureDiagnostics
         var normalized = new string(masked.Where(c => !char.IsControl(c) || c == ' ').ToArray())
             .Trim();
         return normalized.Length > maxLength ? normalized[..maxLength] : normalized;
+    }
+
+    private static string? SafeIdentifier(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        Regex.IsMatch(value, @"^[A-Za-z][A-Za-z0-9_]{0,79}$",
+            RegexOptions.CultureInvariant) ? value : null;
+
+    public static (string? LookupInput, string? LookupSearchField) ReadProviderLookup(
+        string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json.Length > 8192)
+            return (null, null);
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                return (null, null);
+            var root = document.RootElement;
+            var error = root.TryGetProperty("error", out var nested) &&
+                nested.ValueKind == JsonValueKind.Object ? nested : root;
+            static string? Field(JsonElement obj, string property) =>
+                obj.TryGetProperty(property, out var value) &&
+                value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+            return (SafeIdentifier(Field(error, "lookupInput") ?? Field(root, "lookupInput")),
+                SafeIdentifier(Field(error, "lookupSearchField") ??
+                    Field(root, "lookupSearchField")));
+        }
+        catch (JsonException) { return (null, null); }
     }
 
     public static (string? Code, string? Title) ReadProviderError(string? json)
