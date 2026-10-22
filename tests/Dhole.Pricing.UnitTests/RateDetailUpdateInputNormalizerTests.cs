@@ -59,6 +59,77 @@ public sealed class RateDetailUpdateInputNormalizerTests
         Assert.AreEqual(125m, result[1].SaleAmount);
     }
 
+    [TestMethod]
+    public void CifEdit_ExcludesHistoricalFreightButPreservesEveryDestinationCharge()
+    {
+        var oldFreightId = Guid.NewGuid();
+        var advanceManifestId = Guid.NewGuid();
+        var docId = Guid.NewGuid();
+        var freight = Hbl(oldFreightId, null) with
+        {
+            Name = "Flete Internacional",
+            CostDetailType = CostDetailType.Freight,
+        };
+        var advanceManifest = Hbl(advanceManifestId, Guid.NewGuid()) with
+        {
+            Name = "Advance Manifest",
+            CostAmount = 30m,
+            SaleAmount = 35m,
+        };
+        var documentation = Hbl(docId, Guid.NewGuid()) with
+        {
+            Name = "Documentacion",
+            CostAmount = 130m,
+            SaleAmount = 140m,
+        };
+
+        var result = RateDetailUpdateInputNormalizer.WithoutQuotedFreight(
+            [freight, advanceManifest, documentation],
+            new HashSet<Guid> { oldFreightId });
+
+        Assert.AreEqual(2, result.Count);
+        Assert.AreEqual((Guid?)advanceManifestId, result[0].Id);
+        Assert.AreEqual("Advance Manifest", result[0].Name);
+        Assert.AreEqual(35m, result[0].SaleAmount);
+        Assert.AreEqual((Guid?)docId, result[1].Id);
+        Assert.AreEqual(140m, result[1].SaleAmount);
+    }
+
+    [TestMethod]
+    public void CifEdit_WhenAnotherChargeReusesOldFreightId_InsertsItInsteadOfUpdatingRemovedFreight()
+    {
+        var oldFreightId = Guid.NewGuid();
+        var legitimateCostId = Guid.NewGuid();
+        var destinationCharge = Hbl(oldFreightId, legitimateCostId) with
+        {
+            Name = "Release",
+            SaleAmount = 95m,
+        };
+
+        var result = RateDetailUpdateInputNormalizer.WithoutQuotedFreight(
+            [destinationCharge],
+            new HashSet<Guid> { oldFreightId });
+
+        Assert.AreEqual(1, result.Count);
+        Assert.IsNull(result[0].Id);
+        Assert.AreEqual((Guid?)legitimateCostId, result[0].CostId);
+        Assert.AreEqual(95m, result[0].SaleAmount);
+    }
+
+    [TestMethod]
+    public void CifEdit_WithoutHistoricalFreight_LeavesOtherDetailIdsUntouched()
+    {
+        var destinationDetailId = Guid.NewGuid();
+        var destination = Hbl(destinationDetailId, Guid.NewGuid());
+
+        var result = RateDetailUpdateInputNormalizer.WithoutQuotedFreight(
+            [destination],
+            new HashSet<Guid>());
+
+        Assert.AreEqual(1, result.Count);
+        Assert.AreEqual((Guid?)destinationDetailId, result[0].Id);
+    }
+
     private static UpsertRateExtraDetailCommandItem Hbl(Guid id, Guid? costId) => new(
         Id: id,
         CostId: costId,
