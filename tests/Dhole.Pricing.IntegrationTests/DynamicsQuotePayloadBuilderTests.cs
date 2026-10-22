@@ -112,6 +112,49 @@ public sealed class DynamicsQuotePayloadBuilderTests
             inputs.GetProperty("new_idtraasignado").GetString());
     }
 
+
+    [TestMethod]
+    public void ActiveQuoteWithoutOptionalIdtraTextAndCustomerTypeStillBuilds()
+    {
+        // Matches the 22-field "crear_oferta" setup: customer and IDTRA are
+        // name-resolved relationships, while the optional text fields are absent.
+        var oldFields = new[]
+        {
+            """{"name":"customeridtype","target":"customeridtype","type":"string","dataverseType":"EntityName","required":true,"options":[{"label":"Quote","value":"quote"}]},""",
+            """{"name":"new_idtraasignado","target":"new_idtraasignado","type":"string","dataverseType":"String","required":false,"options":[]},"""
+        };
+        var schemaText = Schema;
+        foreach (var oldField in oldFields)
+            schemaText = schemaText.Replace(oldField, "", StringComparison.Ordinal);
+        schemaText = schemaText.Replace(
+            """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            """{"name":"customerid","target":"customerid_account@odata.bind","type":"string","dataverseType":"Customer","required":true,"options":[]},
+              {"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":true,"options":[]},
+              {"name":"msdyn_account","target":"msdyn_account_account@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
+              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            StringComparison.Ordinal);
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(Accepted, schema)));
+        var inputs = doc.RootElement.GetProperty("inputs");
+        Assert.AreEqual("Cliente Prueba", inputs.GetProperty("customerid").GetString());
+        Assert.AreEqual("Cliente Prueba", inputs.GetProperty("msdyn_account").GetString());
+        Assert.AreEqual("IDTRA-2026-045", inputs.GetProperty("new_idtra1").GetString());
+        Assert.IsFalse(inputs.TryGetProperty("customeridtype", out _));
+        Assert.IsFalse(inputs.TryGetProperty("new_idtraasignado", out _));
+    }
+
+    [TestMethod]
+    public void IdtraMustBeMappedToAnAuthorizedField()
+    {
+        var schemaText = Schema.Replace(
+            """{"name":"new_idtraasignado","target":"new_idtraasignado","type":"string","dataverseType":"String","required":false,"options":[]},""",
+            "", StringComparison.Ordinal);
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            DynamicsQuotePayloadBuilder.Build(Accepted, schema));
+    }
+
     [TestMethod]
     public void UnknownEquipmentFailsInsteadOfPickingAnArbitraryCode()
     {

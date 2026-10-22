@@ -43,12 +43,23 @@ public static class DynamicsQuotePayloadBuilder
         if (cost < 0 || sale < 0) throw new InvalidOperationException("Invalid rate totals.");
         var values = new Dictionary<string, object>(StringComparer.Ordinal);
         var fields = schema.Fields.ToDictionary(x => x.Target, StringComparer.Ordinal);
-        foreach (var required in new[] { "name", "customeridtype", "new_equipo", "new_flete",
-                     "new_monto9",
-                     "new_categoriatarifa", "new_preestado", "new_proyecctoespecifico",
-                     "new_tipodecliente", "new_idtraasignado" })
+        // The published CRUD template is user-configurable. customeridtype and
+        // new_idtraasignado are legitimate optional fields in Dataverse and are
+        // not always writable/exposed by the selected quote version. They must
+        // not prevent the automatic quote + quotedetail acceptance integration.
+        foreach (var required in new[] { "name", "new_equipo", "new_flete",
+                     "new_monto9", "new_categoriatarifa", "new_preestado",
+                     "new_proyecctoespecifico", "new_tipodecliente" })
             if (!fields.ContainsKey(required))
                 throw new InvalidOperationException("Published CRUD template is missing " + required);
+        // Preserve a traceable IDTRA on at least one explicitly mapped field.
+        // An existing IDTRA lookup can take the place of the optional text field.
+        if (!schema.Fields.Any(field =>
+            field.Target == "new_idtraasignado" ||
+            field.Name == "new_idtra1" &&
+                field.Target.EndsWith("@odata.bind", StringComparison.Ordinal)))
+            throw new InvalidOperationException(
+                "Published CRUD template must map new_idtra1 or new_idtraasignado.");
 
         foreach (var field in schema.Fields)
         {
@@ -73,6 +84,11 @@ public static class DynamicsQuotePayloadBuilder
                 // published schema, never an arbitrary caller-provided OData key.
                 var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
                     target.Contains("customerid", StringComparison.OrdinalIgnoreCase)
+                    => String(rate, "clientName"),
+                // Custom account lookup selected in the current quote builder.
+                // Its navigation property still comes exclusively from live metadata.
+                var target when field.Name == "msdyn_account" &&
+                    target.EndsWith("@odata.bind", StringComparison.Ordinal)
                     => String(rate, "clientName"),
                 var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
                     target.Contains("idtra", StringComparison.OrdinalIgnoreCase)
