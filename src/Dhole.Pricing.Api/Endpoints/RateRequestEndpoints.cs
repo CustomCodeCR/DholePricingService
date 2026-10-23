@@ -254,16 +254,16 @@ public static class RateRequestEndpoints
     {
         var entity = await db.RateRequests.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (entity is null) return Results.NotFound();
+        if (RateModificationRequestPayload.IsModification(entity.PayloadJson))
+            return Results.Conflict(new {
+                code = "Pricing.ModificationExplicitDeliveryRequired",
+                message = "Salir o liberar la reserva no completa una modificación; sólo Enviar revisión al vendedor puede finalizarla."
+            });
         if (entity.Status == RateRequestStatus.Completed) return Results.NoContent();
         if (entity.Status != RateRequestStatus.Open)
             return Results.Conflict(new { message = "Sólo una solicitud abierta puede completarse." });
         if (!RateRequestLeaseEndpoints.HasActiveLease(context, entity))
             return RateRequestLeaseEndpoints.LeaseRequired();
-
-        if (RateModificationRequestPayload.IsModification(entity.PayloadJson))
-            return Results.Conflict(new {
-                message = "Una modificación debe completarse enviando la nueva revisión de la tarifa."
-            });
 
         entity.MarkCompleted(DateTime.UtcNow);
         await db.SaveChangesAsync(ct);
