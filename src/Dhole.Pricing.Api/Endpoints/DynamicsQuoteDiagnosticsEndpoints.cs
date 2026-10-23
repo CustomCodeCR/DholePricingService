@@ -458,11 +458,21 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                     noPostExecuted = true
                 });
             }
+            using var previewResult = JsonDocument.Parse(lookupJson);
+            var customerOmitted = previewResult.RootElement.ValueKind == JsonValueKind.Object &&
+                previewResult.RootElement.TryGetProperty("customerOmitted", out var omission) &&
+                omission.ValueKind == JsonValueKind.True;
             return Results.Ok(new
             {
                 valid = true, stage = "lookup",
-                code = "DYNAMICS_LOOKUPS_VALID", schemaVersion = schema.Version,
-                message = "El mapeo y los registros relacionados existen. No se creó ninguna QUO.",
+                code = customerOmitted
+                    ? "DYNAMICS_LOOKUPS_VALID_CUSTOMER_OMITTED"
+                    : "DYNAMICS_LOOKUPS_VALID",
+                schemaVersion = schema.Version,
+                customerOmitted,
+                message = customerOmitted
+                    ? "Cliente no encontrado en Dynamics. El conector omitirá customerid; Dataverse podría exigir un cliente. No se creó ninguna QUO."
+                    : "El mapeo y los registros relacionados existen. No se creó ninguna QUO.",
                 noPostExecuted = true
             });
         }
