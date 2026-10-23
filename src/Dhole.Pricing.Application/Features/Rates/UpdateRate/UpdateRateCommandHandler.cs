@@ -365,6 +365,14 @@ public sealed class UpdateRateCommandHandler(
             }
         }
 
+        // A complete edit snapshot is authoritative. Older clients can continue
+        // sending partial updates (ReplaceExtraDetails=false), while the wizard
+        // deletes saved rows absent from its FINAL normalized payload. This also
+        // removes invisible duplicates left behind by catalog/name rehydration.
+        if (command.ReplaceExtraDetails)
+            removedIds.UnionWith(RateDetailUpdateInputNormalizer.MissingPersistedDetailIds(
+                extraDetails, existingDetails.Keys));
+
         // Pantalla 7 is authoritative for persisted rate details during an edit.
         // Keep the original fixed-cost snapshot so the synchronizer can distinguish between
         // details that already belonged to the quote and new catalog costs discovered later.
