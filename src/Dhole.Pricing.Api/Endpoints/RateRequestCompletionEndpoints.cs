@@ -104,7 +104,15 @@ public static class RateRequestCompletionEndpoints
             return Results.NotFound();
 
         if (entity.Status == RateRequestStatus.Completed && entity.RateId == request.RateId)
+        {
+            if (RateModificationRequestPayload.IsModification(entity.PayloadJson)
+                && entity.DeliveryConfirmedAtUtc is null)
+                return Results.Conflict(new {
+                    code = "Pricing.ModificationWasClosedWithoutDelivery",
+                    message = "La modificación figura cerrada sin evidencia de envío. Requiera su reapertura; no se considera atendida."
+                });
             return Results.NoContent();
+        }
         if (entity.Status != RateRequestStatus.Open)
             return Results.Conflict(new { message = "No se puede enviar una solicitud cancelada o cerrada." });
 
