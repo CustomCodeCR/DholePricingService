@@ -80,7 +80,11 @@ public static class BasicRateReportEndpoints
             ["Costo"] = row.Cost
         }).ToList();
         var report = await reports.GenerateTabularAsync(
-            "xlsx", JsonSerializer.Serialize(data),
+            "xlsx", JsonSerializer.Serialize(new
+            {
+                columns = new[] { "Fecha", "QUO", "Cliente", "Detalle de tarifa", "IDTRA", "Moneda", "Venta", "Costo" },
+                rows = data
+            }),
             $"reporte-tarifas-{DateTime.UtcNow:yyyyMMdd-HHmm}",
             "Tarifas", ct);
         return Results.File(report.Content, SpreadsheetMime, report.FileName);
