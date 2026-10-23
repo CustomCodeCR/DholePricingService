@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CustomCodeFramework.Core.Domain.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 
@@ -158,7 +159,7 @@ public sealed class RateRequest : Entity<Guid>
     public void MarkCompleted(DateTime completedAtUtc)
     {
         if (Status != RateRequestStatus.Open) return;
-        if (PayloadJson.Contains("\"kind\":\"Modification\"", StringComparison.Ordinal))
+        if (IsSellerModification())
             throw new InvalidOperationException("Las modificaciones requieren enviar expresamente la revisión al vendedor.");
         Status = RateRequestStatus.Completed;
         CompletedAtUtc = completedAtUtc;
@@ -223,6 +224,24 @@ public sealed class RateRequest : Entity<Guid>
     public void MarkSlaReminderSent(DateTime sentAtUtc)
     {
         SlaReminderSentAtUtc = sentAtUtc;
+    }
+
+    private bool IsSellerModification()
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(PayloadJson);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("kind", out var kind)
+                && kind.ValueKind == JsonValueKind.String
+                && kind.GetString() == "Modification";
+        }
+        catch (JsonException)
+        {
+            // Never permit completing an unrecognizable request via the
+            // ordinary path. It must first be repaired or re-submitted.
+            return true;
+        }
     }
 
     private static string? Normalize(string? value)
