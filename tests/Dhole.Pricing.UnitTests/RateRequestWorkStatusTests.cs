@@ -28,6 +28,32 @@ public sealed class RateRequestWorkStatusTests
     }
 
     [TestMethod]
+    public void CompletingRequest_ClearsWorkStatus()
+    {
+        var request = CreateRequest();
+        request.SetWorkStatus("Working", DateTime.UtcNow);
+
+        request.MarkCompleted(DateTime.UtcNow);
+
+        Assert.AreEqual(RateRequestStatus.Completed, request.Status);
+        Assert.IsNull(request.WorkStatus);
+        Assert.IsNull(request.WorkStatusUpdatedAtUtc);
+    }
+
+    [TestMethod]
+    public void CancellingRequest_ClearsWorkStatus()
+    {
+        var request = CreateRequest();
+        request.SetWorkStatus("RequestedFromProvider", DateTime.UtcNow);
+
+        request.MarkCancelled("SellerCancelled", null, Guid.NewGuid(), "Ventas", DateTime.UtcNow);
+
+        Assert.AreEqual(RateRequestStatus.Cancelled, request.Status);
+        Assert.IsNull(request.WorkStatus);
+        Assert.IsNull(request.WorkStatusUpdatedAtUtc);
+    }
+
+    [TestMethod]
     public void WorkStatus_CannotBeChangedAfterCompletion()
     {
         var request = CreateRequest();
