@@ -68,5 +68,7 @@ public sealed record UpdateRateRequest(
     public int? StorageDays { get; init; }
     public decimal? CargoValue { get; init; }
     public int? TransitDays { get; init; }
+    // True only when the caller sends the full editable detail snapshot.
+    public bool ReplaceExtraDetails { get; init; }
     public Guid? LclGroupAgentId { get; init; }
 }
