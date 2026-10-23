@@ -17,6 +17,7 @@ public static class RateRequestEndpoints
 {
     private const string NotificationEventName = "notifications.notification.requested";
     private const string RateRequestCreatedNotificationType = "pricing.rate-request.created";
+    private const string RateRequestWorkStatusChangedNotificationType = "pricing.rate-request.work-status.changed";
 
     public static IEndpointRouteBuilder MapRateRequestEndpoints(this IEndpointRouteBuilder app)
     {
@@ -510,6 +511,8 @@ public static class RateRequestEndpoints
         UpdateWorkStatusRequest request,
         ServiceDbContext db,
         HttpContext context,
+        IIntegrationEventOutboxWriter outbox,
+        ILoggerFactory loggerFactory,
         CancellationToken ct)
     {
         if (request.WorkStatus is not ("Working" or "RequestedFromProvider"))
@@ -524,6 +527,61 @@ public static class RateRequestEndpoints
 
         entity.SetWorkStatus(request.WorkStatus, DateTime.UtcNow);
         await db.SaveChangesAsync(ct);
+
+        // Solo notificación interna (SignalR) al vendedor titular; no envía correo.
+        // El estado ya quedó guardado, de modo que un fallo de Notifications
+        // nunca revierte el cambio ni duplica la solicitud.
+        if (entity.SellerUserId is { } sellerId && sellerId != Guid.Empty)
+        {
+            var label = entity.WorkStatus == "RequestedFromProvider"
+                ? "Solicitado a proveedor"
+                : "Trabajando";
+            var message = new
+            {
+                notificationType = RateRequestWorkStatusChangedNotificationType,
+                templateCode = (string?)null,
+                channel = "System",
+                entityType = "RateRequest",
+                entityId = entity.Id.ToString(),
+                subject = $"Estado de solicitud: {label}",
+                body = $"La solicitud de {entity.ClientName ?? "su cliente"} cambió a {label}.",
+                payload = new
+                {
+                    type = RateRequestWorkStatusChangedNotificationType,
+                    rateRequestId = entity.Id,
+                    entity.WorkStatus,
+                    entity.WorkStatusUpdatedAtUtc,
+                    route = "/home",
+                },
+                maxAttempts = 3,
+                recipients = new[]
+                {
+                    new
+                    {
+                        userId = sellerId.ToString(),
+                        address = sellerId.ToString(),
+                        displayName = entity.SellerName ?? "Vendedor",
+                    },
+                },
+            };
+
+            try
+            {
+                await outbox.WriteAsync(
+                    NotificationEventName,
+                    NotificationEventName,
+                    message,
+                    correlationId: $"pricing-request-work-status:{id:N}:{entity.WorkStatus}:{entity.WorkStatusUpdatedAtUtc:yyyyMMddHHmmssfff}",
+                    cancellationToken: ct);
+                await db.SaveChangesAsync(ct);
+            }
+            catch (Exception error)
+            {
+                loggerFactory.CreateLogger("RateRequestWorkStatusNotifications").LogError(
+                    error, "No se pudo notificar el cambio de estado de la solicitud {RateRequestId}.", id);
+            }
+        }
+
         return Results.Ok(new { entity.WorkStatus, entity.WorkStatusUpdatedAtUtc });
     }
 
