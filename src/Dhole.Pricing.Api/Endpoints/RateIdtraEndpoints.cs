@@ -36,6 +36,7 @@ public static class RateIdtraEndpoints
         IPricingAuditService audit,
         IRateHeaderCacheService cache,
         HttpContext http,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         if (!HasScope(http.User, PricingConstants.Scopes.RateUpdate) &&
@@ -51,90 +52,135 @@ public static class RateIdtraEndpoints
                 message = "Ingrese los IDTRA separados por comas (máximo 2000 caracteres) y otras referencias de hasta 2000 caracteres."
             });
 
-        // Serialize concurrent assignments on the rate row before reading it;
-        // two simultaneous requests must not create two sync jobs or overwrite
-        // one another's IDTRA.
-        await using var transaction = await db.Database.BeginTransactionAsync(
-            IsolationLevel.ReadCommitted, cancellationToken);
-        await using (var cmd = db.Database.GetDbConnection().CreateCommand())
+        // Npgsql/EF Core may enable retry-on-failure. The entire manually
+        // opened transaction must execute INSIDE its execution strategy,
+        // otherwise SaveChanges throws on a user-initiated transaction.
+        var logger = loggerFactory.CreateLogger("Dhole.Pricing.RateIdtra");
+        var strategy = db.Database.CreateExecutionStrategy();
+        var (response, persisted) = await strategy.ExecuteAsync(async () =>
         {
-            cmd.Transaction = transaction.GetDbTransaction();
-            cmd.CommandText = "SELECT id FROM pricing.\"RateHeaders\" WHERE id = @id FOR UPDATE";
-            var idParameter = cmd.CreateParameter();
-            idParameter.ParameterName = "@id";
-            idParameter.Value = rateId;
-            cmd.Parameters.Add(idParameter);
-            var locked = await cmd.ExecuteScalarAsync(cancellationToken);
-            if (locked is null || locked == DBNull.Value)
-                return Results.NotFound(new { code = "Pricing.RateHeaderNotFound" });
-        }
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                IsolationLevel.ReadCommitted, cancellationToken);
 
-        var rate = await rateHeaders.GetByIdWithDetailsAsync(rateId, cancellationToken);
-        if (rate is null || rate.IsDeleted)
-            return Results.NotFound(new { code = "Pricing.RateHeaderNotFound" });
-
-        if (rate.Status != RateStatus.AcceptedByClient)
-            return Results.Conflict(new
+            // Lock the quote while checking acceptance and existing references.
+            // Concurrent users must not enqueue two CRM jobs for the same QUO.
+            await using (var command = db.Database.GetDbConnection().CreateCommand())
             {
-                code = "Pricing.IdtraRequiresClientAcceptance",
-                message = "El IDTRA solo puede asignarse después de la aceptación del cliente."
-            });
+                command.Transaction = transaction.GetDbTransaction();
+                command.CommandText = "SELECT id FROM pricing.\"RateHeaders\" WHERE id = @id FOR UPDATE";
+                var parameter = command.CreateParameter();
+                parameter.ParameterName = "@id";
+                parameter.Value = rateId;
+                command.Parameters.Add(parameter);
+                var locked = await command.ExecuteScalarAsync(cancellationToken);
+                if (locked is null || locked == DBNull.Value)
+                    return (Response: (IResult)Results.NotFound(new
+                    {
+                        code = "Pricing.RateHeaderNotFound"
+                    }), Persisted: false);
+            }
 
-        if (!string.IsNullOrWhiteSpace(rate.IdtraNumber))
-        {
-            if (string.Equals(rate.IdtraNumber, idtra, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(rate.OtherReferences ?? "", request.OtherReferences?.Trim() ?? "", StringComparison.Ordinal))
-                return Results.Ok(new
+            var rate = await rateHeaders.GetByIdWithDetailsAsync(rateId, cancellationToken);
+            if (rate is null || rate.IsDeleted)
+                return (Response: (IResult)Results.NotFound(new
                 {
-                    rateId, idtraNumber = rate.IdtraNumber,
-                    status = "AcceptedByClient",
-                    message = "El IDTRA ya estaba registrado."
-                });
+                    code = "Pricing.RateHeaderNotFound"
+                }), Persisted: false);
 
-            return Results.Conflict(new
+            if (rate.Status != RateStatus.AcceptedByClient)
+                return (Response: (IResult)Results.Conflict(new
+                {
+                    code = "Pricing.IdtraRequiresClientAcceptance",
+                    message = "El IDTRA solo puede asignarse después de la aceptación del cliente."
+                }), Persisted: false);
+
+            if (!string.IsNullOrWhiteSpace(rate.IdtraNumber))
             {
-                code = "Pricing.IdtraAlreadyAssigned",
-                message = "Esta cotización ya tiene IDTRA. No puede sobrescribirse desde esta acción."
-            });
-        }
+                // A retry after a successful commit must return 200, not 409,
+                // even when the caller uses a different CSV spacing.
+                var normalizedPrevious = NormalizeCsv(rate.IdtraNumber);
+                var normalizedRequested = NormalizeCsv(idtra!);
+                if (string.Equals(normalizedPrevious, normalizedRequested, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(rate.OtherReferences?.Trim() ?? "",
+                        request.OtherReferences?.Trim() ?? "", StringComparison.Ordinal))
+                    return (Response: (IResult)Results.Ok(new
+                    {
+                        rateId, idtraNumber = rate.IdtraNumber,
+                        otherReferences = rate.OtherReferences,
+                        status = "AcceptedByClient",
+                        message = "Los IDTRA ya estaban registrados."
+                    }), Persisted: false);
 
-        var before = PricingAuditSnapshots.From(rate);
-        try
-        {
-            rate.SetIdtraNumber(idtra, http.GetCurrentUserId());
-            rate.SetOtherReferences(request.OtherReferences, http.GetCurrentUserId());
-        }
-        catch (InvalidOperationException exception)
-        {
-            return Results.BadRequest(new { code = "Pricing.InvalidIdtraNumber", message = exception.Message });
-        }
+                return (Response: (IResult)Results.Conflict(new
+                {
+                    code = "Pricing.IdtraAlreadyAssigned",
+                    message = "Esta cotización ya tiene IDTRA. No puede sobrescribirse desde esta acción."
+                }), Persisted: false);
+            }
 
-        await audit.PublishAsync(new PricingAuditEvent(
-            EventType: PricingAuditEventTypes.RateHeaderUpdated,
-            Action: PricingAuditActions.Updated,
-            EntityType: PricingAuditEntityTypes.RateHeader,
-            EntityId: rate.Id,
-            ActorUserId: http.GetCurrentUserId(),
-            Before: before,
-            After: PricingAuditSnapshots.From(rate),
-            Payload: new
+            var before = PricingAuditSnapshots.From(rate);
+            try
             {
-                rate.Id, rate.IdtraNumber, rate.OtherReferences, rate.RevisionNumber,
-                Source = "IdtraAssignedAfterClientAcceptance",
-                DynamicsSyncQueued = true
-            }), cancellationToken);
+                rate.SetIdtraNumber(idtra!, http.GetCurrentUserId());
+                rate.SetOtherReferences(request.OtherReferences, http.GetCurrentUserId());
+            }
+            catch (InvalidOperationException exception)
+            {
+                return (Response: (IResult)Results.BadRequest(new
+                {
+                    code = "Pricing.InvalidIdtraNumber", message = exception.Message
+                }), Persisted: false);
+            }
 
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        await cache.RemoveRateHeaderCacheAsync(rate.Id, cancellationToken);
-        return Results.Ok(new
-        {
-            rateId, idtraNumber = rate.IdtraNumber, otherReferences = rate.OtherReferences,
-            status = "AcceptedByClient",
-            dynamicsSync = "Pending",
-            message = "IDTRA guardado. La creación de la Quote en Dynamics quedó en cola."
+            await audit.PublishAsync(new PricingAuditEvent(
+                EventType: PricingAuditEventTypes.RateHeaderUpdated,
+                Action: PricingAuditActions.Updated,
+                EntityType: PricingAuditEntityTypes.RateHeader,
+                EntityId: rate.Id,
+                ActorUserId: http.GetCurrentUserId(),
+                Before: before,
+                After: PricingAuditSnapshots.From(rate),
+                Payload: new
+                {
+                    rate.Id, rate.IdtraNumber, rate.OtherReferences, rate.RevisionNumber,
+                    Source = "IdtraAssignedAfterClientAcceptance",
+                    DynamicsSyncQueued = true
+                }), cancellationToken);
+
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return (Response: (IResult)Results.Ok(new
+            {
+                rateId, idtraNumber = rate.IdtraNumber, otherReferences = rate.OtherReferences,
+                status = "AcceptedByClient",
+                dynamicsSync = "Pending",
+                message = "IDTRA guardado. La creación de la Quote en Dynamics quedó en cola."
+            }), Persisted: true);
         });
+
+        if (persisted)
+        {
+            try
+            {
+                // Database COMMIT already succeeded. Redis must not turn an
+                // actually saved IDTRA into a misleading HTTP 500 on the UI.
+                await cache.RemoveRateHeaderCacheAsync(rateId, cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                logger.LogWarning(exception,
+                    "IDTRA for rate {RateId} was committed, but cache invalidation failed. TraceId={TraceId}",
+                    rateId, http.TraceIdentifier);
+            }
+        }
+
+        return response;
     }
+
+    private static string NormalizeCsv(string input) =>
+        string.Join(", ", input.Split(',',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase));
 
     private static bool HasScope(ClaimsPrincipal user, string scope) =>
         user.Claims.Where(c => c.Type is "scope" or "scp" or "scopes")
