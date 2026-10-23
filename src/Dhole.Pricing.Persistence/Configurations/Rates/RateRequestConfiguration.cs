@@ -19,6 +19,7 @@ internal sealed class RateRequestConfiguration : IEntityTypeConfiguration<RateRe
         builder.Property(x => x.WorkStatus).HasColumnName("work_status").HasMaxLength(32);
         builder.Property(x => x.WorkStatusUpdatedAtUtc).HasColumnName("work_status_updated_at_utc");
         builder.Property(x => x.PreparedRevisionNumber).HasColumnName("prepared_revision_number");
+        builder.Property(x => x.DeliveryConfirmedAtUtc).HasColumnName("delivery_confirmed_at_utc");
         builder.Property(x => x.RequestedAtUtc).HasColumnName("requested_at_utc").IsRequired();
         builder.Property(x => x.DueAtUtc).HasColumnName("due_at_utc").IsRequired();
         builder.Property(x => x.CompletedAtUtc).HasColumnName("completed_at_utc");
