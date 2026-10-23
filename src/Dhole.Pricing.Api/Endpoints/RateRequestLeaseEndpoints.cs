@@ -53,7 +53,9 @@ public static class RateRequestLeaseEndpoints
                 .SetProperty(x => x.LockedByName, name)
                 .SetProperty(x => x.LockToken, token)
                 .SetProperty(x => x.LockedAtUtc, now)
-                .SetProperty(x => x.LockExpiresAtUtc, expires), ct);
+                .SetProperty(x => x.LockExpiresAtUtc, expires)
+                .SetProperty(x => x.WorkStatus, x => x.WorkStatus ?? "Working")
+                .SetProperty(x => x.WorkStatusUpdatedAtUtc, x => x.WorkStatus == null ? now : x.WorkStatusUpdatedAtUtc), ct);
         if (updated == 1) return Results.Ok(new { token, ownerName = name, expiresAtUtc = expires });
         return await ConflictOrMissingAsync(id, db, ct);
     }
