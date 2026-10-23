@@ -49,12 +49,17 @@ public static class RateRequestCompletionEndpoints
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        var requestIds = await db.RateRequests.AsNoTracking()
+        // Approval of an existing quote must not finish a seller's NEW modification
+        // request. Modifications already point to the original rate before Pricing
+        // has reviewed them; only an explicit complete-rate with a lease may close one.
+        var candidates = await db.RateRequests.AsNoTracking()
             .Where(x => x.RateId == rateId && x.Status == RateRequestStatus.Open)
-            .Select(x => x.Id)
-            .ToArrayAsync(cancellationToken);
+            .Select(x => new { x.Id, x.PayloadJson })
+            .ToListAsync(cancellationToken);
 
-        foreach (var requestId in requestIds)
+        foreach (var requestId in candidates
+            .Where(x => !RateModificationRequestPayload.IsModification(x.PayloadJson))
+            .Select(x => x.Id))
         {
             try
             {
@@ -114,6 +119,11 @@ public static class RateRequestCompletionEndpoints
             return Results.Conflict(new { message = "La solicitud no está vinculada a esta tarifa." });
 
         var isModification = RateModificationRequestPayload.IsModification(entity.PayloadJson);
+        if (isModification && !requireLease)
+            return Results.Conflict(new {
+                code = "Pricing.RateModificationRequiresExplicitCompletion",
+                message = "La modificación sólo puede finalizarse explícitamente por Pricing."
+            });
         if (isModification && entity.RateId != request.RateId)
             return Results.Conflict(new { message = "Una modificación debe conservar su tarifa original." });
 
