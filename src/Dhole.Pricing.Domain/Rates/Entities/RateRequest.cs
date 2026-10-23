@@ -156,6 +156,7 @@ public sealed class RateRequest : Entity<Guid>
         if (Status != RateRequestStatus.Open) return;
         Status = RateRequestStatus.Completed;
         CompletedAtUtc = completedAtUtc;
+        ClearWorkState();
     }
 
     public void MarkCancelled(string reason, string? details, Guid actorId, string actorName, DateTime cancelledAtUtc)
@@ -170,7 +171,14 @@ public sealed class RateRequest : Entity<Guid>
         CancellationReason = reason;
         CancellationDetails = Normalize(details);
 
-        // A cancelled request can never retain an active work lease.
+        // A cancelled or completed request can never retain active work state.
+        ClearWorkState();
+    }
+
+    private void ClearWorkState()
+    {
+        WorkStatus = null;
+        WorkStatusUpdatedAtUtc = null;
         LockedByUserId = null;
         LockedByName = null;
         LockToken = null;
