@@ -268,4 +268,47 @@ public sealed class DynamicsQuotePayloadBuilderTests
                 schema));
     }
 
+    [TestMethod]
+    public void AdditionalAmountsAndCurrencyMapWithoutDuplicatingSupplierCost()
+    {
+        const string extraFields = """
+            {"name":"new_monto1","target":"new_monto1","type":"decimal","dataverseType":"Money","required":false,"options":[]},
+            {"name":"new_monto2","target":"new_monto2","type":"decimal","dataverseType":"Money","required":false,"options":[]},
+            {"name":"new_monto9","target":"new_monto9","type":"decimal","dataverseType":"Money","required":false,"options":[]},
+            {"name":"new_divisa","target":"new_divisa","type":"string","dataverseType":"String","required":false,"options":[]},
+            {"name":"new_totalcostoproveedor","target":"new_totalcostoproveedor","type":"decimal","dataverseType":"Money","required":false,"options":[]},
+            """;
+        var expanded = Schema.Replace(
+            """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            extraFields + "\n" +
+            """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            StringComparison.Ordinal);
+        using var result = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(Accepted, DynamicsQuotePayloadBuilder.ReadSchema(expanded))));
+        var inputs = result.RootElement.GetProperty("inputs");
+        Assert.AreEqual(1800.75m, inputs.GetProperty("new_monto1").GetDecimal());
+        Assert.AreEqual(0m, inputs.GetProperty("new_monto2").GetDecimal());
+        Assert.AreEqual(0m, inputs.GetProperty("new_monto9").GetDecimal());
+        Assert.AreEqual("USD", inputs.GetProperty("new_divisa").GetString());
+        Assert.AreEqual(1800.75m, inputs.GetProperty("new_totalcostoproveedor").GetDecimal());
+    }
+
+    [TestMethod]
+    public void TenthIdtraIsMappedIfActiveTemplateApprovesTenLookups()
+    {
+        const string original = """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""";
+        var lookups = string.Join(",\n", Enumerable.Range(1, 10).Select(i =>
+            "{\"name\":\"new_idtra" + i + "\",\"target\":\"new_idtra" + i +
+            "_incident@odata.bind\",\"type\":\"string\",\"dataverseType\":\"Lookup\",\"required\":false,\"options\":[]}"));
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema.Replace(original,
+            lookups + ",\n" + original, StringComparison.Ordinal));
+        var csv = string.Join(", ", Enumerable.Range(1, 10).Select(i => "IDTRA" + i));
+        using var result = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(
+                Accepted.Replace("IDTRA-2026-045", csv, StringComparison.Ordinal), schema)));
+        var inputs = result.RootElement.GetProperty("inputs");
+        Assert.AreEqual("IDTRA10", inputs.GetProperty("new_idtra10").GetString());
+        Assert.AreEqual(csv, inputs.GetProperty("new_idtraasignado").GetString());
+    }
+
 }
