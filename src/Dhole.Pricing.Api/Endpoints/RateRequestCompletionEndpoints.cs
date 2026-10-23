@@ -144,10 +144,11 @@ public static class RateRequestCompletionEndpoints
             return Results.BadRequest(new { message = "La tarifa indicada no existe." });
 
         if (isModification
-            && rate.RevisionNumber <= RateModificationRequestPayload.SourceRevisionNumber(entity.PayloadJson))
+            && (rate.RevisionNumber <= RateModificationRequestPayload.SourceRevisionNumber(entity.PayloadJson)
+                || entity.PreparedRevisionNumber != rate.RevisionNumber))
             return Results.Conflict(new {
                 code = "Pricing.RateModificationRevisionRequired",
-                message = "Primero guarde una nueva revisión con los cambios solicitados antes de completar la solicitud."
+                message = "Primero guarde la modificación desde el wizard y prepare esta revisión antes de enviarla al vendedor."
             });
 
         if (entity.RateId.HasValue && entity.RateId != request.RateId)
