@@ -43,11 +43,12 @@ public static class RateIdtraEndpoints
             return Results.Forbid();
 
         var idtra = request.IdtraNumber?.Trim();
-        if (string.IsNullOrWhiteSpace(idtra) || idtra.Length > 100)
+        if (string.IsNullOrWhiteSpace(idtra) || idtra.Length > 2000 ||
+            request.OtherReferences?.Length > 2000)
             return Results.BadRequest(new
             {
                 code = "Pricing.InvalidIdtraNumber",
-                message = "Ingresá un IDTRA de 1 a 100 caracteres."
+                message = "Ingrese los IDTRA separados por comas (máximo 2000 caracteres) y otras referencias de hasta 2000 caracteres."
             });
 
         // Serialize concurrent assignments on the rate row before reading it;
@@ -81,7 +82,8 @@ public static class RateIdtraEndpoints
 
         if (!string.IsNullOrWhiteSpace(rate.IdtraNumber))
         {
-            if (string.Equals(rate.IdtraNumber, idtra, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(rate.IdtraNumber, idtra, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(rate.OtherReferences ?? "", request.OtherReferences?.Trim() ?? "", StringComparison.Ordinal))
                 return Results.Ok(new
                 {
                     rateId, idtraNumber = rate.IdtraNumber,
@@ -100,6 +102,7 @@ public static class RateIdtraEndpoints
         try
         {
             rate.SetIdtraNumber(idtra, http.GetCurrentUserId());
+            rate.SetOtherReferences(request.OtherReferences, http.GetCurrentUserId());
         }
         catch (InvalidOperationException exception)
         {
@@ -116,7 +119,7 @@ public static class RateIdtraEndpoints
             After: PricingAuditSnapshots.From(rate),
             Payload: new
             {
-                rate.Id, rate.IdtraNumber, rate.RevisionNumber,
+                rate.Id, rate.IdtraNumber, rate.OtherReferences, rate.RevisionNumber,
                 Source = "IdtraAssignedAfterClientAcceptance",
                 DynamicsSyncQueued = true
             }), cancellationToken);
@@ -126,7 +129,7 @@ public static class RateIdtraEndpoints
         await cache.RemoveRateHeaderCacheAsync(rate.Id, cancellationToken);
         return Results.Ok(new
         {
-            rateId, idtraNumber = rate.IdtraNumber,
+            rateId, idtraNumber = rate.IdtraNumber, otherReferences = rate.OtherReferences,
             status = "AcceptedByClient",
             dynamicsSync = "Pending",
             message = "IDTRA guardado. La creación de la Quote en Dynamics quedó en cola."
@@ -139,5 +142,5 @@ public static class RateIdtraEndpoints
                 StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
             .Any(value => value == scope || value is "pricing.*" or "*");
 
-    public sealed record AssignIdtraRequest(string? IdtraNumber);
+    public sealed record AssignIdtraRequest(string? IdtraNumber, string? OtherReferences = null);
 }
