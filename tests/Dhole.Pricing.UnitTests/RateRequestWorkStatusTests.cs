@@ -129,7 +129,7 @@ public sealed class RateRequestWorkStatusTests
         shipmentMode: "LTL",
         originName: "Colón",
         destinationName: "San Salvador",
-        payloadJson: "{\"kind\":\"Modification\",\"modification\":{\"sourceRevisionNumber\":1}}");
+        payloadJson: "{ \"kind\": \"Modification\", \"modification\": { \"sourceRevisionNumber\": 1 } }");
 
     private static RateRequest CreateRequest() => RateRequest.Create(
         RateRequestPriority.Green,
