@@ -1035,7 +1035,8 @@ public static class RateEndpoints
                 request.Reason,
                 request.IdtraNumber,
                 httpContext.GetCurrentUserId(),
-                canApproveLowMargin
+                canApproveLowMargin,
+                request.OtherReferences
             ),
             cancellationToken
         );
