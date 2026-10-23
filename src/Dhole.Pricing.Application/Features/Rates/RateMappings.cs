@@ -153,6 +153,7 @@ internal static class RateMappings
                 .ToList()
         )
         {
+            OtherReferences = rate.OtherReferences,
             PendingReapproval = rate.PendingReapproval,
             ReapprovalReason = rate.ReapprovalReason,
             SellerReceivedAtUtc = rate.SellerReceivedAtUtc,
