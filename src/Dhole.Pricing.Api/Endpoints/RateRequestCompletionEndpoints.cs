@@ -215,7 +215,10 @@ public static class RateRequestCompletionEndpoints
             """;
 
         entity.AttachRate(request.RateId);
-        entity.MarkCompleted(DateTime.UtcNow);
+        if (isModification)
+            entity.MarkSellerModificationDelivered(DateTime.UtcNow);
+        else
+            entity.MarkCompleted(DateTime.UtcNow);
 
         // El envío de correo queda en Notifications para que una caída de SMTP no convierta
         // la creación de tarifa en un 502. Notifications maneja reintentos y adjunta el PDF.
