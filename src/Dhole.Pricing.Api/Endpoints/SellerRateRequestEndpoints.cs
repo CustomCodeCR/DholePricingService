@@ -400,6 +400,8 @@ public static class SellerRateRequestEndpoints
             kind = RateModificationRequestPayload.IsModification(request.PayloadJson) ? "Modification" : "New",
             priority = request.Priority.ToString(),
             status = request.Status.ToString(),
+            request.WorkStatus,
+            request.WorkStatusUpdatedAtUtc,
             request.RequestedAtUtc,
             request.DueAtUtc,
             request.CompletedAtUtc,
