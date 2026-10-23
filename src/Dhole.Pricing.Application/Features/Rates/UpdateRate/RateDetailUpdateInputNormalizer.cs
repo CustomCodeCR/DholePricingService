@@ -28,6 +28,23 @@ public static class RateDetailUpdateInputNormalizer
             .ToArray();
     }
 
+    /// <summary>
+    /// When a caller explicitly submits a complete detail snapshot, any saved row
+    /// absent from the final normalized list must be deleted. Use persisted detail
+    /// IDs rather than CostIds: two legitimate rows may reference the same cost.
+    /// </summary>
+    public static IReadOnlyCollection<Guid> MissingPersistedDetailIds(
+        IReadOnlyCollection<UpsertRateExtraDetailCommandItem> normalizedDetails,
+        IEnumerable<Guid> persistedDetailIds)
+    {
+        var retainedIds = normalizedDetails
+            .Where(detail => detail.Id.HasValue)
+            .Select(detail => detail.Id!.Value)
+            .ToHashSet();
+
+        return persistedDetailIds.Where(id => !retainedIds.Contains(id)).ToArray();
+    }
+
     public static IReadOnlyList<UpsertRateExtraDetailCommandItem> Normalize(
         IReadOnlyCollection<UpsertRateExtraDetailCommandItem> requested,
         IReadOnlyDictionary<Guid, Guid?> persistedCostIds)
