@@ -40,6 +40,8 @@ public static class RateRequestEndpoints
             .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapPatch("/{id:guid}/work-status", UpdateWorkStatusAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
+        group.MapPost("/{id:guid}/prepare-modification", PrepareModificationAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
 
         return app;
     }
@@ -506,6 +508,48 @@ public static class RateRequestEndpoints
         return false;
     }
 
+    // Opening a request, claiming its lease or approving its existing quote never
+    // implies the seller's requested changes were applied. Only a successful
+    // wizard save may call this endpoint.
+    private static async Task<IResult> PrepareModificationAsync(
+        Guid id,
+        PrepareRateModificationRequest request,
+        ServiceDbContext db,
+        HttpContext context,
+        CancellationToken ct)
+    {
+        if (request.RateId == Guid.Empty || request.RevisionNumber <= 0)
+            return Results.BadRequest(new { message = "Indique la tarifa y la revisión guardada." });
+
+        var entity = await db.RateRequests.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (entity is null) return Results.NotFound();
+        if (entity.Status != RateRequestStatus.Open
+            || !RateModificationRequestPayload.IsModification(entity.PayloadJson)
+            || entity.RateId != request.RateId)
+            return Results.Conflict(new {
+                code = "Pricing.RateModificationNotOpen",
+                message = "La solicitud debe ser una modificación abierta de la misma tarifa."
+            });
+        if (!RateRequestLeaseEndpoints.HasActiveLease(context, entity))
+            return RateRequestLeaseEndpoints.LeaseRequired();
+
+        var revision = await db.RateHeaders.AsNoTracking()
+            .Where(x => x.Id == request.RateId && !x.IsDeleted)
+            .Select(x => (int?)x.RevisionNumber)
+            .FirstOrDefaultAsync(ct);
+
+        if (revision is null || revision != request.RevisionNumber
+            || revision <= RateModificationRequestPayload.SourceRevisionNumber(entity.PayloadJson))
+            return Results.Conflict(new {
+                code = "Pricing.RateModificationRevisionRequired",
+                message = "Guarde la nueva revisión de esta tarifa antes de habilitar el envío al vendedor."
+            });
+
+        entity.PrepareModification(revision.Value);
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { entity.PreparedRevisionNumber });
+    }
+
     private static async Task<IResult> UpdateWorkStatusAsync(
         Guid id,
         UpdateWorkStatusRequest request,
@@ -596,6 +640,7 @@ public static class RateRequestEndpoints
             status = request.Status.ToString(),
             request.WorkStatus,
             request.WorkStatusUpdatedAtUtc,
+            request.PreparedRevisionNumber,
             request.RequestedAtUtc,
             request.DueAtUtc,
             request.CompletedAtUtc,
@@ -626,6 +671,7 @@ public static class RateRequestEndpoints
         };
     }
 
+    private sealed record PrepareRateModificationRequest(Guid RateId, int RevisionNumber);
     private sealed record UpdateWorkStatusRequest(string? WorkStatus);
     private sealed record CancelRateRequestRequest(string? Reason, string? Details);
 
