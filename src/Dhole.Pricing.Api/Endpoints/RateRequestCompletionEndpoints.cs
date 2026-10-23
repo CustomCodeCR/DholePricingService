@@ -116,10 +116,13 @@ public static class RateRequestCompletionEndpoints
             return Results.Conflict(new { message = "La solicitud no está vinculada a esta tarifa." });
 
         var isModification = RateModificationRequestPayload.IsModification(entity.PayloadJson);
-        if (isModification && !requireLease)
+        // Being linked to an existing quote or releasing a tab lease is not
+        // approval to deliver a seller-requested amendment. Require an explicit,
+        // user-initiated intent from the Send revision action.
+        if (isModification && (request.Confirmation != "SendSellerModification" || !requireLease))
             return Results.Conflict(new {
-                code = "Pricing.RateModificationRequiresExplicitCompletion",
-                message = "La modificación sólo puede finalizarse explícitamente por Pricing."
+                code = "Pricing.RateModificationExplicitDeliveryRequired",
+                message = "La modificación sólo puede completarse con Enviar revisión al vendedor."
             });
         if (isModification && entity.RateId != request.RateId)
             return Results.Conflict(new { message = "Una modificación debe conservar su tarifa original." });
@@ -314,5 +317,5 @@ public static class RateRequestCompletionEndpoints
         return parts.Length == 0 ? "Ruta sin definir" : string.Join(" → ", parts);
     }
 
-    private sealed record CompleteRateRequest(Guid RateId);
+    private sealed record CompleteRateRequest(Guid RateId, string? Confirmation = null);
 }
