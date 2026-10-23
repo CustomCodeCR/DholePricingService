@@ -859,6 +859,7 @@ public static class RateEndpoints
                 LclGroupAgentId = request.LclGroupAgentId,
                 SourceImportFclRateId = request.SourceImportFclRateId,
                 UpdateReason = request.UpdateReason,
+                ReplaceExtraDetails = request.ReplaceExtraDetails,
                 PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
                 StorageDays = request.StorageDays,
                 CargoValue = request.CargoValue,
