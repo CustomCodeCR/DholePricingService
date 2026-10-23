@@ -28,6 +28,11 @@ public static class RateRequestEndpoints
         group.MapPost("/", CreateAsync)
             .RequireIdempotency()
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
+        // Historial solo para Pricing: las solicitudes vinculadas dejan de aparecer en /open.
+        group.MapGet("/linked", GetLinkedAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
+        group.MapGet("/by-rate/{rateId:guid}", GetOriginalByRateAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapGet("/open", GetOpenAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/{id:guid}", GetByIdAsync)
@@ -207,6 +212,61 @@ public static class RateRequestEndpoints
                 || !x.RateId.HasValue || !linkedExistingRateIds.Contains(x.RateId.Value))
             .Select(ToDto)
             .ToArray());
+    }
+
+    // Keep the original sales snapshot intact; never reconstruct it from the quote.
+    private static async Task<IResult> GetOriginalByRateAsync(
+        Guid rateId, ServiceDbContext db, CancellationToken ct)
+    {
+        var exists = await db.RateHeaders.AsNoTracking()
+            .AnyAsync(x => x.Id == rateId && !x.IsDeleted, ct);
+        if (!exists) return Results.NotFound();
+
+        var linked = await db.RateRequests.AsNoTracking()
+            .Where(x => x.RateId == rateId)
+            .OrderBy(x => x.RequestedAtUtc)
+            .ToListAsync(ct);
+        var original = linked.FirstOrDefault(x =>
+            !RateModificationRequestPayload.IsModification(x.PayloadJson));
+        return original is null ? Results.NotFound() : Results.Ok(ToDto(original));
+    }
+
+    // A compact historical index. It never includes the full request payload or
+    // unlinked work items and does not change the existing open queue.
+    private static async Task<IResult> GetLinkedAsync(
+        ServiceDbContext db, CancellationToken ct)
+    {
+        var requests = await db.RateRequests.AsNoTracking()
+            .Where(x => x.RateId.HasValue)
+            .OrderByDescending(x => x.RequestedAtUtc)
+            .Take(1000)
+            .ToListAsync(ct);
+        var ids = requests.Select(x => x.RateId!.Value).Distinct().ToArray();
+        var rates = await db.RateHeaders.AsNoTracking()
+            .Where(x => ids.Contains(x.Id) && !x.IsDeleted)
+            .Select(x => new { x.Id, x.QuoNumber, x.RateCode })
+            .ToDictionaryAsync(x => x.Id, ct);
+
+        return Results.Ok(requests
+            .Where(x => x.RateId.HasValue && rates.ContainsKey(x.RateId.Value)
+                && !RateModificationRequestPayload.IsModification(x.PayloadJson))
+            .Take(300)
+            .Select(x => new
+            {
+                x.Id,
+                x.RateId,
+                quoNumber = rates[x.RateId!.Value].QuoNumber
+                    ?? rates[x.RateId.Value].RateCode,
+                x.SellerName,
+                x.ClientName,
+                x.ExecutiveName,
+                x.ShipmentMode,
+                x.OriginName,
+                x.DestinationName,
+                x.RequestedAtUtc,
+                status = x.Status.ToString(),
+                priority = x.Priority.ToString(),
+            }).ToArray());
     }
 
     private static async Task<IResult> GetByIdAsync(Guid id, ServiceDbContext db, CancellationToken ct)
