@@ -130,6 +130,36 @@ public sealed class RateDetailUpdateInputNormalizerTests
         Assert.AreEqual((Guid?)destinationDetailId, result[0].Id);
     }
 
+    [TestMethod]
+    public void CompleteEditSnapshot_RemovesOnlyOmittedPersistedDetailIds()
+    {
+        var retainedVgmId = Guid.NewGuid();
+        var staleVgmId = Guid.NewGuid();
+        var retainedHblId = Guid.NewGuid();
+        var newHandling = Hbl(Guid.NewGuid(), Guid.NewGuid()) with { Id = null };
+        var snapshot = new[]
+        {
+            Hbl(retainedVgmId, Guid.NewGuid()) with { Name = "VGM", SaleAmount = 30m },
+            Hbl(retainedHblId, Guid.NewGuid()),
+            newHandling
+        };
+
+        var missing = RateDetailUpdateInputNormalizer.MissingPersistedDetailIds(
+            snapshot, [retainedVgmId, staleVgmId, retainedHblId]);
+
+        CollectionAssert.AreEquivalent(new[] { staleVgmId }, missing.ToArray());
+    }
+
+    [TestMethod]
+    public void CompleteEditSnapshot_EmptyPayloadRemovesAllPriorDetails()
+    {
+        var first = Guid.NewGuid();
+        var second = Guid.NewGuid();
+        var missing = RateDetailUpdateInputNormalizer.MissingPersistedDetailIds(
+            Array.Empty<UpsertRateExtraDetailCommandItem>(), [first, second]);
+        CollectionAssert.AreEquivalent(new[] { first, second }, missing.ToArray());
+    }
+
     private static UpsertRateExtraDetailCommandItem Hbl(Guid id, Guid? costId) => new(
         Id: id,
         CostId: costId,
