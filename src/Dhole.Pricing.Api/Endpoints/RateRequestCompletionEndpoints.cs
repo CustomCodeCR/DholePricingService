@@ -103,13 +103,10 @@ public static class RateRequestCompletionEndpoints
         if (entity is null)
             return Results.NotFound();
 
+        if (entity.Status == RateRequestStatus.Completed && entity.RateId == request.RateId)
+            return Results.NoContent();
         if (entity.Status != RateRequestStatus.Open)
-        {
-            if (entity.RateId == request.RateId)
-                return Results.NoContent();
-
-            return Results.Conflict(new { message = "La solicitud ya fue completada." });
-        }
+            return Results.Conflict(new { message = "No se puede enviar una solicitud cancelada o cerrada." });
 
         if (requireLease && !RateRequestLeaseEndpoints.HasActiveLease(httpContext, entity))
             return RateRequestLeaseEndpoints.LeaseRequired();
