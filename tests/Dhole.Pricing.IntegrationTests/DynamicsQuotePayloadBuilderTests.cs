@@ -200,4 +200,72 @@ public sealed class DynamicsQuotePayloadBuilderTests
                 Accepted.Replace("40 HC", "20 Flat Rack")
                     .Replace("40HC", "20FLAT"), schema));
     }
+    [TestMethod]
+    public void ParsesFirstIdtraSegmentAndKeepsEmbeddedIdtraPrefixes()
+    {
+        CollectionAssert.AreEqual(
+            new[] { "IDTRA999.12565" },
+            DynamicsQuotePayloadBuilder.ParseIdtraNumbers(
+                "IDTRA IDTRA999.12565 // QUO-00000-000316 // QUO-11229-Q4X8M7"));
+        CollectionAssert.AreEqual(
+            new[] { "IDTRA999.12565", "IDTRA999.12566" },
+            DynamicsQuotePayloadBuilder.ParseIdtraNumbers(
+                "IDTRA IDTRA999.12565, IDTRA999.12566 // QUO-00000-000316"));
+        CollectionAssert.AreEqual(
+            new[] { "IDTRA-2026-00125" },
+            DynamicsQuotePayloadBuilder.ParseIdtraNumbers(
+                "IDTRA-2026-00125 // QUO-00000-000316"));
+    }
+
+    [TestMethod]
+    public void MultipleIdtrasFillTheirDistinctApprovedLookupSlots()
+    {
+        var schemaText = Schema.Replace(
+            """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            """{"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
+              {"name":"new_idtra2","target":"new_idtra2_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
+              {"name":"new_idtra3","target":"new_idtra3_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
+              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            StringComparison.Ordinal);
+        var multiSnapshot = Accepted.Replace("IDTRA-2026-045",
+            "IDTRA IDTRA999.12565, IDTRA999.12566 // QUO-00000-000316 // QUO-11229-Q4X8M7",
+            StringComparison.Ordinal);
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
+        using var result = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(multiSnapshot, schema)));
+        var inputs = result.RootElement.GetProperty("inputs");
+        Assert.AreEqual("IDTRA999.12565", inputs.GetProperty("new_idtra1").GetString());
+        Assert.AreEqual("IDTRA999.12566", inputs.GetProperty("new_idtra2").GetString());
+        Assert.IsFalse(inputs.TryGetProperty("new_idtra3", out _));
+        Assert.AreEqual("IDTRA999.12565, IDTRA999.12566",
+            inputs.GetProperty("new_idtraasignado").GetString());
+    }
+
+    [TestMethod]
+    public void MultipleIdtraNeverSilentlyDiscardsMissingLookupSlots()
+    {
+        var schemaText = Schema.Replace(
+            """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            """{"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
+              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            StringComparison.Ordinal);
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            DynamicsQuotePayloadBuilder.Build(
+                Accepted.Replace("IDTRA-2026-045",
+                    "IDTRA IDTRA999.12565, IDTRA999.12566 // QUO-00000-000316",
+                    StringComparison.Ordinal), schema));
+    }
+
+    [TestMethod]
+    public void MoreThanNineIdtraCannotBeSilentlyTruncated()
+    {
+        var idtras = string.Join(",", Enumerable.Range(1, 10).Select(x => "IDTRA" + x));
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            DynamicsQuotePayloadBuilder.Build(
+                Accepted.Replace("IDTRA-2026-045", idtras, StringComparison.Ordinal),
+                schema));
+    }
+
 }
