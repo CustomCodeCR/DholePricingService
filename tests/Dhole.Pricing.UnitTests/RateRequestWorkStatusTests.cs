@@ -67,6 +67,33 @@ public sealed class RateRequestWorkStatusTests
     }
 
     [TestMethod]
+    public void SellerModificationCannotBeMarkedCompletedWithoutDelivery()
+    {
+        var request = CreateModification();
+        request.SetWorkStatus("Working", DateTime.UtcNow);
+
+        Assert.ThrowsException<InvalidOperationException>(() => request.MarkCompleted(DateTime.UtcNow));
+        Assert.AreEqual(RateRequestStatus.Open, request.Status);
+        Assert.IsNull(request.CompletedAtUtc);
+        Assert.IsNull(request.DeliveryConfirmedAtUtc);
+    }
+
+    [TestMethod]
+    public void SellerModificationCanOnlyCompleteWithPreparedDelivery()
+    {
+        var request = CreateModification();
+        Assert.ThrowsException<InvalidOperationException>(
+            () => request.MarkSellerModificationDelivered(DateTime.UtcNow));
+        request.PrepareModification(2);
+        Assert.AreEqual(RateRequestStatus.Open, request.Status);
+        Assert.IsNull(request.DeliveryConfirmedAtUtc);
+
+        request.MarkSellerModificationDelivered(DateTime.UtcNow);
+        Assert.AreEqual(RateRequestStatus.Completed, request.Status);
+        Assert.AreEqual(request.CompletedAtUtc, request.DeliveryConfirmedAtUtc);
+    }
+
+    [TestMethod]
     public void CompletedRequestCannotBePrepared()
     {
         var request = CreateRequest();
@@ -91,6 +118,18 @@ public sealed class RateRequestWorkStatusTests
         Assert.ThrowsException<ArgumentException>(
             () => request.SetWorkStatus("Completed", DateTime.UtcNow));
     }
+
+    private static RateRequest CreateModification() => RateRequest.Create(
+        RateRequestPriority.Red,
+        sellerUserId: Guid.NewGuid(),
+        sellerName: "Ventas",
+        sellerEmail: "vendedor@example.com",
+        clientName: "BRAME",
+        executiveName: "Ventas",
+        shipmentMode: "LTL",
+        originName: "Colón",
+        destinationName: "San Salvador",
+        payloadJson: "{\"kind\":\"Modification\",\"modification\":{\"sourceRevisionNumber\":1}}");
 
     private static RateRequest CreateRequest() => RateRequest.Create(
         RateRequestPriority.Green,
