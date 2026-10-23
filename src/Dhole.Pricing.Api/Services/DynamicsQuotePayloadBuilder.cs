@@ -41,11 +41,11 @@ public static class DynamicsQuotePayloadBuilder
         var idtras = ParseIdtraNumbers(String(rate, "idtraNumber"));
         if (idtras.Length == 0)
             throw new InvalidOperationException("Accepted rate has no valid IDTRA before the quote references.");
-        if (idtras.Length > 9)
-            throw new InvalidOperationException("A maximum of nine distinct IDTRA values can be mapped to Dynamics.");
+        if (idtras.Length > 10)
+            throw new InvalidOperationException("A maximum of ten distinct IDTRA values can be mapped to Dynamics.");
         var idtraSlots = schema.Fields
             .Select(field => (Field: field, Index: IdtraLookupIndex(field)))
-            .Where(slot => slot.Index is >= 1 and <= 9)
+            .Where(slot => slot.Index is >= 1 and <= 10)
             .Select(slot => slot.Index)
             .ToHashSet();
         var hasIdtraText = schema.Fields.Any(field =>
@@ -56,10 +56,14 @@ public static class DynamicsQuotePayloadBuilder
         if (idtraSlots.Count > 0 && Enumerable.Range(1, idtras.Length)
                 .Any(index => !idtraSlots.Contains(index)))
             throw new InvalidOperationException(
-                "Dynamics crear_oferta has fewer configured new_idtra1..9 lookup fields than the supplied IDTRA values.");
+                "Dynamics crear_oferta has fewer configured new_idtra1..10 lookup fields than the supplied IDTRA values.");
         if (idtraSlots.Count == 0 && !hasIdtraText)
             throw new InvalidOperationException(
                 "Dynamics crear_oferta has no field for the normalized IDTRA values.");
+
+        var amountSlots = schema.Fields
+            .Select(MontoIndex).Where(index => index is >= 1 and <= 9).ToArray();
+        var firstMappedAmount = amountSlots.Length > 0 ? amountSlots.Min() : 0;
 
         var cost = Decimal(rate, "totalCostAmount");
         var sale = Decimal(rate, "totalSaleAmount");
@@ -71,7 +75,7 @@ public static class DynamicsQuotePayloadBuilder
         // not always writable/exposed by the selected quote version. They must
         // not prevent the automatic quote + quotedetail acceptance integration.
         foreach (var required in new[] { "name", "new_equipo", "new_flete",
-                     "new_monto9", "new_categoriatarifa", "new_preestado",
+                     "new_categoriatarifa", "new_preestado",
                      "new_proyecctoespecifico", "new_tipodecliente" })
             if (!fields.ContainsKey(required))
                 throw new InvalidOperationException("Published CRUD template is missing " + required);
@@ -84,6 +88,7 @@ public static class DynamicsQuotePayloadBuilder
         foreach (var field in schema.Fields)
         {
             var idtraIndex = IdtraLookupIndex(field);
+            var montoIndex = MontoIndex(field);
             object? value = field.Target switch
             {
                 "name" => String(rate, "rateName") ?? String(rate, "rateCode"),
@@ -91,7 +96,14 @@ public static class DynamicsQuotePayloadBuilder
                 "effectivefrom" => Date(rate, "validFrom"),
                 "effectiveto" => Date(rate, "validTo"),
                 "msdyn_invoicesetuptotals" => sale,
-                "new_flete" or "new_monto9" => cost,
+                "new_flete" => cost,
+                // The quote snapshot has one consolidated supplier cost, not
+                // nine independent supplier bills. Put it in the FIRST mapped
+                // amount field, never in several fields (which doubles totals).
+                var target when montoIndex is >= 1 and <= 9 =>
+                    montoIndex == firstMappedAmount ? cost : 0m,
+                // Only mapped, writable total-cost fields are eligible here.
+                "new_totalcostoproveedor" => cost,
                 "new_equipo" => EquipmentForSchema(rate, field),
                 "new_cantidadequipos" => Quantity(rate),
                 // Exact choices configured by the business for crear_oferta.
@@ -101,6 +113,7 @@ public static class DynamicsQuotePayloadBuilder
                 "new_proyecctoespecifico" => ConfiguredChoice(field, 100000004, configuration),
                 "new_tipodecliente" => ConfiguredChoice(field, 100000000, configuration),
                 "new_idtraasignado" => string.Join(", ", idtras),
+                "new_divisa" or "new_moneda" => String(rate, "currencyCode"),
                 // The mapped target is a trusted navigation property in the
                 // published schema, never an arbitrary caller-provided OData key.
                 var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
@@ -111,8 +124,11 @@ public static class DynamicsQuotePayloadBuilder
                 var target when field.Name == "msdyn_account" &&
                     target.EndsWith("@odata.bind", StringComparison.Ordinal)
                     => String(rate, "clientName"),
-                var target when idtraIndex is >= 1 and <= 9
+                var target when idtraIndex is >= 1 and <= 10
                     => idtraIndex <= idtras.Length ? idtras[idtraIndex - 1] : null,
+                var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
+                    field.Name.Equals("transactioncurrencyid", StringComparison.OrdinalIgnoreCase)
+                    => String(rate, "currencyCode"),
                 "new_pol" => String(rate, "polName"),
                 "new_poe" => String(rate, "poeName"),
                 "new_pod" => String(rate, "podName"),
@@ -162,11 +178,21 @@ public static class DynamicsQuotePayloadBuilder
             .ToArray();
     }
 
+    private static int MontoIndex(DynamicsCrudField field)
+    {
+        if (field.Target.EndsWith("@odata.bind", StringComparison.Ordinal))
+            return 0;
+        var match = Regex.Match(field.Target, @"^new_monto([1-9])$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success ? int.Parse(match.Groups[1].Value,
+            CultureInfo.InvariantCulture) : 0;
+    }
+
     private static int IdtraLookupIndex(DynamicsCrudField field)
     {
         if (!field.Target.EndsWith("@odata.bind", StringComparison.Ordinal))
             return 0;
-        var match = Regex.Match(field.Name, @"^new_idtra([1-9])$",
+        var match = Regex.Match(field.Name, @"^new_idtra(10|[1-9])$",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
         return match.Success ? int.Parse(match.Groups[1].Value,
             CultureInfo.InvariantCulture) : 0;
