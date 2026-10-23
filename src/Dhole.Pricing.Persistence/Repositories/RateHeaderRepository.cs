@@ -472,6 +472,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             {
                 CreatedByUserId = x.CreatedBy,
                 LastModifiedByUserId = x.UpdatedBy,
+                OtherReferences = x.OtherReferences,
                 PendingReapproval = x.PendingReapproval,
                 ReapprovalReason = x.ReapprovalReason,
             })
