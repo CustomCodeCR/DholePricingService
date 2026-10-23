@@ -88,6 +88,7 @@ app.MapRateEndpoints();
 app.MapRateIdtraEndpoints();
 app.MapDynamicsQuoteDiagnosticsEndpoints();
 app.MapCommercialRateReportEndpoints();
+app.MapBasicRateReportEndpoints();
 app.MapMarketPricingEndpoints();
 app.MapRateCommentEndpoints();
 app.MapRateUpdateEligibilityEndpoints();
