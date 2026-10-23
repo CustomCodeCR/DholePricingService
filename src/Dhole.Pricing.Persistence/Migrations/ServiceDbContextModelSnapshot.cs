@@ -2742,8 +2742,8 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnName("free_days");
 
                     b.Property<string>("IdtraNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
                         .HasColumnName("idtra_number");
 
                     b.Property<string>("Includes")
@@ -2787,6 +2787,11 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasDefaultValue("TransitDomestic")
                         .HasColumnName("operation_type");
+
+                    b.Property<string>("OtherReferences")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("other_references");
 
                     b.Property<Guid?>("WarehouseId")
                         .HasColumnType("uuid")
