@@ -54,6 +54,28 @@ public sealed class RateRequestWorkStatusTests
     }
 
     [TestMethod]
+    public void ModificationIsNotPreparedJustByOpeningOrWorking()
+    {
+        var request = CreateRequest();
+        request.AttachRate(Guid.NewGuid());
+        request.SetWorkStatus("Working", DateTime.UtcNow);
+        Assert.IsNull(request.PreparedRevisionNumber);
+
+        request.PrepareModification(2);
+        Assert.AreEqual(2, request.PreparedRevisionNumber);
+        Assert.AreEqual(RateRequestStatus.Open, request.Status);
+    }
+
+    [TestMethod]
+    public void CompletedRequestCannotBePrepared()
+    {
+        var request = CreateRequest();
+        request.MarkCompleted(DateTime.UtcNow);
+        Assert.ThrowsException<InvalidOperationException>(
+            () => request.PrepareModification(2));
+    }
+
+    [TestMethod]
     public void WorkStatus_CannotBeChangedAfterCompletion()
     {
         var request = CreateRequest();
