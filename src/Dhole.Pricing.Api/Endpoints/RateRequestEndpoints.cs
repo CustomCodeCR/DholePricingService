@@ -37,6 +37,8 @@ public static class RateRequestEndpoints
             .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapPost("/{id:guid}/cancel", CancelAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
+        group.MapPatch("/{id:guid}/work-status", UpdateWorkStatusAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
 
         return app;
     }
@@ -503,6 +505,28 @@ public static class RateRequestEndpoints
         return false;
     }
 
+    private static async Task<IResult> UpdateWorkStatusAsync(
+        Guid id,
+        UpdateWorkStatusRequest request,
+        ServiceDbContext db,
+        HttpContext context,
+        CancellationToken ct)
+    {
+        if (request.WorkStatus is not ("Working" or "RequestedFromProvider"))
+            return Results.BadRequest(new { code = "Pricing.InvalidRateRequestWorkStatus", message = "Seleccione Trabajando o Solicitado a proveedor." });
+
+        var entity = await db.RateRequests.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (entity is null) return Results.NotFound();
+        if (entity.Status != RateRequestStatus.Open)
+            return Results.Conflict(new { message = "La solicitud ya no está abierta." });
+        if (!RateRequestLeaseEndpoints.HasActiveLease(context, entity))
+            return RateRequestLeaseEndpoints.LeaseRequired();
+
+        entity.SetWorkStatus(request.WorkStatus, DateTime.UtcNow);
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { entity.WorkStatus, entity.WorkStatusUpdatedAtUtc });
+    }
+
     private static object ToDto(RateRequest request)
     {
         using var document = JsonDocument.Parse(request.PayloadJson);
@@ -512,6 +536,8 @@ public static class RateRequestEndpoints
             kind = RateModificationRequestPayload.IsModification(request.PayloadJson) ? "Modification" : "New",
             priority = request.Priority.ToString(),
             status = request.Status.ToString(),
+            request.WorkStatus,
+            request.WorkStatusUpdatedAtUtc,
             request.RequestedAtUtc,
             request.DueAtUtc,
             request.CompletedAtUtc,
@@ -542,6 +568,7 @@ public static class RateRequestEndpoints
         };
     }
 
+    private sealed record UpdateWorkStatusRequest(string? WorkStatus);
     private sealed record CancelRateRequestRequest(string? Reason, string? Details);
 
     private sealed record CreateRateRequestRequest(
