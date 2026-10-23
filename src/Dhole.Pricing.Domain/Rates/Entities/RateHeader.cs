@@ -233,6 +233,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string? ClientName { get; private set; }
     public string? ExecutiveName { get; private set; }
     public string? IdtraNumber { get; private set; }
+    public string? OtherReferences { get; private set; }
     public string? QuoNumber { get; private set; }
     public string? Includes { get; private set; }
     public string? SubjectTo { get; private set; }
@@ -1310,18 +1311,32 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
     public void SetIdtraNumber(string idtraNumber, Guid? updatedBy)
     {
-        var normalized = Normalize(idtraNumber);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
-            throw new InvalidOperationException("El IDTRA es obligatorio.");
-        }
+        // Store the complete, normalized CSV. Each identifier remains independent
+        // and the legacy IdtraNumber field remains backward-compatible.
+        var numbers = (idtraNumber ?? "").Split(',',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (numbers.Length is < 1 or > 30 ||
+            numbers.Any(value => value.Length > 100 || value.Contains(';')))
+            throw new InvalidOperationException("Indique entre 1 y 30 IDTRA, de hasta 100 caracteres cada uno, separados por comas.");
 
-        if (normalized.Length > 100)
-        {
-            throw new InvalidOperationException("El IDTRA no puede superar los 100 caracteres.");
-        }
+        var normalized = string.Join(", ", numbers);
+        if (normalized.Length > 2000)
+            throw new InvalidOperationException("La lista de IDTRA no puede superar los 2000 caracteres.");
 
         IdtraNumber = normalized;
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
+    }
+
+    public void SetOtherReferences(string? references, Guid? updatedBy)
+    {
+        var normalized = Normalize(references);
+        if (normalized?.Length > 2000)
+            throw new InvalidOperationException("Las otras referencias no pueden superar los 2000 caracteres.");
+        OtherReferences = normalized;
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
     }
