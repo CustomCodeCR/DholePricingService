@@ -47,6 +47,8 @@ public sealed class RateRequest : Entity<Guid>
     // Estado operativo independiente del ciclo de vida Open/Completed/Cancelled.
     public string? WorkStatus { get; private set; }
     public DateTime? WorkStatusUpdatedAtUtc { get; private set; }
+    // Set only after Pricing explicitly saves the revision for this request.
+    public int? PreparedRevisionNumber { get; private set; }
     public DateTime RequestedAtUtc { get; private set; }
     public DateTime DueAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
@@ -173,6 +175,13 @@ public sealed class RateRequest : Entity<Guid>
 
         // A cancelled or completed request can never retain active work state.
         ClearWorkState();
+    }
+
+    public void PrepareModification(int revisionNumber)
+    {
+        if (Status != RateRequestStatus.Open || revisionNumber <= 0)
+            throw new InvalidOperationException("La solicitud debe estar abierta y tener una revisión guardada.");
+        PreparedRevisionNumber = revisionNumber;
     }
 
     private void ClearWorkState()
