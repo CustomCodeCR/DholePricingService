@@ -541,7 +541,7 @@ public static class RateEndpoints
 
         var cargoLines = (request.CargoLines ?? Array.Empty<RateCargoLineRequest>())
             .Select(x => new Dhole.Pricing.Application.Features.Rates.RateCargoLineCommandItem(
-                x.Description, x.Packages, x.Pallets, x.WeightKg, x.LengthCm, x.WidthCm, x.HeightCm))
+                x.Description, x.Packages, x.Pallets, x.WeightKg, x.LengthCm, x.WidthCm, x.HeightCm, x.IsStackable ?? true))
             .ToArray();
 
         var containers = (request.Containers ?? Array.Empty<RateContainerRequest>())
@@ -758,7 +758,7 @@ public static class RateEndpoints
 
         var cargoLines = (request.CargoLines ?? Array.Empty<RateCargoLineRequest>())
             .Select(x => new Dhole.Pricing.Application.Features.Rates.RateCargoLineCommandItem(
-                x.Description, x.Packages, x.Pallets, x.WeightKg, x.LengthCm, x.WidthCm, x.HeightCm))
+                x.Description, x.Packages, x.Pallets, x.WeightKg, x.LengthCm, x.WidthCm, x.HeightCm, x.IsStackable ?? true))
             .ToArray();
 
         var containers = (request.Containers ?? Array.Empty<RateContainerRequest>())
@@ -1035,7 +1035,8 @@ public static class RateEndpoints
                 request.Reason,
                 request.IdtraNumber,
                 httpContext.GetCurrentUserId(),
-                canApproveLowMargin
+                canApproveLowMargin,
+                request.OtherReferences
             ),
             cancellationToken
         );
