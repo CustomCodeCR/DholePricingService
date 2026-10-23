@@ -148,6 +148,12 @@ public static class RateRequestCompletionEndpoints
                 message = "Primero guarde la modificación desde el wizard y prepare esta revisión antes de enviarla al vendedor."
             });
 
+        if (isModification && rate.Status == RateStatus.PendingApproval)
+            return Results.Conflict(new {
+                code = "Pricing.RateModificationPendingApproval",
+                message = "La revisión todavía requiere aprobación de margen antes de enviarse."
+            });
+
         if (entity.RateId.HasValue && entity.RateId != request.RateId)
             return Results.Conflict(new { message = "La solicitud ya está vinculada a otra tarifa." });
 
