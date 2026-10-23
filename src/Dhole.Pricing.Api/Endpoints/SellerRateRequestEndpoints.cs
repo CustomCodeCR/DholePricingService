@@ -402,6 +402,7 @@ public static class SellerRateRequestEndpoints
             status = request.Status.ToString(),
             request.WorkStatus,
             request.WorkStatusUpdatedAtUtc,
+            request.PreparedRevisionNumber,
             request.RequestedAtUtc,
             request.DueAtUtc,
             request.CompletedAtUtc,
