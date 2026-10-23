@@ -73,16 +73,15 @@ public static class BasicRateReportEndpoints
             ["Fecha"] = row.CreatedAtUtc.AddHours(-6).ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
             ["QUO"] = row.Quo,
             ["Cliente"] = row.Client,
-            ["Detalle de tarifa"] = row.Details,
+            ["Detalle de tarifa"] = row.Details + " · " + row.Currency,
             ["IDTRA"] = row.Idtra,
-            ["Moneda"] = row.Currency,
             ["Venta"] = row.Sale,
             ["Costo"] = row.Cost
         }).ToList();
         var report = await reports.GenerateTabularAsync(
             "xlsx", JsonSerializer.Serialize(new
             {
-                columns = new[] { "Fecha", "QUO", "Cliente", "Detalle de tarifa", "IDTRA", "Moneda", "Venta", "Costo" },
+                columns = new[] { "Fecha", "QUO", "Cliente", "Detalle de tarifa", "IDTRA", "Venta", "Costo" },
                 rows = data
             }),
             $"reporte-tarifas-{DateTime.UtcNow:yyyyMMdd-HHmm}",
@@ -125,7 +124,9 @@ public static class BasicRateReportEndpoints
     {
         // Do not mix master tariffs with client quotations.
         var query = db.RateHeaders.AsNoTracking()
-            .Where(rate => !rate.IsDeleted && rate.RateType != RateType.Tariff);
+            .Where(rate => !rate.IsDeleted &&
+                !(rate.RateType == RateType.Tariff &&
+                  rate.ClientName != null && rate.ClientName.ToLower().Contains("tarifario")));
 
         if (startUtc.HasValue)
             query = query.Where(rate => rate.CreatedAtUtc >= startUtc.Value);
