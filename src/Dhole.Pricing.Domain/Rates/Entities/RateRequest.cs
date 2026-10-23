@@ -49,6 +49,8 @@ public sealed class RateRequest : Entity<Guid>
     public DateTime? WorkStatusUpdatedAtUtc { get; private set; }
     // Set only after Pricing explicitly saves the revision for this request.
     public int? PreparedRevisionNumber { get; private set; }
+    // Set only during explicit successful seller-delivery flow; ordinary lease release cannot set this.
+    public DateTime? DeliveryConfirmedAtUtc { get; private set; }
     public DateTime RequestedAtUtc { get; private set; }
     public DateTime DueAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
@@ -156,8 +158,21 @@ public sealed class RateRequest : Entity<Guid>
     public void MarkCompleted(DateTime completedAtUtc)
     {
         if (Status != RateRequestStatus.Open) return;
+        if (PayloadJson.Contains("\"kind\":\"Modification\"", StringComparison.Ordinal))
+            throw new InvalidOperationException("Las modificaciones requieren enviar expresamente la revisión al vendedor.");
         Status = RateRequestStatus.Completed;
         CompletedAtUtc = completedAtUtc;
+        ClearWorkState();
+    }
+
+    public void MarkSellerModificationDelivered(DateTime deliveredAtUtc)
+    {
+        if (Status != RateRequestStatus.Open
+            || PreparedRevisionNumber is null or <= 0)
+            throw new InvalidOperationException("No se puede cerrar una modificación sin revisión preparada.");
+        DeliveryConfirmedAtUtc = deliveredAtUtc;
+        Status = RateRequestStatus.Completed;
+        CompletedAtUtc = deliveredAtUtc;
         ClearWorkState();
     }
 
