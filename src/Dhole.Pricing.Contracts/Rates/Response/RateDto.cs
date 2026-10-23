@@ -86,6 +86,7 @@ public sealed record RateDto(
     IReadOnlyCollection<RateServiceDto> Services
 )
 {
+    public string? OtherReferences { get; init; }
     public bool PendingReapproval { get; init; }
     public string? ReapprovalReason { get; init; }
     public DateTime? SellerReceivedAtUtc { get; init; }
