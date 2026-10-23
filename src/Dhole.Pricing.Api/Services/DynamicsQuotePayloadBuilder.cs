@@ -113,7 +113,7 @@ public static class DynamicsQuotePayloadBuilder
                 "new_proyecctoespecifico" => ConfiguredChoice(field, 100000004, configuration),
                 "new_tipodecliente" => ConfiguredChoice(field, 100000000, configuration),
                 "new_idtraasignado" => string.Join(", ", idtras),
-                "new_divisa" or "new_moneda" => String(rate, "currencyCode"),
+                "new_divisa" or "new_moneda" => CurrencyForSchema(rate, field),
                 // The mapped target is a trusted navigation property in the
                 // published schema, never an arbitrary caller-provided OData key.
                 var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
@@ -176,6 +176,25 @@ public static class DynamicsQuotePayloadBuilder
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static object? CurrencyForSchema(JsonElement rate, DynamicsCrudField field)
+    {
+        var code = String(rate, "currencyCode")?.Trim();
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        if (field.DataverseType is not ("Picklist" or "Status" or "State"))
+            return code;
+        var matches = (field.Options ?? [])
+            .Where(option => Normalize(option.Label) == Normalize(code) ||
+                option.Value.ValueKind == JsonValueKind.String &&
+                Normalize(option.Value.GetString() ?? "") == Normalize(code)).ToArray();
+        if (matches.Length != 1)
+            throw new InvalidOperationException("Dynamics currency option is absent or ambiguous for " + field.Target);
+        return field.Type == "integer" && matches[0].Value.ValueKind == JsonValueKind.Number
+            ? matches[0].Value.GetInt32()
+            : field.Type == "string"
+                ? matches[0].Label
+                : throw new InvalidOperationException("Unsupported Dynamics currency choice type for " + field.Target);
     }
 
     private static int MontoIndex(DynamicsCrudField field)
