@@ -44,6 +44,9 @@ public sealed class RateRequest : Entity<Guid>
 
     public RateRequestPriority Priority { get; private set; }
     public RateRequestStatus Status { get; private set; }
+    // Estado operativo independiente del ciclo de vida Open/Completed/Cancelled.
+    public string? WorkStatus { get; private set; }
+    public DateTime? WorkStatusUpdatedAtUtc { get; private set; }
     public DateTime RequestedAtUtc { get; private set; }
     public DateTime DueAtUtc { get; private set; }
     public DateTime? CompletedAtUtc { get; private set; }
@@ -173,6 +176,16 @@ public sealed class RateRequest : Entity<Guid>
         LockToken = null;
         LockedAtUtc = null;
         LockExpiresAtUtc = null;
+    }
+
+    public void SetWorkStatus(string workStatus, DateTime updatedAtUtc)
+    {
+        if (Status != RateRequestStatus.Open)
+            throw new InvalidOperationException("Sólo puede actualizarse el avance de una solicitud abierta.");
+        if (workStatus is not ("Working" or "RequestedFromProvider"))
+            throw new ArgumentException("Estado de trabajo inválido.", nameof(workStatus));
+        WorkStatus = workStatus;
+        WorkStatusUpdatedAtUtc = updatedAtUtc;
     }
 
     public void MarkSlaReminderSent(DateTime sentAtUtc)
