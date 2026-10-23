@@ -38,10 +38,28 @@ public static class DynamicsQuotePayloadBuilder
             string.IsNullOrWhiteSpace(String(rate, "idtraNumber")))
             throw new InvalidOperationException("Only client-accepted rates with IDTRA may sync.");
 
-        var idtras = (String(rate, "idtraNumber") ?? "").Split(',',
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (idtras.Length > 1 && !schema.Fields.Any(field => field.Target == "new_idtraasignado"))
-            throw new InvalidOperationException("Multiple IDTRA require the new_idtraasignado text field in the published Dynamics quote template; a single lookup cannot hold a CSV.");
+        var idtras = ParseIdtraNumbers(String(rate, "idtraNumber"));
+        if (idtras.Length == 0)
+            throw new InvalidOperationException("Accepted rate has no valid IDTRA before the quote references.");
+        if (idtras.Length > 9)
+            throw new InvalidOperationException("A maximum of nine distinct IDTRA values can be mapped to Dynamics.");
+        var idtraSlots = schema.Fields
+            .Select(field => (Field: field, Index: IdtraLookupIndex(field)))
+            .Where(slot => slot.Index is >= 1 and <= 9)
+            .Select(slot => slot.Index)
+            .ToHashSet();
+        var hasIdtraText = schema.Fields.Any(field =>
+            field.Target == "new_idtraasignado");
+        // A text-only template can preserve the CSV; a template with lookup
+        // slots must have a slot for EVERY supplied IDTRA. Never silently drop
+        // a second or later relationship.
+        if (idtraSlots.Count > 0 && Enumerable.Range(1, idtras.Length)
+                .Any(index => !idtraSlots.Contains(index)))
+            throw new InvalidOperationException(
+                "Dynamics crear_oferta has fewer configured new_idtra1..9 lookup fields than the supplied IDTRA values.");
+        if (idtraSlots.Count == 0 && !hasIdtraText)
+            throw new InvalidOperationException(
+                "Dynamics crear_oferta has no field for the normalized IDTRA values.");
 
         var cost = Decimal(rate, "totalCostAmount");
         var sale = Decimal(rate, "totalSaleAmount");
@@ -59,19 +77,17 @@ public static class DynamicsQuotePayloadBuilder
                 throw new InvalidOperationException("Published CRUD template is missing " + required);
         // Preserve a traceable IDTRA on at least one explicitly mapped field.
         // An existing IDTRA lookup can take the place of the optional text field.
-        if (!schema.Fields.Any(field =>
-            field.Target == "new_idtraasignado" ||
-            field.Name == "new_idtra1" &&
-                field.Target.EndsWith("@odata.bind", StringComparison.Ordinal)))
+        if (!hasIdtraText && !idtraSlots.Contains(1))
             throw new InvalidOperationException(
                 "Published CRUD template must map new_idtra1 or new_idtraasignado.");
 
         foreach (var field in schema.Fields)
         {
+            var idtraIndex = IdtraLookupIndex(field);
             object? value = field.Target switch
             {
                 "name" => String(rate, "rateName") ?? String(rate, "rateCode"),
-                "description" => Description(rate),
+                "description" => Description(rate, idtras),
                 "effectivefrom" => Date(rate, "validFrom"),
                 "effectiveto" => Date(rate, "validTo"),
                 "msdyn_invoicesetuptotals" => sale,
@@ -84,7 +100,7 @@ public static class DynamicsQuotePayloadBuilder
                 "new_preestado" => ConfiguredChoice(field, 100000003, configuration),
                 "new_proyecctoespecifico" => ConfiguredChoice(field, 100000004, configuration),
                 "new_tipodecliente" => ConfiguredChoice(field, 100000000, configuration),
-                "new_idtraasignado" => String(rate, "idtraNumber"),
+                "new_idtraasignado" => string.Join(", ", idtras),
                 // The mapped target is a trusted navigation property in the
                 // published schema, never an arbitrary caller-provided OData key.
                 var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
@@ -95,9 +111,8 @@ public static class DynamicsQuotePayloadBuilder
                 var target when field.Name == "msdyn_account" &&
                     target.EndsWith("@odata.bind", StringComparison.Ordinal)
                     => String(rate, "clientName"),
-                var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
-                    target.Contains("idtra", StringComparison.OrdinalIgnoreCase)
-                    => idtras.Length == 1 ? idtras[0] : null,
+                var target when idtraIndex is >= 1 and <= 9
+                    => idtraIndex <= idtras.Length ? idtras[idtraIndex - 1] : null,
                 "new_pol" => String(rate, "polName"),
                 "new_poe" => String(rate, "poeName"),
                 "new_pod" => String(rate, "podName"),
@@ -127,6 +142,34 @@ public static class DynamicsQuotePayloadBuilder
             values[field.Name] = value;
         }
         return new { connectionCode = "principal", inputs = values };
+    }
+
+    /// <summary>
+    /// The seller's display string may include quote references after //:
+    /// "IDTRA IDTRA999.12565, IDTRA999.12566 // QUO-... // QUO-...".
+    /// Strip only the leading label, never the IDTRA prefix of an actual ID.
+    /// </summary>
+    public static string[] ParseIdtraNumbers(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return [];
+        var segment = raw.Split(["//"], 2, StringSplitOptions.None)[0].Trim();
+        segment = Regex.Replace(segment, @"^IDTRA(?:\s+|\s*:\s*)", "",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Trim();
+        return segment.Split(',', StringSplitOptions.RemoveEmptyEntries |
+                StringSplitOptions.TrimEntries)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static int IdtraLookupIndex(DynamicsCrudField field)
+    {
+        if (!field.Target.EndsWith("@odata.bind", StringComparison.Ordinal))
+            return 0;
+        var match = Regex.Match(field.Name, @"^new_idtra([1-9])$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success ? int.Parse(match.Groups[1].Value,
+            CultureInfo.InvariantCulture) : 0;
     }
 
     private static int ConfiguredChoice(DynamicsCrudField field, int preferred,
@@ -172,10 +215,10 @@ public static class DynamicsQuotePayloadBuilder
             : parsed.ToUniversalTime()).ToString("O", CultureInfo.InvariantCulture);
     }
 
-    private static string Description(JsonElement rate) =>
+    private static string Description(JsonElement rate, string[] idtras) =>
         string.Join(" | ", new[] { String(rate, "rateCode"), String(rate, "clientName"),
             String(rate, "shipmentMode"), String(rate, "currencyCode"),
-            String(rate, "idtraNumber") }.Where(x => !string.IsNullOrWhiteSpace(x)));
+            string.Join(", ", idtras) }.Where(x => !string.IsNullOrWhiteSpace(x)));
 
     private static string Quantity(JsonElement rate)
     {
