@@ -38,6 +38,11 @@ public static class DynamicsQuotePayloadBuilder
             string.IsNullOrWhiteSpace(String(rate, "idtraNumber")))
             throw new InvalidOperationException("Only client-accepted rates with IDTRA may sync.");
 
+        var idtras = (String(rate, "idtraNumber") ?? "").Split(',',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (idtras.Length > 1 && !schema.Fields.Any(field => field.Target == "new_idtraasignado"))
+            throw new InvalidOperationException("Multiple IDTRA require the new_idtraasignado text field in the published Dynamics quote template; a single lookup cannot hold a CSV.");
+
         var cost = Decimal(rate, "totalCostAmount");
         var sale = Decimal(rate, "totalSaleAmount");
         if (cost < 0 || sale < 0) throw new InvalidOperationException("Invalid rate totals.");
@@ -92,7 +97,7 @@ public static class DynamicsQuotePayloadBuilder
                     => String(rate, "clientName"),
                 var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
                     target.Contains("idtra", StringComparison.OrdinalIgnoreCase)
-                    => String(rate, "idtraNumber"),
+                    => idtras.Length == 1 ? idtras[0] : null,
                 "new_pol" => String(rate, "polName"),
                 "new_poe" => String(rate, "poeName"),
                 "new_pod" => String(rate, "podName"),
