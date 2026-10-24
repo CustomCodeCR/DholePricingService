@@ -173,6 +173,26 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.Property<int>("Attempts")
                         .HasColumnType("integer");
 
+                    b.Property<int>("RecoveryAttempt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("RecoveryAttempt");
+
+                    b.Property<DateTime?>("RecoveryApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("RecoveryApprovedAtUtc");
+
+                    b.Property<string>("RecoveryApprovedBy")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("RecoveryApprovedBy");
+
+                    b.Property<string>("RecoveryReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("RecoveryReason");
+
                     b.Property<DateTime?>("CompletedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
