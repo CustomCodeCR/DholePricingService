@@ -142,8 +142,25 @@ public static class DynamicsQuoteFailureDiagnostics
             static string? Read(JsonElement element, string name) =>
                 element.TryGetProperty(name, out var value)
                 && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-            return (Safe(Read(error, "code") ?? Read(root, "code"), 100),
-                    Safe(Read(error, "title") ?? Read(root, "title"), 320));
+            var code = Safe(Read(error, "code") ?? Read(root, "code"), 100);
+            var title = Safe(Read(error, "title") ?? Read(root, "title"), 320);
+            // execute-with-total returns this strictly typed state for an
+            // uncertain header or quotedetail write, without an error.code.
+            // Preserve its stage instead of displaying only generic HTTP 409.
+            if (code is null && Read(root, "state") == "requires_reconciliation")
+            {
+                var stage = Read(root, "stage");
+                return stage switch
+                {
+                    "quote" => ("quote_header_requires_reconciliation",
+                        "La creación de la cabecera de la QUO no se pudo confirmar. Revisá el registro de idempotencia antes de repetirla."),
+                    "total" => ("quote_total_requires_reconciliation",
+                        "La cabecera de la QUO se creó, pero la línea de venta total no quedó confirmada. Conciliá la línea antes de cualquier reintento."),
+                    _ => ("quote_requires_reconciliation",
+                        "La operación de QUO no quedó confirmada. Verificá cabecera y línea en Dynamics antes de reintentar.")
+                };
+            }
+            return (code, title);
         }
         catch (JsonException) { return (null, null); }
     }
