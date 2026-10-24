@@ -215,6 +215,18 @@ public sealed class DynamicsQuotePayloadBuilderTests
             new[] { "IDTRA-2026-00125" },
             DynamicsQuotePayloadBuilder.ParseIdtraNumbers(
                 "IDTRA-2026-00125 // QUO-00000-000316"));
+        CollectionAssert.AreEqual(
+            new[] { "IDTRA999.12585" },
+            DynamicsQuotePayloadBuilder.ParseIdtraNumbers(
+                "IDTRA IDTRA999.12585-QUO 11228"));
+        CollectionAssert.AreEqual(
+            new[] { "IDTRA999.12585", "IDTRA999.12586" },
+            DynamicsQuotePayloadBuilder.ParseIdtraNumbers(
+                "IDTRA IDTRA999.12585-QUO 11228, IDTRA999.12586-QUO 11229 // QUO-00000-000352"));
+        CollectionAssert.AreEqual(
+            new[] { "IDTRA-2026-00125" },
+            DynamicsQuotePayloadBuilder.ParseIdtraNumbers(
+                "IDTRA-2026-00125"));
     }
 
     [TestMethod]
