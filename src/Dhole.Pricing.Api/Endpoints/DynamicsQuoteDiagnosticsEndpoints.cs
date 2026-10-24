@@ -257,10 +257,12 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             // Do not copy arbitrary upstream response text into the admin API.
             return new(enabled,
                 codeText is "DYNAMICS_QUOTE_WRITES_READY" or "production_writes_not_approved"
-                    or "production_quote_writes_not_approved"
+                    or "production_quote_writes_not_approved" or "quote_grants_incomplete"
                     ? codeText : "DYNAMICS_PREFLIGHT_UNKNOWN",
-                enabled ? "La política del conector permite crear QUO."
-                    : "Producción todavía rechaza las escrituras de QUO. Se requiere autorización del cambio.");
+                enabled ? "La clave de Pricing tiene permisos verificados para cabecera, vínculos y línea de venta."
+                    : codeText == "quote_grants_incomplete"
+                        ? "Faltan permisos de la clave activa para la cabecera, vínculos de cliente/IDTRA/divisa o quotedetail. Usá «Autorizar vínculos y venta total» con la clave configurada en Pricing y volvé a comprobar."
+                        : "Producción todavía rechaza las escrituras de QUO. Se requiere autorización del cambio.");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception)
@@ -619,8 +621,11 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                         ? "No existe un registro relacionado con el valor exacto enviado por Dhole. Revisá el campo de búsqueda indicado y el valor correspondiente en Dynamics."
                         : providerCode == "lookup_name_ambiguous"
                         ? "La búsqueda devolvió varios registros. Debe existir un único registro coincidente."
-                        : providerCode is "client_denied" or "lookup_target_denied"
-                        ? "La clave de integración de Pricing no tiene autorizada la lectura de una entidad o campo relacionado (Cuenta, IDTRA o divisa). Usá «Autorizar vínculos y venta total» con la misma clave activa configurada en Pricing. Esta comprobación no crea QUO."
+                        : providerCode == "quote_customer_required"
+                        ? "La plantilla crear_oferta no resolvió el cliente obligatorio customerid_account/customerid_contact de Dynamics. Configurá la relación nativa customerid y asegurá que el cliente exista en Cuentas antes de recuperar la QUO. No se creó ninguna QUO."
+                        : providerCode is "client_denied" or "lookup_target_denied" or
+                          "lookup_name_field_not_authorized" or "lookup_target_fields_denied"
+                        ? "La clave de Pricing no puede consultar una relación requerida. Autorizá la lectura de Cuenta, IDTRA y divisa con «Autorizar vínculos y venta total» para la clave realmente configurada en Pricing. Volvé a diagnosticar antes de recuperar; esta consulta no crea QUO."
                         : "No se pudieron comprobar los vínculos de la oferta en Dynamics.",
                     noPostExecuted = true
                 });
@@ -629,17 +634,19 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             var customerOmitted = previewResult.RootElement.ValueKind == JsonValueKind.Object &&
                 previewResult.RootElement.TryGetProperty("customerOmitted", out var omission) &&
                 omission.ValueKind == JsonValueKind.True;
+            // Older connector versions can report a successful preview while
+            // silently omitting customerid. Such a response is never eligible
+            // for an administrative recovery.
             return Results.Ok(new
             {
-                valid = true, stage = "lookup",
+                valid = !customerOmitted, stage = "lookup",
                 code = customerOmitted
-                    ? "DYNAMICS_LOOKUPS_VALID_CUSTOMER_OMITTED"
-                    : "DYNAMICS_LOOKUPS_VALID",
+                    ? "quote_customer_required" : "DYNAMICS_LOOKUPS_VALID",
                 schemaVersion = schema.Version,
                 customerOmitted,
                 message = customerOmitted
-                    ? "Cliente no encontrado en Dynamics. El conector omitirá customerid; Dataverse podría exigir un cliente. No se creó ninguna QUO."
-                    : "El mapeo y los registros relacionados existen. No se creó ninguna QUO.",
+                    ? "La cuenta del cliente no se resolvió. Corregí customerid en crear_oferta antes de continuar."
+                    : "El cliente obligatorio, el mapeo y los registros relacionados fueron validados sin crear QUO.",
                 noPostExecuted = true
             });
         }
