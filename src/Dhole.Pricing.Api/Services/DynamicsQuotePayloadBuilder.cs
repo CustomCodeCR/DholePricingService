@@ -188,6 +188,11 @@ public static class DynamicsQuotePayloadBuilder
         if (string.IsNullOrWhiteSpace(code))
             throw new InvalidOperationException("Currency is missing from the accepted Pricing snapshot.");
 
+        // Lookup-by-name templates resolve ISO code to the actual Dataverse
+        // currency ID using the approved isocurrencycode search field.
+        // A GUID-mode template instead requires an explicit GUID mapping.
+        if (field.Type == "string") return code;
+
         // Prefer an explicit ISO-currency -> Dataverse GUID mapping. This is
         // necessary because a Dataverse transactioncurrency GUID is tenant-
         // specific and MUST NOT be reused for an unrelated currency.
@@ -203,11 +208,7 @@ public static class DynamicsQuotePayloadBuilder
         if (Guid.TryParse(mapped, out var valid) && valid != Guid.Empty)
             return valid.ToString("D");
 
-        // The template may deliberately use lookup_name(isocurrencycode).
-        // Only then send the ISO code, never to a GUID-based input.
-        if (field.Type == "string" && configuration?.GetValue(
-                "DynamicsQuoteSync:CurrencyLookupByIsoCode", false) == true)
-            return code;
+
         throw new InvalidOperationException("No approved Dynamics transactioncurrency GUID for " +
             code + ". Configure DynamicsQuoteSync:CurrencyIds:" + code +
             " or SingleCurrencyCode/SingleCurrencyId. Do not substitute another currency.");
