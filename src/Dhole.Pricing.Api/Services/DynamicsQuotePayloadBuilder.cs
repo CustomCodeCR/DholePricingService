@@ -181,38 +181,13 @@ public static class DynamicsQuotePayloadBuilder
             .ToArray();
     }
 
+    // Fixed Dataverse tenant currency GUID, supplied for this Dhole integration.
+    // Intentionally not configurable through environment variables.
+    private const string QuoteCurrencyId = "b3a963da-2eda-e611-80f2-fc15b42826a0";
+
     private static string CurrencyLookupValue(
-        JsonElement rate, DynamicsCrudField field, IConfiguration? configuration)
-    {
-        var code = String(rate, "currencyCode")?.Trim().ToUpperInvariant();
-        if (string.IsNullOrWhiteSpace(code))
-            throw new InvalidOperationException("Currency is missing from the accepted Pricing snapshot.");
-
-        // Lookup-by-name templates resolve ISO code to the actual Dataverse
-        // currency ID using the approved isocurrencycode search field.
-        // A GUID-mode template instead requires an explicit GUID mapping.
-        if (field.Type == "string") return code;
-
-        // Prefer an explicit ISO-currency -> Dataverse GUID mapping. This is
-        // necessary because a Dataverse transactioncurrency GUID is tenant-
-        // specific and MUST NOT be reused for an unrelated currency.
-        var mapped = configuration?["DynamicsQuoteSync:CurrencyIds:" + code];
-        // Single-currency legacy integration. The supplied tenant GUID is only
-        // valid if the administrator explicitly identifies its ISO code.
-        var singleCode = configuration?["DynamicsQuoteSync:SingleCurrencyCode"]?.Trim();
-        if (string.IsNullOrWhiteSpace(mapped) &&
-            string.Equals(singleCode, code, StringComparison.OrdinalIgnoreCase))
-            mapped = configuration?["DynamicsQuoteSync:SingleCurrencyId"]
-                ?? "b3a963da-2eda-e611-80f2-fc15b42826a0";
-
-        if (Guid.TryParse(mapped, out var valid) && valid != Guid.Empty)
-            return valid.ToString("D");
-
-
-        throw new InvalidOperationException("No approved Dynamics transactioncurrency GUID for " +
-            code + ". Configure DynamicsQuoteSync:CurrencyIds:" + code +
-            " or SingleCurrencyCode/SingleCurrencyId. Do not substitute another currency.");
-    }
+        JsonElement rate, DynamicsCrudField field, IConfiguration? configuration) =>
+        QuoteCurrencyId;
 
     private static object? CurrencyForSchema(JsonElement rate, DynamicsCrudField field)
     {
