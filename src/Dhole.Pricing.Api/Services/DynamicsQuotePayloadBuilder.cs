@@ -131,7 +131,7 @@ public static class DynamicsQuotePayloadBuilder
                     => idtraIndex <= idtras.Length ? idtras[idtraIndex - 1] : null,
                 var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
                     field.Name.Equals("transactioncurrencyid", StringComparison.OrdinalIgnoreCase)
-                    => String(rate, "currencyCode"),
+                    => CurrencyLookupValue(rate, field, configuration),
                 "new_pol" => String(rate, "polName"),
                 "new_poe" => String(rate, "poeName"),
                 "new_pod" => String(rate, "podName"),
@@ -179,6 +179,38 @@ public static class DynamicsQuotePayloadBuilder
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    private static string CurrencyLookupValue(
+        JsonElement rate, DynamicsCrudField field, IConfiguration? configuration)
+    {
+        var code = String(rate, "currencyCode")?.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(code))
+            throw new InvalidOperationException("Currency is missing from the accepted Pricing snapshot.");
+
+        // Prefer an explicit ISO-currency -> Dataverse GUID mapping. This is
+        // necessary because a Dataverse transactioncurrency GUID is tenant-
+        // specific and MUST NOT be reused for an unrelated currency.
+        var mapped = configuration?["DynamicsQuoteSync:CurrencyIds:" + code];
+        // Single-currency legacy integration. The supplied tenant GUID is only
+        // valid if the administrator explicitly identifies its ISO code.
+        var singleCode = configuration?["DynamicsQuoteSync:SingleCurrencyCode"]?.Trim();
+        if (string.IsNullOrWhiteSpace(mapped) &&
+            string.Equals(singleCode, code, StringComparison.OrdinalIgnoreCase))
+            mapped = configuration?["DynamicsQuoteSync:SingleCurrencyId"]
+                ?? "b3a963da-2eda-e611-80f2-fc15b42826a0";
+
+        if (Guid.TryParse(mapped, out var valid) && valid != Guid.Empty)
+            return valid.ToString("D");
+
+        // The template may deliberately use lookup_name(isocurrencycode).
+        // Only then send the ISO code, never to a GUID-based input.
+        if (field.Type == "string" && configuration?.GetValue(
+                "DynamicsQuoteSync:CurrencyLookupByIsoCode", false) == true)
+            return code;
+        throw new InvalidOperationException("No approved Dynamics transactioncurrency GUID for " +
+            code + ". Configure DynamicsQuoteSync:CurrencyIds:" + code +
+            " or SingleCurrencyCode/SingleCurrencyId. Do not substitute another currency.");
     }
 
     private static object? CurrencyForSchema(JsonElement rate, DynamicsCrudField field)
