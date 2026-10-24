@@ -103,6 +103,7 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
             entity.Property(x => x.PayloadJson).HasColumnName("PayloadJson");
             entity.Property(x => x.Status).HasColumnName("Status").HasMaxLength(32);
             entity.Property(x => x.Attempts).HasColumnName("Attempts");
+            entity.Property(x => x.RecoveryAttempt).HasColumnName("RecoveryAttempt").HasDefaultValue(0);
             entity.Property(x => x.NextAttemptAtUtc).HasColumnName("NextAttemptAtUtc");
             entity.Property(x => x.LeaseExpiresAtUtc).HasColumnName("LeaseExpiresAtUtc");
             entity.Property(x => x.LastError).HasColumnName("LastError").HasMaxLength(500);
