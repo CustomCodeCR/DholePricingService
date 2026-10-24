@@ -87,6 +87,11 @@ public static class DynamicsQuotePayloadBuilder
 
         foreach (var field in schema.Fields)
         {
+            // These quote totals are calculated and read-only in Dataverse.
+            // Only their writable source fields may be included in crear_oferta.
+            if (field.Target is "new_totalcostoproveedor" or "new_totalcostotarifario")
+                throw new InvalidOperationException(
+                    "Dynamics " + field.Target + " is calculated and read-only; configure its source fields instead.");
             var idtraIndex = IdtraLookupIndex(field);
             var montoIndex = MontoIndex(field);
             object? value = field.Target switch
@@ -102,8 +107,6 @@ public static class DynamicsQuotePayloadBuilder
                 // amount field, never in several fields (which doubles totals).
                 var target when montoIndex is >= 1 and <= 9 =>
                     montoIndex == firstMappedAmount ? cost : 0m,
-                // Only mapped, writable total-cost fields are eligible here.
-                "new_totalcostoproveedor" => cost,
                 "new_equipo" => EquipmentForSchema(rate, field),
                 "new_cantidadequipos" => Quantity(rate),
                 // Exact choices configured by the business for crear_oferta.
