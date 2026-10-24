@@ -272,8 +272,23 @@ public static class DynamicsQuoteDiagnosticsEndpoints
     {
         if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
         var check = await CheckQuoteReadinessAsync(clients, configuration, cancellationToken);
+        // The opaque CRUD key embeds a public UUID. Returning ONLY this key ID
+        // to a Dynamics administrator lets the UI approve grants for the exact
+        // integration identity used by Pricing, without revealing the API key.
+        string? configuredKeyId = null;
+        if (http.User.Claims.Any(c =>
+                c.Type is "scope" or "scp" or "scopes" &&
+                c.Value.Split([' ', ',', ';'], StringSplitOptions.RemoveEmptyEntries)
+                    .Contains("dynamics.security.admin", StringComparer.OrdinalIgnoreCase)))
+        {
+            var secret = configuration["DynamicsQuoteSync:ApiKey"];
+            if (secret is { Length: 81 } && secret.StartsWith("dkw1_", StringComparison.Ordinal) &&
+                secret[37] == '_' &&
+                Guid.TryParseExact(secret.Substring(5, 32), "N", out var id))
+                configuredKeyId = id.ToString("D");
+        }
         return Results.Ok(new { ready = check.Ready, code = check.Code,
-            message = check.Message, noPostExecuted = true });
+            message = check.Message, configuredKeyId, noPostExecuted = true });
     }
 
     private static async Task<IResult> RetryPreWriteAsync(
@@ -454,6 +469,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                         ? "No existe un registro relacionado con el valor exacto enviado por Dhole. Revisá el campo de búsqueda indicado y el valor correspondiente en Dynamics."
                         : providerCode == "lookup_name_ambiguous"
                         ? "La búsqueda devolvió varios registros. Debe existir un único registro coincidente."
+                        : providerCode is "client_denied" or "lookup_target_denied"
+                        ? "La clave de integración de Pricing no tiene autorizada la lectura de una entidad o campo relacionado (Cuenta, IDTRA o divisa). Usá «Autorizar vínculos y venta total» con la misma clave activa configurada en Pricing. Esta comprobación no crea QUO."
                         : "No se pudieron comprobar los vínculos de la oferta en Dynamics.",
                     noPostExecuted = true
                 });
