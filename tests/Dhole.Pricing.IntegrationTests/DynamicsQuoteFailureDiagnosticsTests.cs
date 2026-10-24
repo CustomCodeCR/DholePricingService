@@ -110,4 +110,28 @@ public sealed class DynamicsQuoteFailureDiagnosticsTests
         Assert.AreEqual("crud_template_inactive", code);
         Assert.AreEqual("Plantilla inactiva", title);
     }
+    [TestMethod]
+    public void Http409ReconciliationShowsWhetherHeaderOrTotalLineIsUnconfirmed()
+    {
+        var header = DynamicsQuoteFailureDiagnostics.ReadProviderError(
+            """{"state":"requires_reconciliation","stage":"quote","recordId":null,"replay":false}""");
+        Assert.AreEqual("quote_header_requires_reconciliation", header.Code);
+        StringAssert.Contains(header.Title!, "cabecera");
+        var total = DynamicsQuoteFailureDiagnostics.ReadProviderError(
+            """{"state":"requires_reconciliation","stage":"total",
+                "recordId":"00000000-0000-0000-0000-000000000001","replay":false}""");
+        Assert.AreEqual("quote_total_requires_reconciliation", total.Code);
+        StringAssert.Contains(total.Title!, "línea de venta");
+        Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure(total.Code));
+        Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure(header.Code));
+
+        var (display, diagnosticJson) = DynamicsQuoteFailureDiagnostics.Format(
+            "execute", new HttpRequestException("sensitive request URL"), true,
+            HttpStatusCode.Conflict, total.Code, total.Title);
+        Assert.IsTrue(display.Contains("línea de venta", StringComparison.Ordinal));
+        using var parsed = JsonDocument.Parse(diagnosticJson);
+        Assert.IsTrue(parsed.RootElement.GetProperty("postAttempted").GetBoolean());
+    }
+
+
 }
