@@ -327,7 +327,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
     }
 
     [TestMethod]
-    public void TransactionCurrencyUsesApprovedTenantGuidAndRejectsWrongCurrency()
+    public void TransactionCurrencyUsesFixedGuidWithoutConfiguration()
     {
         const string field = """
             {"name":"transactioncurrencyid","target":"transactioncurrencyid@odata.bind","type":"guid","dataverseType":"Lookup","required":false,"options":[]},
@@ -339,23 +339,19 @@ public sealed class DynamicsQuotePayloadBuilderTests
             StringComparison.Ordinal);
         Assert.AreNotEqual(Schema, schemaText);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
-        var approved = new ConfigurationBuilder().AddInMemoryCollection(
-            new Dictionary<string,string?>
-            {
-                ["DynamicsQuoteSync:SingleCurrencyCode"] = "USD",
-                ["DynamicsQuoteSync:SingleCurrencyId"] =
-                    "b3a963da-2eda-e611-80f2-fc15b42826a0"
-            }).Build();
-        using var parsed = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(Accepted, schema, approved)));
-        Assert.AreEqual("b3a963da-2eda-e611-80f2-fc15b42826a0",
-            parsed.RootElement.GetProperty("inputs")
-                .GetProperty("transactioncurrencyid").GetString());
-
-        var wrongCurrency = Accepted.Replace("\"currencyCode\":\"USD\"",
-            "\"currencyCode\":\"CRC\"", StringComparison.Ordinal);
-        Assert.ThrowsExactly<InvalidOperationException>(() =>
-            DynamicsQuotePayloadBuilder.Build(wrongCurrency, schema, approved));
+        foreach (var snapshot in new[]
+        {
+            Accepted,
+            Accepted.Replace("\"currencyCode\":\"USD\"", "\"currencyCode\":\"CRC\"",
+                StringComparison.Ordinal)
+        })
+        {
+            using var parsed = JsonDocument.Parse(JsonSerializer.Serialize(
+                DynamicsQuotePayloadBuilder.Build(snapshot, schema)));
+            Assert.AreEqual("b3a963da-2eda-e611-80f2-fc15b42826a0",
+                parsed.RootElement.GetProperty("inputs")
+                    .GetProperty("transactioncurrencyid").GetString());
+        }
     }
 
 }
