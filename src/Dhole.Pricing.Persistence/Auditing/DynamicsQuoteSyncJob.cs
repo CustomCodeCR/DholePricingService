@@ -13,6 +13,8 @@ public sealed class DynamicsQuoteSyncJob
     public string PayloadJson { get; set; } = "";
     public string Status { get; set; } = "Pending";
     public int Attempts { get; set; }
+    // 0 = initial attempt; 1..3 = separately approved recoveries after confirmed 4xx.
+    public int RecoveryAttempt { get; set; }
     public DateTime NextAttemptAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? LeaseExpiresAtUtc { get; set; }
     public string? LastError { get; set; }
