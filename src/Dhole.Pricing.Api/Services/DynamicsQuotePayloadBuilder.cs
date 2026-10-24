@@ -171,11 +171,19 @@ public static class DynamicsQuotePayloadBuilder
     public static string[] ParseIdtraNumbers(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return [];
+        // The incoming IDTRA field may be a display string rather than a
+        // single IDTRA, e.g. "IDTRA IDTRA999.12585-QUO 11228" or
+        // "IDTRA A-QUO 11228, B-QUO 11229 // QUO-00000-000316".
+        // First discard references after //; then trim the QUO suffix
+        // independently for each comma-separated IDTRA so later IDs remain.
         var segment = raw.Split(["//"], 2, StringSplitOptions.None)[0].Trim();
         segment = Regex.Replace(segment, @"^IDTRA(?:\s+|\s*:\s*)", "",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Trim();
         return segment.Split(',', StringSplitOptions.RemoveEmptyEntries |
                 StringSplitOptions.TrimEntries)
+            .Select(value => Regex.Split(value,
+                @"\s*[-–—]\s*QUO(?=\s|[-#]|$)",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)[0].Trim())
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
