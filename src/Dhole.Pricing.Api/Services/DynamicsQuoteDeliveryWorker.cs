@@ -215,7 +215,8 @@ public sealed class DynamicsQuoteDeliveryWorker(
             };
             execute.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
             execute.Headers.TryAddWithoutValidation("Idempotency-Key",
-                "dhole-pricing-quote-" + job.RateId.ToString("N") + "-v" + job.RevisionNumber);
+                "dhole-pricing-quote-" + job.RateId.ToString("N") + "-v" + job.RevisionNumber +
+                (job.RecoveryAttempt > 0 ? "-r" + job.RecoveryAttempt : ""));
             postAttempted = true;
             using var result = await client.SendAsync(execute, ct);
             if (!result.IsSuccessStatusCode)
