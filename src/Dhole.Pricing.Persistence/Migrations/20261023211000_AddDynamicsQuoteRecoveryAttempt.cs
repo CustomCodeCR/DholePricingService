@@ -15,6 +15,12 @@ public sealed class AddDynamicsQuoteRecoveryAttempt : Migration
             ALTER TABLE pricing."DynamicsQuoteSyncJobs"
             ADD COLUMN IF NOT EXISTS "RecoveryAttempt" integer NOT NULL DEFAULT 0;
             ALTER TABLE pricing."DynamicsQuoteSyncJobs"
+            ADD COLUMN IF NOT EXISTS "RecoveryReason" varchar(500) NULL;
+            ALTER TABLE pricing."DynamicsQuoteSyncJobs"
+            ADD COLUMN IF NOT EXISTS "RecoveryApprovedBy" varchar(128) NULL;
+            ALTER TABLE pricing."DynamicsQuoteSyncJobs"
+            ADD COLUMN IF NOT EXISTS "RecoveryApprovedAtUtc" timestamptz NULL;
+            ALTER TABLE pricing."DynamicsQuoteSyncJobs"
             ADD CONSTRAINT "CK_DynamicsQuoteSyncJobs_RecoveryAttempt"
             CHECK ("RecoveryAttempt" BETWEEN 0 AND 3);
             """);
@@ -26,7 +32,10 @@ public sealed class AddDynamicsQuoteRecoveryAttempt : Migration
             ALTER TABLE pricing."DynamicsQuoteSyncJobs"
             DROP CONSTRAINT IF EXISTS "CK_DynamicsQuoteSyncJobs_RecoveryAttempt";
             ALTER TABLE pricing."DynamicsQuoteSyncJobs"
-            DROP COLUMN IF EXISTS "RecoveryAttempt";
+            DROP COLUMN IF EXISTS "RecoveryAttempt",
+            DROP COLUMN IF EXISTS "RecoveryReason",
+            DROP COLUMN IF EXISTS "RecoveryApprovedBy",
+            DROP COLUMN IF EXISTS "RecoveryApprovedAtUtc";
             """);
     }
 }
