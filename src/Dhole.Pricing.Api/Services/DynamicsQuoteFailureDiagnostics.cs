@@ -22,6 +22,8 @@ public static class DynamicsQuoteFailureDiagnostics
             "quote_id_read_not_authorized" or "quote_detail_relationship_missing" or
             "quote_lookup_target_not_authorized" or
             "quote_lookup_name_field_not_authorized" or "write_grant_denied" or
+            "client_denied" or "scope_denied" or "lookup_target_denied" or
+            "lookup_target_fields_denied" or "quote_customer_required" or
             "table_denied" or "field_denied" or "crud_template_inactive" or
             "crud_template_scope_denied" or "template_mapping_field_denied" or
             "quote_creation_key_required" or "crud_key_invalid" or
