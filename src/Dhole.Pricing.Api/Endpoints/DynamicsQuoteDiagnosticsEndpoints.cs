@@ -36,6 +36,10 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         group.MapGet("/dynamics-sync/issues", GetIssuesAsync);
         group.MapGet("/dynamics-sync/write-readiness", GetReadinessAsync);
         group.MapPost("/{rateId:guid}/dynamics-sync/retry", RetryPreWriteAsync);
+        // Manual recovery is different from retry: the former is allowed only
+        // when the connector proves the previous header was rejected 4xx.
+        group.MapPost("/{rateId:guid}/dynamics-sync/recover-rejected",
+            RecoverRejectedAsync);
         // Explicitly queue an already accepted rate with IDTRA if it predated
         // the integration or the acceptance event was not recorded. Does not
         // perform a Dataverse write in the HTTP request.
@@ -382,6 +386,152 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             ? Results.Accepted($"/api/pricing/rates/{rateId}/dynamics-sync",
                 new { rateId, status = "Pending", detail = "Reintento encolado con el mismo identificador." })
             : Results.Conflict(new { code = "sync_status_changed" });
+    }
+
+    private sealed record RecoverRejectedRequest(string Confirmation, string Reason);
+
+    private static bool CanApproveRecovery(ClaimsPrincipal principal)
+    {
+        if (principal.Identity?.IsAuthenticated != true) return false;
+        return principal.Claims.Where(c => c.Type is "scope" or "scp" or "scopes")
+            .SelectMany(c => c.Value.Split([' ', ',', ';'],
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Any(scope => scope is "dynamics.security.admin" or "dynamics.*" or "*");
+    }
+
+    private static async Task<IResult> RecoverRejectedAsync(
+        Guid rateId, RecoverRejectedRequest request, HttpContext http,
+        ServiceDbContext db, IHttpClientFactory clients,
+        IConfiguration configuration, CancellationToken ct)
+    {
+        if (!CanApproveRecovery(http.User)) return Results.Forbid();
+        if (request.Confirmation != "RECUPERAR_QUO" ||
+            request.Reason?.Trim().Length is not (>= 10 and <= 500))
+            return Results.BadRequest(new {
+                code = "recovery_explicit_confirmation_required",
+                message = "Se requiere RECUPERAR_QUO y un motivo de 10 a 500 caracteres."
+            });
+        var rate = await db.RateHeaders.IgnoreQueryFilters().AsNoTracking()
+            .Where(r => r.Id == rateId)
+            .Select(r => new { r.IsDeleted, r.Status, r.RevisionNumber, r.IdtraNumber })
+            .SingleOrDefaultAsync(ct);
+        if (rate is null || rate.IsDeleted ||
+            rate.Status != RateStatus.AcceptedByClient ||
+            string.IsNullOrWhiteSpace(rate.IdtraNumber))
+            return Results.Conflict(new {
+                code = "rate_not_eligible",
+                message = "La tarifa debe estar vigente, aceptada y con IDTRA."
+            });
+        var job = await db.DynamicsQuoteSyncJobs.AsNoTracking()
+            .SingleOrDefaultAsync(j => j.RateId == rateId &&
+                j.RevisionNumber == rate.RevisionNumber, ct);
+        if (job is null || job.Status != "NeedsAttention" ||
+            job.RecoveryAttempt >= 3)
+            return Results.Conflict(new {
+                code = "recovery_job_not_eligible",
+                message = "No hay una incidencia recuperable o se alcanzó el límite de 3 recuperaciones."
+            });
+
+        var apiKey = configuration["DynamicsQuoteSync:ApiKey"];
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return Results.Conflict(new { code = "dynamics_key_missing" });
+        var client = clients.CreateClient("DynamicsQuoteSync");
+        var prefix = "https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta";
+        var nextAttempt = job.RecoveryAttempt + 1;
+
+        // Read-only connector ledger verification, scoped to the actual API
+        // key. It also verifies all prior recovery attempts are explicit 4xx
+        // rejects with no quoteId and no total lines.
+        var ledgerUrl = prefix + "/recovery-eligibility?connectionCode=principal" +
+            "&dholeRateId=" + rateId.ToString("D") +
+            "&revisionNumber=" + rate.RevisionNumber +
+            "&nextAttempt=" + nextAttempt;
+        using (var check = new HttpRequestMessage(HttpMethod.Get, ledgerUrl))
+        {
+            check.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+            using var result = await client.SendAsync(check, ct);
+            if (!result.IsSuccessStatusCode)
+                return Results.Conflict(new {
+                    code = "recovery_ledger_unavailable",
+                    message = "No se pudo verificar el historial. No se autorizó ningún nuevo envío."
+                });
+            using var json = JsonDocument.Parse(await result.Content.ReadAsStringAsync(ct));
+            if (!json.RootElement.TryGetProperty("eligible", out var eligible) ||
+                eligible.ValueKind != JsonValueKind.True ||
+                !json.RootElement.TryGetProperty("noPostExecuted", out var readOnly) ||
+                readOnly.ValueKind != JsonValueKind.True)
+                return Results.Conflict(new {
+                    code = "recovery_not_safe",
+                    message = "El conector no confirmó el rechazo previo sin registro creado."
+                });
+        }
+
+        // Before reserving a new generation, validate current fields, allowed
+        // lookups, customerid and schema; all read-only to Dataverse.
+        object payload;
+        try
+        {
+            using var schemaRequest = new HttpRequestMessage(HttpMethod.Get,
+                prefix + "/schema?connectionCode=principal");
+            schemaRequest.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+            using var schemaResponse = await client.SendAsync(schemaRequest, ct);
+            if (!schemaResponse.IsSuccessStatusCode)
+                return Results.Conflict(new { code = "recovery_schema_denied" });
+            var schema = DynamicsQuotePayloadBuilder.ReadSchema(
+                await schemaResponse.Content.ReadAsStringAsync(ct));
+            payload = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema, configuration);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or JsonException)
+        {
+            return Results.Conflict(new { code = "recovery_mapping_invalid",
+                message = "La plantilla o los IDTRA no pudieron validarse. Corregí el mapeo antes de recuperar." });
+        }
+
+        using (var validate = new HttpRequestMessage(HttpMethod.Post,
+            prefix + "/validate-lookups"))
+        {
+            validate.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+            validate.Content = new StringContent(JsonSerializer.Serialize(payload),
+                System.Text.Encoding.UTF8, "application/json");
+            using var result = await client.SendAsync(validate, ct);
+            if (!result.IsSuccessStatusCode)
+            {
+                var (code, _) = DynamicsQuoteFailureDiagnostics.ReadProviderError(
+                    await result.Content.ReadAsStringAsync(ct));
+                return Results.Conflict(new { code = code ?? "recovery_lookup_denied",
+                    message = "La cabecera no está lista: existe un vínculo faltante o sin permiso. Diagnosticá antes de crear." });
+            }
+            using var check = JsonDocument.Parse(await result.Content.ReadAsStringAsync(ct));
+            if (!check.RootElement.TryGetProperty("noPostExecuted", out var readOnly) ||
+                readOnly.ValueKind != JsonValueKind.True ||
+                check.RootElement.TryGetProperty("customerOmitted", out var omitted) &&
+                omitted.ValueKind == JsonValueKind.True)
+                return Results.Conflict(new { code = "recovery_customer_required",
+                    message = "Dynamics exige un cliente válido. Vinculá primero la cuenta real de la tarifa." });
+        }
+        var actor = http.User.Claims.FirstOrDefault(c =>
+            c.Type is ClaimTypes.NameIdentifier or "sub")?.Value ?? "dynamics-admin";
+        if (actor.Length > 128) actor = actor[..128];
+        var changed = await db.DynamicsQuoteSyncJobs.Where(j =>
+                j.Id == job.Id && j.Status == "NeedsAttention" &&
+                j.RecoveryAttempt == job.RecoveryAttempt)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(j => j.RecoveryAttempt, nextAttempt)
+                .SetProperty(j => j.RecoveryReason, request.Reason.Trim())
+                .SetProperty(j => j.RecoveryApprovedBy, actor)
+                .SetProperty(j => j.RecoveryApprovedAtUtc, DateTime.UtcNow)
+                .SetProperty(j => j.Status, "Pending")
+                .SetProperty(j => j.Attempts, 0)
+                .SetProperty(j => j.LastError, (string?)null)
+                .SetProperty(j => j.ResponseJson, (string?)null)
+                .SetProperty(j => j.NextAttemptAtUtc, DateTime.UtcNow)
+                .SetProperty(j => j.LeaseExpiresAtUtc, (DateTime?)null), ct);
+        return changed == 1
+            ? Results.Accepted($"/api/pricing/rates/{rateId}/dynamics-sync",
+                new { status = "Pending", recoveryAttempt = nextAttempt,
+                    detail = "Recuperación aprobada. Worker utilizará una nueva clave -r" +
+                        nextAttempt + " tras validar el historial; no se realizó POST desde esta solicitud." })
+            : Results.Conflict(new { code = "recovery_concurrent_change" });
     }
 
     private static async Task<IResult> ValidateAsync(
