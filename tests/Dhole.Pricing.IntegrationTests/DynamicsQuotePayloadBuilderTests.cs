@@ -276,7 +276,6 @@ public sealed class DynamicsQuotePayloadBuilderTests
             {"name":"new_monto2","target":"new_monto2","type":"decimal","dataverseType":"Money","required":false,"options":[]},
             {"name":"new_monto9","target":"new_monto9","type":"decimal","dataverseType":"Money","required":false,"options":[]},
             {"name":"new_divisa","target":"new_divisa","type":"string","dataverseType":"String","required":false,"options":[]},
-            {"name":"new_totalcostoproveedor","target":"new_totalcostoproveedor","type":"decimal","dataverseType":"Money","required":false,"options":[]},
             """;
         var expanded = Schema.Replace(
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
@@ -290,7 +289,23 @@ public sealed class DynamicsQuotePayloadBuilderTests
         Assert.AreEqual(0m, inputs.GetProperty("new_monto2").GetDecimal());
         Assert.AreEqual(0m, inputs.GetProperty("new_monto9").GetDecimal());
         Assert.AreEqual("USD", inputs.GetProperty("new_divisa").GetString());
-        Assert.AreEqual(1800.75m, inputs.GetProperty("new_totalcostoproveedor").GetDecimal());
+    }
+
+    [TestMethod]
+    public void CalculatedSupplierCostCannotBeWrittenByPricingTemplate()
+    {
+        const string calculated = """
+            {"name":"new_totalcostoproveedor","target":"new_totalcostoproveedor","type":"decimal","dataverseType":"Decimal","required":false,"options":[]},
+            """;
+        var schemaText = Schema.Replace(
+            """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            calculated + "\n" +
+            """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            StringComparison.Ordinal);
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            DynamicsQuotePayloadBuilder.Build(Accepted, schema));
+        StringAssert.Contains(error.Message, "calculated and read-only");
     }
 
     [TestMethod]
