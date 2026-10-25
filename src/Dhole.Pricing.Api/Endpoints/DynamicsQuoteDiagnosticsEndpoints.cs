@@ -138,7 +138,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 r.IncotermName,
                 r.TotalSaleAmount,
                 r.TotalCostAmount,
-                r.CurrencyCode
+                r.CurrencyCode,
+                r.CurrencyName
             })
             .ToListAsync(cancellationToken);
 
@@ -211,7 +212,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                     incotermName = (string?)null, polName = (string?)null,
                     poeName = (string?)null, podName = (string?)null,
                     totalSaleAmount = (decimal?)null, totalCostAmount = (decimal?)null,
-                    totalUtilityAmount = (decimal?)null, currencyCode = (string?)null };
+                    totalUtilityAmount = (decimal?)null, currencyCode = (string?)null,
+                    currencyName = (string?)null };
             string? Read(string name) =>
                 rate.TryGetProperty(name, out var value) &&
                 value.ValueKind == JsonValueKind.String ? value.GetString() : null;
@@ -232,6 +234,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 poeName = Read("poeName"),
                 podName = Read("podName"),
                 currencyCode = Read("currencyCode"),
+                currencyName = Read("currencyName"),
                 totalSaleAmount = Number("totalSaleAmount"),
                 totalCostAmount = Number("totalCostAmount"),
                 totalUtilityAmount = Number("totalUtilityAmount")
