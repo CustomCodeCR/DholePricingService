@@ -55,6 +55,36 @@ public sealed class DynamicsQuoteDeliveryWorker(
                    AND "LastError" LIKE '%Published CRUD template is missing msdyn_invoicesetuptotals%'
                    AND "ResponseJson"::jsonb->>'postAttempted' = 'false'
                 """, stoppingToken);
+            // Recover currency-label failures automatically ONLY when the old
+            // diagnostic proves no Dataverse POST occurred. Do not touch
+            // partial, ambiguous, completed or unclassified operations.
+            // Keep the existing job, revision and idempotency identity.
+            var recovered = await retryDb.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE pricing."DynamicsQuoteSyncJobs" j
+                   SET "Status" = 'Retry',
+                       "NextAttemptAtUtc" = now(),
+                       "LastError" = NULL,
+                       "LeaseExpiresAtUtc" = NULL
+                 WHERE j."Status" = 'NeedsAttention'
+                   AND j."ResponseJson" IS NOT NULL
+                   AND j."ResponseJson"::jsonb->>'stage' = 'schema'
+                   AND j."ResponseJson"::jsonb->>'code' = 'DYNAMICS_SCHEMA_INVALID'
+                   AND j."ResponseJson"::jsonb->>'postAttempted' = 'false'
+                   AND j."LastError" LIKE '%The quote ISO currency must be USD or CRC%'
+                   AND EXISTS (
+                       SELECT 1 FROM pricing."RateHeaders" r
+                        WHERE r.id = j."RateId"
+                          AND r.revision_number = j."RevisionNumber"
+                          AND r.status = 'AcceptedByClient'
+                          AND r.is_deleted = false
+                          AND NULLIF(btrim(r.idtra_number), '') IS NOT NULL
+                   )
+                """, stoppingToken);
+            if (recovered > 0)
+                logger.LogInformation(
+                    "Resumed {Count} confirmed pre-write Dynamics currency failures with original idempotency keys.",
+                    recovered);
         }
         catch (Exception ex)
         {
@@ -206,13 +236,16 @@ public sealed class DynamicsQuoteDeliveryWorker(
             // attempt, with the same active integration key (read-only).
             // Currency is a required field of the trusted Pricing integration,
             // independent of the editable crear_oferta mapping list.
-            var iso = source.RootElement.TryGetProperty("currencyCode", out var currency) &&
-                currency.ValueKind == JsonValueKind.String
-                ? currency.GetString()?.Trim().ToUpperInvariant() : null;
-            if (iso is not ("USD" or "CRC"))
-                throw new InvalidOperationException(
-                    "The quote ISO currency must be USD or CRC before creating a Dynamics QUO.");
             stage = "currency";
+            // Pricing keeps catalog codes (CUR-...), whereas Dataverse
+            // requires ISO 4217. Use the approved human-readable currency
+            // name as a fallback; refuse unknown or conflicting currencies.
+            var iso = DynamicsQuoteCurrency.ResolveIso(job.PayloadJson);
+            var originalCurrencyCode =
+                source.RootElement.TryGetProperty("currencyCode", out var currency) &&
+                currency.ValueKind == JsonValueKind.String
+                    ? currency.GetString() : null;
+            var outboundSnapshot = DynamicsQuoteCurrency.NormalizeSnapshot(job.PayloadJson, iso);
             using var currencyRequest = new HttpRequestMessage(HttpMethod.Get,
                 Url + "/resolve-currency?connectionCode=principal&currencyCode=" + iso);
             currencyRequest.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
@@ -236,8 +269,9 @@ public sealed class DynamicsQuoteDeliveryWorker(
                 !Guid.TryParse(resolvedId.GetString(), out var currencyId) ||
                 currencyId == Guid.Empty)
                 throw new InvalidOperationException("Dynamics ISO currency lookup returned an invalid GUID.");
+            DynamicsQuoteCurrency.VerifyResolvedIdentity(originalCurrencyCode, iso, currencyId);
             stage = "mapping";
-            var body = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema, configuration, currencyId);
+            var body = DynamicsQuotePayloadBuilder.Build(outboundSnapshot, schema, configuration, currencyId);
 
             // Two separately idempotent Dataverse writes: create Quote header
             // and create its one write-in quotedetail for the standard totalamount.

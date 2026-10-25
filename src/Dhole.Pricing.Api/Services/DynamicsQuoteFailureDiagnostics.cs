@@ -41,6 +41,7 @@ public static class DynamicsQuoteFailureDiagnostics
         var code = exception switch
         {
             InvalidOperationException when stage == "mapping" => "DYNAMICS_MAPPING_INVALID",
+            InvalidOperationException when stage == "currency" => "DYNAMICS_CURRENCY_INVALID",
             InvalidOperationException when stage == "schema" => "DYNAMICS_SCHEMA_INVALID",
             JsonException => "DYNAMICS_RESPONSE_INVALID",
             HttpRequestException or TaskCanceledException => "DYNAMICS_NETWORK_ERROR",
