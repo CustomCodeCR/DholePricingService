@@ -285,10 +285,11 @@ public static class DynamicsQuoteDiagnosticsEndpoints
     private static async Task<IResult> EnqueueAcceptedAsync(
         Guid rateId, HttpContext http, ServiceDbContext db,
         IRateHeaderRepository rateHeaders,
-        ILogger<DynamicsQuoteDiagnosticsEndpoints> logger,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
         if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
+        var logger = loggerFactory.CreateLogger(nameof(DynamicsQuoteDiagnosticsEndpoints));
         // All writes in this endpoint are to the Pricing queue. It never POSTs
         // to Dynamics. Serialize against acceptance/revision updates by
         // locking the physical rate row inside a local database transaction.
