@@ -240,6 +240,11 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             var body = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode)
             {
+                // A 429 is a temporary rate limit, never an authorization
+                // failure or evidence that the real Pricing key is invalid.
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                    return new(false, "DYNAMICS_PREFLIGHT_RATE_LIMITED",
+                        "El conector alcanzó temporalmente su límite de solicitudes. No se envió ninguna QUO; repetí la comprobación cuando se libere la ventana.");
                 var (code, title) = DynamicsQuoteFailureDiagnostics.ReadProviderError(body);
                 return new(false, code ?? "DYNAMICS_PREFLIGHT_HTTP_" + (int)response.StatusCode,
                     title ?? "El conector no autorizó la comprobación de QUO.");
