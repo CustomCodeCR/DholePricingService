@@ -220,7 +220,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
     }
 
 
-    private sealed record QuoteReadiness(bool Ready, string Code, string Message);
+    private sealed record QuoteReadiness(bool Ready, string Code, string Message,
+        string[]? MissingGrants = null);
 
     private static async Task<QuoteReadiness> CheckQuoteReadinessAsync(
         IHttpClientFactory clients, IConfiguration configuration, CancellationToken ct)
@@ -259,6 +260,20 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             var enabled = ready.GetBoolean();
             var codeText = root.TryGetProperty("code", out var value) &&
                 value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+            // Field names originate from our authenticated connector. Permit
+            // only bounded, identifier-like labels; do not surface arbitrary
+            // remote text or request contents from an upstream error response.
+            var missingGrants = root.TryGetProperty("missingGrants", out var items) &&
+                items.ValueKind == JsonValueKind.Array
+                ? items.EnumerateArray()
+                    .Where(item => item.ValueKind == JsonValueKind.String)
+                    .Select(item => item.GetString()!)
+                    .Where(item => item.Length is >= 3 and <= 128 &&
+                        System.Text.RegularExpressions.Regex.IsMatch(item,
+                            @"^[A-Za-z_][A-Za-z0-9_.:|@-]*$"))
+                    .Distinct(StringComparer.Ordinal)
+                    .Take(30).ToArray()
+                : [];
             // Do not copy arbitrary upstream response text into the admin API.
             return new(enabled,
                 codeText is "DYNAMICS_QUOTE_WRITES_READY" or "production_writes_not_approved"
@@ -266,8 +281,13 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                     ? codeText : "DYNAMICS_PREFLIGHT_UNKNOWN",
                 enabled ? "La clave de Pricing tiene permisos verificados para cabecera, vínculos y línea de venta."
                     : codeText == "quote_grants_incomplete"
-                        ? "Faltan permisos de la clave activa para la cabecera, vínculos de cliente/IDTRA/divisa o quotedetail. Usá «Autorizar vínculos y venta total» con la clave configurada en Pricing y volvé a comprobar."
-                        : "Producción todavía rechaza las escrituras de QUO. Se requiere autorización del cambio.");
+                        ? missingGrants.Length > 0
+                            ? "La clave de Pricing no tiene autorizados estos permisos: " +
+                              string.Join(", ", missingGrants.Take(12)) +
+                              ". Usá «Autorizar vínculos y venta total» con la clave activa."
+                            : "Faltan permisos en la clave activa de Pricing. Usá «Autorizar vínculos y venta total» y volvé a comprobar."
+                        : "Producción todavía rechaza las escrituras de QUO. Se requiere autorización del cambio.",
+                missingGrants);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception)
@@ -299,7 +319,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 configuredKeyId = id.ToString("D");
         }
         return Results.Ok(new { ready = check.Ready, code = check.Code,
-            message = check.Message, configuredKeyId, noPostExecuted = true });
+            message = check.Message, missingGrants = check.MissingGrants,
+            configuredKeyId, noPostExecuted = true });
     }
 
     private static async Task<IResult> RetryPreWriteAsync(
