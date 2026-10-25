@@ -152,6 +152,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 return new
                 {
                     x.RateId, x.RevisionNumber, x.Status, x.Attempts,
+                    rate = SummarizeAcceptedRate(x.PayloadJson),
+                    crm = ExtractWrittenQuoteEvidence(x.ResponseJson, x.Status),
                     x.LastError, error = Diagnostic(x.ResponseJson),
                     x.CreatedAtUtc, x.NextAttemptAtUtc, x.CompletedAtUtc,
                     currentRateRevision = rate?.RevisionNumber,
@@ -163,6 +165,89 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         });
     }
 
+
+    // These fields come from the immutable accepted snapshot for THIS
+    // revision; do not show newer edited commercial details on an old job.
+    private static object SummarizeAcceptedRate(string snapshot)
+    {
+        try
+        {
+            using var json = JsonDocument.Parse(snapshot);
+            var rate = json.RootElement;
+            if (rate.ValueKind != JsonValueKind.Object)
+                return new { rateCode = (string?)null, clientName = (string?)null,
+                    rateName = (string?)null, executiveName = (string?)null,
+                    idtraNumber = (string?)null, shipmentMode = (string?)null,
+                    incotermName = (string?)null, polName = (string?)null,
+                    poeName = (string?)null, podName = (string?)null,
+                    totalSaleAmount = (decimal?)null, totalCostAmount = (decimal?)null,
+                    totalUtilityAmount = (decimal?)null, currencyCode = (string?)null };
+            string? Read(string name) =>
+                rate.TryGetProperty(name, out var value) &&
+                value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+            decimal? Number(string name) =>
+                rate.TryGetProperty(name, out var value) &&
+                value.ValueKind == JsonValueKind.Number &&
+                value.TryGetDecimal(out var number) ? number : null;
+            return new
+            {
+                rateCode = Read("rateCode") ?? Read("quoNumber"),
+                rateName = Read("rateName"),
+                clientName = Read("clientName"),
+                executiveName = Read("executiveName"),
+                idtraNumber = Read("idtraNumber"),
+                shipmentMode = Read("shipmentMode"),
+                incotermName = Read("incotermName"),
+                polName = Read("polName"),
+                poeName = Read("poeName"),
+                podName = Read("podName"),
+                currencyCode = Read("currencyCode"),
+                totalSaleAmount = Number("totalSaleAmount"),
+                totalCostAmount = Number("totalCostAmount"),
+                totalUtilityAmount = Number("totalUtilityAmount")
+            };
+        }
+        catch (JsonException)
+        {
+            return new { error = "accepted_snapshot_invalid" };
+        }
+    }
+
+    // A Completed job records connector success, NOT proof that the quote
+    // and its sales line can still be read from live Dataverse. Never claim
+    // live confirmation without the separate read-only verification.
+    private static object ExtractWrittenQuoteEvidence(string? json, string jobStatus)
+    {
+        Guid? quoteId = null;
+        Guid? lineId = null;
+        if (!string.IsNullOrWhiteSpace(json))
+        {
+            try
+            {
+                using var parsed = JsonDocument.Parse(json);
+                var root = parsed.RootElement;
+                Guid? Read(string name) =>
+                    root.ValueKind == JsonValueKind.Object &&
+                    root.TryGetProperty(name, out var raw) &&
+                    raw.ValueKind == JsonValueKind.String &&
+                    Guid.TryParse(raw.GetString(), out var value) &&
+                    value != Guid.Empty ? value : null;
+                quoteId = Read("recordId");
+                lineId = Read("lineRecordId");
+            }
+            catch (JsonException) { /* Legacy diagnostics are not write proof. */ }
+        }
+        return new
+        {
+            quoteId,
+            lineId,
+            connectorRecordedSuccess =
+                jobStatus == "Completed" && quoteId.HasValue && lineId.HasValue,
+            liveDataverseVerified = false,
+            verification = quoteId.HasValue
+                ? "pending_live_verification" : "no_record_identifiers"
+        };
+    }
 
     private static async Task<IResult> EnqueueAcceptedAsync(
         Guid rateId, HttpContext http, ServiceDbContext db,
