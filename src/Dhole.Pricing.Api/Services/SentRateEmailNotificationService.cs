@@ -171,7 +171,7 @@ public sealed class SentRateEmailNotificationService(
         return null;
     }
 
-    private async Task<IReadOnlyList<string>> ResolveRecipientsAsync(
+    internal async Task<IReadOnlyList<string>> ResolveRecipientsAsync(
         string executiveName,
         string? requestSellerName,
         string? requestSellerEmail,
