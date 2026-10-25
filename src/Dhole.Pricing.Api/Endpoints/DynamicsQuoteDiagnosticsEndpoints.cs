@@ -875,7 +875,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 return Results.Conflict(new { code = "recovery_schema_denied" });
             var schema = DynamicsQuotePayloadBuilder.ReadSchema(
                 await schemaResponse.Content.ReadAsStringAsync(ct));
-            payload = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema, configuration);
+            payload = await BuildQuotePayloadForReadOnlyChecksAsync(
+                client, apiKey, prefix, job.PayloadJson, schema, configuration, ct);
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonException)
         {
@@ -970,7 +971,10 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 });
             }
             var schema = DynamicsQuotePayloadBuilder.ReadSchema(text);
-            var body = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema, configuration);
+            var body = await BuildQuotePayloadForReadOnlyChecksAsync(
+                clients.CreateClient("DynamicsQuoteSync"), apiKey,
+                "https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta",
+                job.PayloadJson, schema, configuration, cancellationToken);
             // Validate each exact-name lookup using the same active
             // template and approved read grants as execute-with-total.
             // This POST is a READ-ONLY preview: no quote is created.
@@ -1057,6 +1061,47 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 noPostExecuted = true
             });
         }
+    }
+
+    /// <summary>
+    /// READ-ONLY validation and administrative recovery must use precisely the
+    /// same ISO/Dataverse currency resolution as DynamicsQuoteDeliveryWorker.
+    /// The old preview omitted currencyId, making legitimate recovery fail
+    /// before any customer validation could be completed.
+    /// </summary>
+    private static async Task<object> BuildQuotePayloadForReadOnlyChecksAsync(
+        HttpClient client, string apiKey, string prefix, string snapshot,
+        DynamicsCrudSchema schema, IConfiguration configuration, CancellationToken ct)
+    {
+        var iso = DynamicsQuoteCurrency.ResolveIso(snapshot);
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            prefix + "/resolve-currency?connectionCode=principal&currencyCode=" + iso);
+        request.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+        using var response = await client.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var (code, _) = DynamicsQuoteFailureDiagnostics.ReadProviderError(
+                await response.Content.ReadAsStringAsync(ct));
+            throw new InvalidOperationException(
+                "Dynamics currency resolution rejected: " + (code ?? "currency_lookup_unavailable"));
+        }
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var root = document.RootElement;
+        if (!root.TryGetProperty("noPostExecuted", out var noWrite) ||
+            noWrite.ValueKind != JsonValueKind.True ||
+            !root.TryGetProperty("currencyCode", out var actualIso) ||
+            actualIso.ValueKind != JsonValueKind.String ||
+            actualIso.GetString() != iso ||
+            !root.TryGetProperty("currencyId", out var actualId) ||
+            actualId.ValueKind != JsonValueKind.String ||
+            !Guid.TryParse(actualId.GetString(), out var id) || id == Guid.Empty)
+            throw new InvalidOperationException("Currency validation did not return a verified Dataverse GUID.");
+        using var original = JsonDocument.Parse(snapshot);
+        var sourceCode = original.RootElement.TryGetProperty("currencyCode", out var field) &&
+            field.ValueKind == JsonValueKind.String ? field.GetString() : null;
+        DynamicsQuoteCurrency.VerifyResolvedIdentity(sourceCode, iso, id);
+        var normalized = DynamicsQuoteCurrency.NormalizeSnapshot(snapshot, iso);
+        return DynamicsQuotePayloadBuilder.Build(normalized, schema, configuration, id);
     }
 
     private static bool CanInspectQuoteSync(ClaimsPrincipal user)
