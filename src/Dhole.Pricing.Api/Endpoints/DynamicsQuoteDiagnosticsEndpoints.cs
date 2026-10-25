@@ -35,6 +35,9 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         // operations console. The handler verifies either Dynamics admin scope
         // or the existing Pricing margin-approval scope.
         group.MapGet("/dynamics-sync/issues", GetIssuesAsync);
+        // Exposes the complete operator queue, including pending/in-flight
+        // jobs and recently confirmed success, not just errors.
+        group.MapGet("/dynamics-sync/queue", GetIssuesAsync);
         group.MapGet("/dynamics-sync/write-readiness", GetReadinessAsync);
         group.MapPost("/{rateId:guid}/dynamics-sync/retry", RetryPreWriteAsync);
         // Manual recovery is different from retry: the former is allowed only
@@ -90,15 +93,31 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         HttpContext http, ServiceDbContext db, CancellationToken cancellationToken)
     {
         if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
-        var failures = await db.DynamicsQuoteSyncJobs.AsNoTracking()
-            .Where(x => x.Status == "NeedsAttention" || x.Status == "Retry")
+        // Nonterminal jobs remain visible throughout the entire lifecycle.
+        // Previously Pending and Processing disappeared from the UI despite
+        // Dataverse not having confirmed a successful write.
+        var active = await db.DynamicsQuoteSyncJobs.AsNoTracking()
+            .Where(x => x.Status == "Pending" || x.Status == "Processing" ||
+                        x.Status == "Retry" || x.Status == "NeedsAttention")
             .OrderByDescending(x => x.CreatedAtUtc)
-            .Take(100)
+            .Take(150)
             .ToListAsync(cancellationToken);
+        var completed = await db.DynamicsQuoteSyncJobs.AsNoTracking()
+            .Where(x => x.Status == "Completed")
+            .OrderByDescending(x => x.CompletedAtUtc)
+            .Take(25)
+            .ToListAsync(cancellationToken);
+        var jobs = active.Concat(completed)
+            .OrderByDescending(x => x.CreatedAtUtc).ToList();
+        var counts = await db.DynamicsQuoteSyncJobs.AsNoTracking()
+            .GroupBy(x => x.Status)
+            .Select(x => new { Status = x.Key, Total = x.Count() })
+            .ToListAsync(cancellationToken);
+        int Count(string state) => counts.FirstOrDefault(x => x.Status == state)?.Total ?? 0;
         // The job is immutable, but the linked rate may have been deleted,
         // reapproved, or advanced to a newer revision since it was queued.
         // Surface that state so an operator never sees an unexplained 404.
-        var rateIds = failures.Select(x => x.RateId).Distinct().ToArray();
+        var rateIds = jobs.Select(x => x.RateId).Distinct().ToArray();
         var currentRates = await db.RateHeaders.IgnoreQueryFilters().AsNoTracking()
             .Where(x => rateIds.Contains(x.Id))
             .Select(x => new { x.Id, x.Status, x.RevisionNumber, x.IdtraNumber, x.IsDeleted })
@@ -106,8 +125,17 @@ public static class DynamicsQuoteDiagnosticsEndpoints
 
         return Results.Ok(new
         {
-            totalShown = failures.Count,
-            issues = failures.Select(x =>
+            totalShown = jobs.Count,
+            refreshedAtUtc = DateTime.UtcNow,
+            queue = new
+            {
+                pending = Count("Pending"),
+                processing = Count("Processing"),
+                retry = Count("Retry"),
+                needsAttention = Count("NeedsAttention"),
+                completed = Count("Completed")
+            },
+            issues = jobs.Select(x =>
             {
                 currentRates.TryGetValue(x.RateId, out var rate);
                 var retryBlockReason = rate is null
@@ -125,7 +153,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 {
                     x.RateId, x.RevisionNumber, x.Status, x.Attempts,
                     x.LastError, error = Diagnostic(x.ResponseJson),
-                    x.CreatedAtUtc, x.NextAttemptAtUtc,
+                    x.CreatedAtUtc, x.NextAttemptAtUtc, x.CompletedAtUtc,
                     currentRateRevision = rate?.RevisionNumber,
                     retryBlockReason,
                     retryableWithoutDuplicateRisk =
