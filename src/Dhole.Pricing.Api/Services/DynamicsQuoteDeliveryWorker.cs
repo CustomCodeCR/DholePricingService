@@ -187,12 +187,54 @@ public sealed class DynamicsQuoteDeliveryWorker(
             }
             var schemaText = await schemaResponse.Content.ReadAsStringAsync(ct);
             var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
-            stage = "mapping";
-            var body = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema, configuration);
             using var source = JsonDocument.Parse(job.PayloadJson);
             if (!source.RootElement.TryGetProperty("totalSaleAmount", out var saleElement) ||
-                !saleElement.TryGetDecimal(out var totalSaleAmount) || totalSaleAmount < 0)
-                throw new InvalidOperationException("Rate snapshot has no valid totalSaleAmount.");
+                !saleElement.TryGetDecimal(out var totalSaleAmount) || totalSaleAmount < 0 ||
+                !source.RootElement.TryGetProperty("totalCostAmount", out var costElement) ||
+                !costElement.TryGetDecimal(out var totalCostAmount) || totalCostAmount < 0)
+                throw new InvalidOperationException("Rate snapshot has no valid Pricing sale or supplier cost.");
+
+            // The tenant default currency can be CRC even when the Pricing
+            // quote is USD. Resolve ISO -> actual Dataverse GUID on every
+            // attempt, with the same active integration key (read-only).
+            var currencyField = schema.Fields.SingleOrDefault(field =>
+                field.Name.Equals("transactioncurrencyid", StringComparison.OrdinalIgnoreCase) &&
+                field.Target.EndsWith("@odata.bind", StringComparison.Ordinal));
+            if (currencyField is null)
+                throw new InvalidOperationException(
+                    "The active crear_oferta template must map transactioncurrencyid@odata.bind; no QUO was created.");
+            var iso = source.RootElement.TryGetProperty("currencyCode", out var currency) &&
+                currency.ValueKind == JsonValueKind.String
+                ? currency.GetString()?.Trim().ToUpperInvariant() : null;
+            if (iso is not ("USD" or "CRC"))
+                throw new InvalidOperationException(
+                    "The quote ISO currency must be USD or CRC before creating a Dynamics QUO.");
+            stage = "currency";
+            using var currencyRequest = new HttpRequestMessage(HttpMethod.Get,
+                Url + "/resolve-currency?connectionCode=principal&currencyCode=" + iso);
+            currencyRequest.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+            using var currencyResponse = await client.SendAsync(currencyRequest, ct);
+            if (!currencyResponse.IsSuccessStatusCode)
+            {
+                httpStatus = currencyResponse.StatusCode;
+                (providerCode, providerTitle) = DynamicsQuoteFailureDiagnostics.ReadProviderError(
+                    await currencyResponse.Content.ReadAsStringAsync(ct));
+                throw new DeliveryException(
+                    "ISO currency lookup HTTP " + (int)currencyResponse.StatusCode,
+                    Transient(currencyResponse.StatusCode));
+            }
+            using var resolvedCurrency = JsonDocument.Parse(
+                await currencyResponse.Content.ReadAsStringAsync(ct));
+            if (!resolvedCurrency.RootElement.TryGetProperty("noPostExecuted", out var noWrite) ||
+                noWrite.ValueKind != JsonValueKind.True ||
+                !resolvedCurrency.RootElement.TryGetProperty("currencyCode", out var resolvedIso) ||
+                resolvedIso.GetString() != iso ||
+                !resolvedCurrency.RootElement.TryGetProperty("currencyId", out var resolvedId) ||
+                !Guid.TryParse(resolvedId.GetString(), out var currencyId) ||
+                currencyId == Guid.Empty)
+                throw new InvalidOperationException("Dynamics ISO currency lookup returned an invalid GUID.");
+            stage = "mapping";
+            var body = DynamicsQuotePayloadBuilder.Build(job.PayloadJson, schema, configuration, currencyId);
 
             // Two separately idempotent Dataverse writes: create Quote header
             // and create its one write-in quotedetail for the standard totalamount.
@@ -204,6 +246,7 @@ public sealed class DynamicsQuoteDeliveryWorker(
                 connectionCode = "principal",
                 dholeRateId = job.RateId,
                 totalSaleAmount,
+                totalCostAmount,
                 inputs = inputJson
             };
             stage = "execute";
