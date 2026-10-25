@@ -345,33 +345,70 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 return Results.Conflict(new { code = "invalid_rate_revision" });
 
             stage = "existing_job";
-            var existing = await db.DynamicsQuoteSyncJobs.AsNoTracking()
-                .Where(x => x.RateId == rate.Id &&
-                            x.RevisionNumber == rate.RevisionNumber)
-                .Select(x => new { x.Status, x.Attempts })
-                .SingleOrDefaultAsync(cancellationToken);
-            if (existing is not null)
+            // All reads in this transaction use the same underlying Npgsql
+            // connection and transaction. Do not mix EF LINQ here: production
+            // failures moved from load_rate to existing_job after switching the
+            // first read to SQL, even though the job table is accessible to the
+            // normal queue viewer.
+            string? existingStatus;
+            await using (var jobCommand = db.Database.GetDbConnection().CreateCommand())
+            {
+                jobCommand.Transaction = transaction.GetDbTransaction();
+                jobCommand.CommandText =
+                    """
+                    SELECT "Status"
+                    FROM pricing."DynamicsQuoteSyncJobs"
+                    WHERE "RateId" = @rateId AND "RevisionNumber" = @revision
+                    LIMIT 1
+                    """;
+                var jobRateId = jobCommand.CreateParameter();
+                jobRateId.ParameterName = "@rateId";
+                jobRateId.Value = rate.Id;
+                jobCommand.Parameters.Add(jobRateId);
+                var jobRevision = jobCommand.CreateParameter();
+                jobRevision.ParameterName = "@revision";
+                jobRevision.Value = rate.RevisionNumber;
+                jobCommand.Parameters.Add(jobRevision);
+                existingStatus = await jobCommand.ExecuteScalarAsync(cancellationToken) as string;
+            }
+            if (existingStatus is not null)
                 return Results.Ok(new
                 {
                     rateId, revisionNumber = rate.RevisionNumber,
-                    status = existing.Status, alreadyQueued = true,
+                    status = existingStatus, alreadyQueued = true,
                     message = "Ya existe una sincronización para esta revisión. No se duplicó."
                 });
 
             stage = "load_equipment";
-            var containers = await db.RateContainerAllocations.AsNoTracking()
-                .Where(x => x.RateHeaderId == rateId)
-                .OrderBy(x => x.ContainerTypeCode)
-                .Select(x => new
-                {
-                    x.ContainerTypeName, x.ContainerTypeCode, x.Quantity
-                })
-                .ToArrayAsync(cancellationToken);
+            // A second EF projection can fail on historical records too. Read
+            // only the three required physical columns; build the same JSON
+            // shape consumed by DynamicsQuotePayloadBuilder.
+            string? containersJson;
+            await using (var containerCommand = db.Database.GetDbConnection().CreateCommand())
+            {
+                containerCommand.Transaction = transaction.GetDbTransaction();
+                containerCommand.CommandText =
+                    """
+                    SELECT COALESCE(
+                        jsonb_agg(jsonb_build_object(
+                            'containerTypeName', c.container_type_name,
+                            'containerTypeCode', c.container_type_code,
+                            'quantity', c.quantity
+                        ) ORDER BY c.container_type_code),
+                        '[]'::jsonb)::text
+                    FROM pricing."RateContainerAllocations" c
+                    WHERE c.rate_header_id = @rateId
+                    """;
+                var containerRateId = containerCommand.CreateParameter();
+                containerRateId.ParameterName = "@rateId";
+                containerRateId.Value = rateId;
+                containerCommand.Parameters.Add(containerRateId);
+                containersJson = await containerCommand.ExecuteScalarAsync(cancellationToken) as string;
+            }
 
             stage = "snapshot";
-            // Preserve the worker's immutable acceptance snapshot contract,
-            // without requiring a hydrated legacy RateHeader entity.
-            var payloadJson = rate.ToPayloadJson(containers);
+            using var containersDocument = JsonDocument.Parse(containersJson ?? "[]");
+            var payloadJson = rate.ToPayloadJson(containersDocument.RootElement);
             var jobId = Guid.NewGuid();
             var eventId = Guid.NewGuid();
             var now = DateTime.UtcNow;
@@ -397,17 +434,15 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             {
                 // Another acceptance or administrator inserted this revision.
                 // Return its real state; never create a second operation.
-                var concurrent = await db.DynamicsQuoteSyncJobs.AsNoTracking()
-                    .Where(x => x.RateId == rateId &&
-                                x.RevisionNumber == rate.RevisionNumber)
-                    .Select(x => x.Status)
-                    .SingleOrDefaultAsync(cancellationToken);
+                // The database unique constraint already proved another job
+                // owns this revision. Do not run an EF query after COMMIT merely
+                // to display its status; the queue GET provides its actual state.
                 return Results.Ok(new
                 {
                     rateId, revisionNumber = rate.RevisionNumber,
-                    status = concurrent ?? "Existing",
+                    status = "Existing",
                     alreadyQueued = true,
-                    message = "Esta revisión ya tiene un trabajo de Dynamics. No se duplicó."
+                    message = "Esta revisión ya tiene un trabajo de Dynamics. No se duplicó. Actualizá la cola para consultar el estado."
                 });
             }
             logger.LogInformation(
@@ -453,7 +488,11 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 {
                     ["code"] = "dynamics_enqueue_failed",
                     ["stage"] = stage,
-                    ["traceId"] = http.TraceIdentifier
+                    ["traceId"] = http.TraceIdentifier,
+                    // Safe diagnostics: never return SQL, internal connection
+                    // strings, stack traces or the immutable quote payload.
+                    ["exceptionType"] = error.GetType().Name,
+                    ["databaseCode"] = (error as Npgsql.PostgresException)?.SqlState
                 });
         }
     }
