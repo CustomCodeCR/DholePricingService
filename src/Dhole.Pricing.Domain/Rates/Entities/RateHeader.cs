@@ -1,6 +1,7 @@
 using CustomCodeFramework.Core.Domain.Entities;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Enums;
+using Dhole.Pricing.Domain.Rates;
 using Dhole.Pricing.Domain.Rates.Events;
 
 namespace Dhole.Pricing.Domain.Rates.Entities;
@@ -130,7 +131,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             )
         );
         ClientName = Normalize(clientName);
-        IdtraNumber = Normalize(idtraNumber);
+        IdtraNumber = IdtraNumberNormalizer.NormalizeCsvOrNull(idtraNumber);
         QuoNumber = Normalize(quoNumber);
         Includes = Normalize(includes);
         SubjectTo = Normalize(subjectTo);
@@ -466,7 +467,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         ContainerQuantity = containerQuantity;
         SynchronizeFreightQuantities();
         ClientName = Normalize(clientName);
-        IdtraNumber = Normalize(idtraNumber);
+        IdtraNumber = IdtraNumberNormalizer.NormalizeCsvOrNull(idtraNumber);
         QuoNumber = Normalize(quoNumber);
         Includes = Normalize(includes);
         SubjectTo = Normalize(subjectTo);
@@ -1313,11 +1314,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     {
         // Store the complete, normalized CSV. Each identifier remains independent
         // and the legacy IdtraNumber field remains backward-compatible.
-        var numbers = (idtraNumber ?? "").Split(',',
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var numbers = IdtraNumberNormalizer.Parse(idtraNumber);
         if (numbers.Length is < 1 or > 30 ||
             numbers.Any(value => value.Length > 100 || value.Contains(';')))
             throw new InvalidOperationException("Indique entre 1 y 30 IDTRA, de hasta 100 caracteres cada uno, separados por comas.");
