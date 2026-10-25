@@ -114,6 +114,34 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             .Select(x => new { Status = x.Key, Total = x.Count() })
             .ToListAsync(cancellationToken);
         int Count(string state) => counts.FirstOrDefault(x => x.Status == state)?.Total ?? 0;
+        // Accepted quotes with an IDTRA but NO job for the current revision
+        // must not disappear from monitoring just because the acceptance
+        // event was missed. Expose read-only, never auto-create or resend.
+        var notQueued = await db.RateHeaders.AsNoTracking()
+            .Where(r => !r.IsDeleted && r.Status == RateStatus.AcceptedByClient &&
+                r.IdtraNumber != null && r.IdtraNumber != "" &&
+                !db.DynamicsQuoteSyncJobs.Any(j =>
+                    j.RateId == r.Id && j.RevisionNumber == r.RevisionNumber))
+            .OrderByDescending(r => r.ValidFrom)
+            .Take(30)
+            .Select(r => new
+            {
+                rateId = r.Id,
+                r.RateCode,
+                r.RateName,
+                r.ClientName,
+                r.IdtraNumber,
+                r.RevisionNumber,
+                r.PolName,
+                r.PoeName,
+                r.PodName,
+                r.IncotermName,
+                r.TotalSaleAmount,
+                r.TotalCostAmount,
+                r.CurrencyCode
+            })
+            .ToListAsync(cancellationToken);
+
         // The job is immutable, but the linked rate may have been deleted,
         // reapproved, or advanced to a newer revision since it was queued.
         // Surface that state so an operator never sees an unexplained 404.
@@ -126,6 +154,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         return Results.Ok(new
         {
             totalShown = jobs.Count,
+            missingQueuedJobs = notQueued,
+            missingQueuedCountShown = notQueued.Count,
             refreshedAtUtc = DateTime.UtcNow,
             queue = new
             {
