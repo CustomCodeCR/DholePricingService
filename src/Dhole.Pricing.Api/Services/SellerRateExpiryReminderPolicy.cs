@@ -10,7 +10,6 @@ public static class SellerRateExpiryReminderPolicy
     public static readonly TimeZoneInfo CostaRicaZone =
         TimeZoneInfo.FindSystemTimeZoneById("America/Costa_Rica");
 
-    private static readonly TimeSpan Grace = TimeSpan.FromHours(2);
 
     public sealed record Reminder(string Key, string Label, DateTimeOffset ExpiresAtUtc);
 
@@ -40,7 +39,7 @@ public static class SellerRateExpiryReminderPolicy
                 DateTime.SpecifyKind(localAt, DateTimeKind.Unspecified),
                 CostaRicaZone), TimeSpan.Zero);
 
-            if (now.ToUniversalTime() >= dueUtc && now.ToUniversalTime() < dueUtc.Add(Grace))
+            // Day reminders run from 09:00 until midnight local time. The\n            // final 6-hour reminder runs until the actual expiry. This lets\n            // deployments/restarts later in the day catch their milestone\n            // without accidentally sending missed earlier-day reminders.\n            var windowEndUtc = key == "6h"\n                ? expirationUtc\n                : dueUtc.AddHours(15);\n            if (now.ToUniversalTime() >= dueUtc && now.ToUniversalTime() < windowEndUtc)
                 return new Reminder(key, label, expirationUtc);
         }
 
