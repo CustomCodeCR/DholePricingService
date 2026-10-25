@@ -27,7 +27,8 @@ public static class DynamicsQuotePayloadBuilder
         JsonSerializer.Deserialize<DynamicsCrudSchema>(response, Json)
         ?? throw new InvalidOperationException("Empty Dynamics CRUD schema.");
 
-    public static object Build(string acceptedSnapshot, DynamicsCrudSchema schema, IConfiguration? configuration = null)
+    public static object Build(string acceptedSnapshot, DynamicsCrudSchema schema,
+        IConfiguration? configuration = null, Guid? resolvedCurrencyId = null)
     {
         if (schema.Name != "crear_oferta" || schema.EntityName != "quote" ||
             schema.Operation != "create" || schema.ConnectionCode != "principal" ||
@@ -61,10 +62,6 @@ public static class DynamicsQuotePayloadBuilder
         if (idtraSlots.Count == 0 && !hasIdtraText)
             throw new InvalidOperationException(
                 "Dynamics crear_oferta has no field for the normalized IDTRA values.");
-
-        var amountSlots = schema.Fields
-            .Select(MontoIndex).Where(index => index is >= 1 and <= 9).ToArray();
-        var firstMappedAmount = amountSlots.Length > 0 ? amountSlots.Min() : 0;
 
         var cost = Decimal(rate, "totalCostAmount");
         var sale = Decimal(rate, "totalSaleAmount");
@@ -103,11 +100,9 @@ public static class DynamicsQuotePayloadBuilder
                 "effectiveto" => Date(rate, "validTo"),
                 "msdyn_invoicesetuptotals" => sale,
                 "new_flete" => cost,
-                // The quote snapshot has one consolidated supplier cost, not
-                // nine independent supplier bills. Put it in the FIRST mapped
-                // amount field, never in several fields (which doubles totals).
+                // Consolidated supplier cost goes in monto1; monto2..9 = 0.
                 var target when montoIndex is >= 1 and <= 9 =>
-                    montoIndex == firstMappedAmount ? cost : 0m,
+                    montoIndex == 1 ? cost : 0m,
                 "new_equipo" => EquipmentForSchema(rate, field),
                 "new_cantidadequipos" => Quantity(rate),
                 // Exact choices configured by the business for crear_oferta.
@@ -132,7 +127,7 @@ public static class DynamicsQuotePayloadBuilder
                     => idtraIndex <= idtras.Length ? idtras[idtraIndex - 1] : null,
                 var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
                     field.Name.Equals("transactioncurrencyid", StringComparison.OrdinalIgnoreCase)
-                    => CurrencyLookupValue(rate, field, configuration),
+                    => CurrencyLookupValue(resolvedCurrencyId),
                 "new_pol" => String(rate, "polName"),
                 "new_poe" => String(rate, "poeName"),
                 "new_pod" => String(rate, "podName"),
@@ -172,12 +167,11 @@ public static class DynamicsQuotePayloadBuilder
     public static string[] ParseIdtraNumbers(string? raw) =>
         IdtraNumberNormalizer.Parse(raw);
 
-    // Fixed Dataverse currency for the Pricing quote integration.
-    private const string QuoteCurrencyId = "b3a963da-2eda-e611-80f2-fc15b42826a0";
-
-    private static string CurrencyLookupValue(
-        JsonElement rate, DynamicsCrudField field, IConfiguration? configuration) =>
-        QuoteCurrencyId;
+    private static string CurrencyLookupValue(Guid? resolvedCurrencyId) =>
+        resolvedCurrencyId is Guid id && id != Guid.Empty
+            ? id.ToString("D")
+            : throw new InvalidOperationException(
+                "The quote currency was not resolved by Dataverse ISO code; no QUO was created.");
 
     private static object? CurrencyForSchema(JsonElement rate, DynamicsCrudField field)
     {
@@ -268,6 +262,12 @@ public static class DynamicsQuotePayloadBuilder
 
     private static string Quantity(JsonElement rate)
     {
+        if (String(rate, "shipmentMode") is "Lcl" or "Ltl" &&
+            rate.TryGetProperty("chargeableQuantity", out var billable) &&
+            billable.ValueKind == JsonValueKind.Number &&
+            billable.TryGetDecimal(out var quantity) && quantity > 0)
+            return quantity.ToString("0.####", CultureInfo.InvariantCulture) +
+                (String(rate, "shipmentMode") == "Lcl" ? " CBM LCL" : " LTL");
         if (rate.TryGetProperty("containers", out var containers) &&
             containers.ValueKind == JsonValueKind.Array && containers.GetArrayLength() != 0)
             return string.Join(", ", containers.EnumerateArray().Select(item =>
