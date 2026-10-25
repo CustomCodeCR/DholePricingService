@@ -40,6 +40,10 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         // when the connector proves the previous header was rejected 4xx.
         group.MapPost("/{rateId:guid}/dynamics-sync/recover-rejected",
             RecoverRejectedAsync);
+        // A previous 409 may be stale: reconcile only when BOTH writes are
+        // confirmed succeeded in the connector's durable ledger. No POST.
+        group.MapPost("/{rateId:guid}/dynamics-sync/reconcile-confirmed",
+            ReconcileConfirmedAsync);
         // Explicitly queue an already accepted rate with IDTRA if it predated
         // the integration or the acceptance event was not recorded. Does not
         // perform a Dataverse write in the HTTP request.
@@ -414,6 +418,96 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             ? Results.Accepted($"/api/pricing/rates/{rateId}/dynamics-sync",
                 new { rateId, status = "Pending", detail = "Reintento encolado con el mismo identificador." })
             : Results.Conflict(new { code = "sync_status_changed" });
+    }
+
+    private sealed record ConfirmedWriteResult(
+        bool Confirmed, string? HeaderStatus, string? TotalStatus,
+        Guid? QuoteId, Guid? LineId, bool NoPostExecuted);
+
+    private static async Task<IResult> ReconcileConfirmedAsync(
+        Guid rateId, HttpContext http, ServiceDbContext db,
+        IHttpClientFactory clients, IConfiguration configuration, CancellationToken ct)
+    {
+        if (!CanApproveRecovery(http.User)) return Results.Forbid();
+        var rate = await db.RateHeaders.AsNoTracking()
+            .Where(x => x.Id == rateId && !x.IsDeleted)
+            .Select(x => new { x.Status, x.RevisionNumber })
+            .SingleOrDefaultAsync(ct);
+        if (rate is null || rate.Status != RateStatus.AcceptedByClient)
+            return Results.Conflict(new { code = "sync_rate_not_eligible" });
+        var job = await db.DynamicsQuoteSyncJobs.AsNoTracking()
+            .Where(x => x.RateId == rateId && x.RevisionNumber == rate.RevisionNumber)
+            .SingleOrDefaultAsync(ct);
+        if (job is null) return Results.NotFound(new { code = "sync_job_not_found" });
+        if (job.Status == "Completed")
+            return Results.Ok(new { status = "Completed", alreadyReconciled = true });
+        if (job.Status != "NeedsAttention")
+            return Results.Conflict(new { code = "sync_job_not_ready_for_reconciliation" });
+        var apiKey = configuration["DynamicsQuoteSync:ApiKey"];
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return Results.Conflict(new { code = "dynamics_key_missing" });
+
+        // Never trust a browser-submitted CRM record ID. Recheck the two
+        // EXACT durable write operations on the connector using Pricing's key.
+        const string prefix =
+            "https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta";
+        var url = prefix + "/write-result?connectionCode=principal&dholeRateId=" +
+            Uri.EscapeDataString(rateId.ToString("D")) +
+            "&revisionNumber=" + rate.RevisionNumber.ToString(
+                System.Globalization.CultureInfo.InvariantCulture);
+        ConfirmedWriteResult? confirmation;
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+            using var response = await clients.CreateClient("DynamicsQuoteSync")
+                .SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+                return Results.Conflict(new {
+                    code = "sync_reconciliation_ledger_unavailable",
+                    message = "No se pudo verificar el registro de idempotencia. No se modificó la tarifa."
+                });
+            confirmation = await response.Content.ReadFromJsonAsync<ConfirmedWriteResult>(
+                cancellationToken: ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception)
+        {
+            return Results.Conflict(new {
+                code = "sync_reconciliation_unavailable",
+                message = "No se pudo consultar Dynamics. No se modificó la tarifa."
+            });
+        }
+        if (confirmation is not {
+            Confirmed: true, NoPostExecuted: true,
+            HeaderStatus: "succeeded", TotalStatus: "succeeded",
+            QuoteId: Guid quoteId, LineId: Guid lineId
+        } || quoteId == Guid.Empty || lineId == Guid.Empty)
+            return Results.Conflict(new {
+                code = "sync_reconciliation_not_confirmed",
+                message = "No hay dos operaciones confirmadas para esta misma tarifa y revisión. No se enviará otra QUO."
+            });
+
+        var now = DateTime.UtcNow;
+        var resultJson = JsonSerializer.Serialize(new {
+            state = "succeeded", recordId = quoteId, lineRecordId = lineId,
+            stage = "completed", reconciledFromLedger = true, noPostExecuted = true
+        });
+        var affected = await db.DynamicsQuoteSyncJobs
+            .Where(x => x.Id == job.Id && x.Status == "NeedsAttention")
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Status, "Completed")
+                .SetProperty(x => x.ResponseJson, resultJson)
+                .SetProperty(x => x.LastError, (string?)null)
+                .SetProperty(x => x.CompletedAtUtc, now)
+                .SetProperty(x => x.LeaseExpiresAtUtc, (DateTime?)null),
+                ct);
+        return affected == 1
+            ? Results.Ok(new {
+                status = "Completed", quoteId, lineId,
+                message = "QUO y línea de venta conciliadas sin otro POST a Dataverse."
+            })
+            : Results.Conflict(new { code = "sync_reconciliation_state_changed" });
     }
 
     private sealed record RecoverRejectedRequest(string Confirmation, string Reason);
