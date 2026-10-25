@@ -311,29 +311,30 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             }
 
             stage = "load_rate";
-            // Never hydrate the complete aggregate/its split-query graph for
-            // an operator enqueue. Historical rates can have optional legacy
-            // relationships or columns that are not materializable. Fetch
-            // precisely the mapped scalar columns needed by the Dynamics
-            // payload, using a single read-only, projected query.
-            var rate = await db.RateHeaders.AsNoTracking()
-                .Where(x => x.Id == rateId && !x.IsDeleted)
-                .Select(x => new
-                {
-                    x.Id, x.RevisionNumber, x.Status, x.IdtraNumber,
-                    x.RateCode, x.RateName, x.ClientName, x.ExecutiveName,
-                    x.TotalCostAmount, x.TotalSaleAmount,
-                    x.CurrencyCode, x.CurrencyName, x.ShipmentMode,
-                    x.RateType, x.IncotermName, x.ContainerQuantity,
-                    x.ContainerTypeName, x.ContainerTypeCode,
-                    x.ChargeableQuantity, x.ValidFrom, x.ValidTo,
-                    x.PolName, x.PoeName, x.PodName, x.Includes,
-                    x.SubjectTo, x.Excludes, x.TransitTime
-                })
-                .SingleOrDefaultAsync(cancellationToken);
-            if (rate is null)
+            // Read the locked physical row as JSON. The previous EF projection
+            // still failed for legacy rates at load_rate: EF tried to convert
+            // columns before the queue could validate the actual snapshot.
+            // to_jsonb reads only the requested row without entity hydration
+            // and tolerates historical optional column differences.
+            string? databaseRow;
+            await using (var readCommand = db.Database.GetDbConnection().CreateCommand())
+            {
+                readCommand.Transaction = transaction.GetDbTransaction();
+                readCommand.CommandText =
+                    """SELECT to_jsonb(r)::text FROM pricing."RateHeaders" r WHERE r.id = @id""";
+                var idParameter = readCommand.CreateParameter();
+                idParameter.ParameterName = "@id";
+                idParameter.Value = rateId;
+                readCommand.Parameters.Add(idParameter);
+                databaseRow = await readCommand.ExecuteScalarAsync(cancellationToken) as string;
+            }
+            if (databaseRow is null)
                 return Results.NotFound(new { code = "rate_not_found" });
-            if (rate.Status != RateStatus.AcceptedByClient ||
+
+            var rate = DynamicsQuoteEnqueueRateReader.Parse(databaseRow);
+            if (rate.Id != rateId || rate.IsDeleted)
+                return Results.NotFound(new { code = "rate_not_found" });
+            if (rate.Status != RateStatus.AcceptedByClient.ToString() ||
                 string.IsNullOrWhiteSpace(rate.IdtraNumber))
                 return Results.Conflict(new
                 {
@@ -368,27 +369,9 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 .ToArrayAsync(cancellationToken);
 
             stage = "snapshot";
-            // Same field contract as PricingAuditSnapshots.From(RateHeader),
-            // but without loading RateDetails/RateServices or all legacy
-            // columns. Manual jobs are immutable after this transaction.
-            var snapshot = new
-            {
-                rate.Id, rate.RateCode, rate.RateName, rate.RevisionNumber,
-                rate.ClientName, rate.ExecutiveName, rate.IdtraNumber,
-                rate.TotalCostAmount, rate.TotalSaleAmount,
-                rate.CurrencyCode, rate.CurrencyName, rate.IncotermName,
-                rate.PolName, rate.PoeName, rate.PodName,
-                rate.ContainerQuantity, rate.ContainerTypeName,
-                rate.ContainerTypeCode, rate.ChargeableQuantity,
-                rate.ValidFrom, rate.ValidTo, rate.Includes,
-                rate.SubjectTo, rate.Excludes, rate.TransitTime,
-                RateType = rate.RateType.ToString(),
-                ShipmentMode = rate.ShipmentMode.ToString(),
-                Status = rate.Status.ToString(),
-                Containers = containers
-            };
-            var payloadJson = JsonSerializer.Serialize(snapshot,
-                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            // Preserve the worker's immutable acceptance snapshot contract,
+            // without requiring a hydrated legacy RateHeader entity.
+            var payloadJson = rate.ToPayloadJson(containers);
             var jobId = Guid.NewGuid();
             var eventId = Guid.NewGuid();
             var now = DateTime.UtcNow;
@@ -441,6 +424,18 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             throw;
+        }
+        catch (InvalidDataException error)
+        {
+            logger.LogWarning(error,
+                "Dynamics enqueue refused invalid rate snapshot for {RateId} at {Stage}",
+                rateId, stage);
+            return Results.Conflict(new
+            {
+                code = "dynamics_rate_snapshot_invalid",
+                stage,
+                message = "La tarifa contiene datos históricos inválidos para sincronizar. Revisá el registro de Pricing; no se creó un trabajo ni se envió una QUO."
+            });
         }
         catch (Exception error)
         {
