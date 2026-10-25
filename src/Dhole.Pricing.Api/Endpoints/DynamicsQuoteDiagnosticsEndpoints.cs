@@ -1125,6 +1125,10 @@ public static class DynamicsQuoteDiagnosticsEndpoints
     private static bool CanRetry(string status, string? diagnosticJson)
     {
         if (status != "NeedsAttention") return false;
+        // Historical text-limit HTTP 422 is a proven pre-header validation
+        // rejection, even when the old worker incorrectly set postAttempted.
+        if (DynamicsQuoteFailureDiagnostics.IsKnownLegacyTextPreflight(diagnosticJson))
+            return true;
         try
         {
             using var doc = JsonDocument.Parse(diagnosticJson ?? "{}");

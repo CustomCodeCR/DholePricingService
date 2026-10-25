@@ -111,4 +111,41 @@ public sealed class DynamicsQuoteFailureDiagnosticsTests
     }
 
 
+
+    [TestMethod]
+    public void TextLimit422IsAProvenPreWriteFailureWithFieldDiagnostic()
+    {
+        Assert.IsTrue(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure(
+            "quote_text_exceeds_dataverse_limit"));
+        var response = """
+            {"code":"quote_text_exceeds_dataverse_limit",
+             "lookupInput":"name","lookupSearchField":"MaxLength"}
+            """;
+        var (field, bound) = DynamicsQuoteFailureDiagnostics.ReadProviderLookup(response);
+        Assert.AreEqual("name", field);
+        Assert.AreEqual("MaxLength", bound);
+        var (message, json) = DynamicsQuoteFailureDiagnostics.Format(
+            "execute", new HttpRequestException("no POST"), false,
+            HttpStatusCode.UnprocessableEntity, "quote_text_exceeds_dataverse_limit",
+            "Validation rejected", field, bound);
+        StringAssert.Contains(message, "name");
+        using var parsed = JsonDocument.Parse(json);
+        Assert.IsFalse(parsed.RootElement.GetProperty("postAttempted").GetBoolean());
+    }
+
+    [TestMethod]
+    public void PriorTextLimitPreflightCanBeRetriedButOtherPostResultsCannot()
+    {
+        const string oldResponse = """
+            {"stage":"execute","providerCode":"quote_text_exceeds_dataverse_limit",
+             "httpStatus":422,"postAttempted":true}
+            """;
+        Assert.IsTrue(DynamicsQuoteFailureDiagnostics.IsKnownLegacyTextPreflight(oldResponse));
+        Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsKnownLegacyTextPreflight(
+            oldResponse.Replace("422", "409")));
+        Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsKnownLegacyTextPreflight(
+            oldResponse.Replace("quote_text_exceeds_dataverse_limit", "quote_header_dataverse_rejected")));
+        Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsKnownLegacyTextPreflight(
+            oldResponse.Replace("execute", "total")));
+    }
 }
