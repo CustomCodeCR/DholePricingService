@@ -19,8 +19,11 @@ public sealed class DynamicsQuoteDeliveryWorker(
     private const int MaxAttempts = 10;
     private const string Url =
         "https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta";
-    private static readonly TimeSpan ReadinessInterval = TimeSpan.FromMinutes(2);
-    private static readonly TimeSpan Poll = TimeSpan.FromSeconds(10);
+    // Readiness blocks QUO creation when Dynamics permissions are incomplete.
+    // Recheck quickly during a block; use a longer interval when healthy.
+    private static readonly TimeSpan HealthyReadinessInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan BlockedReadinessInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan Poll = TimeSpan.FromSeconds(1);
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -35,7 +38,7 @@ public sealed class DynamicsQuoteDeliveryWorker(
             return;
         }
 
-        await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+        await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
         // Repair only historic failures that explicitly prove no POST was
         // attempted. Legacy unclassified failures remain untouched.
         try
@@ -67,15 +70,19 @@ public sealed class DynamicsQuoteDeliveryWorker(
             if (DateTime.UtcNow >= nextReadinessCheckUtc)
             {
                 quoteWritesReady = await ProbeWriteReadinessAsync(apiKey, stoppingToken);
-                nextReadinessCheckUtc = DateTime.UtcNow.Add(ReadinessInterval);
+                nextReadinessCheckUtc = DateTime.UtcNow.Add(quoteWritesReady
+                    ? HealthyReadinessInterval : BlockedReadinessInterval);
                 if (!quoteWritesReady)
                     logger.LogWarning(
                         "Dynamics quote queue paused: production write approval or connector readiness is missing.");
             }
             try
             {
-                if (quoteWritesReady)
-                    await ProcessNextAsync(apiKey, stoppingToken);
+                // Drain ready jobs back-to-back. Every job is atomically
+                // claimed with FOR UPDATE SKIP LOCKED and keeps the same
+                // idempotency key: this does not create duplicate Quotes.
+                if (quoteWritesReady && await ProcessNextAsync(apiKey, stoppingToken))
+                    continue;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex)
@@ -114,7 +121,7 @@ public sealed class DynamicsQuoteDeliveryWorker(
         }
     }
 
-    private async Task ProcessNextAsync(string apiKey, CancellationToken ct)
+    private async Task<bool> ProcessNextAsync(string apiKey, CancellationToken ct)
     {
         Guid? jobId = null;
         await using (var claimScope = scopes.CreateAsyncScope())
@@ -156,7 +163,7 @@ public sealed class DynamicsQuoteDeliveryWorker(
             finally { await db.Database.CloseConnectionAsync(); }
         }
 
-        if (jobId is null) return;
+        if (jobId is null) return false;
         await using var scope = scopes.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
         var job = await dbContext.DynamicsQuoteSyncJobs
@@ -295,7 +302,7 @@ public sealed class DynamicsQuoteDeliveryWorker(
                 logger.LogInformation(
                     "Dynamics quote synchronized for Pricing rate {RateId} revision {Revision}.",
                     job.RateId, job.RevisionNumber);
-                return;
+                return true;
             }
             throw new DeliveryException("Dynamics did not confirm a succeeded write.", false);
         }
@@ -319,6 +326,9 @@ public sealed class DynamicsQuoteDeliveryWorker(
                 job.RateId, job.RevisionNumber, job.Status, job.Attempts, stage,
                 (int?)httpStatus, providerCode, postAttempted, job.LastError);
         }
+        // The claimed job was handled (success or persisted failure);
+        // check the next queued job immediately instead of sleeping.
+        return true;
     }
 
     private static bool Transient(HttpStatusCode code) =>
