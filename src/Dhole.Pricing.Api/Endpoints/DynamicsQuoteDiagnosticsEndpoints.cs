@@ -284,7 +284,6 @@ public static class DynamicsQuoteDiagnosticsEndpoints
 
     private static async Task<IResult> EnqueueAcceptedAsync(
         Guid rateId, HttpContext http, ServiceDbContext db,
-        IRateHeaderRepository rateHeaders,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
@@ -312,8 +311,27 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             }
 
             stage = "load_rate";
-            var rate = await rateHeaders.GetByIdWithDetailsAsync(rateId, cancellationToken);
-            if (rate is null || rate.IsDeleted)
+            // Never hydrate the complete aggregate/its split-query graph for
+            // an operator enqueue. Historical rates can have optional legacy
+            // relationships or columns that are not materializable. Fetch
+            // precisely the mapped scalar columns needed by the Dynamics
+            // payload, using a single read-only, projected query.
+            var rate = await db.RateHeaders.AsNoTracking()
+                .Where(x => x.Id == rateId && !x.IsDeleted)
+                .Select(x => new
+                {
+                    x.Id, x.RevisionNumber, x.Status, x.IdtraNumber,
+                    x.RateCode, x.RateName, x.ClientName, x.ExecutiveName,
+                    x.TotalCostAmount, x.TotalSaleAmount,
+                    x.CurrencyCode, x.CurrencyName, x.ShipmentMode,
+                    x.RateType, x.IncotermName, x.ContainerQuantity,
+                    x.ContainerTypeName, x.ContainerTypeCode,
+                    x.ChargeableQuantity, x.ValidFrom, x.ValidTo,
+                    x.PolName, x.PoeName, x.PodName, x.Includes,
+                    x.SubjectTo, x.Excludes, x.TransitTime
+                })
+                .SingleOrDefaultAsync(cancellationToken);
+            if (rate is null)
                 return Results.NotFound(new { code = "rate_not_found" });
             if (rate.Status != RateStatus.AcceptedByClient ||
                 string.IsNullOrWhiteSpace(rate.IdtraNumber))
@@ -339,8 +357,36 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                     message = "Ya existe una sincronización para esta revisión. No se duplicó."
                 });
 
+            stage = "load_equipment";
+            var containers = await db.RateContainerAllocations.AsNoTracking()
+                .Where(x => x.RateHeaderId == rateId)
+                .OrderBy(x => x.ContainerTypeCode)
+                .Select(x => new
+                {
+                    x.ContainerTypeName, x.ContainerTypeCode, x.Quantity
+                })
+                .ToArrayAsync(cancellationToken);
+
             stage = "snapshot";
-            var snapshot = PricingAuditSnapshots.From(rate);
+            // Same field contract as PricingAuditSnapshots.From(RateHeader),
+            // but without loading RateDetails/RateServices or all legacy
+            // columns. Manual jobs are immutable after this transaction.
+            var snapshot = new
+            {
+                rate.Id, rate.RateCode, rate.RateName, rate.RevisionNumber,
+                rate.ClientName, rate.ExecutiveName, rate.IdtraNumber,
+                rate.TotalCostAmount, rate.TotalSaleAmount,
+                rate.CurrencyCode, rate.CurrencyName, rate.IncotermName,
+                rate.PolName, rate.PoeName, rate.PodName,
+                rate.ContainerQuantity, rate.ContainerTypeName,
+                rate.ContainerTypeCode, rate.ChargeableQuantity,
+                rate.ValidFrom, rate.ValidTo, rate.Includes,
+                rate.SubjectTo, rate.Excludes, rate.TransitTime,
+                RateType = rate.RateType.ToString(),
+                ShipmentMode = rate.ShipmentMode.ToString(),
+                Status = rate.Status.ToString(),
+                Containers = containers
+            };
             var payloadJson = JsonSerializer.Serialize(snapshot,
                 new JsonSerializerOptions(JsonSerializerDefaults.Web));
             var jobId = Guid.NewGuid();
