@@ -31,7 +31,7 @@ public static class DynamicsQuoteFailureDiagnostics
             "lookup_name_not_found" or "lookup_name_ambiguous" or
             "lookup_name_field_not_authorized" or "lookup_relation_not_approved" or
             "preview_lookup_target_denied" or "choice_label_not_found" or
-            "choice_label_ambiguous";
+            "choice_label_ambiguous" or "quote_text_exceeds_dataverse_limit";
 
     // A definitive policy rejection happens in the HTTP middleware before
     // template execution and BEFORE any Dataverse write or idempotency claim.
@@ -49,6 +49,35 @@ public static class DynamicsQuoteFailureDiagnostics
         provider.ValueKind == JsonValueKind.String &&
         provider.GetString() is ("production_writes_not_approved" or
             "production_quote_writes_not_approved");
+
+    /// <summary>
+    /// The old worker incorrectly marked POST-attempted for a connector
+    /// validation HTTP 422. This precise provider code can ONLY be emitted
+    /// from PricingQuoteTextLimits before any header write or ledger entry.
+    /// Do not generalize this override to other 422/409/unknown errors.
+    /// </summary>
+    public static bool IsKnownLegacyTextPreflight(string? diagnosticJson)
+    {
+        if (string.IsNullOrWhiteSpace(diagnosticJson)) return false;
+        try
+        {
+            using var parsed = JsonDocument.Parse(diagnosticJson);
+            var root = parsed.RootElement;
+            return root.ValueKind == JsonValueKind.Object &&
+                root.TryGetProperty("stage", out var stage) &&
+                stage.ValueKind == JsonValueKind.String &&
+                stage.GetString() == "execute" &&
+                root.TryGetProperty("providerCode", out var code) &&
+                code.ValueKind == JsonValueKind.String &&
+                code.GetString() == "quote_text_exceeds_dataverse_limit" &&
+                root.TryGetProperty("httpStatus", out var status) &&
+                status.ValueKind == JsonValueKind.Number &&
+                status.TryGetInt32(out var http) && http == 422 &&
+                root.TryGetProperty("postAttempted", out var attempt) &&
+                attempt.ValueKind == JsonValueKind.True;
+        }
+        catch (JsonException) { return false; }
+    }
 
     public static (string LastError, string DiagnosticJson) Format(
         string stage, Exception exception, bool postAttempted,
@@ -95,6 +124,12 @@ public static class DynamicsQuoteFailureDiagnostics
             description = $"Dynamics encontró varios registros para {lookupInput}" +
                 (lookupSearchField is null ? "." : $" en el campo {lookupSearchField}.") +
                 " Se necesita una coincidencia única.";
+        else if (providerCode == "quote_text_exceeds_dataverse_limit")
+            description = lookupInput is null
+                ? "Algún texto supera el límite de Dataverse. La QUO no se envió; revisá el esquema actualizado."
+                : $"El campo {lookupInput} supera la longitud máxima autorizada (MaxLength) en Dataverse. " +
+                  "La QUO no se envió. El sistema solo abrevia etiquetas de presentación; " +
+                  "las condiciones, el cliente y el IDTRA se conservan completos.";
         var display = Safe($"[{code}] {stage}: {description}", 500);
         var json = JsonSerializer.Serialize(new
         {
