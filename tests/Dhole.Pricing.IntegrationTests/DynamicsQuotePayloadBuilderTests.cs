@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Dhole.Pricing.Api.Services;
+using Dhole.Pricing.Domain.Rates;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Dhole.Pricing.IntegrationTests;
@@ -68,7 +69,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         Assert.AreEqual(100000004, inputs.GetProperty("new_proyecctoespecifico").GetInt32());
         Assert.AreEqual(100000000, inputs.GetProperty("new_tipodecliente").GetInt32());
         Assert.AreEqual("quote", inputs.GetProperty("customeridtype").GetString());
-        Assert.AreEqual("IDTRA-2026-045", inputs.GetProperty("new_idtraasignado").GetString());
+        Assert.AreEqual("IDTRA999.2026-045", inputs.GetProperty("new_idtraasignado").GetString());
         Assert.AreEqual("2 x 40 HC", inputs.GetProperty("new_cantidadequipos").GetString());
     }
 
@@ -109,7 +110,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         Assert.AreEqual(1800.75m, inputs.GetProperty("new_flete").GetDecimal());
         Assert.AreEqual(1800.75m, inputs.GetProperty("new_monto9").GetDecimal());
         Assert.IsFalse(inputs.TryGetProperty("msdyn_invoicesetuptotals", out _));
-        Assert.AreEqual("IDTRA-2026-045",
+        Assert.AreEqual("IDTRA999.2026-045",
             inputs.GetProperty("new_idtraasignado").GetString());
     }
 
@@ -140,7 +141,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         var inputs = doc.RootElement.GetProperty("inputs");
         Assert.AreEqual("Cliente Prueba", inputs.GetProperty("customerid").GetString());
         Assert.AreEqual("Cliente Prueba", inputs.GetProperty("msdyn_account").GetString());
-        Assert.AreEqual("IDTRA-2026-045", inputs.GetProperty("new_idtra1").GetString());
+        Assert.AreEqual("IDTRA999.2026-045", inputs.GetProperty("new_idtra1").GetString());
         Assert.IsFalse(inputs.TryGetProperty("customeridtype", out _));
         Assert.IsFalse(inputs.TryGetProperty("new_idtraasignado", out _));
     }
@@ -212,7 +213,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
             DynamicsQuotePayloadBuilder.ParseIdtraNumbers(
                 "IDTRA IDTRA999.12565, IDTRA999.12566 // QUO-00000-000316"));
         CollectionAssert.AreEqual(
-            new[] { "IDTRA-2026-00125" },
+            new[] { "IDTRA999.2026-00125" },
             DynamicsQuotePayloadBuilder.ParseIdtraNumbers(
                 "IDTRA-2026-00125 // QUO-00000-000316"));
         CollectionAssert.AreEqual(
@@ -224,9 +225,53 @@ public sealed class DynamicsQuotePayloadBuilderTests
             DynamicsQuotePayloadBuilder.ParseIdtraNumbers(
                 "IDTRA IDTRA999.12585-QUO 11228, IDTRA999.12586-QUO 11229 // QUO-00000-000352"));
         CollectionAssert.AreEqual(
-            new[] { "IDTRA-2026-00125" },
+            new[] { "IDTRA999.2026-00125" },
             DynamicsQuotePayloadBuilder.ParseIdtraNumbers(
                 "IDTRA-2026-00125"));
+    }
+
+    [TestMethod]
+    public void DynamicsLookupAlwaysUsesIdtra999PrefixAndNeverIncludesQuo()
+    {
+        var cases = new (string Input, string Expected)[]
+        {
+            ("IDTRA12589-QUO11098", "IDTRA999.12589"),
+            ("IDTRA999.12589-QUO11098", "IDTRA999.12589"),
+            ("IDTRA12589", "IDTRA999.12589"),
+            ("12589", "IDTRA999.12589"),
+            ("999.12589", "IDTRA999.12589"),
+            ("IDTRA 12589", "IDTRA999.12589"),
+            ("IDTRA IDTRA999.12589 // QUO-00000-000061", "IDTRA999.12589"),
+            ("IDTRA-2026-00125 // QUO-123", "IDTRA999.2026-00125")
+        };
+        foreach (var (input, expected) in cases)
+        {
+            CollectionAssert.AreEqual(new[] { expected },
+                DynamicsQuotePayloadBuilder.ParseIdtraNumbers(input), input);
+            Assert.AreEqual(expected, IdtraNumberNormalizer.NormalizeCsvOrNull(input), input);
+        }
+        CollectionAssert.AreEqual(new[] { "IDTRA999.12589", "IDTRA999.12590" },
+            DynamicsQuotePayloadBuilder.ParseIdtraNumbers(
+                "IDTRA12589-QUO11098, 12590-QUO11099, IDTRA999.12589 // QUO-00000-000061"));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            DynamicsQuotePayloadBuilder.ParseIdtraNumbers("QUO11098"));
+    }
+
+    [TestMethod]
+    public void ActiveQuoteLookupUsesCanonicalIdtraForExistingRawSnapshot()
+    {
+        var fields = Schema.Replace(
+            """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            """{"name":"new_idtra1","target":"new_IDTRA1@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
+              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            StringComparison.Ordinal);
+        var accepted = Accepted.Replace("IDTRA-2026-045", "IDTRA12589-QUO11098");
+        using var result = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(accepted,
+                DynamicsQuotePayloadBuilder.ReadSchema(fields))));
+        var inputs = result.RootElement.GetProperty("inputs");
+        Assert.AreEqual("IDTRA999.12589", inputs.GetProperty("new_idtra1").GetString());
+        Assert.AreEqual("IDTRA999.12589", inputs.GetProperty("new_idtraasignado").GetString());
     }
 
     [TestMethod]
@@ -334,8 +379,9 @@ public sealed class DynamicsQuotePayloadBuilderTests
             DynamicsQuotePayloadBuilder.Build(
                 Accepted.Replace("IDTRA-2026-045", csv, StringComparison.Ordinal), schema)));
         var inputs = result.RootElement.GetProperty("inputs");
-        Assert.AreEqual("IDTRA10", inputs.GetProperty("new_idtra10").GetString());
-        Assert.AreEqual(csv, inputs.GetProperty("new_idtraasignado").GetString());
+        Assert.AreEqual("IDTRA999.10", inputs.GetProperty("new_idtra10").GetString());
+        Assert.AreEqual(string.Join(", ", Enumerable.Range(1, 10).Select(i => "IDTRA999." + i)),
+            inputs.GetProperty("new_idtraasignado").GetString());
     }
 
     [TestMethod]
