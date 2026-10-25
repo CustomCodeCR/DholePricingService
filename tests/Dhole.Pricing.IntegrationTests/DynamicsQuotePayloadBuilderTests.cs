@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Configuration;
 using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Domain.Rates;
@@ -429,4 +430,32 @@ public sealed class DynamicsQuotePayloadBuilderTests
             .GetProperty("new_cantidadequipos").GetString());
     }
 
+    [TestMethod]
+    public void CommercialTermsAreOmittedEvenWhenTemplateMarksInputsRequired()
+    {
+        const string commercialFields = """
+            {"name":"new_noincluye","target":"new_noincluye","type":"string","dataverseType":"String","required":true,"options":[]},
+            {"name":"new_tarifasujetaa","target":"new_tarifasujetaa","type":"string","dataverseType":"String","required":true,"options":[]},
+            {"name":"new_tarifaincluye","target":"new_tarifaincluye","type":"string","dataverseType":"String","required":true,"options":[]},
+            """;
+        // Append approved commercial fields without changing the mandatory
+        // Pricing quote schema or any of its other field mappings.
+        var fields = JsonNode.Parse(Schema)!.AsObject()["fields"]!.AsArray();
+        var extra = JsonNode.Parse("[" + commercialFields.Trim().TrimEnd(',') + "]")!.AsArray();
+        foreach (var field in extra) fields.Add(field!.DeepClone());
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(fields.Parent!.ToJsonString());
+        var accepted = JsonNode.Parse(Accepted)!.AsObject();
+        accepted["excludes"] = new string('X', 12000);
+        accepted["subjectTo"] = new string('Y', 12000);
+        accepted["includes"] = new string('Z', 12000);
+        using var outbound = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(accepted.ToJsonString(), schema)));
+        var inputs = outbound.RootElement.GetProperty("inputs");
+        Assert.IsFalse(inputs.TryGetProperty("new_noincluye", out _));
+        Assert.IsFalse(inputs.TryGetProperty("new_tarifasujetaa", out _));
+        Assert.IsFalse(inputs.TryGetProperty("new_tarifaincluye", out _));
+        Assert.AreEqual("Oferta 40HC", inputs.GetProperty("name").GetString());
+        Assert.AreEqual(1800.75m, inputs.GetProperty("new_flete").GetDecimal());
+        Assert.AreEqual(12000, accepted["excludes"]!.GetValue<string>().Length);
+    }
 }

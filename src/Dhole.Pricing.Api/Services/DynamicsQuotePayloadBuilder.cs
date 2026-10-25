@@ -85,6 +85,12 @@ public static class DynamicsQuotePayloadBuilder
 
         foreach (var field in schema.Fields)
         {
+            // These are optional commercial presentation texts in Dynamics.
+            // Never forward them (not even an empty string/null), including
+            // when a historical active template marked the input as required.
+            // The accepted Pricing snapshot, tariff and PDF remain unchanged.
+            if (field.Target is "new_noincluye" or "new_tarifasujetaa" or "new_tarifaincluye")
+                continue;
             // These quote totals are calculated and read-only in Dataverse.
             // Only their writable source fields may be included in crear_oferta.
             if (field.Target is "new_totalcostoproveedor" or "new_totalcostotarifario")
