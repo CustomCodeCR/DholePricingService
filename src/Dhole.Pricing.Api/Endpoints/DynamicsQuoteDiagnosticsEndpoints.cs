@@ -284,90 +284,136 @@ public static class DynamicsQuoteDiagnosticsEndpoints
 
     private static async Task<IResult> EnqueueAcceptedAsync(
         Guid rateId, HttpContext http, ServiceDbContext db,
-        IRateHeaderRepository rateHeaders, IPricingAuditService audit,
+        IRateHeaderRepository rateHeaders,
+        ILogger<DynamicsQuoteDiagnosticsEndpoints> logger,
         CancellationToken cancellationToken)
     {
         if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
-        // Lock the rate so a concurrent IDTRA assignment or approval cannot
-        // create a second synchronization job for the same revision.
-        await using var transaction = await db.Database.BeginTransactionAsync(
-            IsolationLevel.ReadCommitted, cancellationToken);
-        await using (var lockCommand = db.Database.GetDbConnection().CreateCommand())
+        // All writes in this endpoint are to the Pricing queue. It never POSTs
+        // to Dynamics. Serialize against acceptance/revision updates by
+        // locking the physical rate row inside a local database transaction.
+        var stage = "acquire_lock";
+        try
         {
-            lockCommand.Transaction = transaction.GetDbTransaction();
-            lockCommand.CommandText =
-                """SELECT id FROM pricing."RateHeaders" WHERE id = @id FOR UPDATE""";
-            var parameter = lockCommand.CreateParameter();
-            parameter.ParameterName = "@id";
-            parameter.Value = rateId;
-            lockCommand.Parameters.Add(parameter);
-            if (await lockCommand.ExecuteScalarAsync(cancellationToken) is not Guid)
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                IsolationLevel.ReadCommitted, cancellationToken);
+            await using (var lockCommand = db.Database.GetDbConnection().CreateCommand())
+            {
+                lockCommand.Transaction = transaction.GetDbTransaction();
+                lockCommand.CommandText =
+                    """SELECT id FROM pricing."RateHeaders" WHERE id = @id FOR UPDATE""";
+                var parameter = lockCommand.CreateParameter();
+                parameter.ParameterName = "@id";
+                parameter.Value = rateId;
+                lockCommand.Parameters.Add(parameter);
+                if (await lockCommand.ExecuteScalarAsync(cancellationToken) is not Guid)
+                    return Results.NotFound(new { code = "rate_not_found" });
+            }
+
+            stage = "load_rate";
+            var rate = await rateHeaders.GetByIdWithDetailsAsync(rateId, cancellationToken);
+            if (rate is null || rate.IsDeleted)
                 return Results.NotFound(new { code = "rate_not_found" });
+            if (rate.Status != RateStatus.AcceptedByClient ||
+                string.IsNullOrWhiteSpace(rate.IdtraNumber))
+                return Results.Conflict(new
+                {
+                    code = "rate_not_ready_for_dynamics",
+                    message = "La tarifa debe estar aceptada y tener IDTRA antes de crear la oferta."
+                });
+            if (rate.RevisionNumber < 1)
+                return Results.Conflict(new { code = "invalid_rate_revision" });
+
+            stage = "existing_job";
+            var existing = await db.DynamicsQuoteSyncJobs.AsNoTracking()
+                .Where(x => x.RateId == rate.Id &&
+                            x.RevisionNumber == rate.RevisionNumber)
+                .Select(x => new { x.Status, x.Attempts })
+                .SingleOrDefaultAsync(cancellationToken);
+            if (existing is not null)
+                return Results.Ok(new
+                {
+                    rateId, revisionNumber = rate.RevisionNumber,
+                    status = existing.Status, alreadyQueued = true,
+                    message = "Ya existe una sincronización para esta revisión. No se duplicó."
+                });
+
+            stage = "snapshot";
+            var snapshot = PricingAuditSnapshots.From(rate);
+            var payloadJson = JsonSerializer.Serialize(snapshot,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            var jobId = Guid.NewGuid();
+            var eventId = Guid.NewGuid();
+            var now = DateTime.UtcNow;
+
+            // The manual command is already audited by its immutable,
+            // uniquely keyed durable job. DO NOT invoke PricingAuditService
+            // with an artificial RateHeaderUpdated/Before=After event: it
+            // adds unrelated outbox writes and can roll back manual enqueues.
+            // Atomic PostgreSQL ON CONFLICT also handles any concurrent
+            // acceptance-created job without producing a 500 or duplicates.
+            stage = "insert_job";
+            var inserted = await db.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO pricing."DynamicsQuoteSyncJobs"
+                    ("Id","EventId","RateId","RevisionNumber","PayloadJson",
+                     "Status","Attempts","NextAttemptAtUtc","CreatedAtUtc")
+                VALUES ({jobId},{eventId},{rate.Id},{rate.RevisionNumber},
+                        {payloadJson},'Pending',0,{now},{now})
+                ON CONFLICT ("RateId","RevisionNumber") DO NOTHING
+                """, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            if (inserted == 0)
+            {
+                // Another acceptance or administrator inserted this revision.
+                // Return its real state; never create a second operation.
+                var concurrent = await db.DynamicsQuoteSyncJobs.AsNoTracking()
+                    .Where(x => x.RateId == rateId &&
+                                x.RevisionNumber == rate.RevisionNumber)
+                    .Select(x => x.Status)
+                    .SingleOrDefaultAsync(cancellationToken);
+                return Results.Ok(new
+                {
+                    rateId, revisionNumber = rate.RevisionNumber,
+                    status = concurrent ?? "Existing",
+                    alreadyQueued = true,
+                    message = "Esta revisión ya tiene un trabajo de Dynamics. No se duplicó."
+                });
+            }
+            logger.LogInformation(
+                "Manual Dynamics quote enqueue recorded for rate {RateId} revision {Revision} job {JobId}",
+                rateId, rate.RevisionNumber, jobId);
+            return Results.Accepted($"/api/pricing/rates/{rateId}/dynamics-sync",
+                new
+                {
+                    rateId, revisionNumber = rate.RevisionNumber,
+                    status = "Pending", alreadyQueued = false,
+                    message = "Trabajo guardado en Pricing. Dynamics aún no ha confirmado la QUO."
+                });
         }
-
-        var rate = await rateHeaders.GetByIdWithDetailsAsync(rateId, cancellationToken);
-        if (rate is null || rate.IsDeleted)
-            return Results.NotFound(new { code = "rate_not_found" });
-        if (rate.Status != RateStatus.AcceptedByClient ||
-            string.IsNullOrWhiteSpace(rate.IdtraNumber))
-            return Results.Conflict(new
-            {
-                code = "rate_not_ready_for_dynamics",
-                message = "La tarifa debe estar aceptada y tener IDTRA antes de crear la oferta."
-            });
-        if (rate.RevisionNumber < 1)
-            return Results.Conflict(new { code = "invalid_rate_revision" });
-
-        var existing = await db.DynamicsQuoteSyncJobs.AsNoTracking()
-            .Where(x => x.RateId == rate.Id &&
-                        x.RevisionNumber == rate.RevisionNumber)
-            .Select(x => new { x.Status, x.Attempts })
-            .SingleOrDefaultAsync(cancellationToken);
-        if (existing is not null)
-            return Results.Ok(new
-            {
-                rateId, revisionNumber = rate.RevisionNumber,
-                status = existing.Status, alreadyQueued = true,
-                message = "Ya existe una sincronización para esta revisión. No se duplicó."
-            });
-
-        var eventId = Guid.NewGuid();
-        var snapshot = PricingAuditSnapshots.From(rate);
-        db.DynamicsQuoteSyncJobs.Add(new Dhole.Pricing.Persistence.Auditing.DynamicsQuoteSyncJob
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            Id = Guid.NewGuid(),
-            EventId = eventId,
-            RateId = rate.Id,
-            RevisionNumber = rate.RevisionNumber,
-            PayloadJson = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-            Status = "Pending",
-            NextAttemptAtUtc = DateTime.UtcNow,
-            CreatedAtUtc = DateTime.UtcNow
-        });
-        await audit.PublishAsync(new PricingAuditEvent(
-            EventType: PricingAuditEventTypes.RateHeaderUpdated,
-            Action: PricingAuditActions.Updated,
-            EntityType: PricingAuditEntityTypes.RateHeader,
-            EntityId: rate.Id,
-            ActorUserId: http.GetCurrentUserId(),
-            Before: snapshot,
-            After: snapshot,
-            Payload: new
-            {
-                rate.Id, rate.RevisionNumber,
-                Source = "ManualDynamicsQuoteSyncEnqueue",
-                DynamicsSyncQueued = true
-            }), cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        return Results.Accepted($"/api/pricing/rates/{rateId}/dynamics-sync",
-            new
-            {
-                rateId, revisionNumber = rate.RevisionNumber,
-                status = "Pending", alreadyQueued = false,
-                message = "Sincronización encolada. Ninguna escritura en Dynamics se realizó desde este endpoint."
-            });
+            throw;
+        }
+        catch (Exception error)
+        {
+            // The production exception stays in server logs. The operator
+            // receives a stage, rate, and trace identifier without SQL or
+            // sensitive snapshot contents.
+            logger.LogError(error,
+                "Dynamics manual enqueue failed at {Stage} for rate {RateId} trace {TraceId}",
+                stage, rateId, http.TraceIdentifier);
+            return Results.Problem(
+                title: "No se pudo encolar la tarifa en Pricing.",
+                detail: "La operación no fue confirmada. Revisá el registro del servicio con el identificador de seguimiento.",
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                extensions: new Dictionary<string, object?>
+                {
+                    ["code"] = "dynamics_enqueue_failed",
+                    ["stage"] = stage,
+                    ["traceId"] = http.TraceIdentifier
+                });
+        }
     }
 
 
