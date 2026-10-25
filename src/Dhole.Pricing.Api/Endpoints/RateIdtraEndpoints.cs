@@ -6,6 +6,7 @@ using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Rates.Enums;
+using Dhole.Pricing.Domain.Rates;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
@@ -178,9 +179,7 @@ public static class RateIdtraEndpoints
     }
 
     private static string NormalizeCsv(string input) =>
-        string.Join(", ", input.Split(',',
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.OrdinalIgnoreCase));
+        IdtraNumberNormalizer.NormalizeCsvOrNull(input) ?? "";
 
     private static bool HasScope(ClaimsPrincipal user, string scope) =>
         user.Claims.Where(c => c.Type is "scope" or "scp" or "scopes")
