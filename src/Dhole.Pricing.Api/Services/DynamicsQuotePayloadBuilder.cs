@@ -1,3 +1,4 @@
+using Dhole.Pricing.Domain.Rates;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -164,30 +165,12 @@ public static class DynamicsQuotePayloadBuilder
     }
 
     /// <summary>
-    /// The seller's display string may include quote references after //:
-    /// "IDTRA IDTRA999.12565, IDTRA999.12566 // QUO-... // QUO-...".
-    /// Strip only the leading label, never the IDTRA prefix of an actual ID.
+    /// Always resolve an IDTRA in Dynamics using its canonical IDTRA999.
+    /// prefix. Existing immutable rate snapshots may contain a trailing
+    /// -QUO reference; those remain readable without editing historical data.
     /// </summary>
-    public static string[] ParseIdtraNumbers(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw)) return [];
-        // The incoming IDTRA field may be a display string rather than a
-        // single IDTRA, e.g. "IDTRA IDTRA999.12585-QUO 11228" or
-        // "IDTRA A-QUO 11228, B-QUO 11229 // QUO-00000-000316".
-        // First discard references after //; then trim the QUO suffix
-        // independently for each comma-separated IDTRA so later IDs remain.
-        var segment = raw.Split(["//"], 2, StringSplitOptions.None)[0].Trim();
-        segment = Regex.Replace(segment, @"^IDTRA(?:\s+|\s*:\s*)", "",
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).Trim();
-        return segment.Split(',', StringSplitOptions.RemoveEmptyEntries |
-                StringSplitOptions.TrimEntries)
-            .Select(value => Regex.Split(value,
-                @"\s*[-–—]\s*QUO(?=\s|[-#]|$)",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)[0].Trim())
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-    }
+    public static string[] ParseIdtraNumbers(string? raw) =>
+        IdtraNumberNormalizer.Parse(raw);
 
     // Fixed Dataverse tenant currency GUID, supplied for this Dhole integration.
     // Intentionally not configurable through environment variables.
