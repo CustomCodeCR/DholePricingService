@@ -61,7 +61,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         var inputs = doc.RootElement.GetProperty("inputs");
         Assert.AreEqual("principal", doc.RootElement.GetProperty("connectionCode").GetString());
         Assert.AreEqual(1800.75m, inputs.GetProperty("new_flete").GetDecimal());
-        Assert.AreEqual(1800.75m, inputs.GetProperty("new_monto9").GetDecimal());
+        Assert.AreEqual(0m, inputs.GetProperty("new_monto9").GetDecimal());
         Assert.AreEqual(2400.25m, inputs.GetProperty("msdyn_invoicesetuptotals").GetDecimal());
         Assert.AreEqual(100000005, inputs.GetProperty("new_equipo").GetInt32());
         Assert.AreEqual(100000001, inputs.GetProperty("new_categoriatarifa").GetInt32());
@@ -108,7 +108,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
             DynamicsQuotePayloadBuilder.Build(Accepted, schema)));
         var inputs = mapped.RootElement.GetProperty("inputs");
         Assert.AreEqual(1800.75m, inputs.GetProperty("new_flete").GetDecimal());
-        Assert.AreEqual(1800.75m, inputs.GetProperty("new_monto9").GetDecimal());
+        Assert.AreEqual(0m, inputs.GetProperty("new_monto9").GetDecimal());
         Assert.IsFalse(inputs.TryGetProperty("msdyn_invoicesetuptotals", out _));
         Assert.AreEqual("IDTRA999.2026-045",
             inputs.GetProperty("new_idtraasignado").GetString());
@@ -385,7 +385,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
     }
 
     [TestMethod]
-    public void TransactionCurrencyUsesFixedGuidWithoutConfiguration()
+    public void CurrencyRequiresResolvedLiveDataverseId()
     {
         const string field = """
             {"name":"transactioncurrencyid","target":"transactioncurrencyid@odata.bind","type":"guid","dataverseType":"Lookup","required":false,"options":[]},
@@ -395,21 +395,38 @@ public sealed class DynamicsQuotePayloadBuilderTests
             field + "\n" +
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
             StringComparison.Ordinal);
-        Assert.AreNotEqual(Schema, schemaText);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
-        foreach (var snapshot in new[]
-        {
-            Accepted,
-            Accepted.Replace("\"currencyCode\":\"USD\"", "\"currencyCode\":\"CRC\"",
-                StringComparison.Ordinal)
-        })
-        {
-            using var parsed = JsonDocument.Parse(JsonSerializer.Serialize(
-                DynamicsQuotePayloadBuilder.Build(snapshot, schema)));
-            Assert.AreEqual("b3a963da-2eda-e611-80f2-fc15b42826a0",
-                parsed.RootElement.GetProperty("inputs")
-                    .GetProperty("transactioncurrencyid").GetString());
-        }
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            DynamicsQuotePayloadBuilder.Build(Accepted, schema));
+        var usd = Guid.NewGuid();
+        var crc = Guid.NewGuid();
+        using var usdPayload = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(Accepted, schema, resolvedCurrencyId: usd)));
+        using var crcPayload = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(
+                Accepted.Replace("\"currencyCode\":\"USD\"", "\"currencyCode\":\"CRC\""),
+                schema, resolvedCurrencyId: crc)));
+        Assert.AreEqual(usd.ToString("D"),
+            usdPayload.RootElement.GetProperty("inputs")
+                .GetProperty("transactioncurrencyid").GetString());
+        Assert.AreEqual(crc.ToString("D"),
+            crcPayload.RootElement.GetProperty("inputs")
+                .GetProperty("transactioncurrencyid").GetString());
+        Assert.AreNotEqual(usd, crc);
+    }
+
+    [TestMethod]
+    public void LclEquipmentQuantityUsesChargeableCbmInsteadOfZeroContainers()
+    {
+        var rate = Accepted.Replace("\"shipmentMode\":\"Fcl\"",
+            "\"shipmentMode\":\"Lcl\"")
+            .Replace("\"containerQuantity\":2",
+                "\"containerQuantity\":0,\"chargeableQuantity\":12.64");
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
+        using var payload = JsonDocument.Parse(JsonSerializer.Serialize(
+            DynamicsQuotePayloadBuilder.Build(rate, schema)));
+        Assert.AreEqual("12.64 CBM LCL", payload.RootElement.GetProperty("inputs")
+            .GetProperty("new_cantidadequipos").GetString());
     }
 
 }
