@@ -59,8 +59,25 @@ try:
     if readiness.get("ready") is not True or readiness.get("code") != "DYNAMICS_QUOTE_WRITES_READY":
         missing = readiness.get("missingGrants") or []
         safe_fields = [x for x in missing if isinstance(x, str) and len(x) < 128]
-        raise ValueError("The active Pricing key is not authorized; missing grants: "
-                         + (", ".join(safe_fields[:12]) or readiness.get("code", "unknown")))
+        # A missing grant is not a missing/incorrect API key. The Pricing
+        # worker independently checks write-readiness every two minutes and
+        # will not dispatch any QUO while Dynamics reports not-ready.
+        # Allow a valid credential's production container refresh so the
+        # new secret from /opt/dhole/.env is actually loaded. Other errors
+        # (authorization failures, production policy, unexpected payloads)
+        # remain deployment blockers.
+        if (readiness.get("code") == "quote_grants_incomplete"
+                and readiness.get("noPostExecuted") is True
+                and isinstance(missing, list) and safe_fields):
+            print("::warning::The active Dynamics key and crear_oferta schema are valid,"
+                  " but approved field grants are incomplete: "
+                  + ", ".join(safe_fields[:20])
+                  + ". Pricing will deploy with QUO delivery PAUSED until"
+                  " Dynamics reports DYNAMICS_QUOTE_WRITES_READY.")
+            sys.exit(0)
+        raise ValueError("Dynamics write-readiness denied ("
+                         + str(readiness.get("code", "unknown"))
+                         + "). Deployment stopped before changing containers.")
     print(f"Verified current Pricing key: active crear_oferta v{version}, currency relationship and write grants ready. No Dataverse write performed.")
 except (OSError, KeyError, ValueError, TypeError, json.JSONDecodeError) as exc:
     print(f"::error::Dynamics key preflight failed: {exc}", file=sys.stderr)
