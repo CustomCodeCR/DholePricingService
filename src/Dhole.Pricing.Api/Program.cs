@@ -60,6 +60,7 @@ builder.Services.AddScoped<SellerRateAccessService>();
 builder.Services.AddScoped<RateCreatorIdentityService>();
 builder.Services.AddScoped<AcceptedRateOpeningsNotificationService>();
 builder.Services.AddScoped<SentRateEmailNotificationService>();
+builder.Services.AddHostedService<SellerRateExpiryReminderWorker>();
 builder.Services.AddScoped<LowMarginApprovedNotificationService>();
 builder.Services.AddScoped<CompetitorTariffImportProcessor>();
 builder.Services.AddHostedService<CompetitorTariffImportWorker>();
