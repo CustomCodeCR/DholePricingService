@@ -449,7 +449,8 @@ public sealed class CreateRateCommandHandler(
             return Result.Failure<Guid>(PricingErrors.RateInvalidFreightDistribution);
         }
 
-        var rateCode = await rateCodeGenerator.GenerateAsync(cancellationToken);
+        await using var codeReservation = await rateCodeGenerator.ReserveAsync(cancellationToken);
+        var rateCode = codeReservation.Code;
 
         // Toda solicitud/tarifa nace con un QUO de seguimiento. RateCode ya utiliza
         // el consecutivo QUO del servicio; QuoNumber lo conserva como dato comercial explícito.
@@ -701,6 +702,7 @@ public sealed class CreateRateCommandHandler(
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await codeReservation.CommitAsync(cancellationToken);
 
         await cache.RemoveRateHeaderCacheAsync(rate.Id, cancellationToken);
 
