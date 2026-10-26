@@ -66,7 +66,8 @@ public sealed class DuplicateRateCommandHandler(
                 return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);
             }
 
-            var appliedRateCode = await rateCodeGenerator.GenerateAsync(cancellationToken);
+            await using var appliedCodeReservation = await rateCodeGenerator.ReserveAsync(cancellationToken);
+            var appliedRateCode = appliedCodeReservation.Code;
             RateHeader appliedRate;
 
             try
@@ -261,6 +262,7 @@ public sealed class DuplicateRateCommandHandler(
             );
 
             await unitOfWork.SaveChangesAsync(cancellationToken);
+            await appliedCodeReservation.CommitAsync(cancellationToken);
             await cache.RemoveRateHeaderCacheAsync(appliedRate.Id, cancellationToken);
 
             return Result.Success(appliedRate.Id);
@@ -327,7 +329,8 @@ public sealed class DuplicateRateCommandHandler(
             return Result.Failure<Guid>(PricingErrors.ConfigServiceUnavailable);
         }
 
-        var rateCode = await rateCodeGenerator.GenerateAsync(cancellationToken);
+        await using var codeReservation = await rateCodeGenerator.ReserveAsync(cancellationToken);
+        var rateCode = codeReservation.Code;
         var currentExchangeRate = await exchangeRateProvider.GetUsdCrcAsync(cancellationToken);
         var today = DateTime.UtcNow.Date;
         var duplicateValidFrom = command.ValidFrom
@@ -537,6 +540,7 @@ public sealed class DuplicateRateCommandHandler(
         );
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
+        await codeReservation.CommitAsync(cancellationToken);
 
         await cache.RemoveRateHeaderCacheAsync(duplicate.Id, cancellationToken);
 
