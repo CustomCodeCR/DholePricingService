@@ -105,7 +105,7 @@ public static class DynamicsQuotePayloadBuilder
                 "effectivefrom" => Date(rate, "validFrom"),
                 "effectiveto" => Date(rate, "validTo"),
                 "msdyn_invoicesetuptotals" => sale,
-                "new_flete" => cost,
+                "new_flete" => sale,
                 // Consolidated supplier cost goes in monto1; monto2..9 = 0.
                 var target when montoIndex is >= 1 and <= 9 =>
                     montoIndex == 1 ? cost : 0m,
