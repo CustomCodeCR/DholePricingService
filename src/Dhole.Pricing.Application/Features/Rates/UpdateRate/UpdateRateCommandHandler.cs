@@ -901,15 +901,9 @@ public sealed class UpdateRateCommandHandler(
                 automaticallyApprovedLowMargin = true;
             }
 
-            // Recalcular importes no debe retroceder una cotización enviada a Open.
-            // Solo restauramos el estado comercial cuando el margen recalculado
-            // ya cumple la regla de aprobación (o fue aprobado por el scope).
-            if (!rate.RequiredApproval && commercialStatusBeforeUpdate is RateStatus.Sent or RateStatus.RequestedByClient)
-            {
-                rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: command.UpdatedBy);
-                if (commercialStatusBeforeUpdate == RateStatus.RequestedByClient)
-                    rate.SetCommercialStatus(RateStatus.RequestedByClient, reason: null, updatedBy: command.UpdatedBy);
-            }
+            // Guardar una nueva revisión invalida el envío comercial anterior.
+            // SetAmounts deja la revisión en Open o PendingApproval; Pricing deberá
+            // reenviarla explícitamente tras revisar los cambios y, si aplica, aprobar el margen.
 
             // Permite renovar una tarifa Expired. Si la nueva vigencia sigue vencida,
             // conserva Expired en vez de reabrirla accidentalmente por SetAmounts().
