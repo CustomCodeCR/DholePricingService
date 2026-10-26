@@ -376,10 +376,14 @@ public sealed class CreateRateCommandHandler(
             var today = DateTime.UtcNow.Date;
             importedRate.ExpireIfNeeded(today, command.CreatedBy);
 
-            // Una tarifa importada aprobada puede seleccionarse antes de que inicie su ventana
-            // comercial. CreateFromImportedRate conserva ValidFrom/ValidTo de la tarifa fuente,
-            // por lo que no debemos exigir que sea efectiva "hoy"; solo impedir usar una vencida.
-            if (importedRate.Status == ImportStatus.Expired)
+            // La fecha de carga/embarque define el inicio de la QUO. Una tarifa fuente
+            // vencida hoy sigue siendo válida para una cotización histórica cuando estaba
+            // vigente el día del embarque. Nunca sustituir la fecha comercial por DateTime.UtcNow.
+            var cargoDate = command.ValidFrom.Date;
+            var freightValidForShipment =
+                cargoDate >= importedRate.ValidFrom.Date
+                && cargoDate <= importedRate.ValidTo.Date;
+            if (!freightValidForShipment)
             {
                 return Result.Failure<Guid>(PricingErrors.ImportFclRateOutsideValidity);
             }
@@ -403,7 +407,8 @@ public sealed class CreateRateCommandHandler(
                 automaticallyApprovedImport = true;
             }
 
-            if (importedRate.Status != ImportStatus.Approved)
+            if (importedRate.Status != ImportStatus.Approved
+                && !(importedRate.Status == ImportStatus.Expired && freightValidForShipment))
             {
                 return Result.Failure<Guid>(PricingErrors.ImportFclRateInvalidStatus);
             }
@@ -802,8 +807,8 @@ public sealed class CreateRateCommandHandler(
             command.CurrencyName,
             command.CurrencyCode,
             importedRate.FreeDays,
-            importedRate.ValidFrom,
-            importedRate.ValidTo,
+            command.ValidFrom,
+            command.ValidTo,
             command.Containers.Sum(x => x.Quantity),
             command.ClientName,
             command.IdtraNumber,
