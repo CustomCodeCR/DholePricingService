@@ -26,6 +26,25 @@ public sealed class RateStatusWorkflowTests
     }
 
     [TestMethod]
+    public void EditedSentRate_RequiresExplicitResendOfNewRevision()
+    {
+        var rate = CreateRate();
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+
+        // Recalculating edited amounts invalidates the delivery of the previous revision.
+        rate.SetAmounts(updatedBy: null);
+        rate.AdvanceRevision(updatedBy: null, updateReason: "Actualización comercial");
+
+        Assert.AreEqual(2, rate.RevisionNumber);
+        Assert.AreEqual(RateStatus.Open, rate.Status);
+
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+        Assert.AreEqual(RateStatus.Sent, rate.Status);
+    }
+
+    [TestMethod]
     public void SetAmounts_MarginAtLeastTwelve_LeavesRateOpen()
     {
         var rate = CreateRate();
