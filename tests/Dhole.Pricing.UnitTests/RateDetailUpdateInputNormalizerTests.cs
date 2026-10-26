@@ -5,6 +5,35 @@ using Dhole.Pricing.Domain.Rates.Enums;
 namespace Dhole.Pricing.UnitTests;
 
 [TestClass]
+public sealed class OwnLclMatrixFixedChargePolicyTests
+{
+    [TestMethod]
+    public void ChinaConsolidationManejos_WithCatalogCostId_SurvivesSync()
+    {
+        var manejorCostId = Guid.Parse("e5b98707-6f1f-4772-b178-e440be0887fa");
+        var notes = "LCL PROPIO · ConsolidadoId: e7baad63-d3a0-410f-a234-8b8e205aa0a3 · Consolidado: #54 · Base: HBL; cantidad aplicada: 1.";
+        Assert.IsFalse(Dhole.Pricing.Application.Services.OwnLclMatrixFixedChargePolicy.ShouldRemove(
+            manejorCostId, CostType.Fixed, notes));
+    }
+
+    [TestMethod]
+    public void NormalAutoFixedCost_WithoutMatrixSource_CanBeRemoved()
+    {
+        Assert.IsTrue(Dhole.Pricing.Application.Services.OwnLclMatrixFixedChargePolicy.ShouldRemove(
+            Guid.NewGuid(), CostType.Fixed, "Costo fijo automático de catálogo"));
+    }
+
+    [TestMethod]
+    public void VariablePickupAndUnlinkedMatrixLine_AreRetained()
+    {
+        Assert.IsFalse(Dhole.Pricing.Application.Services.OwnLclMatrixFixedChargePolicy.ShouldRemove(
+            Guid.NewGuid(), CostType.Variable, null));
+        Assert.IsFalse(Dhole.Pricing.Application.Services.OwnLclMatrixFixedChargePolicy.ShouldRemove(
+            null, CostType.Fixed, "LCL PROPIO · Consolidado: #54"));
+    }
+}
+
+[TestClass]
 public sealed class RateDetailUpdateInputNormalizerTests
 {
     [TestMethod]
