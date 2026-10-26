@@ -44,7 +44,7 @@ No usa ni guarda tokens OAuth de Dataverse.
 | `new_preestado` | `100000003` |
 | `new_proyecctoespecifico` | `100000004` |
 | `new_tipodecliente` | `100000000` |
-| `new_flete` | `TotalCostAmount` |
+| `new_flete` | `TotalSaleAmount` (venta total al cliente, no costo) |
 | `new_monto9` | `TotalCostAmount` |
 | `msdyn_invoicesetuptotals` | `TotalSaleAmount` |
 | `new_idtraasignado` | `IdtraNumber` |
