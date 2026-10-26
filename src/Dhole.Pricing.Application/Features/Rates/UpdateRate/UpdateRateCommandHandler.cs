@@ -562,10 +562,9 @@ public sealed class UpdateRateCommandHandler(
         var freeDays = command.FreeDays;
         var validFrom = command.ValidFrom;
         var validTo = command.ValidTo;
-        // En una cotización FCL asociada a un flete importado, la fuente es la
-        // autoridad para la vigencia, también en ediciones y renovaciones.
-        // El middleware de edición puede neutralizar temporalmente la fuente
-        // persistida; por eso priorizamos la seleccionada en la solicitud.
+        // La vigencia comercial de la QUO se recibe del wizard: ValidFrom es la
+        // fecha de carga/embarque, no la vigencia de la tarifa importada asociada.
+        // El flete fuente se verifica como referencia, sin reescribir las fechas.
         var sourceImportId = command.SourceImportFclRateId ?? rate.SourceImportFclRateId;
         if (command.ShipmentMode == ShipmentMode.Fcl && sourceImportId.HasValue)
         {
@@ -573,8 +572,7 @@ public sealed class UpdateRateCommandHandler(
             if (sourceFreight is null || sourceFreight.IsDeleted)
                 return Result.Failure(PricingErrors.ImportFclRateNotFound);
 
-            validFrom = sourceFreight.ValidFrom;
-            validTo = sourceFreight.ValidTo;
+            // Conservar command.ValidFrom y command.ValidTo, incluso si son históricos.
         }
         var containerQuantity = requestedContainerQuantity;
         var transitTime = command.TransitDays.HasValue
