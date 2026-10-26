@@ -59,11 +59,7 @@ public static class OwnLclDestinationAutomationEndpoints
             ct);
 
         return result is null
-            ? Results.BadRequest(new
-            {
-                code = "Pricing.OwnLclDestinationSelectionRequired",
-                message = "Seleccione naviera y POE para calcular los cargos de destino.",
-            })
+            ? MissingMatrixOrSelectionResult(carrierCode, carrierName, arrivalPortCode, "Seleccione naviera y POE para calcular los cargos de destino.")
             : Results.Ok(result);
     }
 
@@ -91,11 +87,9 @@ public static class OwnLclDestinationAutomationEndpoints
                 ct);
 
         if (profile is null)
-            return Results.BadRequest(new
-            {
-                code = "Pricing.OwnLclDestinationSelectionRequired",
-                message = "Seleccione naviera y POE para calcular el consolidado.",
-            });
+            return MissingMatrixOrSelectionResult(
+                request.CarrierCode, request.CarrierName, request.PanamaArrivalPortCode,
+                "Seleccione naviera y POE para calcular el consolidado.");
 
         await using var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
@@ -229,11 +223,9 @@ public static class OwnLclDestinationAutomationEndpoints
                 ct);
 
         if (profile is null)
-            return Results.BadRequest(new
-            {
-                code = "Pricing.OwnLclDestinationSelectionRequired",
-                message = "Seleccione naviera y POE para calcular el consolidado.",
-            });
+            return MissingMatrixOrSelectionResult(
+                request.CarrierCode, request.CarrierName, request.PanamaArrivalPortCode,
+                "Seleccione naviera y POE para calcular el consolidado.");
 
         var snapshot = JsonSerializer.Serialize(profile, JsonOptions);
         await using var connection = db.Database.GetDbConnection();
@@ -530,6 +522,11 @@ public static class OwnLclDestinationAutomationEndpoints
             db,
             ct);
         if (matrixProfile is not null) return matrixProfile;
+        
+        // Never replace a partially configured Maersk/Balboa USD 912 profile
+        // with a silently cheaper zero-cost destination reference.
+        if (OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(carrierCandidates, portCandidate))
+            return null;
 
         // Missing matrix rows must never block an own-LCL project. Keep the destination
         // amount at zero and preserve the Panama -> Costa Rica operational baseline.
@@ -597,10 +594,22 @@ public static class OwnLclDestinationAutomationEndpoints
                 .Any(value => value == portCandidate);
         }
 
-        var matches = candidates
+        var matchingCosts = candidates
             .Where(cost => CarrierMatches(cost) && PortMatches(cost))
+            .ToArray();
+
+        // MAERSK / Balboa LCL has exactly four approved cost-matrix entries.
+        // Do not inherit generic handling, LCL W/M, Other Incomes, Port Charges or TI.
+        var isMaerskBalboa = OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(carrierCandidates, portCandidate);
+        var matches = (isMaerskBalboa
+                ? OwnLclDestinationCostPolicy.SelectMaerskBalboaCharges(matchingCosts, cost => cost.Id)
+                : matchingCosts)
             .OrderBy(cost => cost.Name)
             .ToArray();
+
+        if (isMaerskBalboa && matches.Length != OwnLclDestinationCostPolicy.RequiredMaerskBalboaChargeCount)
+            return null;
+
         if (matches.Length == 0) return null;
 
         var useEmptyReturn = includeEmptyReturn ?? true;
@@ -725,6 +734,26 @@ public static class OwnLclDestinationAutomationEndpoints
             "Pricing: Matriz de costos (sin cargos LCL/Any aplicables)");
     }
 
+    private static IResult MissingMatrixOrSelectionResult(
+        string? carrierCode, string? carrierName, string? arrivalPortCode, string selectionMessage)
+    {
+        if (OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(
+                new[] { carrierCode, carrierName }, arrivalPortCode))
+        {
+            return Results.UnprocessableEntity(new
+            {
+                code = "Pricing.OwnLclMaerskBalboaCostsIncomplete",
+                message = "La matriz Maersk LCL / Balboa debe contener los cuatro cargos autorizados (342 + 80 + 90 + 400). Revisá los registros antes de crear o guardar el consolidado.",
+            });
+        }
+
+        return Results.BadRequest(new
+        {
+            code = "Pricing.OwnLclDestinationSelectionRequired",
+            message = selectionMessage,
+        });
+    }
+
     private static string BuildProfileCode(string carrierLabel, string portCandidate)
     {
         var profileCode = $"MATRIX-{NormalizeMatch(carrierLabel)}-{portCandidate}";
@@ -787,7 +816,7 @@ public sealed record AutomaticOwnLclConsolidationRequest(
     string? PanamaArrivalPortName,
     string PanamaArrivalPortCode,
     bool? IncludeEmptyReturn,
-    decimal? BunkerCost = 280m,
+    decimal? BunkerCost = 476m,
     decimal? FreightProfitPerCbm = null,
     string? Name = null,
     int? ConsolidationNumber = null);
