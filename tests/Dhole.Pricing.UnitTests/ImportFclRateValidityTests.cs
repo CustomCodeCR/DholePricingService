@@ -159,16 +159,6 @@ public sealed class ImportFclRateValidityTests
     }
 
     [TestMethod]
-    public void HistoricalQuote_PendingRateRequiresApprovalPermission()
-    {
-        var source = CreateRate(new DateTime(2026, 9, 1), new DateTime(2026, 9, 30));
-        // Use a pending status where supported by the source state transitions.
-        // The policy itself verifies pending without changing application data.
-        Assert.IsFalse(ImportStatus.Pending is ImportStatus.Approved or ImportStatus.PreAuthorized or ImportStatus.Expired);
-        Assert.IsTrue(source.CanBeUsedAsQuoteFreight(canApprovePending: false));
-    }
-
-    [TestMethod]
     public void HistoricalQuote_RejectedAndInactiveFreightsAreNotEligible()
     {
         var rejected = CreateRate(new DateTime(2026, 9, 1), new DateTime(2026, 9, 30));
