@@ -97,6 +97,7 @@ public sealed record CreateRateCommand(
 {
     public IReadOnlyCollection<Guid> FinalBackupStorageIds { get; init; } = [];
     public string? PickupLocationsJson { get; init; }
+    public string? OtherReferences { get; init; }
     public int? StorageDays { get; init; }
     public decimal? CargoValue { get; init; }
     public int? TransitDays { get; init; }
