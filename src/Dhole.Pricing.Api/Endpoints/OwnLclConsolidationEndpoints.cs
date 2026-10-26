@@ -208,7 +208,7 @@ public static class OwnLclConsolidationEndpoints
             Add(command, "maximum_cbm", maxCbm);
             Add(command, "destination_cost", request.CarrierDestinationCostTotal ?? 912m);
             Add(command, "panama_to_cr", request.PanamaToCostaRicaCost ?? 2140m);
-            Add(command, "bunker", request.BunkerCost ?? 280m);
+            Add(command, "bunker", request.BunkerCost ?? 476m);
             Add(command, "cr_base", request.CostaRicaTransferBaseCbm is > 0 ? request.CostaRicaTransferBaseCbm.Value : 95m);
             Add(command, "freight_profit_per_cbm", Math.Max(0m, request.FreightProfitPerCbm ?? DefaultFreightProfitPerCbm));
             Add(command, "version", version);
