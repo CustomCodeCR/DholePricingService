@@ -168,6 +168,13 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
     public Guid? CreatedAsRateHeaderId { get; private set; }
 
     public bool HasBeenUsedAsRate => CreatedAsRateHeaderId.HasValue || UsedAsRateCount > 0;
+    // Una QUO histórica puede utilizar un flete previamente aprobado aunque
+    // esté vencido hoy o su ventana sea distinta a la fecha de carga.
+    // Pendientes requieren autorización explícita; rechazados e inactivos nunca.
+    public bool CanBeUsedAsQuoteFreight(bool canApprovePending) =>
+        Status is ImportStatus.Approved or ImportStatus.PreAuthorized or ImportStatus.Expired
+        || (Status == ImportStatus.Pending && canApprovePending);
+
     public bool CanBeManuallyReviewed =>
         Status is ImportStatus.Pending or ImportStatus.PreAuthorized
         || (Status == ImportStatus.Approved && !HasBeenUsedAsRate);
@@ -289,7 +296,9 @@ public sealed class ImportFclRates : SoftDeletableAggregateRoot<Guid>
         if (Status == ImportStatus.Inactive)
             throw new InvalidOperationException("Una tarifa importada inactiva no puede utilizarse en nuevas tarifas.");
 
-        Status = ImportStatus.Approved;
+        // Referenciar un flete vencido en una QUO histórica no debe reactivarlo.
+        if (Status != ImportStatus.Expired)
+            Status = ImportStatus.Approved;
         CreatedAsRateHeaderId = rateHeaderId;
         UsedAsRateCount += 1;
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
