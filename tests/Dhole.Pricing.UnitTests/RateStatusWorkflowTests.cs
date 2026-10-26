@@ -8,6 +8,30 @@ namespace Dhole.Pricing.UnitTests;
 public sealed class RateStatusWorkflowTests
 {
     [TestMethod]
+    public void QuoteReferences_IdtraCsvAndInternalReferences_RemainIndependent()
+    {
+        var rate = CreateRate();
+        rate.SetIdtraNumber("IDTRA999.12565, IDTRA999.12566, IDTRA999.12565", updatedBy: null);
+        rate.SetOtherReferences("  BL-2026-100 / PO-200  ", updatedBy: null);
+
+        Assert.AreEqual("IDTRA999.12565, IDTRA999.12566", rate.IdtraNumber);
+        Assert.AreEqual("BL-2026-100 / PO-200", rate.OtherReferences);
+
+        rate.SetOtherReferences(string.Empty, updatedBy: null);
+
+        Assert.AreEqual("IDTRA999.12565, IDTRA999.12566", rate.IdtraNumber);
+        Assert.IsNull(rate.OtherReferences);
+    }
+
+    [TestMethod]
+    public void QuoteReferences_InternalReferencesOverTwoThousandCharacters_AreRejected()
+    {
+        var rate = CreateRate();
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            rate.SetOtherReferences(new string('A', 2001), updatedBy: null));
+    }
+
+    [TestMethod]
     public void AdvanceRevision_AfterEachSavedEdit_IncrementsWithoutChangingSentStatus()
     {
         var rate = CreateRate();
