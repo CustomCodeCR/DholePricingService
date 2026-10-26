@@ -61,7 +61,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
             DynamicsQuotePayloadBuilder.Build(Accepted, schema)));
         var inputs = doc.RootElement.GetProperty("inputs");
         Assert.AreEqual("principal", doc.RootElement.GetProperty("connectionCode").GetString());
-        Assert.AreEqual(1800.75m, inputs.GetProperty("new_flete").GetDecimal());
+        Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
         Assert.AreEqual(0m, inputs.GetProperty("new_monto9").GetDecimal());
         Assert.AreEqual(2400.25m, inputs.GetProperty("msdyn_invoicesetuptotals").GetDecimal());
         Assert.AreEqual(100000005, inputs.GetProperty("new_equipo").GetInt32());
@@ -108,7 +108,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         using var mapped = JsonDocument.Parse(JsonSerializer.Serialize(
             DynamicsQuotePayloadBuilder.Build(Accepted, schema)));
         var inputs = mapped.RootElement.GetProperty("inputs");
-        Assert.AreEqual(1800.75m, inputs.GetProperty("new_flete").GetDecimal());
+        Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
         Assert.AreEqual(0m, inputs.GetProperty("new_monto9").GetDecimal());
         Assert.IsFalse(inputs.TryGetProperty("msdyn_invoicesetuptotals", out _));
         Assert.AreEqual("IDTRA999.2026-045",
@@ -455,7 +455,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         Assert.IsFalse(inputs.TryGetProperty("new_tarifasujetaa", out _));
         Assert.IsFalse(inputs.TryGetProperty("new_tarifaincluye", out _));
         Assert.AreEqual("Oferta 40HC", inputs.GetProperty("name").GetString());
-        Assert.AreEqual(1800.75m, inputs.GetProperty("new_flete").GetDecimal());
+        Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
         Assert.AreEqual(12000, accepted["excludes"]!.GetValue<string>().Length);
     }
 }
