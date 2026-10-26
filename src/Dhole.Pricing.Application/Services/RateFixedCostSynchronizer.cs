@@ -10,6 +10,26 @@ using Dhole.Pricing.Domain.Shared;
 
 namespace Dhole.Pricing.Application.Services;
 
+/// <summary>
+/// An own-LCL matrix line may carry a catalog CostId (e.g. Manejos) for
+/// traceability. That does not make it an automatic tariff cost: it is an
+/// explicitly priced line and must survive synchronization after a PUT.
+/// Only unrelated catalog-fixed rows may be removed from an own-LCL quote.
+/// </summary>
+public static class OwnLclMatrixFixedChargePolicy
+{
+    public static bool ShouldRemove(Guid? costId, CostType costType, string? notes)
+    {
+        if (!costId.HasValue || costType != CostType.Fixed)
+            return false;
+
+        var source = notes ?? string.Empty;
+        return !source.Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase)
+            && !source.Contains("Fuente LCL: Propio", StringComparison.OrdinalIgnoreCase)
+            && !source.Contains("ConsolidadoId:", StringComparison.OrdinalIgnoreCase);
+    }
+}
+
 public sealed class RateFixedCostSynchronizer(
     ICostRepository costs,
     IPricingConfigCatalogClient configCatalog,
@@ -55,7 +75,7 @@ public sealed class RateFixedCostSynchronizer(
             // are explicitly included in the quote and must never be deleted just
             // because they retain a CostId referencing the Costs catalog.
             var configuredDetailIds = rate.RateDetails
-                .Where(x => x.CostId.HasValue && x.CostType == CostType.Fixed)
+                .Where(x => OwnLclMatrixFixedChargePolicy.ShouldRemove(x.CostId, x.CostType, x.Notes))
                 .Select(x => x.Id)
                 .ToArray();
 
