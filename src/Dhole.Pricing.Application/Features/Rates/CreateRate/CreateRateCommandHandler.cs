@@ -402,19 +402,15 @@ public sealed class CreateRateCommandHandler(
                 return Result.Failure<Guid>(PricingErrors.ImportFclRateNotFound);
             }
 
-            var today = DateTime.UtcNow.Date;
-            importedRate.ExpireIfNeeded(today, command.CreatedBy);
-
-            // La fecha de carga/embarque define el inicio de la QUO. Una tarifa fuente
-            // vencida hoy sigue siendo válida para una cotización histórica cuando estaba
-            // vigente el día del embarque. Nunca sustituir la fecha comercial por DateTime.UtcNow.
-            var cargoDate = command.ValidFrom.Date;
-            var freightValidForShipment =
-                cargoDate >= importedRate.ValidFrom.Date
-                && cargoDate <= importedRate.ValidTo.Date;
-            if (!freightValidForShipment)
+            // La QUO puede registrarse después de que cliente y Pricing acordaron
+            // las condiciones. Su fecha de carga/embarque y vencimiento son independientes
+            // de la ventana del tarifario de origen y de la fecha actual. La validación
+            // cronológica de la propia QUO permanece en RateHeader.ValidateHeader.
+            // Nunca modificar el estado del flete importado por la fecha de hoy
+            // durante la creación de una cotización histórica.
+            if (!importedRate.CanBeUsedAsQuoteFreight(command.CanApproveImportedRate))
             {
-                return Result.Failure<Guid>(PricingErrors.ImportFclRateOutsideValidity);
+                return Result.Failure<Guid>(PricingErrors.ImportFclRateInvalidStatus);
             }
 
             // PreAuthorized is a machine-approved state created specifically so an active
@@ -436,11 +432,8 @@ public sealed class CreateRateCommandHandler(
                 automaticallyApprovedImport = true;
             }
 
-            if (importedRate.Status != ImportStatus.Approved
-                && !(importedRate.Status == ImportStatus.Expired && freightValidForShipment))
-            {
-                return Result.Failure<Guid>(PricingErrors.ImportFclRateInvalidStatus);
-            }
+            // Los fletes vencidos se aceptan para registrar cotizaciones históricas.
+            // La política anterior ya rechazó fuentes inactivas o rechazadas.
 
             if (
                 command.Containers.Count != 1
