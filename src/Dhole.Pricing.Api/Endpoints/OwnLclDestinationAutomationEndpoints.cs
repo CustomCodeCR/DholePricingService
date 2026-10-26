@@ -13,7 +13,7 @@ public static class OwnLclDestinationAutomationEndpoints
 {
     private const decimal DefaultMaximumCbm = 50m;
     private const decimal DefaultPanamaToCostaRicaCost = 2140m;
-    private const decimal DefaultBunkerCost = 280m;
+    private const decimal DefaultBunkerCost = 476m;
     private const decimal DefaultCostaRicaTransferBaseCbm = 95m;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
