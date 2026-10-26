@@ -100,6 +100,35 @@ public sealed class RateExtraDetailResolver(
             );
         }
 
+        // A matrix-generated LCL own charge is an explicitly priced snapshot, even
+        // when a catalog CostId is attached for traceability. Do not overwrite
+        // the matrix's amounts, name, or basis with catalog defaults (for example
+        // Manejos USD 65 on consolidated shipment #54).
+        if ((input.Notes ?? string.Empty).Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase))
+        {
+            return RateExtraDetailResolution.Success(
+                new ResolvedRateExtraDetail(
+                    input.Id,
+                    input.CostId,
+                    input.Name.Trim(),
+                    input.CostDetailType,
+                    input.CostType,
+                    currency.Id,
+                    currency.SnapshotName(),
+                    currency.Code,
+                    input.CostAmount,
+                    input.SaleAmount,
+                    Normalize(input.Notes),
+                    IsAccountant: false,
+                    input.Quantity,
+                    input.ChargeBasis,
+                    input.ApplyDestinationTax,
+                    input.DestinationTaxRate,
+                    Normalize(input.BillToClient)
+                )
+            );
+        }
+
         var cost = await costs.GetByIdAsync(input.CostId.Value, cancellationToken);
 
         if (cost is null)
