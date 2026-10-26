@@ -32,6 +32,7 @@ public sealed class UseTransactionalQuoteConsecutive : Migration
                     END
                 ), 0)
             FROM pricing."RateHeaders"
+            WHERE TRUE
             ON CONFLICT (id) DO UPDATE
             SET last_number = GREATEST(
                 pricing.rate_quote_counter.last_number,
