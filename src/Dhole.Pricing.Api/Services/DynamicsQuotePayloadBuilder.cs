@@ -105,7 +105,7 @@ public static class DynamicsQuotePayloadBuilder
                 "effectivefrom" => Date(rate, "validFrom"),
                 "effectiveto" => Date(rate, "validTo"),
                 "msdyn_invoicesetuptotals" => sale,
-                "new_flete" => cost,
+                "new_flete" => sale,
                 // new_monto1 carries the consolidated supplier cost. Every
                 // other amount field starts at numeric zero, not null. The
                 // trusted Dynamics connector fills any fields omitted from
