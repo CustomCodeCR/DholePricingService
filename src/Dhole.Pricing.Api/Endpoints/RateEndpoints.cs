@@ -647,6 +647,7 @@ public static class RateEndpoints
             )
             {
                 FinalBackupStorageIds = request.FinalBackupStorageIds ?? [],
+                OtherReferences = request.OtherReferences,
                 LclGroupAgentId = request.LclGroupAgentId,
                 PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
                 StorageDays = request.StorageDays,
@@ -856,6 +857,7 @@ public static class RateEndpoints
             )
             {
                 FinalBackupStorageIds = request.FinalBackupStorageIds,
+                OtherReferences = request.OtherReferences,
                 LclGroupAgentId = request.LclGroupAgentId,
                 SourceImportFclRateId = request.SourceImportFclRateId,
                 UpdateReason = request.UpdateReason,
