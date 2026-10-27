@@ -67,9 +67,12 @@ public static class DynamicsQuotePayloadBuilder
                 .Any(index => !idtraSlots.Contains(index)))
             throw new InvalidOperationException(
                 "Dynamics crear_oferta has fewer configured new_idtra1..10 lookup fields than the supplied IDTRA values.");
-        // Legacy templates without IDTRA lookup slots may still carry them in
-        // the commercial description; the GUID-only key must never substitute
-        // for actual incident relationships.
+        // Legacy templates may rely on the immutable RateId for traceability,
+        // while newer templates supply each independent IDTRA lookup. At least
+        // one form of traceability must be present.
+        if (idtraSlots.Count == 0 && !hasRateGuidField)
+            throw new InvalidOperationException(
+                "Dynamics crear_oferta requires a Dhole RateId GUID or at least one IDTRA lookup.");
 
         var cost = Decimal(rate, "totalCostAmount");
         var sale = Decimal(rate, "totalSaleAmount");
