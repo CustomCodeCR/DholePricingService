@@ -62,7 +62,6 @@ public sealed class SellerRateDeliveryRetryWorker(
                   && (!rate.RequiredApproval || rate.TotalSaleAmount <= 0m)
             orderby request.CompletedAtUtc
             select rate.Id)
-            .Distinct()
             .Take(20)
             .ToListAsync(cancellationToken);
 
