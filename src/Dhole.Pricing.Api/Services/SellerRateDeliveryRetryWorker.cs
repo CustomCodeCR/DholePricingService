@@ -76,7 +76,7 @@ public sealed class SellerRateDeliveryRetryWorker(
             .Take(20)
             .ToArray();
 
-        if (rateIds.Count == 0) return;
+        if (rateIds.Length == 0) return;
 
         var dispatcher = services.GetRequiredService<ICommandDispatcher>();
         var outbox = services.GetRequiredService<IIntegrationEventOutboxWriter>();
