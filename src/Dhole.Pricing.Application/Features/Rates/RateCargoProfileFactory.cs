@@ -85,7 +85,7 @@ internal static class RateCargoProfileFactory
                 );
             }
 
-            var units = Math.Max(line.Packages, 1);
+            // Las tarimas también son unidades físicas que multiplican el volumen; los bultos declarados no.\n            var units = Math.Max(Math.Max(line.Packages, line.Pallets), 1);
             var forcedNonStackable = line.HeightCm >= ForcedNonStackableHeightCm;
             var isStackable = !forcedNonStackable && line.IsStackable;
             var billableHeightCm = isStackable
@@ -98,6 +98,8 @@ internal static class RateCargoProfileFactory
                 line.LengthCm * line.WidthCm * billableHeightCm * units / 1_000_000m;
             var deadSpaceCbm = Math.Max(0m, lineBillableVolume - linePhysicalVolume);
 
+            var unitType = line.UnitType is "Pallet" or "Loose" or "Box" or "Other"
+                ? line.UnitType : line.Pallets > 0 ? "Pallet" : "Loose";
             packages += line.Packages;
             pallets += line.Pallets;
             weight += line.WeightKg;
@@ -116,13 +118,15 @@ internal static class RateCargoProfileFactory
                     Math.Round(linePhysicalVolume, 6, MidpointRounding.AwayFromZero),
                     isStackable,
                     Math.Round(lineBillableVolume, 6, MidpointRounding.AwayFromZero),
-                    Math.Round(deadSpaceCbm, 6, MidpointRounding.AwayFromZero)
+                    Math.Round(deadSpaceCbm, 6, MidpointRounding.AwayFromZero),
+                    unitType
                 )
             );
         }
 
         return new RateCargoProfile(
-            packages,
+            // La cabecera conserva los bultos que declaró Ventas, incluso si viajan dentro de tarimas.
+            fallbackPackages > 0 ? fallbackPackages : packages,
             pallets,
             Math.Round(weight, 4, MidpointRounding.AwayFromZero),
             Math.Round(physicalVolume, 6, MidpointRounding.AwayFromZero),
