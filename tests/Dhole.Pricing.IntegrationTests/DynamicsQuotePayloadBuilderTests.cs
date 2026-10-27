@@ -10,6 +10,14 @@ namespace Dhole.Pricing.IntegrationTests;
 [TestClass]
 public sealed class DynamicsQuotePayloadBuilderTests
 {
+    private static readonly Guid TestDholeRateId =
+        Guid.Parse("11111111-1111-4111-8111-111111111111");
+
+    private static object BuildForTest(string acceptedSnapshot, DynamicsCrudSchema schema,
+        IConfiguration? configuration = null, Guid? resolvedCurrencyId = null) =>
+        DynamicsQuotePayloadBuilder.Build(acceptedSnapshot,schema,configuration,
+            resolvedCurrencyId,TestDholeRateId);
+
     private const string Schema = """
         {
           "name":"crear_oferta","version":1,"entityName":"quote",
@@ -58,7 +66,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
     {
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(Accepted, schema)));
+            BuildForTest(Accepted, schema)));
         var inputs = doc.RootElement.GetProperty("inputs");
         Assert.AreEqual("principal", doc.RootElement.GetProperty("connectionCode").GetString());
         Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
@@ -70,7 +78,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         Assert.AreEqual(100000004, inputs.GetProperty("new_proyecctoespecifico").GetInt32());
         Assert.AreEqual(100000000, inputs.GetProperty("new_tipodecliente").GetInt32());
         Assert.AreEqual("quote", inputs.GetProperty("customeridtype").GetString());
-        Assert.AreEqual("IDTRA999.2026-045", inputs.GetProperty("new_idtraasignado").GetString());
+        Assert.AreEqual(TestDholeRateId.ToString("D"), inputs.GetProperty("new_idtraasignado").GetString());
         Assert.AreEqual("2 x 40 HC", inputs.GetProperty("new_cantidadequipos").GetString());
     }
 
@@ -80,7 +88,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
         var lcl = Accepted.Replace("\"shipmentMode\":\"Fcl\"", "\"shipmentMode\":\"Lcl\"");
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(lcl, schema)));
+            BuildForTest(lcl, schema)));
         Assert.AreEqual(100000000, doc.RootElement.GetProperty("inputs")
             .GetProperty("new_equipo").GetInt32());
     }
@@ -90,10 +98,10 @@ public sealed class DynamicsQuotePayloadBuilderTests
     {
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            DynamicsQuotePayloadBuilder.Build(
+            BuildForTest(
                 Accepted.Replace("AcceptedByClient", "PendingApproval"), schema));
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            DynamicsQuotePayloadBuilder.Build(
+            BuildForTest(
                 Accepted.Replace("IDTRA-2026-045", ""), schema));
     }
 
@@ -106,7 +114,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
             "");
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(withoutInvoiceSetupField);
         using var mapped = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(Accepted, schema)));
+            BuildForTest(Accepted, schema)));
         var inputs = mapped.RootElement.GetProperty("inputs");
         Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
         Assert.AreEqual(0m, inputs.GetProperty("new_monto9").GetDecimal());
@@ -138,7 +146,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(Accepted, schema)));
+            BuildForTest(Accepted, schema)));
         var inputs = doc.RootElement.GetProperty("inputs");
         Assert.AreEqual("Cliente Prueba", inputs.GetProperty("customerid").GetString());
         Assert.AreEqual("Cliente Prueba", inputs.GetProperty("msdyn_account").GetString());
@@ -155,7 +163,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
             "", StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            DynamicsQuotePayloadBuilder.Build(Accepted, schema));
+            BuildForTest(Accepted, schema));
     }
 
     [TestMethod]
@@ -166,7 +174,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
             .Replace("100000004", "100000000", StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(altered);
         using var parsed = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(Accepted, schema)));
+            BuildForTest(Accepted, schema)));
         var inputs = parsed.RootElement.GetProperty("inputs");
         Assert.AreEqual(100000000, inputs.GetProperty("new_categoriatarifa").GetInt32());
         Assert.AreEqual(100000000, inputs.GetProperty("new_preestado").GetInt32());
@@ -182,13 +190,13 @@ public sealed class DynamicsQuotePayloadBuilderTests
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(altered);
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            DynamicsQuotePayloadBuilder.Build(Accepted, schema));
+            BuildForTest(Accepted, schema));
         var options = new ConfigurationBuilder().AddInMemoryCollection(
             new Dictionary<string,string?> {
                 ["DynamicsQuoteSync:Choices:new_categoriatarifa"] = "100000002"
             }).Build();
         using var parsed = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(Accepted, schema, options)));
+            BuildForTest(Accepted, schema, options)));
         Assert.AreEqual(100000002, parsed.RootElement.GetProperty("inputs")
             .GetProperty("new_categoriatarifa").GetInt32());
     }
@@ -198,7 +206,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
     {
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            DynamicsQuotePayloadBuilder.Build(
+            BuildForTest(
                 Accepted.Replace("40 HC", "20 Flat Rack")
                     .Replace("40HC", "20FLAT"), schema));
     }
@@ -268,11 +276,11 @@ public sealed class DynamicsQuotePayloadBuilderTests
             StringComparison.Ordinal);
         var accepted = Accepted.Replace("IDTRA-2026-045", "IDTRA12589-QUO11098");
         using var result = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(accepted,
+            BuildForTest(accepted,
                 DynamicsQuotePayloadBuilder.ReadSchema(fields))));
         var inputs = result.RootElement.GetProperty("inputs");
         Assert.AreEqual("IDTRA999.12589", inputs.GetProperty("new_idtra1").GetString());
-        Assert.AreEqual("IDTRA999.12589", inputs.GetProperty("new_idtraasignado").GetString());
+        Assert.AreEqual(TestDholeRateId.ToString("D"), inputs.GetProperty("new_idtraasignado").GetString());
     }
 
     [TestMethod]
@@ -290,12 +298,12 @@ public sealed class DynamicsQuotePayloadBuilderTests
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         using var result = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(multiSnapshot, schema)));
+            BuildForTest(multiSnapshot, schema)));
         var inputs = result.RootElement.GetProperty("inputs");
         Assert.AreEqual("IDTRA999.12565", inputs.GetProperty("new_idtra1").GetString());
         Assert.AreEqual("IDTRA999.12566", inputs.GetProperty("new_idtra2").GetString());
         Assert.IsFalse(inputs.TryGetProperty("new_idtra3", out _));
-        Assert.AreEqual("IDTRA999.12565, IDTRA999.12566",
+        Assert.AreEqual(TestDholeRateId.ToString("D"),
             inputs.GetProperty("new_idtraasignado").GetString());
     }
 
@@ -309,7 +317,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            DynamicsQuotePayloadBuilder.Build(
+            BuildForTest(
                 Accepted.Replace("IDTRA-2026-045",
                     "IDTRA IDTRA999.12565, IDTRA999.12566 // QUO-00000-000316",
                     StringComparison.Ordinal), schema));
@@ -321,7 +329,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         var idtras = string.Join(",", Enumerable.Range(1, 10).Select(x => "IDTRA" + x));
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            DynamicsQuotePayloadBuilder.Build(
+            BuildForTest(
                 Accepted.Replace("IDTRA-2026-045", idtras, StringComparison.Ordinal),
                 schema));
     }
@@ -341,7 +349,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
             StringComparison.Ordinal);
         using var result = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(Accepted, DynamicsQuotePayloadBuilder.ReadSchema(expanded))));
+            BuildForTest(Accepted, DynamicsQuotePayloadBuilder.ReadSchema(expanded))));
         var inputs = result.RootElement.GetProperty("inputs");
         Assert.AreEqual(1800.75m, inputs.GetProperty("new_monto1").GetDecimal());
         Assert.AreEqual(0m, inputs.GetProperty("new_monto2").GetDecimal());
@@ -362,7 +370,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         var error = Assert.ThrowsExactly<InvalidOperationException>(() =>
-            DynamicsQuotePayloadBuilder.Build(Accepted, schema));
+            BuildForTest(Accepted, schema));
         StringAssert.Contains(error.Message, "calculated and read-only");
     }
 
@@ -377,7 +385,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
             lookups + ",\n" + original, StringComparison.Ordinal));
         var csv = string.Join(", ", Enumerable.Range(1, 10).Select(i => "IDTRA" + i));
         using var result = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(
+            BuildForTest(
                 Accepted.Replace("IDTRA-2026-045", csv, StringComparison.Ordinal), schema)));
         var inputs = result.RootElement.GetProperty("inputs");
         Assert.AreEqual("IDTRA999.10", inputs.GetProperty("new_idtra10").GetString());
@@ -398,13 +406,13 @@ public sealed class DynamicsQuotePayloadBuilderTests
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            DynamicsQuotePayloadBuilder.Build(Accepted, schema));
+            BuildForTest(Accepted, schema));
         var usd = Guid.NewGuid();
         var crc = Guid.NewGuid();
         using var usdPayload = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(Accepted, schema, resolvedCurrencyId: usd)));
+            BuildForTest(Accepted, schema, resolvedCurrencyId: usd)));
         using var crcPayload = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(
+            BuildForTest(
                 Accepted.Replace("\"currencyCode\":\"USD\"", "\"currencyCode\":\"CRC\""),
                 schema, resolvedCurrencyId: crc)));
         Assert.AreEqual(usd.ToString("D"),
@@ -425,7 +433,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
                 "\"containerQuantity\":0,\"chargeableQuantity\":12.64");
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
         using var payload = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(rate, schema)));
+            BuildForTest(rate, schema)));
         Assert.AreEqual("12.64 CBM LCL", payload.RootElement.GetProperty("inputs")
             .GetProperty("new_cantidadequipos").GetString());
     }
@@ -449,7 +457,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         accepted["subjectTo"] = new string('Y', 12000);
         accepted["includes"] = new string('Z', 12000);
         using var outbound = JsonDocument.Parse(JsonSerializer.Serialize(
-            DynamicsQuotePayloadBuilder.Build(accepted.ToJsonString(), schema)));
+            BuildForTest(accepted.ToJsonString(), schema)));
         var inputs = outbound.RootElement.GetProperty("inputs");
         Assert.IsFalse(inputs.TryGetProperty("new_noincluye", out _));
         Assert.IsFalse(inputs.TryGetProperty("new_tarifasujetaa", out _));
