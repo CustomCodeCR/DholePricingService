@@ -52,7 +52,7 @@ public sealed class SellerRateDeliveryRetryWorker(
         // requests must not starve quotes that are ready to be delivered.
         var rateIds = await (
             from request in db.RateRequests.AsNoTracking()
-            join rate in db.RateHeaders.AsNoTracking() on request.RateId equals rate.Id
+            join rate in db.RateHeaders.AsNoTracking() on request.RateId equals (Guid?)rate.Id
             where request.Status == RateRequestStatus.Completed
                   && request.DeliveryConfirmedAtUtc == null
                   && !rate.IsDeleted
