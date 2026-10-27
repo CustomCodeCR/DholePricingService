@@ -80,8 +80,10 @@ internal static class RateCargoProfileFactory
             }
 
             var lineVolume = line.LengthCm * line.WidthCm * line.HeightCm / 1_000_000m;
-            lineVolume *= Math.Max(line.Packages, 1);
+            // Antes se ignoraba la cantidad de tarimas al calcular los CBM.\n            lineVolume *= Math.Max(Math.Max(line.Packages, line.Pallets), 1);
 
+            var unitType = line.UnitType is "Pallet" or "Loose" or "Box" or "Other"
+                ? line.UnitType : line.Pallets > 0 ? "Pallet" : "Loose";
             packages += line.Packages;
             pallets += line.Pallets;
             weight += line.WeightKg;
@@ -96,13 +98,15 @@ internal static class RateCargoProfileFactory
                     line.LengthCm,
                     line.WidthCm,
                     line.HeightCm,
-                    Math.Round(lineVolume, 6, MidpointRounding.AwayFromZero)
+                    Math.Round(lineVolume, 6, MidpointRounding.AwayFromZero),
+                    UnitType: unitType
                 )
             );
         }
 
         return new RateCargoProfile(
-            packages,
+            // La cabecera conserva los bultos que declaró Ventas, incluso si viajan dentro de tarimas.
+            fallbackPackages > 0 ? fallbackPackages : packages,
             pallets,
             Math.Round(weight, 4, MidpointRounding.AwayFromZero),
             Math.Round(volume, 6, MidpointRounding.AwayFromZero),
