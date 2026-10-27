@@ -541,7 +541,7 @@ public static class RateEndpoints
 
         var cargoLines = (request.CargoLines ?? Array.Empty<RateCargoLineRequest>())
             .Select(x => new Dhole.Pricing.Application.Features.Rates.RateCargoLineCommandItem(
-                x.Description, x.Packages, x.Pallets, x.WeightKg, x.LengthCm, x.WidthCm, x.HeightCm, x.IsStackable ?? true))
+                x.Description, x.Packages, x.Pallets, x.WeightKg, x.LengthCm, x.WidthCm, x.HeightCm, x.IsStackable ?? true, x.UnitType))
             .ToArray();
 
         var containers = (request.Containers ?? Array.Empty<RateContainerRequest>())
@@ -759,7 +759,7 @@ public static class RateEndpoints
 
         var cargoLines = (request.CargoLines ?? Array.Empty<RateCargoLineRequest>())
             .Select(x => new Dhole.Pricing.Application.Features.Rates.RateCargoLineCommandItem(
-                x.Description, x.Packages, x.Pallets, x.WeightKg, x.LengthCm, x.WidthCm, x.HeightCm, x.IsStackable ?? true))
+                x.Description, x.Packages, x.Pallets, x.WeightKg, x.LengthCm, x.WidthCm, x.HeightCm, x.IsStackable ?? true, x.UnitType))
             .ToArray();
 
         var containers = (request.Containers ?? Array.Empty<RateContainerRequest>())
