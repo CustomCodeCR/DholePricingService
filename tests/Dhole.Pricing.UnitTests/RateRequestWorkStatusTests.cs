@@ -94,6 +94,53 @@ public sealed class RateRequestWorkStatusTests
     }
 
     [TestMethod]
+    public void CompletedSellerRequest_CanAwaitMarginApprovalAndQueueDeliveryLater()
+    {
+        var request = CreateRequest();
+        var rateId = Guid.NewGuid();
+        var finishedAt = DateTime.UtcNow;
+        request.AttachRate(rateId);
+        request.MarkCompleted(finishedAt);
+
+        Assert.AreEqual(RateRequestStatus.Completed, request.Status);
+        Assert.AreEqual(rateId, request.RateId);
+        Assert.IsNull(request.DeliveryConfirmedAtUtc);
+
+        var queuedAt = finishedAt.AddMinutes(10);
+        request.MarkDeliveryQueued(queuedAt);
+        request.MarkDeliveryQueued(queuedAt.AddMinutes(1));
+        Assert.AreEqual(queuedAt, request.DeliveryConfirmedAtUtc);
+    }
+
+    [TestMethod]
+    public void SellerModification_CompletesAfterRevisionPreparedWithoutBypassingDelivery()
+    {
+        var request = CreateModification();
+        request.AttachRate(Guid.NewGuid());
+
+        Assert.ThrowsException<InvalidOperationException>(
+            () => request.MarkSellerModificationReadyForDelivery(DateTime.UtcNow));
+        request.PrepareModification(2);
+        request.MarkSellerModificationReadyForDelivery(DateTime.UtcNow);
+
+        Assert.AreEqual(RateRequestStatus.Completed, request.Status);
+        Assert.IsNull(request.DeliveryConfirmedAtUtc);
+        request.MarkDeliveryQueued(DateTime.UtcNow);
+        Assert.IsNotNull(request.DeliveryConfirmedAtUtc);
+    }
+
+    [TestMethod]
+    public void OpenOrUnlinkedRequest_CannotConfirmDelivery()
+    {
+        var request = CreateRequest();
+        Assert.ThrowsException<InvalidOperationException>(
+            () => request.MarkDeliveryQueued(DateTime.UtcNow));
+        request.AttachRate(Guid.NewGuid());
+        Assert.ThrowsException<InvalidOperationException>(
+            () => request.MarkDeliveryQueued(DateTime.UtcNow));
+    }
+
+    [TestMethod]
     public void CompletedRequestCannotBePrepared()
     {
         var request = CreateRequest();
