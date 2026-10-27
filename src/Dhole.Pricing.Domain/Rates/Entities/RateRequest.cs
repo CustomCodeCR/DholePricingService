@@ -166,6 +166,29 @@ public sealed class RateRequest : Entity<Guid>
         ClearWorkState();
     }
 
+    // Saving a seller-requested revision completes Pricing's work even if the
+    // margin still needs approval. Delivery is tracked separately and retried.
+    public void MarkSellerModificationReadyForDelivery(DateTime completedAtUtc)
+    {
+        if (Status != RateRequestStatus.Open || !IsSellerModification()
+            || PreparedRevisionNumber is null or <= 0 || !RateId.HasValue)
+            throw new InvalidOperationException("La modificación necesita una revisión preparada y vinculada.");
+
+        Status = RateRequestStatus.Completed;
+        CompletedAtUtc = completedAtUtc;
+        ClearWorkState();
+    }
+
+    // Confirmation here means the email was placed in the durable Notifications
+    // outbox, not that the downstream SMTP provider has already delivered it.
+    public void MarkDeliveryQueued(DateTime queuedAtUtc)
+    {
+        if (Status != RateRequestStatus.Completed || !RateId.HasValue)
+            throw new InvalidOperationException("La solicitud debe estar completada y asociada a una tarifa.");
+
+        DeliveryConfirmedAtUtc ??= queuedAtUtc;
+    }
+
     public void MarkSellerModificationDelivered(DateTime deliveredAtUtc)
     {
         if (Status != RateRequestStatus.Open
