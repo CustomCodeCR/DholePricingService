@@ -126,7 +126,7 @@ public sealed class RateStatusWorkflowTests
     }
 
     [TestMethod]
-    public void ApproveLowMargin_RequiresOpeningBeforeItCanBeSent()
+    public void ApprovedLowMargin_CanBeSentWithoutManualOpening()
     {
         var rate = CreateRate();
         AddFreight(rate, cost: 90m, sale: 100m);
@@ -136,15 +136,32 @@ public sealed class RateStatusWorkflowTests
         Assert.AreEqual(RateStatus.ApprovedByManagement, rate.Status);
         Assert.IsFalse(rate.RequiredApproval);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() =>
-            rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null)
-        );
-
-        rate.SetCommercialStatus(RateStatus.Open, reason: null, updatedBy: null);
-        Assert.AreEqual(RateStatus.Open, rate.Status);
-
         rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
         Assert.AreEqual(RateStatus.Sent, rate.Status);
+    }
+
+    [TestMethod]
+    public void PendingReapproval_WaitsForMarginApprovalBeforeResending()
+    {
+        var rate = CreateRate();
+        AddFreight(rate, cost: 90m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetApprovalMargin(updatedBy: null, isApproved: true);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
+
+        rate.BeginRevision(updatedBy: null, modificationReason: "Cambio solicitado por vendedor");
+
+        Assert.IsTrue(rate.PendingReapproval);
+        Assert.AreEqual(RateStatus.PendingApproval, rate.Status);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null));
+
+        rate.SetApprovalMargin(updatedBy: null, isApproved: true);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+
+        Assert.AreEqual(RateStatus.Sent, rate.Status);
+        Assert.IsTrue(rate.PendingReapproval);
     }
 
     [TestMethod]
