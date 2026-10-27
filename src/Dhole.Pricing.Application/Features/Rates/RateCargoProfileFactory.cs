@@ -31,7 +31,7 @@ internal static class RateCargoProfileFactory
     {
         var effectiveFactor = kgPerCbm > 0m
             ? kgPerCbm
-            : shipmentMode == ShipmentMode.Ltl ? 333m : 500m;
+            : shipmentMode == ShipmentMode.Ltl ? 330m : 500m;
 
         if (lines.Count == 0)
         {
