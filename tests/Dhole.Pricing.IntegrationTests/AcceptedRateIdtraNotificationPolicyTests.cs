@@ -19,6 +19,32 @@ public sealed class AcceptedRateIdtraNotificationPolicyTests
     }
 
     [TestMethod]
+    public void SellerAcceptanceCopiesOnlyTheAssignedSellerWithNoDuplicatesOrInvalidAddresses()
+    {
+        CollectionAssert.AreEqual(
+            new[] { "pricingcf@castrofallas.com", "rchaves@castrofallas.com" },
+            AcceptedRateOpeningsNotificationService.CopyRecipientsFor(
+                RateAcceptanceActor.Seller,
+                [
+                    " RChaves@castrofallas.com ",
+                    "rchaves@castrofallas.com",
+                    "pricingcf@castrofallas.com",
+                    "aperturatramite@grupocastrofallas.com",
+                    "dirección inválida",
+                ]));
+    }
+
+    [TestMethod]
+    public void PricingAcceptanceIgnoresSellerCopies()
+    {
+        CollectionAssert.AreEqual(
+            Array.Empty<string>(),
+            AcceptedRateOpeningsNotificationService.CopyRecipientsFor(
+                RateAcceptanceActor.Pricing,
+                ["rchaves@castrofallas.com"]));
+    }
+
+    [TestMethod]
     public void PricingAcceptanceGoesToAperturaTramiteWithoutCopy()
     {
         Assert.AreEqual(
