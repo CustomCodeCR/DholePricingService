@@ -50,20 +50,31 @@ public sealed class SellerRateDeliveryRetryWorker(
 
         // Filter approvals in SQL before Take: a long queue of pending-margin
         // requests must not starve quotes that are ready to be delivered.
-        var rateIds = await (
+        var candidates = await (
             from request in db.RateRequests.AsNoTracking()
             join rate in db.RateHeaders.AsNoTracking() on request.RateId equals (Guid?)rate.Id
-            where request.Status == RateRequestStatus.Completed
-                  && request.DeliveryConfirmedAtUtc == null
+            where ((request.Status == RateRequestStatus.Completed
+                        && request.DeliveryConfirmedAtUtc == null)
+                   // Recover older completed quotations that stayed Open because
+                   // the user was previously required to mark them manually.
+                   || (request.Status == RateRequestStatus.Open && rate.TotalSaleAmount > 0m))
                   && !rate.IsDeleted
                   && (rate.Status == RateStatus.Open
                       || rate.Status == RateStatus.ApprovedByManagement
                       || rate.Status == RateStatus.Sent)
                   && (!rate.RequiredApproval || rate.TotalSaleAmount <= 0m)
-            orderby request.CompletedAtUtc
-            select rate.Id)
-            .Take(20)
+            orderby request.RequestedAtUtc
+            select new { rate.Id, request.Status, request.PayloadJson })
+            .Take(500)
             .ToListAsync(cancellationToken);
+
+        var rateIds = candidates
+            .Where(x => x.Status == RateRequestStatus.Completed
+                || !RateModificationRequestPayload.IsModification(x.PayloadJson))
+            .Select(x => x.Id)
+            .Distinct()
+            .Take(20)
+            .ToArray();
 
         if (rateIds.Count == 0) return;
 
