@@ -29,7 +29,11 @@ read_status() {
 }
 schema_status="$(read_status schema "$workspace/schema.json")"
 if [[ "$schema_status" != "200" ]]; then
-  echo "::error::The installed Pricing API key was rejected by the active Dynamics template schema (HTTP $schema_status). Check whether /opt/dhole/.env contains the NEW key for the new active template version."
+  if [[ "$schema_status" == "401" ]]; then
+    echo "::error::Dynamics rejected the Pricing key for principal/crear_oferta (HTTP 401). The credential may be tied to an older template version, revoked, expired or different from the installed secret. In Dynamics > API CRUD > crear_oferta, use 'Reutilizar clave seleccionada' for a still-valid key; only if it is expired/revoked, create a replacement and securely update DynamicsQuoteSync__ApiKey in /opt/dhole/.env. No containers were changed."
+  else
+    echo "::error::Dynamics could not validate the installed Pricing key against the active principal/crear_oferta schema (HTTP $schema_status). No containers were changed."
+  fi
   exit 1
 fi
 ready_status="$(read_status write-readiness "$workspace/readiness.json")"
