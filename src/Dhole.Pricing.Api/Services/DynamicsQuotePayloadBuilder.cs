@@ -28,7 +28,8 @@ public static class DynamicsQuotePayloadBuilder
         ?? throw new InvalidOperationException("Empty Dynamics CRUD schema.");
 
     public static object Build(string acceptedSnapshot, DynamicsCrudSchema schema,
-        IConfiguration? configuration = null, Guid? resolvedCurrencyId = null)
+        IConfiguration? configuration = null, Guid? resolvedCurrencyId = null,
+        Guid? dholeRateId = null)
     {
         if (schema.Name != "crear_oferta" || schema.EntityName != "quote" ||
             schema.Operation != "create" || schema.ConnectionCode != "principal" ||
@@ -50,38 +51,41 @@ public static class DynamicsQuotePayloadBuilder
             .Where(slot => slot.Index is >= 1 and <= 10)
             .Select(slot => slot.Index)
             .ToHashSet();
-        var hasIdtraText = schema.Fields.Any(field =>
+        // Reserved solely for the permanent Dhole RateId GUID. NEVER write
+        // IDTRA CSV or incident references into the quote upsert identity.
+        var hasRateGuidField = schema.Fields.Any(field =>
             field.Target == "new_idtraasignado");
-        // A text-only template can preserve the CSV; a template with lookup
-        // slots must have a slot for EVERY supplied IDTRA. Never silently drop
-        // a second or later relationship.
+        var guid = dholeRateId is Guid supplied && supplied != Guid.Empty
+            ? supplied : Guid.TryParse(String(rate, "id"), out var extracted) && extracted != Guid.Empty
+                ? extracted : Guid.Empty;
+        if (hasRateGuidField && guid == Guid.Empty)
+            throw new InvalidOperationException(
+                "Dynamics new_idtraasignado requires the permanent Dhole RateId GUID.");
+        // IDTRA is maintained only in the incident lookup slots. Never
+        // overload the reserved GUID column with IDTRA CSV.
         if (idtraSlots.Count > 0 && Enumerable.Range(1, idtras.Length)
                 .Any(index => !idtraSlots.Contains(index)))
             throw new InvalidOperationException(
                 "Dynamics crear_oferta has fewer configured new_idtra1..10 lookup fields than the supplied IDTRA values.");
-        if (idtraSlots.Count == 0 && !hasIdtraText)
-            throw new InvalidOperationException(
-                "Dynamics crear_oferta has no field for the normalized IDTRA values.");
+        // Legacy templates without IDTRA lookup slots may still carry them in
+        // the commercial description; the GUID-only key must never substitute
+        // for actual incident relationships.
 
         var cost = Decimal(rate, "totalCostAmount");
         var sale = Decimal(rate, "totalSaleAmount");
         if (cost < 0 || sale < 0) throw new InvalidOperationException("Invalid rate totals.");
         var values = new Dictionary<string, object>(StringComparer.Ordinal);
         var fields = schema.Fields.ToDictionary(x => x.Target, StringComparer.Ordinal);
-        // The published CRUD template is user-configurable. customeridtype and
-        // new_idtraasignado are legitimate optional fields in Dataverse and are
-        // not always writable/exposed by the selected quote version. They must
-        // not prevent the automatic quote + quotedetail acceptance integration.
+        // The published CRUD template is user-configurable. The reserved
+        // GUID field is optional for legacy CREATE but when present is always
+        // populated with the immutable Pricing RateId.
         foreach (var required in new[] { "name", "new_equipo", "new_flete",
                      "new_categoriatarifa", "new_preestado",
                      "new_proyecctoespecifico", "new_tipodecliente" })
             if (!fields.ContainsKey(required))
                 throw new InvalidOperationException("Published CRUD template is missing " + required);
-        // Preserve a traceable IDTRA on at least one explicitly mapped field.
-        // An existing IDTRA lookup can take the place of the optional text field.
-        if (!hasIdtraText && !idtraSlots.Contains(1))
-            throw new InvalidOperationException(
-                "Published CRUD template must map new_idtra1 or new_idtraasignado.");
+        // IDTRA business references remain in the accepted Pricing snapshot,
+        // and in new_idtra1..10 wherever the template exposes those lookups.
 
         foreach (var field in schema.Fields)
         {
@@ -117,7 +121,7 @@ public static class DynamicsQuotePayloadBuilder
                 "new_preestado" => ConfiguredChoice(field, 100000003, configuration),
                 "new_proyecctoespecifico" => ConfiguredChoice(field, 100000004, configuration),
                 "new_tipodecliente" => ConfiguredChoice(field, 100000000, configuration),
-                "new_idtraasignado" => string.Join(", ", idtras),
+                "new_idtraasignado" => guid.ToString("D"),
                 "new_divisa" or "new_moneda" => CurrencyForSchema(rate, field),
                 // The mapped target is a trusted navigation property in the
                 // published schema, never an arbitrary caller-provided OData key.
