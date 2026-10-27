@@ -1366,6 +1366,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         var isValidTransition = (Status, status) switch
         {
             (RateStatus.ApprovedByManagement, RateStatus.Open) => true,
+            // El margen ya fue aprobado: permitir enviar la revisión directamente
+            // sin obligar a realizar una transición manual adicional a Open.
+            (RateStatus.ApprovedByManagement, RateStatus.Sent) => true,
             // Una solicitud puede guardarse antes de tener proveedor/costos terminados.
             // RequestedByClient funciona como la cola interna de "Abiertas" de Pricing.
             (RateStatus.PendingApproval, RateStatus.RequestedByClient) => true,
