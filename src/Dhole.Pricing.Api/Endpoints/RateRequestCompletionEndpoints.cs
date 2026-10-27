@@ -49,16 +49,19 @@ public static class RateRequestCompletionEndpoints
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        // Approval of an existing quote must not finish a seller's NEW modification
-        // request. Modifications already point to the original rate before Pricing
-        // has reviewed them; only an explicit complete-rate with a lease may close one.
+        // Reconcile both older open requests and completed requests whose email
+        // is still waiting for a margin decision or a delivery retry.
+        // An unprepared modification must never send the original quote again.
         var candidates = await db.RateRequests.AsNoTracking()
-            .Where(x => x.RateId == rateId && x.Status == RateRequestStatus.Open)
-            .Select(x => new { x.Id, x.PayloadJson })
+            .Where(x => x.RateId == rateId
+                && (x.Status == RateRequestStatus.Open
+                    || (x.Status == RateRequestStatus.Completed && x.DeliveryConfirmedAtUtc == null)))
+            .Select(x => new { x.Id, x.PayloadJson, x.Status, x.PreparedRevisionNumber })
             .ToListAsync(cancellationToken);
 
         foreach (var requestId in candidates
-            .Where(x => !RateModificationRequestPayload.IsModification(x.PayloadJson))
+            .Where(x => !RateModificationRequestPayload.IsModification(x.PayloadJson)
+                || (x.Status == RateRequestStatus.Completed && x.PreparedRevisionNumber.HasValue))
             .Select(x => x.Id))
         {
             try
@@ -103,20 +106,14 @@ public static class RateRequestCompletionEndpoints
         if (entity is null)
             return Results.NotFound();
 
-        if (entity.Status == RateRequestStatus.Completed && entity.RateId == request.RateId)
-        {
-            if (RateModificationRequestPayload.IsModification(entity.PayloadJson)
-                && entity.DeliveryConfirmedAtUtc is null)
-                return Results.Conflict(new {
-                    code = "Pricing.ModificationWasClosedWithoutDelivery",
-                    message = "La modificación figura cerrada sin evidencia de envío. Requiera su reapertura; no se considera atendida."
-                });
+        var alreadyCompleted = entity.Status == RateRequestStatus.Completed
+            && entity.RateId == request.RateId;
+        if (alreadyCompleted && entity.DeliveryConfirmedAtUtc.HasValue)
             return Results.NoContent();
-        }
-        if (entity.Status != RateRequestStatus.Open)
-            return Results.Conflict(new { message = "No se puede enviar una solicitud cancelada o cerrada." });
+        if (entity.Status != RateRequestStatus.Open && !alreadyCompleted)
+            return Results.Conflict(new { message = "No se puede enviar una solicitud cancelada o vinculada a otra tarifa." });
 
-        if (requireLease && !RateRequestLeaseEndpoints.HasActiveLease(httpContext, entity))
+        if (requireLease && !alreadyCompleted && !RateRequestLeaseEndpoints.HasActiveLease(httpContext, entity))
             return RateRequestLeaseEndpoints.LeaseRequired();
 
         // Automated completion may only touch a request already explicitly linked to this rate.
@@ -127,7 +124,8 @@ public static class RateRequestCompletionEndpoints
         // Being linked to an existing quote or releasing a tab lease is not
         // approval to deliver a seller-requested amendment. Require an explicit,
         // user-initiated intent from the Send revision action.
-        if (isModification && (request.Confirmation != "SendSellerModification" || !requireLease))
+        if (isModification && !alreadyCompleted
+            && (request.Confirmation != "SendSellerModification" || !requireLease))
             return Results.Conflict(new {
                 code = "Pricing.RateModificationExplicitDeliveryRequired",
                 message = "La modificación sólo puede completarse con Enviar revisión al vendedor."
@@ -159,24 +157,30 @@ public static class RateRequestCompletionEndpoints
                 message = "Primero guarde la modificación desde el wizard y prepare esta revisión antes de enviarla al vendedor."
             });
 
-        if (isModification && rate.Status == RateStatus.PendingApproval)
-            return Results.Conflict(new {
-                code = "Pricing.RateModificationPendingApproval",
-                message = "La revisión todavía requiere aprobación de margen antes de enviarse."
-            });
-
         if (entity.RateId.HasValue && entity.RateId != request.RateId)
             return Results.Conflict(new { message = "La solicitud ya está vinculada a otra tarifa." });
 
-        // A low-margin quote exists but cannot produce its PDF until authorized.
-        // Save its explicit relationship NOW, rather than losing it when PDF generation fails.
-        // The margin approval endpoint will finish this linked request automatically.
-        if (!isModification && rate.Status == RateStatus.PendingApproval)
+        // Completing Pricing's work is independent of margin authorization,
+        // PDF generation and SMTP availability. Store this transition first.
+        if (!alreadyCompleted)
         {
             entity.AttachRate(request.RateId);
+            if (isModification)
+                entity.MarkSellerModificationReadyForDelivery(DateTime.UtcNow);
+            else
+                entity.MarkCompleted(DateTime.UtcNow);
             await db.SaveChangesAsync(cancellationToken);
-            return Results.Accepted(value: new { status = "AwaitingMarginApproval", rateId = request.RateId });
         }
+
+        // Never bypass an approval. The approval hook and background reconciler
+        // will issue the PDF/email when the quote becomes commercially releasable.
+        if (rate.Status == RateStatus.PendingApproval
+            || (rate.RequiredApproval && rate.TotalSaleAmount > 0m))
+            return Results.Accepted(value: new { status = "CompletedAwaitingMarginApproval", rateId = request.RateId });
+
+        if (rate.Status is RateStatus.RejectedByManagement or RateStatus.RejectedByClient
+            or RateStatus.Cancelled or RateStatus.Closed)
+            return Results.Accepted(value: new { status = "CompletedDeliveryOnHold", rateId = request.RateId });
 
         var documentResult = await dispatcher.DispatchAsync(
             new GenerateRateDocumentCommand(request.RateId, null, "pdf"),
@@ -184,7 +188,7 @@ public static class RateRequestCompletionEndpoints
         );
 
         if (!documentResult.IsSuccess)
-            return EndpointResults.FromResult(documentResult, httpContext);
+            return Results.Accepted(value: new { status = "CompletedDeliveryRetryPending", rateId = request.RateId });
 
         if (rate.Status != RateStatus.Sent)
         {
@@ -201,7 +205,7 @@ public static class RateRequestCompletionEndpoints
             );
 
             if (!statusResult.IsSuccess)
-                return EndpointResults.FromResult(statusResult, httpContext);
+                return Results.Accepted(value: new { status = "CompletedDeliveryRetryPending", rateId = request.RateId });
         }
 
         var document = documentResult.Value;
@@ -221,12 +225,6 @@ public static class RateRequestCompletionEndpoints
             <p>Se adjunta la cotización completa en PDF para que pueda enviarla al cliente.</p>
             <p>Grupo Castro Fallas - Pricing</p>
             """;
-
-        entity.AttachRate(request.RateId);
-        if (isModification)
-            entity.MarkSellerModificationDelivered(DateTime.UtcNow);
-        else
-            entity.MarkCompleted(DateTime.UtcNow);
 
         // El envío de correo queda en Notifications para que una caída de SMTP no convierta
         // la creación de tarifa en un 502. Notifications maneja reintentos y adjunta el PDF.
@@ -313,6 +311,7 @@ public static class RateRequestCompletionEndpoints
             cancellationToken
         );
 
+        entity.MarkDeliveryQueued(DateTime.UtcNow);
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.NoContent();
