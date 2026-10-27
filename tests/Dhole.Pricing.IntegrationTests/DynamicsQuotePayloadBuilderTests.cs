@@ -62,6 +62,20 @@ public sealed class DynamicsQuotePayloadBuilderTests
         """;
 
     [TestMethod]
+    public void QuoteUpsertIdentityRejectsMissingGuidAndNeverStoresIdtraCsv()
+    {
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            DynamicsQuotePayloadBuilder.Build(Accepted,schema));
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(Accepted,schema)));
+        var value = document.RootElement.GetProperty("inputs")
+            .GetProperty("new_idtraasignado").GetString();
+        Assert.AreEqual(TestDholeRateId.ToString("D"),value);
+        Assert.IsFalse(value!.Contains("IDTRA",StringComparison.OrdinalIgnoreCase));
+    }
+
+    [TestMethod]
     public void MapsApprovedQuoteWithoutGuessingEquipmentOrPrice()
     {
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
@@ -119,7 +133,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
         Assert.AreEqual(0m, inputs.GetProperty("new_monto9").GetDecimal());
         Assert.IsFalse(inputs.TryGetProperty("msdyn_invoicesetuptotals", out _));
-        Assert.AreEqual("IDTRA999.2026-045",
+        Assert.AreEqual(TestDholeRateId.ToString("D"),
             inputs.GetProperty("new_idtraasignado").GetString());
     }
 
@@ -389,7 +403,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
                 Accepted.Replace("IDTRA-2026-045", csv, StringComparison.Ordinal), schema)));
         var inputs = result.RootElement.GetProperty("inputs");
         Assert.AreEqual("IDTRA999.10", inputs.GetProperty("new_idtra10").GetString());
-        Assert.AreEqual(string.Join(", ", Enumerable.Range(1, 10).Select(i => "IDTRA999." + i)),
+        Assert.AreEqual(TestDholeRateId.ToString("D"),
             inputs.GetProperty("new_idtraasignado").GetString());
     }
 
