@@ -275,7 +275,7 @@ public sealed class DynamicsQuoteDeliveryWorker(
                 throw new InvalidOperationException("Dynamics ISO currency lookup returned an invalid GUID.");
             DynamicsQuoteCurrency.VerifyResolvedIdentity(originalCurrencyCode, iso, currencyId);
             stage = "mapping";
-            var body = DynamicsQuotePayloadBuilder.Build(outboundSnapshot, schema, configuration, currencyId);
+            var body = DynamicsQuotePayloadBuilder.Build(outboundSnapshot, schema, configuration, currencyId, job.RateId);
 
             // Two separately idempotent Dataverse writes: create Quote header
             // and create its one write-in quotedetail for the standard totalamount.
