@@ -8,5 +8,6 @@ public sealed record RateCargoLineRequest(
     decimal LengthCm,
     decimal WidthCm,
     decimal HeightCm,
-    bool? IsStackable = null
+    bool? IsStackable = null,
+    string? UnitType = null
 );
