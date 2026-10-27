@@ -478,6 +478,38 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             })
             .ToListAsync(cancellationToken);
 
+        // The paged projection cannot read the NotMapped UnitWeightsKg property
+        // inside EF's nested collection. Load the persisted JSON in one additional
+        // query per page and enrich the public container DTOs, just like GetById.
+        if (items.Count > 0)
+        {
+            var pageRateIds = items.Select(rate => rate.Id).ToArray();
+            var savedUnitWeights = await dbContext.RateContainerAllocations
+                .AsNoTracking()
+                .Where(container => pageRateIds.Contains(container.RateHeaderId))
+                .Select(container => new { container.Id, container.UnitWeightsKgJson })
+                .ToListAsync(cancellationToken);
+
+            var weightsByContainerId = savedUnitWeights.ToDictionary(
+                row => row.Id,
+                row => (IReadOnlyList<decimal>)(System.Text.Json.JsonSerializer.Deserialize<decimal[]>(
+                    row.UnitWeightsKgJson) ?? []));
+            items = items.Select(rate => rate with
+            {
+                Containers = rate.Containers.Select(container =>
+                {
+                    if (!weightsByContainerId.TryGetValue(container.Id, out var weights))
+                        return container;
+                    return container with
+                    {
+                        UnitWeightsKg = weights,
+                        OverweightUnitCount = RateContainerOverweightPolicy.CountOverweight(
+                            rate.PoeName, weights)
+                    };
+                }).ToArray()
+            }).ToList();
+        }
+
         // RateDetails are the source of truth. Recalculate the read snapshot so historical
         // rates created before aggregate USD/CRC fields were populated never render as 0.00.
         items = items.Select(item => item.WithRecalculatedFinancials()).ToList();
