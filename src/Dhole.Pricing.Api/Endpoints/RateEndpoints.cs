@@ -87,6 +87,13 @@ public static class RateEndpoints
         group
             .MapPatch("/{rateId:guid}/status", SetRateStatusAsync);
 
+        // Reenvío explícito de la revisión ya enviada que espera reaprobación
+        // del vendedor. No se manipula el estado comercial para forzar un correo.
+        group
+            .MapPost("/{rateId:guid}/resend", ResendRateRevisionAsync)
+            .RequireIdempotency()
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
+
         group.MapDelete("/", DeleteRatesAsync).RequireScope(PricingConstants.Scopes.RateDelete);
 
         return app;
@@ -975,6 +982,69 @@ public static class RateEndpoints
         );
 
         return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static async Task<IResult> ResendRateRevisionAsync(
+        Guid rateId,
+        ResendRateRevisionRequest request,
+        SentRateEmailNotificationService sentRateEmailNotificationService,
+        ServiceDbContext db,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var rate = await db.RateHeaders.AsNoTracking()
+            .Where(x => x.Id == rateId && !x.IsDeleted)
+            .Select(x => new
+            {
+                x.RevisionNumber,
+                x.Status,
+                x.PendingReapproval,
+                x.RequiredApproval,
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (rate is null)
+            return Results.NotFound();
+
+        if (request.RevisionNumber != rate.RevisionNumber)
+            return Results.Conflict(new
+            {
+                code = "Pricing.RateRevisionChanged",
+                message = "La tarifa cambió de revisión. Recargue antes de reenviarla.",
+            });
+
+        if (rate.Status != RateStatus.Sent || !rate.PendingReapproval || rate.RequiredApproval)
+            return EndpointResults.BadRequest(
+                "Pricing.RateNotEligibleForResend",
+                "Solo se puede reenviar una revisión ya enviada que esté pendiente de reaprobación y no tenga aprobación de margen pendiente.",
+                httpContext);
+
+        // Cada clic explícito representa un envío nuevo. La clave de idempotencia
+        // HTTP evita duplicarlo ante reintentos del mismo POST.
+        try
+        {
+            var error = await sentRateEmailNotificationService.QueueBeforeStatusTransitionAsync(
+                rateId,
+                cancellationToken,
+                resendCorrelationId: $"pricing-rate-resend:{rateId:N}:rev:{rate.RevisionNumber}:attempt:{Guid.NewGuid():N}"
+            );
+
+            if (error is not null)
+                return EndpointResults.BadRequest(
+                    "Pricing.RateSentEmailNotQueued", error, httpContext);
+
+            // El reenvío no cambia el estado; persistir el Outbox explícitamente.
+            await db.SaveChangesAsync(cancellationToken);
+            return Results.NoContent();
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return Results.Problem(
+                title: "No se pudo preparar el reenvío al vendedor",
+                detail: "No se encoló un nuevo correo. Intente nuevamente.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
     }
 
     private static async Task<IResult> SetRateStatusAsync(
