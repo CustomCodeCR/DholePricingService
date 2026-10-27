@@ -85,7 +85,8 @@ internal static class RateCargoProfileFactory
                 );
             }
 
-            // Las tarimas también son unidades físicas que multiplican el volumen; los bultos declarados no.\n            var units = Math.Max(Math.Max(line.Packages, line.Pallets), 1);
+            // Las tarimas también son unidades físicas que multiplican el volumen; los bultos declarados no.
+            var units = Math.Max(Math.Max(line.Packages, line.Pallets), 1);
             var forcedNonStackable = line.HeightCm >= ForcedNonStackableHeightCm;
             var isStackable = !forcedNonStackable && line.IsStackable;
             var billableHeightCm = isStackable
