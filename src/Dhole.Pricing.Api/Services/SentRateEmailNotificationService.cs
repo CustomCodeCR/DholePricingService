@@ -38,7 +38,8 @@ public sealed class SentRateEmailNotificationService(
     /// <returns>Null cuando el correo quedó preparado en el Outbox; de lo contrario, el motivo.</returns>
     public async Task<string?> QueueBeforeStatusTransitionAsync(
         Guid rateId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? resendCorrelationId = null)
     {
         var rate = await db.RateHeaders
             .AsNoTracking()
@@ -161,7 +162,7 @@ public sealed class SentRateEmailNotificationService(
                     displayName = executiveName,
                 }).ToArray(),
             },
-            correlationId: $"pricing-rate-sent:{rate.Id:N}:rev:{rate.RevisionNumber}",
+            correlationId: resendCorrelationId ?? $"pricing-rate-sent:{rate.Id:N}:rev:{rate.RevisionNumber}",
             cancellationToken: cancellationToken);
 
         logger.LogInformation(
