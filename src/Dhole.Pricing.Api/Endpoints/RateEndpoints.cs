@@ -436,9 +436,29 @@ public static class RateEndpoints
         return EndpointResults.FromResult(result, httpContext);
     }
 
+    // El generador QUO usa una transacción explícita: con EnableRetryOnFailure
+    // la reserva, el guardado y el commit deben ejecutarse dentro de la estrategia EF.
+    // Cada reintento recibe un DbContext nuevo para evitar entidades rastreadas
+    // o eventos de outbox pendientes de un intento que se revirtió.
+    private static async Task<TResult> DispatchWithTransactionalRateCodeAsync<TResult>(
+        ServiceDbContext db,
+        HttpContext httpContext,
+        Func<ICommandDispatcher, Task<TResult>> dispatch
+    )
+    {
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var retryScope = httpContext.RequestServices
+                .GetRequiredService<IServiceScopeFactory>()
+                .CreateAsyncScope();
+            var retryDispatcher = retryScope.ServiceProvider.GetRequiredService<ICommandDispatcher>();
+            return await dispatch(retryDispatcher);
+        });
+    }
+
     private static async Task<IResult> CreateRateAsync(
         CreateRateRequest request,
-        ICommandDispatcher dispatcher,
         ServiceDbContext db,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -580,8 +600,7 @@ public static class RateEndpoints
             cancellationToken
         );
 
-        var result = await dispatcher.DispatchAsync(
-            new CreateRateCommand(
+        var creationCommand = new CreateRateCommand(
                 request.SourceImportFclRateId,
                 request.AgentId,
                 request.AgentName,
@@ -653,8 +672,12 @@ public static class RateEndpoints
                 StorageDays = request.StorageDays,
                 CargoValue = request.CargoValue,
                 TransitDays = request.TransitDays,
-            },
-            cancellationToken
+            };
+
+        var result = await DispatchWithTransactionalRateCodeAsync(
+            db,
+            httpContext,
+            retryDispatcher => retryDispatcher.DispatchAsync(creationCommand, cancellationToken)
         );
 
         return EndpointResults.FromResult(result, httpContext);
@@ -876,13 +899,12 @@ public static class RateEndpoints
     private static async Task<IResult> DuplicateRateAsync(
         Guid rateId,
         DuplicateRateRequest request,
-        ICommandDispatcher dispatcher,
+        ServiceDbContext db,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
     {
-        var result = await dispatcher.DispatchAsync(
-            new DuplicateRateCommand(
+        var duplicateCommand = new DuplicateRateCommand(
                 rateId,
                 request.ValidFrom,
                 request.ValidTo,
@@ -892,8 +914,12 @@ public static class RateEndpoints
                 request.ExecutiveName,
                 request.IdtraNumber,
                 request.IdenticalCopy
-            ),
-            cancellationToken
+            );
+
+        var result = await DispatchWithTransactionalRateCodeAsync(
+            db,
+            httpContext,
+            retryDispatcher => retryDispatcher.DispatchAsync(duplicateCommand, cancellationToken)
         );
 
         return EndpointResults.FromResult(result, httpContext);
