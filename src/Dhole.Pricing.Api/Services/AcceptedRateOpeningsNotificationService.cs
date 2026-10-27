@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Mail;
 using System.Text.Json;
 using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Application.Abstractions.Messaging;
@@ -16,6 +17,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
     ICommandDispatcher dispatcher,
     IIntegrationEventOutboxWriter outbox,
     ServiceDbContext db,
+    SentRateEmailNotificationService sellerEmailNotifications,
     ILogger<AcceptedRateOpeningsNotificationService> logger)
 {
     private const string OpeningRecipient = "aperturatramite@grupocastrofallas.com";
@@ -28,12 +30,26 @@ public sealed class AcceptedRateOpeningsNotificationService(
         _ => throw new ArgumentOutOfRangeException(nameof(actor), actor, null),
     };
 
-    public static string[] CopyRecipientsFor(RateAcceptanceActor actor) => actor switch
+    public static string[] CopyRecipientsFor(
+        RateAcceptanceActor actor,
+        IEnumerable<string>? sellerEmails = null)
     {
-        RateAcceptanceActor.Seller => [SellerAcceptanceCc],
-        RateAcceptanceActor.Pricing => [],
-        _ => throw new ArgumentOutOfRangeException(nameof(actor), actor, null),
-    };
+        IEnumerable<string> recipients = actor switch
+        {
+            RateAcceptanceActor.Seller => new[] { SellerAcceptanceCc }.Concat(sellerEmails ?? []),
+            RateAcceptanceActor.Pricing => [],
+            _ => throw new ArgumentOutOfRangeException(nameof(actor), actor, null),
+        };
+
+        return recipients
+            .Where(email => !string.IsNullOrWhiteSpace(email))
+            .Select(email => email.Trim())
+            .Where(email => MailAddress.TryCreate(email, out var address)
+                && string.Equals(address.Address, email, StringComparison.OrdinalIgnoreCase))
+            .Where(email => !string.Equals(email, OpeningRecipient, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 
     public static bool HasPendingIdtra(
         RateStatus status,
@@ -95,6 +111,50 @@ public sealed class AcceptedRateOpeningsNotificationService(
                     rate.Id
                 );
                 return;
+            }
+
+            var ccRecipients = CopyRecipientsFor(actor);
+            if (actor == RateAcceptanceActor.Seller)
+            {
+                // El ejecutivo elegido en la tarifa es la fuente de verdad.
+                // Solo si falta, usar los datos del último requerimiento ligado a la tarifa.
+                var executiveName = new[]
+                    {
+                        rate.ExecutiveName,
+                        request?.ExecutiveName,
+                        request?.SellerName,
+                    }
+                    .FirstOrDefault(name => !string.IsNullOrWhiteSpace(name))?.Trim();
+
+                if (!string.IsNullOrWhiteSpace(executiveName))
+                {
+                    try
+                    {
+                        var sellerEmails = await sellerEmailNotifications.ResolveRecipientsAsync(
+                            executiveName, request?.SellerName, request?.SellerEmail,
+                            cancellationToken);
+                        ccRecipients = CopyRecipientsFor(actor, sellerEmails);
+
+                        if (sellerEmails.Count == 0)
+                            logger.LogWarning(
+                                "No se encontró correo del vendedor {ExecutiveName} para la tarifa {RateId}; se mantiene CC a Pricing.",
+                                executiveName, rate.Id);
+                    }
+                    catch (Exception exception) when (exception is not OperationCanceledException)
+                    {
+                        // El fallo de Auth/Config no impide notificar a Apertura y Pricing.
+                        logger.LogWarning(
+                            exception,
+                            "No se pudo resolver el correo del vendedor para la tarifa {RateId}; se mantiene CC a Pricing.",
+                            rate.Id);
+                    }
+                }
+                else
+                {
+                    logger.LogWarning(
+                        "La tarifa {RateId} no tiene ejecutivo asociado; se mantiene CC a Pricing.",
+                        rate.Id);
+                }
             }
 
             var payload = ReadRequestPayload(request?.PayloadJson);
@@ -217,7 +277,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
                         acceptanceOrigin,
                         idtraPending = true,
                         rateUrl,
-                        cc = CopyRecipientsFor(actor),
+                        cc = ccRecipients,
                         quo = quoteNumber,
                         seller = sellerText,
                         client = clientText,
