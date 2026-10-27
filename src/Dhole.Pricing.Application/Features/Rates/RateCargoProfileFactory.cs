@@ -80,7 +80,8 @@ internal static class RateCargoProfileFactory
             }
 
             var lineVolume = line.LengthCm * line.WidthCm * line.HeightCm / 1_000_000m;
-            // Antes se ignoraba la cantidad de tarimas al calcular los CBM.\n            lineVolume *= Math.Max(Math.Max(line.Packages, line.Pallets), 1);
+            // Antes se ignoraba la cantidad de tarimas al calcular los CBM.
+            lineVolume *= Math.Max(Math.Max(line.Packages, line.Pallets), 1);
 
             var unitType = line.UnitType is "Pallet" or "Loose" or "Box" or "Other"
                 ? line.UnitType : line.Pallets > 0 ? "Pallet" : "Loose";
