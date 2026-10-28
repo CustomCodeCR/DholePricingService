@@ -243,10 +243,54 @@ public sealed class DynamicsQuotePayloadBuilderTests
         Assert.IsFalse(inputs.TryGetProperty("customerid", out _));
         Assert.IsFalse(inputs.TryGetProperty("customeridtype", out _));
         Assert.IsFalse(inputs.TryGetProperty("msdyn_account", out _));
-        Assert.AreEqual("QUO-2026-003", inputs.GetProperty("name").GetString());
+        Assert.AreEqual("Oferta 40HC", inputs.GetProperty("name").GetString());
         Assert.IsFalse(inputs.GetProperty("description").GetString()!
             .Contains("Cliente Prueba", StringComparison.Ordinal));
         Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
+    }
+
+    [TestMethod]
+    public void DynamicsQuoteNameUsesCompleteStoredPricingRateName()
+    {
+        const string fullName =
+            "QUO-00000-000233 - Tarifa 1 x 40 High Cube - FOB - Qingdao, China To San Jose, Costa Rica Via Caldera - EL REINADO DE LAS LLANTAS";
+        var accepted = JsonNode.Parse(Accepted)!.AsObject();
+        accepted["rateCode"] = "QUO-00000-000233";
+        accepted["rateName"] = fullName;
+        accepted["clientName"] = "EL REINADO DE LAS LLANTAS";
+        using var outgoing = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(accepted.ToJsonString(), DynamicsQuotePayloadBuilder.ReadSchema(Schema))));
+        var inputs = outgoing.RootElement.GetProperty("inputs");
+        Assert.AreEqual(fullName, inputs.GetProperty("name").GetString());
+        Assert.IsFalse(inputs.TryGetProperty("customerid", out _));
+        Assert.IsFalse(inputs.TryGetProperty("msdyn_account", out _));
+        Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
+    }
+
+    [TestMethod]
+    public void DynamicsQuoteResponseNotificationMarksAcceptedRateOnlyWhenFieldExists()
+    {
+        var schemaNode = JsonNode.Parse(Schema)!.AsObject();
+        var fields = schemaNode["fields"]!.AsArray();
+        fields.Add(JsonNode.Parse("""
+            {"name":"notifRespuestaCotizacion","target":"new_notif_respuestacotizacion",
+             "type":"boolean","dataverseType":"Boolean","required":false,"options":[]}
+            """));
+        fields.Add(JsonNode.Parse("""
+            {"name":"notifInicioCotizacion","target":"new_notif_iniciocotizacion",
+             "type":"boolean","dataverseType":"Boolean","required":false,"options":[]}
+            """));
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaNode.ToJsonString());
+        using var outgoing = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(Accepted, schema)));
+        var inputs = outgoing.RootElement.GetProperty("inputs");
+        Assert.IsTrue(inputs.GetProperty("notifRespuestaCotizacion").GetBoolean());
+        Assert.IsFalse(inputs.TryGetProperty("notifInicioCotizacion", out _));
+
+        using var defaultOutgoing = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(Accepted, DynamicsQuotePayloadBuilder.ReadSchema(Schema))));
+        Assert.IsFalse(defaultOutgoing.RootElement.GetProperty("inputs")
+            .TryGetProperty("notifRespuestaCotizacion", out _));
     }
 
     [TestMethod]
@@ -556,7 +600,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         Assert.IsFalse(inputs.TryGetProperty("new_noincluye", out _));
         Assert.IsFalse(inputs.TryGetProperty("new_tarifasujetaa", out _));
         Assert.IsFalse(inputs.TryGetProperty("new_tarifaincluye", out _));
-        Assert.AreEqual("QUO-2026-003", inputs.GetProperty("name").GetString());
+        Assert.AreEqual("Oferta 40HC", inputs.GetProperty("name").GetString());
         Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
         Assert.AreEqual(12000, accepted["excludes"]!.GetValue<string>().Length);
     }
