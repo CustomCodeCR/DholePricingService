@@ -108,7 +108,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         Assert.AreEqual(100000003, inputs.GetProperty("new_preestado").GetInt32());
         Assert.AreEqual(100000004, inputs.GetProperty("new_proyecctoespecifico").GetInt32());
         Assert.AreEqual(100000000, inputs.GetProperty("new_tipodecliente").GetInt32());
-        Assert.AreEqual("quote", inputs.GetProperty("customeridtype").GetString());
+        Assert.IsFalse(inputs.TryGetProperty("customeridtype", out _));
         Assert.AreEqual(TestDholeRateId.ToString("D"), inputs.GetProperty("new_idtraasignado").GetString());
         Assert.AreEqual("2 x 40 HC", inputs.GetProperty("new_cantidadequipos").GetString());
     }
@@ -219,11 +219,34 @@ public sealed class DynamicsQuotePayloadBuilderTests
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
             BuildForTest(Accepted, schema)));
         var inputs = doc.RootElement.GetProperty("inputs");
-        Assert.AreEqual("Cliente Prueba", inputs.GetProperty("customerid").GetString());
-        Assert.AreEqual("Cliente Prueba", inputs.GetProperty("msdyn_account").GetString());
+        Assert.IsFalse(inputs.TryGetProperty("customerid", out _));
+        Assert.IsFalse(inputs.TryGetProperty("msdyn_account", out _));
         Assert.AreEqual("IDTRA999.2026-045", inputs.GetProperty("new_idtra1").GetString());
         Assert.IsFalse(inputs.TryGetProperty("customeridtype", out _));
         Assert.IsFalse(inputs.TryGetProperty("new_idtraasignado", out _));
+    }
+
+    [TestMethod]
+    public void AcceptedQuoteNeverIncludesCustomerEvenWhenTemplateDemandsIt()
+    {
+        var schemaText = Schema.Replace(
+            """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            """{"name":"customerid","target":"customerid_account@odata.bind","type":"string","dataverseType":"Customer","required":true,"options":[]},
+              {"name":"msdyn_account","target":"msdyn_account_account@odata.bind","type":"string","dataverseType":"Lookup","required":true,"options":[]},
+              {"name":"description","target":"description","type":"string","dataverseType":"Memo","required":true,"options":[]},
+              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            StringComparison.Ordinal);
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(Accepted, schema)));
+        var inputs = doc.RootElement.GetProperty("inputs");
+        Assert.IsFalse(inputs.TryGetProperty("customerid", out _));
+        Assert.IsFalse(inputs.TryGetProperty("customeridtype", out _));
+        Assert.IsFalse(inputs.TryGetProperty("msdyn_account", out _));
+        Assert.AreEqual("QUO-2026-003", inputs.GetProperty("name").GetString());
+        Assert.IsFalse(inputs.GetProperty("description").GetString()!
+            .Contains("Cliente Prueba", StringComparison.Ordinal));
+        Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
     }
 
     [TestMethod]
@@ -533,7 +556,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         Assert.IsFalse(inputs.TryGetProperty("new_noincluye", out _));
         Assert.IsFalse(inputs.TryGetProperty("new_tarifasujetaa", out _));
         Assert.IsFalse(inputs.TryGetProperty("new_tarifaincluye", out _));
-        Assert.AreEqual("Oferta 40HC", inputs.GetProperty("name").GetString());
+        Assert.AreEqual("QUO-2026-003", inputs.GetProperty("name").GetString());
         Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
         Assert.AreEqual(12000, accepted["excludes"]!.GetValue<string>().Length);
     }
