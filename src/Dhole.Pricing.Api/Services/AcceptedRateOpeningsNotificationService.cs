@@ -62,7 +62,8 @@ public sealed class AcceptedRateOpeningsNotificationService(
     public async Task QueueAsync(
         Guid rateId,
         RateAcceptanceActor actor,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? acceptanceObservations = null)
     {
         try
         {
@@ -230,6 +231,14 @@ public sealed class AcceptedRateOpeningsNotificationService(
             if (string.IsNullOrWhiteSpace(servicesText))
                 servicesText = "—";
 
+            // Store escaped text in the outbox email at acceptance time, so
+            // retries never depend on a later edit or request context.
+            var observations = acceptanceObservations?.Trim();
+            if (observations?.Length > 2000) observations = observations[..2000];
+            var observationsRow = string.IsNullOrWhiteSpace(observations)
+                ? string.Empty
+                : $"<tr><td style=\"padding:5px 10px\"><strong>Observaciones del vendedor para apertura</strong></td><td style=\"padding:5px 10px\">{WebUtility.HtmlEncode(observations).Replace("\r\n", "\n").Replace("\n", "<br />")}</td></tr>";
+
             var emailBody = $"""
                 <p>Hay una nueva tarifa aceptada con <strong>IDTRA pendiente de asignación</strong>.
                    Se adjunta el PDF de la cotización para continuar con el trámite.</p>
@@ -250,6 +259,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
                   <tr><td style="padding:5px 10px"><strong>Vigencia</strong></td><td style="padding:5px 10px">{rate.ValidFrom:dd/MM/yyyy} - {rate.ValidTo:dd/MM/yyyy}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Peso / volumen</strong></td><td style="padding:5px 10px">{rate.TotalWeightKg:0.###} kg / {rate.TotalVolumeCbm:0.###} m³</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Estado</strong></td><td style="padding:5px 10px">Aceptada por el cliente</td></tr>
+                  {observationsRow}
                   <tr><td style="padding:5px 10px"><strong>IDTRA</strong></td><td style="padding:5px 10px"><strong>PENDIENTE DE ASIGNAR</strong></td></tr>
                 </table>
                 <p><a href="{Html(rateUrl)}">Consultar tarifa en Dhole</a></p>
@@ -275,6 +285,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
                         rateCode = rate.RateCode,
                         revisionNumber = rate.RevisionNumber,
                         acceptanceOrigin,
+                        acceptanceObservations = observations,
                         idtraPending = true,
                         rateUrl,
                         cc = ccRecipients,
