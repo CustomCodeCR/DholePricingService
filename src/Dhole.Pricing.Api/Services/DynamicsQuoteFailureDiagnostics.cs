@@ -136,6 +136,12 @@ public static class DynamicsQuoteFailureDiagnostics
             description = $"Dynamics encontró varios registros para {lookupInput}" +
                 (lookupSearchField is null ? "." : $" en el campo {lookupSearchField}.") +
                 " Se necesita una coincidencia única.";
+        else if (providerCode == "legacy_quote_requires_rate_key_linking")
+            description = "Se encontró una cabecera CREATE exitosa de esta tarifa en una revisión anterior, " +
+                "pero la clave alternativa de RateId no la identifica. El bloqueo ocurrió antes " +
+                "de crear la cabecera de esta revisión. Consultá el historial de revisiones en " +
+                "«Verificar en Dynamics» y conciliá el GUID de la QUO existente antes de reintentar. " +
+                "No generés otra QUO.";
         else if (providerCode == "quote_customer_required")
             description = "La cabecera no puede crearse sin un cliente de Dynamics vinculado: " +
                 "configurá customerid_account o customerid_contact en crear_oferta y " +
