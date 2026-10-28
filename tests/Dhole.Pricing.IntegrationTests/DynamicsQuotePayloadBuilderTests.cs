@@ -114,6 +114,46 @@ public sealed class DynamicsQuotePayloadBuilderTests
     }
 
     [TestMethod]
+    public void UpsertUsesCr933RateIdAndNeverConfusesItWithIdtra()
+    {
+        var schemaText = Schema.Replace(
+            "\"operation\":\"create\"", "\"operation\":\"upsert\"",
+            StringComparison.Ordinal).Replace(
+            """{"name":"new_idtraasignado","target":"new_idtraasignado","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            """{"name":"cr933_dholerateid","target":"cr933_dholerateid","type":"string","dataverseType":"String","required":true,"options":[]}""",
+            StringComparison.Ordinal);
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(Accepted, schema)));
+        var inputs = document.RootElement.GetProperty("inputs");
+        Assert.AreEqual(TestDholeRateId.ToString("D"),
+            inputs.GetProperty("cr933_dholerateid").GetString());
+        Assert.IsFalse(inputs.TryGetProperty("new_idtraasignado", out _));
+        Assert.IsFalse(inputs.GetProperty("cr933_dholerateid").GetString()!
+            .Contains("IDTRA", StringComparison.OrdinalIgnoreCase));
+        Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
+    }
+
+    [TestMethod]
+    public void MapsAllNineCostAmountsAndTotalSaleIndependently()
+    {
+        const string oldCostField =
+            """{"name":"new_monto9","target":"new_monto9","type":"decimal","dataverseType":"Money","required":true,"options":[]}""";
+        var allCostFields = string.Join(",", Enumerable.Range(1, 9).Select(i =>
+            "{\"name\":\"new_monto" + i + "\",\"target\":\"new_monto" + i +
+            "\",\"type\":\"decimal\",\"dataverseType\":\"Money\",\"required\":true,\"options\":[]}"));
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(
+            Schema.Replace(oldCostField, allCostFields, StringComparison.Ordinal));
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(Accepted, schema)));
+        var inputs = document.RootElement.GetProperty("inputs");
+        Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
+        Assert.AreEqual(1800.75m, inputs.GetProperty("new_monto1").GetDecimal());
+        for (var index = 2; index <= 9; index++)
+            Assert.AreEqual(0m, inputs.GetProperty("new_monto" + index).GetDecimal());
+    }
+
+    [TestMethod]
     public void LclUsesItsOwnDynamicsOption()
     {
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
