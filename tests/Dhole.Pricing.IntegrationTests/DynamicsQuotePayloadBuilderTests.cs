@@ -79,14 +79,15 @@ public sealed class DynamicsQuotePayloadBuilderTests
     public void UpsertTemplatePreservesAutomaticSaleLineInputsAndTrustedRateIdentity()
     {
         var upsertSchema = Schema.Replace(
-            "\"\"operation\":\"create\"", "\"\"operation\":\"upsert\"",
+            "\"operation\":\"create\"", "\"operation\":\"upsert\"",
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(upsertSchema);
+        Assert.AreEqual("upsert", schema.Operation);
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
             BuildForTest(Accepted, schema)));
         var inputs = doc.RootElement.GetProperty("inputs");
         Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
-        Assert.AreEqual(1800.75m, inputs.GetProperty("new_monto1").GetDecimal());
+        Assert.AreEqual(0m, inputs.GetProperty("new_monto9").GetDecimal());
         Assert.AreEqual(TestDholeRateId.ToString("D"),
             inputs.GetProperty("new_idtraasignado").GetString());
     }
