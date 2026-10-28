@@ -58,7 +58,7 @@ alternativa; el conector exige conciliación antes de continuar.
 | `new_idtra1` … `new_idtra10` | IDTRA asignados, uno por campo lookup disponible, en orden |
 | `cr933_dholerateid` | GUID permanente `RateHeader.Id`, cuando forma parte de la plantilla |
 | `new_idtraasignado` | GUID permanente `RateHeader.Id` SOLO para plantillas heredadas que lo emplean como identidad |
-| `name` | `RateName` completo de Pricing: `QUO - Tarifa/equipos - Incoterm - Origen To Destino Via Entrada - Cliente`. Solo se usa `RateCode` si falta el nombre histórico |\n| `description` | Consecutivo QUO, modo, moneda e IDTRA; sin vínculo de cliente ni nombre duplicado |\n| `new_notifrespuestacotizacion` | `100000000` (opción numérica de Picklist), obligatorio en toda QUO nueva creada/actualizada por Pricing |
+| `name` | `RateName` completo de Pricing: `QUO - Tarifa/equipos - Incoterm - Origen To Destino Via Entrada - Cliente`. Solo se usa `RateCode` si falta el nombre histórico |\n| `description` (Descripción/Pesos/Volumen) | Nombre del cliente al inicio, seguido del consecutivo QUO, modo, moneda e IDTRA, separados por ` | `. No crea ni modifica vínculos de cliente en Dynamics |\n| `new_notifrespuestacotizacion` | `100000000` (opción numérica de Picklist), obligatorio en toda QUO nueva creada/actualizada por Pricing |
 | `effectivefrom`, `effectiveto` | Fechas de validez de la tarifa |
 | `new_pol`, `new_poe`, `new_pod` | Origen, entrada y destino almacenados |
 | `new_categoriatarifa` | Opción aprobada, preferencia `100000001` |
