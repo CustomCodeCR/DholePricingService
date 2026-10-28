@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
@@ -54,7 +53,10 @@ public sealed class RateReportAirLclParityTests
 
         var root = report.RootElement;
         var rows = root.GetProperty("items").EnumerateArray().ToArray();
-        Assert.AreEqual(12, rows.Length, "PDF must include zero-sale persisted rows as in Pricing.");
+        Assert.AreEqual(10, rows.Length, "PDF must exclude charges with zero sale.");
+        Assert.IsFalse(rows.Any(x => x.GetProperty("unitSaleAmount").GetDecimal() == 0m));
+        var exportedRows = root.GetProperty("rows").EnumerateArray().ToArray();
+        Assert.AreEqual(12, exportedRows.Length, "Internal tabular exports must keep the complete persisted rows.");
         var freightRow = rows.Single(x => x.GetProperty("description").GetString() == "Flete Internacional");
         Assert.AreEqual(54.885m, freightRow.GetProperty("quantity").GetDecimal());
         Assert.AreEqual(
@@ -64,7 +66,7 @@ public sealed class RateReportAirLclParityTests
             617.10m,
             decimal.Round(freightRow.GetProperty("lineTotalAmount").GetDecimal(), 2));
         Assert.AreEqual(2,
-            rows.Count(x => x.GetProperty("lineTotalAmount").GetDecimal() == 0m));
+            exportedRows.Count(x => x.GetProperty("Precio unitario").GetDecimal() == 0m));
         Assert.AreEqual(997.10m,
             decimal.Round(root.GetProperty("currencyTotals")[0].GetProperty("amount").GetDecimal(), 2));
         StringAssert.Contains(root.GetProperty("rate").GetProperty("containerType").GetString()!,
