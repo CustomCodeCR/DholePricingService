@@ -117,7 +117,12 @@ public static class DynamicsQuotePayloadBuilder
             var montoIndex = MontoIndex(field);
             object? value = field.Target switch
             {
-                "name" => String(rate, "rateCode") ?? String(rate, "rateName"),
+                // RateName is the complete immutable business title generated
+                // by RateHeader.CreateRateName: QUO - Tarifa/equipment -
+                // Incoterm - POL To POD Via POE - customer. Do not overwrite
+                // it with the short tracking number (RateCode).
+                "name" => String(rate, "rateName") ?? String(rate, "rateCode"),
+                var target when IsQuoteResponseNotification(field) => true,
                 "description" => Description(rate, idtras),
                 "effectivefrom" => Date(rate, "validFrom"),
                 "effectiveto" => Date(rate, "validTo"),
@@ -272,6 +277,30 @@ public static class DynamicsQuotePayloadBuilder
         string.Join(" | ", new[] { String(rate, "rateCode"),
             String(rate, "shipmentMode"), String(rate, "currencyCode"),
             string.Join(", ", idtras) }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+    // Map the published Dataverse Two Options field "Notif. Respuesta
+    // Cotizacion" on accepted client responses. The actual logical column
+    // name can vary between solutions, so match only schema-declared Boolean
+    // columns using their *real* input/target name. Never guess an OData
+    // property or write to other notification switches.
+    private static bool IsQuoteResponseNotification(DynamicsCrudField field)
+    {
+        if (field.Target.EndsWith("@odata.bind", StringComparison.Ordinal) ||
+            field.Type is not ("boolean" or "bool") &&
+            field.DataverseType is not ("Boolean" or "TwoOptions"))
+            return false;
+        static string Flat(string? text) =>
+            new((text ?? "").Where(char.IsLetterOrDigit)
+                .Select(char.ToLowerInvariant).ToArray());
+        return new[] { Flat(field.Name), Flat(field.Target) }.Any(name =>
+            name.Contains("notif", StringComparison.Ordinal) &&
+            (name.Contains("respuesta", StringComparison.Ordinal) ||
+             name.Contains("response", StringComparison.Ordinal) ||
+             name.Contains("resp", StringComparison.Ordinal)) &&
+            (name.Contains("cotiz", StringComparison.Ordinal) ||
+             name.Contains("quote", StringComparison.Ordinal) ||
+             name.Contains("oferta", StringComparison.Ordinal)));
+    }
 
     private static bool PricingCustomerTarget(string target) =>
         target.Equals("customerid", StringComparison.OrdinalIgnoreCase) ||
