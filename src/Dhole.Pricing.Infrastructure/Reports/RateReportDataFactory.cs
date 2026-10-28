@@ -98,7 +98,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         // Project the same commercial unit in PDFs/exports, including legacy
         // quotes saved with quantity=1 before PerLb was supported by Pricing.
         bool IsAirPoundCharge(RateDetail detail) =>
-            isAirLcl && detail.ChargeBasis == ChargeBasis.PerLb && !IsPickupCharge(detail);
+            isAirLcl && rate.TotalWeightKg > 0m
+            && detail.ChargeBasis == ChargeBasis.PerLb && !IsPickupCharge(detail);
         decimal ReportUnitSale(RateDetail detail) =>
             IsAirPoundCharge(detail) ? detail.SaleAmount * AirPoundsPerKg : detail.SaleAmount;
         decimal LineSubtotal(RateDetail detail) => ReportUnitSale(detail) * ReportQuantity(detail);
