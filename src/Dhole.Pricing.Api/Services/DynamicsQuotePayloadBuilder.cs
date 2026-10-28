@@ -294,10 +294,14 @@ public static class DynamicsQuotePayloadBuilder
             : parsed.ToUniversalTime()).ToString("O", CultureInfo.InvariantCulture);
     }
 
+    // The description shown as "Descripción/Pesos/Volumen" in Dynamics
+    // begins with the customer and then retains the existing QUO details.
+    // This is presentation text only; it never creates customer relationships.
     private static string Description(JsonElement rate, string[] idtras) =>
-        string.Join(" | ", new[] { String(rate, "rateCode"),
-            String(rate, "shipmentMode"), String(rate, "currencyCode"),
-            string.Join(", ", idtras) }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        string.Join(" | ", new[] { String(rate, "clientName")?.Trim(),
+            String(rate, "rateCode"), String(rate, "shipmentMode"),
+            String(rate, "currencyCode"), string.Join(", ", idtras) }
+            .Where(x => !string.IsNullOrWhiteSpace(x)));
 
     private static bool PricingCustomerTarget(string target) =>
         target.Equals("customerid", StringComparison.OrdinalIgnoreCase) ||
