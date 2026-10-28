@@ -3,13 +3,38 @@
 # Called before Docker images are built or running Pricing containers are touched.
 set -euo pipefail
 umask 077
-envfile="${1:?usage: check-dynamics-pricing-credential.sh PREPARED_ENV_FILE}"
-test -r "$envfile" || { echo "::error::Prepared production environment is unreadable."; exit 1; }
-key="$(sed -n 's/^DynamicsQuoteSync__ApiKey=//p' "$envfile" | tail -n 1 | tr -d '\r')"
-key="${key#\"}"
-key="${key%\"}"
+# Production secrets always originate from the canonical host file.
+# The second argument is the prepared Compose env, only used for parity checks.
+envfile="${1:-/opt/dhole/.env}"
+runtime_envfile="${2:-}"
+test -r "$envfile" || { echo "::error::Cannot read the canonical Pricing environment: $envfile."; exit 1; }
+read_key() {
+  local source="$1" count
+  count="$(grep -c '^DynamicsQuoteSync__ApiKey=' "$source" || true)"
+  if [[ "$count" != "1" ]]; then
+    echo "::error::Expected one DynamicsQuoteSync__ApiKey entry in $source (found $count). Remove duplicates; no key values are logged." >&2
+    return 1
+  fi
+  local value
+  value="$(sed -n 's/^DynamicsQuoteSync__ApiKey=//p' "$source" | tr -d '\r')"
+  value="${value#\"}"
+  value="${value%\"}"
+  value="${value#\'}"
+  value="${value%\'}"
+  printf '%s' "$value"
+}
+key="$(read_key "$envfile")"
+if [[ -n "$runtime_envfile" ]]; then
+  test -r "$runtime_envfile" || { echo "::error::Prepared Compose environment is unreadable: $runtime_envfile."; exit 1; }
+  runtime_key="$(read_key "$runtime_envfile")"
+  if [[ "$key" != "$runtime_key" ]]; then
+    echo "::error::DynamicsQuoteSync__ApiKey in $runtime_envfile does not match the canonical $envfile. Pricing was not deployed." >&2
+    exit 1
+  fi
+  unset runtime_key
+fi
 if [[ ! "$key" =~ ^dkw1_[A-Za-z0-9_-]{76}$ ]]; then
-  echo "::error::DynamicsQuoteSync__ApiKey is absent or not a generated Dynamics key in the production host env. Re-deploying alone will NOT rotate the credential."
+  echo "::error::DynamicsQuoteSync__ApiKey in $envfile is missing or has an invalid Dynamics key format. No secret has been logged."
   exit 1
 fi
 if grep -Eiq '^DynamicsQuoteSync__Enabled=(false|0)$' "$envfile"; then
