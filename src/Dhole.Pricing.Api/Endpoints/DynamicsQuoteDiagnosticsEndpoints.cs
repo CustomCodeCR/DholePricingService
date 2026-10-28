@@ -1134,7 +1134,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         if (status != "NeedsAttention") return false;
         // Historical text-limit HTTP 422 is a proven pre-header validation
         // rejection, even when the old worker incorrectly set postAttempted.
-        if (DynamicsQuoteFailureDiagnostics.IsKnownLegacyTextPreflight(diagnosticJson))
+        if (DynamicsQuoteFailureDiagnostics.IsKnownLegacyTextPreflight(diagnosticJson) ||
+            DynamicsQuoteFailureDiagnostics.IsKnownLegacyReadGrantPreflight(diagnosticJson))
             return true;
         try
         {
