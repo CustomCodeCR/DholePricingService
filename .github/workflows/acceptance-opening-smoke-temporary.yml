@@ -1,0 +1,24 @@
+name: Acceptance opening email smoke temporary
+on:
+  push:
+    branches: [feat/acceptance-observations-opening-mail-20261028, feat/acceptance-observations-opening-mail-develop-20261028]
+  pull_request:
+    branches: [master, develop]
+permissions:
+  contents: read
+  packages: read
+jobs:
+  api-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore and compile Pricing API
+        env:
+          NuGetPackageSourceCredentials_github: 'Username=${{ github.actor }};Password=${{ secrets.GITHUB_TOKEN }};ValidAuthenticationTypes=Basic'
+        run: |
+          dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile NuGet.Config
+          dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configuration Release --no-restore --verbosity minimal
