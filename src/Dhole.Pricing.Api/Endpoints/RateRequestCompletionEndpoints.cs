@@ -27,7 +27,7 @@ public static class RateRequestCompletionEndpoints
         return app;
     }
 
-    private static Task<IResult> CompleteAsync(
+    private static async Task<IResult> CompleteAsync(
         Guid requestId,
         CompleteRateRequest request,
         ServiceDbContext db,
@@ -36,8 +36,31 @@ public static class RateRequestCompletionEndpoints
         HttpContext httpContext,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken
-    ) => CompleteCoreAsync(requestId, request, db, dispatcher, outbox, httpContext,
-        loggerFactory, requireLease: true, cancellationToken);
+    )
+    {
+        try
+        {
+            return await CompleteCoreAsync(requestId, request, db, dispatcher, outbox,
+                httpContext, loggerFactory, requireLease: true, cancellationToken);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            // Includes failed initial lookups and unexpected infrastructure errors.
+            // Existing stage-specific errors remain 409/503; never send raw SQL,
+            // server paths or credentials in the HTTP body.
+            loggerFactory.CreateLogger("RateRequestCompletion").LogError(error,
+                "Unhandled complete-rate failure. RequestId={RequestId}, RateId={RateId}, TraceId={TraceId}",
+                requestId, request.RateId, httpContext.TraceIdentifier);
+            return Results.Json(new
+            {
+                code = "Pricing.RateRequestCompletionUnexpected",
+                message = "No se pudo completar la solicitud. La revisión puede estar guardada; verifique su estado antes de reintentar.",
+                requestId,
+                rateId = request.RateId,
+                traceId = httpContext.TraceIdentifier,
+            }, statusCode: StatusCodes.Status500InternalServerError);
+        }
+    }
 
     // The approval endpoint can finish an already-linked request without a user lease.
     // Never infer an association: only requests explicitly linked during rate creation qualify.
