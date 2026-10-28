@@ -159,6 +159,24 @@ public sealed class DynamicsQuoteFailureDiagnosticsTests
     }
 
     [TestMethod]
+    public void HistoricalClientDenied403IsPreWriteAndDoesNotNeedNewIdempotencyKey()
+    {
+        var response = """
+            {"code":"DYNAMICS_FORBIDDEN","stage":"execute","httpStatus":403,
+             "providerCode":"client_denied","postAttempted":true}
+            """;
+        Assert.IsTrue(DynamicsQuoteFailureDiagnostics.IsKnownLegacyReadGrantPreflight(response));
+        Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsKnownLegacyReadGrantPreflight(
+            response.Replace("403", "409")));
+        Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsKnownLegacyReadGrantPreflight(
+            response.Replace("client_denied", "quote_total_partial_requires_reconciliation")));
+        Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsKnownLegacyReadGrantPreflight(
+            response.Replace("execute", "total")));
+        Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsKnownLegacyReadGrantPreflight(
+            "{}"));
+    }
+
+    [TestMethod]
     public void PriorTextLimitPreflightCanBeRetriedButOtherPostResultsCannot()
     {
         const string oldResponse = """
