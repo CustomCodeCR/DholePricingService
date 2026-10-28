@@ -216,18 +216,35 @@ public static class RateRequestCompletionEndpoints
             }
             catch (DbUpdateException error) when (!cancellationToken.IsCancellationRequested)
             {
+                // A 503 is not sufficient to diagnose a persistent PostgreSQL
+                // constraint violation. Expose only safe, stable identifiers;
+                // never return SQL text, payload_json or database credentials.
+                var postgres = error.GetBaseException() as Npgsql.PostgresException;
+                var sqlState = postgres?.SqlState;
+                var constraintName = postgres?.ConstraintName;
+                var tableName = postgres?.TableName;
                 loggerFactory.CreateLogger("RateRequestCompletion").LogError(
                     error,
-                    "Complete-rate could not persist request transition. RequestId={RequestId}, RateId={RateId}, " +
-                    "Status={Status}, PreparedRevisionNumber={PreparedRevision}, ActualRevision={ActualRevision}, TraceId={TraceId}",
+                    "Complete-rate persistence failed. RequestId={RequestId}, RateId={RateId}, " +
+                    "Status={Status}, PreparedRevisionNumber={PreparedRevision}, ActualRevision={ActualRevision}, " +
+                    "SqlState={SqlState}, ConstraintName={ConstraintName}, TableName={TableName}, TraceId={TraceId}",
                     requestId, request.RateId, entity.Status, entity.PreparedRevisionNumber,
-                    rate.RevisionNumber, httpContext.TraceIdentifier);
+                    rate.RevisionNumber, sqlState, constraintName, tableName, httpContext.TraceIdentifier);
                 return Results.Json(new
                 {
                     code = "Pricing.RateRequestCompletionPersistenceFailed",
-                    message = "La revisión de la QUO puede estar guardada, pero no se pudo persistir el cierre de la solicitud. Revise el diagnóstico antes de reintentar.",
+                    message = "La revisión de la QUO puede estar guardada, pero PostgreSQL rechazó el cierre de la solicitud. No cree otra revisión.",
                     requestId,
                     rateId = request.RateId,
+                    traceId = httpContext.TraceIdentifier,
+                    diagnostic = new
+                    {
+                        sqlState,
+                        constraintName,
+                        tableName,
+                        // A null value indicates a non-Postgres update failure;
+                        // the original exception is still in structured server logs.
+                    },
                 }, statusCode: StatusCodes.Status503ServiceUnavailable);
             }
         }
