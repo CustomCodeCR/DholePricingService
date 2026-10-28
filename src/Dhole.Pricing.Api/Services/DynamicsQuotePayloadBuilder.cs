@@ -104,7 +104,9 @@ public static class DynamicsQuotePayloadBuilder
             // Never forward them (not even an empty string/null), including
             // when a historical active template marked the input as required.
             // The accepted Pricing snapshot, tariff and PDF remain unchanged.
-            if (field.Target is "new_noincluye" or "new_tarifasujetaa" or "new_tarifaincluye")
+            if (field.Target is "new_noincluye" or "new_tarifasujetaa" or "new_tarifaincluye" ||
+                PricingCustomerTarget(field.Target) ||
+                field.Name is "customerid" or "customeridtype" or "msdyn_account")
                 continue;
             // These quote totals are calculated and read-only in Dataverse.
             // Only their writable source fields may be included in crear_oferta.
@@ -115,7 +117,7 @@ public static class DynamicsQuotePayloadBuilder
             var montoIndex = MontoIndex(field);
             object? value = field.Target switch
             {
-                "name" => String(rate, "rateName") ?? String(rate, "rateCode"),
+                "name" => String(rate, "rateCode") ?? String(rate, "rateName"),
                 "description" => Description(rate, idtras),
                 "effectivefrom" => Date(rate, "validFrom"),
                 "effectiveto" => Date(rate, "validTo"),
@@ -127,7 +129,6 @@ public static class DynamicsQuotePayloadBuilder
                 "new_equipo" => EquipmentForSchema(rate, field),
                 "new_cantidadequipos" => Quantity(rate),
                 // Exact choices configured by the business for crear_oferta.
-                "customeridtype" => "quote",
                 "new_categoriatarifa" => ConfiguredChoice(field, 100000001, configuration),
                 "new_preestado" => ConfiguredChoice(field, 100000003, configuration),
                 "new_proyecctoespecifico" => ConfiguredChoice(field, 100000004, configuration),
@@ -135,16 +136,6 @@ public static class DynamicsQuotePayloadBuilder
                 "new_idtraasignado" => guid.ToString("D"),
                 "cr933_dholerateid" => guid.ToString("D"),
                 "new_divisa" or "new_moneda" => CurrencyForSchema(rate, field),
-                // The mapped target is a trusted navigation property in the
-                // published schema, never an arbitrary caller-provided OData key.
-                var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
-                    target.Contains("customerid", StringComparison.OrdinalIgnoreCase)
-                    => String(rate, "clientName"),
-                // Custom account lookup selected in the current quote builder.
-                // Its navigation property still comes exclusively from live metadata.
-                var target when field.Name == "msdyn_account" &&
-                    target.EndsWith("@odata.bind", StringComparison.Ordinal)
-                    => String(rate, "clientName"),
                 var target when idtraIndex is >= 1 and <= 10
                     => idtraIndex <= idtras.Length ? idtras[idtraIndex - 1] : null,
                 var target when target.EndsWith("@odata.bind", StringComparison.Ordinal) &&
@@ -278,9 +269,17 @@ public static class DynamicsQuotePayloadBuilder
     }
 
     private static string Description(JsonElement rate, string[] idtras) =>
-        string.Join(" | ", new[] { String(rate, "rateCode"), String(rate, "clientName"),
+        string.Join(" | ", new[] { String(rate, "rateCode"),
             String(rate, "shipmentMode"), String(rate, "currencyCode"),
             string.Join(", ", idtras) }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+    private static bool PricingCustomerTarget(string target) =>
+        target.Equals("customerid", StringComparison.OrdinalIgnoreCase) ||
+        target.Equals("customeridtype", StringComparison.OrdinalIgnoreCase) ||
+        (target.StartsWith("customerid_", StringComparison.OrdinalIgnoreCase) &&
+         target.EndsWith("@odata.bind", StringComparison.OrdinalIgnoreCase)) ||
+        (target.StartsWith("msdyn_account", StringComparison.OrdinalIgnoreCase) &&
+         target.EndsWith("@odata.bind", StringComparison.OrdinalIgnoreCase));
 
     private static string Quantity(JsonElement rate)
     {
