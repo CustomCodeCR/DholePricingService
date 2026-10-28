@@ -85,6 +85,7 @@ public static class DynamicsQuoteFailureDiagnostics
                 code.ValueKind == JsonValueKind.String &&
                 code.GetString() == "client_denied" &&
                 value.TryGetProperty("httpStatus", out var status) &&
+                status.ValueKind == JsonValueKind.Number &&
                 status.TryGetInt32(out var http) && http == 403;
         }
         catch (JsonException) { return false; }
