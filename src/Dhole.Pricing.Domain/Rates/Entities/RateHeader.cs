@@ -901,6 +901,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                         ? Math.Max(chargeableCbm, 1m)
                         : Math.Max(chargeableCbm, 0.001m)) * 35.31466672148859m,
             ChargeBasis.PerKg => Math.Max(TotalWeightKg, 0.001m),
+            // Rates priced per pound must bill the physical weight in pounds,
+            // not the default quantity of one. Keep the same conversion as the web wizard.
+            ChargeBasis.PerLb => Math.Max(TotalWeightKg * 2.20462262m, 0.001m),
             ChargeBasis.Per100Kg => Math.Max(TotalWeightKg / 100m, 0.001m),
             ChargeBasis.PerTon => Math.Max(TotalWeightKg / 1000m, 0.001m),
             ChargeBasis.PerPallet => Math.Max(TotalPallets, 1),
@@ -1758,6 +1761,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                 ChargeBasis.PerCbm or
                 ChargeBasis.PerChargeableCbm or
                 ChargeBasis.PerKg or
+                ChargeBasis.PerLb or
                 ChargeBasis.Per100Kg or
                 ChargeBasis.PerTon or
                 ChargeBasis.PerPallet or
