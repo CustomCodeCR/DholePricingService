@@ -79,6 +79,34 @@ public static class DynamicsQuoteFailureDiagnostics
         catch (JsonException) { return false; }
     }
 
+    /// <summary>
+    /// Earlier Pricing workers marked a connector ReadAccess client_denied
+    /// as postAttempted even though that 403 is raised by PermitAsync before
+    /// executing the Quote header. Connector paths AFTER a successful header
+    /// return quote_total_partial_requires_reconciliation instead.
+    /// This permits reusing the SAME idempotency key, never creating a new
+    /// recovery generation for a missing read grant.
+    /// </summary>
+    public static bool IsKnownLegacyReadGrantPreflight(string? diagnosticJson)
+    {
+        if (string.IsNullOrWhiteSpace(diagnosticJson)) return false;
+        try
+        {
+            using var parsed = JsonDocument.Parse(diagnosticJson);
+            var value = parsed.RootElement;
+            return value.ValueKind == JsonValueKind.Object &&
+                value.TryGetProperty("stage", out var stage) &&
+                stage.ValueKind == JsonValueKind.String &&
+                stage.GetString() == "execute" &&
+                value.TryGetProperty("providerCode", out var code) &&
+                code.ValueKind == JsonValueKind.String &&
+                code.GetString() == "client_denied" &&
+                value.TryGetProperty("httpStatus", out var status) &&
+                status.TryGetInt32(out var http) && http == 403;
+        }
+        catch (JsonException) { return false; }
+    }
+
     public static (string LastError, string DiagnosticJson) Format(
         string stage, Exception exception, bool postAttempted,
         HttpStatusCode? httpStatus = null, string? providerCode = null, string? providerTitle = null,
