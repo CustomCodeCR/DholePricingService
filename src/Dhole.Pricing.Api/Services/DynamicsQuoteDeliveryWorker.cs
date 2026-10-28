@@ -127,12 +127,18 @@ public sealed class DynamicsQuoteDeliveryWorker(
                 // Drain ready jobs back-to-back. Every job is atomically
                 // claimed with FOR UPDATE SKIP LOCKED and keeps the same
                 // idempotency key: this does not create duplicate Quotes.
-                if (quoteWritesReady && await ProcessNextAsync(apiKey, stoppingToken))
-                    continue;
+                if (quoteWritesReady)
+                {
+                    var processed = await ProcessNextAsync(apiKey, stoppingToken);
+                    // A successful database claim check clears a previous iteration error.
+                    workerState.Report(true, "DYNAMICS_QUOTE_WRITES_READY");
+                    if (processed) continue;
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex)
             {
+                workerState.Report(false, "DYNAMICS_WORKER_ITERATION_FAILED");
                 logger.LogError("Dynamics quote worker iteration failed ({Type}).",
                     ex.GetType().Name);
             }
