@@ -107,6 +107,11 @@ public static class DynamicsQuoteFailureDiagnostics
             description = $"Dynamics encontró varios registros para {lookupInput}" +
                 (lookupSearchField is null ? "." : $" en el campo {lookupSearchField}.") +
                 " Se necesita una coincidencia única.";
+        else if (providerCode == "quote_customer_required")
+            description = "La cabecera no puede crearse sin un cliente de Dynamics vinculado: " +
+                "configurá customerid_account o customerid_contact en crear_oferta y " +
+                "verificá que el nombre del cliente resuelva a una cuenta o contacto único. " +
+                "No se hizo ningún POST de cabecera.";
         else if (providerCode == "quote_text_exceeds_dataverse_limit")
             description = lookupInput is null
                 ? "Algún texto supera el límite de Dataverse. La QUO no se envió; revisá el esquema actualizado."
