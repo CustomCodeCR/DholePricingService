@@ -229,7 +229,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
     }
 
     [TestMethod]
-    public void AcceptedQuoteNeverIncludesCustomerEvenWhenTemplateDemandsIt()
+    public void AcceptedQuoteDoesNotBindCustomerLookupsEvenWhenItsNameIsInDescription()
     {
         var schemaText = Schema.Replace(
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
@@ -246,9 +246,39 @@ public sealed class DynamicsQuotePayloadBuilderTests
         Assert.IsFalse(inputs.TryGetProperty("customeridtype", out _));
         Assert.IsFalse(inputs.TryGetProperty("msdyn_account", out _));
         Assert.AreEqual("Oferta 40HC", inputs.GetProperty("name").GetString());
-        Assert.IsFalse(inputs.GetProperty("description").GetString()!
-            .Contains("Cliente Prueba", StringComparison.Ordinal));
+        Assert.AreEqual(
+            "Cliente Prueba | QUO-2026-003 | Fcl | USD | IDTRA999.2026-045",
+            inputs.GetProperty("description").GetString());
         Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal());
+    }
+
+    [TestMethod]
+    public void DynamicsQuoteDescriptionPutsClientFirstAndKeepsOriginalDetails()
+    {
+        var schemaNode = JsonNode.Parse(Schema)!.AsObject();
+        schemaNode["fields"]!.AsArray().Add(JsonNode.Parse("""
+            {"name":"description","target":"description","type":"string",
+             "dataverseType":"Memo","required":true,"options":[]}
+            """));
+        var rate = JsonNode.Parse(Accepted)!.AsObject();
+        rate["clientName"] = "  EL REINADO DE LAS LLANTAS  ";
+        rate["rateCode"] = "QUO-00000-000233";
+        rate["idtraNumber"] = "IDTRA999.12761";
+        using var outgoing = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(rate.ToJsonString(),
+                DynamicsQuotePayloadBuilder.ReadSchema(schemaNode.ToJsonString()))));
+        Assert.AreEqual(
+            "EL REINADO DE LAS LLANTAS | QUO-00000-000233 | Fcl | USD | IDTRA999.12761",
+            outgoing.RootElement.GetProperty("inputs").GetProperty("description").GetString());
+
+        // Older accepted snapshots without a customer must retain the
+        // complete previous description without leading separators.
+        rate.Remove("clientName");
+        using var legacy = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(rate.ToJsonString(),
+                DynamicsQuotePayloadBuilder.ReadSchema(schemaNode.ToJsonString()))));
+        Assert.AreEqual("QUO-00000-000233 | Fcl | USD | IDTRA999.12761",
+            legacy.RootElement.GetProperty("inputs").GetProperty("description").GetString());
     }
 
     [TestMethod]
