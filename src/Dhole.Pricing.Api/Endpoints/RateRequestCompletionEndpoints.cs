@@ -34,9 +34,10 @@ public static class RateRequestCompletionEndpoints
         ICommandDispatcher dispatcher,
         IIntegrationEventOutboxWriter outbox,
         HttpContext httpContext,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken
     ) => CompleteCoreAsync(requestId, request, db, dispatcher, outbox, httpContext,
-        requireLease: true, cancellationToken);
+        loggerFactory, requireLease: true, cancellationToken);
 
     // The approval endpoint can finish an already-linked request without a user lease.
     // Never infer an association: only requests explicitly linked during rate creation qualify.
@@ -68,7 +69,7 @@ public static class RateRequestCompletionEndpoints
             {
                 var result = await CompleteCoreAsync(
                     requestId, new CompleteRateRequest(rateId), db, dispatcher, outbox,
-                    httpContext, requireLease: false, cancellationToken);
+                    httpContext, loggerFactory, requireLease: false, cancellationToken);
                 if (result is IStatusCodeHttpResult status && status.StatusCode >= 400)
                 {
                     loggerFactory.CreateLogger("RateRequestCompletion").LogWarning(
@@ -93,6 +94,7 @@ public static class RateRequestCompletionEndpoints
         ICommandDispatcher dispatcher,
         IIntegrationEventOutboxWriter outbox,
         HttpContext httpContext,
+        ILoggerFactory loggerFactory,
         bool requireLease,
         CancellationToken cancellationToken
     )
@@ -182,137 +184,163 @@ public static class RateRequestCompletionEndpoints
             or RateStatus.Cancelled or RateStatus.Closed)
             return Results.Accepted(value: new { status = "CompletedDeliveryOnHold", rateId = request.RateId });
 
-        var documentResult = await dispatcher.DispatchAsync(
-            new GenerateRateDocumentCommand(request.RateId, null, "pdf"),
-            cancellationToken
-        );
-
-        if (!documentResult.IsSuccess)
-            return Results.Accepted(value: new { status = "CompletedDeliveryRetryPending", rateId = request.RateId });
-
-        if (rate.Status != RateStatus.Sent)
+        // The revision and work-item completion have already been committed.
+        // PDF generation, commercial status and outbox delivery are recoverable
+        // operations. Never turn those failures into a misleading "save failed" 500.
+        try
         {
-            var actor = httpContext.GetCurrentUserId();
-            var statusResult = await dispatcher.DispatchAsync(
-                new SetRateStatusCommand(
-                    request.RateId,
-                    RateStatus.Sent,
-                    null,
-                    null,
-                    actor
-                ),
+            var documentResult = await dispatcher.DispatchAsync(
+                new GenerateRateDocumentCommand(request.RateId, null, "pdf"),
                 cancellationToken
             );
-
-            if (!statusResult.IsSuccess)
+    
+            if (!documentResult.IsSuccess)
                 return Results.Accepted(value: new { status = "CompletedDeliveryRetryPending", rateId = request.RateId });
-        }
-
-        var document = documentResult.Value;
-        var sellerName = WebUtility.HtmlEncode(entity.SellerName ?? entity.ExecutiveName ?? "Vendedor");
-        var clientName = WebUtility.HtmlEncode(entity.ClientName ?? "Cliente");
-        var routeText = BuildRoute(entity);
-        var route = WebUtility.HtmlEncode(routeText);
-        var quoteNumberText = rate.QuoNumber ?? rate.RateCode;
-        var quoteNumber = WebUtility.HtmlEncode(quoteNumberText);
-        var sellerEmail = entity.SellerEmail.Trim();
-        var sellerDisplayName = entity.SellerName ?? entity.ExecutiveName;
-        var emailBody = $"""
-            <p>Hola {sellerName},</p>
-            <p>Pricing { (isModification ? "actualizó" : "terminó") } la tarifa solicitada para <strong>{clientName}</strong>.</p>
-            <p><strong>Tarifa:</strong> {quoteNumber}<br />
-            <strong>Ruta:</strong> {route}</p>
-            <p>Se adjunta la cotización completa en PDF para que pueda enviarla al cliente.</p>
-            <p>Grupo Castro Fallas - Pricing</p>
-            """;
-
-        // El envío de correo queda en Notifications para que una caída de SMTP no convierta
-        // la creación de tarifa en un 502. Notifications maneja reintentos y adjunta el PDF.
-        await outbox.WriteAsync(
-            NotificationEventName,
-            NotificationEventName,
-            new
+    
+            if (rate.Status != RateStatus.Sent)
             {
-                notificationType = "pricing.requested-rate.completed.email",
-                channel = "Email",
-                entityType = "RateRequest",
-                entityId = requestId.ToString(),
-                subject = $"{(isModification ? "Tarifa Actualizada" : "Tarifa Lista")} - {(string.IsNullOrWhiteSpace(rate.RateName) ? quoteNumberText : rate.RateName.Trim())}",
-                body = emailBody,
-                payload = new
+                var actor = httpContext.GetCurrentUserId();
+                var statusResult = await dispatcher.DispatchAsync(
+                    new SetRateStatusCommand(
+                        request.RateId,
+                        RateStatus.Sent,
+                        null,
+                        null,
+                        actor
+                    ),
+                    cancellationToken
+                );
+    
+                if (!statusResult.IsSuccess)
+                    return Results.Accepted(value: new { status = "CompletedDeliveryRetryPending", rateId = request.RateId });
+            }
+    
+            var document = documentResult.Value;
+            var sellerName = WebUtility.HtmlEncode(entity.SellerName ?? entity.ExecutiveName ?? "Vendedor");
+            var clientName = WebUtility.HtmlEncode(entity.ClientName ?? "Cliente");
+            var routeText = BuildRoute(entity);
+            var route = WebUtility.HtmlEncode(routeText);
+            var quoteNumberText = rate.QuoNumber ?? rate.RateCode;
+            var quoteNumber = WebUtility.HtmlEncode(quoteNumberText);
+            var sellerEmail = entity.SellerEmail.Trim();
+            var sellerDisplayName = entity.SellerName ?? entity.ExecutiveName;
+            var emailBody = $"""
+                <p>Hola {sellerName},</p>
+                <p>Pricing { (isModification ? "actualizó" : "terminó") } la tarifa solicitada para <strong>{clientName}</strong>.</p>
+                <p><strong>Tarifa:</strong> {quoteNumber}<br />
+                <strong>Ruta:</strong> {route}</p>
+                <p>Se adjunta la cotización completa en PDF para que pueda enviarla al cliente.</p>
+                <p>Grupo Castro Fallas - Pricing</p>
+                """;
+    
+            // El envío de correo queda en Notifications para que una caída de SMTP no convierta
+            // la creación de tarifa en un 502. Notifications maneja reintentos y adjunta el PDF.
+            await outbox.WriteAsync(
+                NotificationEventName,
+                NotificationEventName,
+                new
                 {
-                    rateRequestId = requestId,
-                    rateId = request.RateId,
-                    quo = quoteNumberText,
-                    client = entity.ClientName,
-                    route = routeText,
-                    cc = new[]
+                    notificationType = "pricing.requested-rate.completed.email",
+                    channel = "Email",
+                    entityType = "RateRequest",
+                    entityId = requestId.ToString(),
+                    subject = $"{(isModification ? "Tarifa Actualizada" : "Tarifa Lista")} - {(string.IsNullOrWhiteSpace(rate.RateName) ? quoteNumberText : rate.RateName.Trim())}",
+                    body = emailBody,
+                    payload = new
                     {
-                        "jmesen@castrofallas.com",
-                        "pricingcf@castrofallas.com",
-                        "cquiros@castrofallas.com",
+                        rateRequestId = requestId,
+                        rateId = request.RateId,
+                        quo = quoteNumberText,
+                        client = entity.ClientName,
+                        route = routeText,
+                        cc = new[]
+                        {
+                            "jmesen@castrofallas.com",
+                            "pricingcf@castrofallas.com",
+                            "cquiros@castrofallas.com",
+                        },
+                        attachments = new[]
+                        {
+                            new
+                            {
+                                fileName = document.FileName,
+                                contentType = document.ContentType,
+                                contentBase64 = Convert.ToBase64String(document.Content),
+                            },
+                        },
                     },
-                    attachments = new[]
+                    recipients = new[]
                     {
                         new
                         {
-                            fileName = document.FileName,
-                            contentType = document.ContentType,
-                            contentBase64 = Convert.ToBase64String(document.Content),
+                            userId = entity.SellerUserId?.ToString(),
+                            address = sellerEmail,
+                            displayName = sellerDisplayName,
                         },
                     },
                 },
-                recipients = new[]
+                $"{requestId}:seller-email",
+                cancellationToken
+            );
+    
+            // Mantener además la notificación interna/SignalR para el vendedor.
+            await outbox.WriteAsync(
+                NotificationEventName,
+                NotificationEventName,
+                new
                 {
-                    new
+                    notificationType = "pricing.requested-rate.completed",
+                    channel = "System",
+                    entityType = "RateRequest",
+                    entityId = requestId.ToString(),
+                    subject = isModification ? "Modificación de tarifa completada" : "Tarifa solicitada lista",
+                    body = $"Pricing {(isModification ? "actualizó" : "terminó")} la tarifa {quoteNumberText} para {entity.ClientName ?? "el cliente"}.",
+                    payload = new
                     {
-                        userId = entity.SellerUserId?.ToString(),
-                        address = sellerEmail,
-                        displayName = sellerDisplayName,
+                        rateRequestId = requestId,
+                        rateId = request.RateId,
+                        quo = quoteNumberText,
+                        client = entity.ClientName,
+                        route = routeText,
+                        pdfFileName = document.FileName,
+                    },
+                    recipients = new[]
+                    {
+                        new
+                        {
+                            userId = entity.SellerUserId?.ToString(),
+                            address = sellerEmail,
+                            displayName = sellerDisplayName,
+                        },
                     },
                 },
-            },
-            $"{requestId}:seller-email",
-            cancellationToken
-        );
-
-        // Mantener además la notificación interna/SignalR para el vendedor.
-        await outbox.WriteAsync(
-            NotificationEventName,
-            NotificationEventName,
-            new
+                $"{requestId}:system",
+                cancellationToken
+            );
+    
+            entity.MarkDeliveryQueued(DateTime.UtcNow);
+            await db.SaveChangesAsync(cancellationToken);
+    
+    
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            loggerFactory.CreateLogger("RateRequestCompletion").LogError(
+                error,
+                "Tarifa {RateId} ya guardada para solicitud {RequestId}; fallo en PDF, estado o outbox. " +
+                "Entrega pendiente de reintento. TraceId={TraceId}",
+                request.RateId, requestId, httpContext.TraceIdentifier);
+            // SellerRateDeliveryRetryWorker processes Completed requests whose
+            // DeliveryConfirmedAtUtc is still null. Keep the same request and revision:
+            // retrying here must NOT create a second quotation or new revision.
+            return Results.Accepted(value: new
             {
-                notificationType = "pricing.requested-rate.completed",
-                channel = "System",
-                entityType = "RateRequest",
-                entityId = requestId.ToString(),
-                subject = isModification ? "Modificación de tarifa completada" : "Tarifa solicitada lista",
-                body = $"Pricing {(isModification ? "actualizó" : "terminó")} la tarifa {quoteNumberText} para {entity.ClientName ?? "el cliente"}.",
-                payload = new
-                {
-                    rateRequestId = requestId,
-                    rateId = request.RateId,
-                    quo = quoteNumberText,
-                    client = entity.ClientName,
-                    route = routeText,
-                    pdfFileName = document.FileName,
-                },
-                recipients = new[]
-                {
-                    new
-                    {
-                        userId = entity.SellerUserId?.ToString(),
-                        address = sellerEmail,
-                        displayName = sellerDisplayName,
-                    },
-                },
-            },
-            $"{requestId}:system",
-            cancellationToken
-        );
-
-        entity.MarkDeliveryQueued(DateTime.UtcNow);
-        await db.SaveChangesAsync(cancellationToken);
+                status = "CompletedDeliveryRetryPending",
+                code = "Pricing.RateRequestDeliveryDeferred",
+                rateId = request.RateId,
+                requestId,
+            });
+        }
 
         return Results.NoContent();
     }
