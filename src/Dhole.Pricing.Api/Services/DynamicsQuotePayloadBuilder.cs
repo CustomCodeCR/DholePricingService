@@ -54,13 +54,16 @@ public static class DynamicsQuotePayloadBuilder
         // Reserved solely for the permanent Dhole RateId GUID. NEVER write
         // IDTRA CSV or incident references into the quote upsert identity.
         var hasRateGuidField = schema.Fields.Any(field =>
-            field.Target == "new_idtraasignado");
+            field.Target is "cr933_dholerateid" or "new_idtraasignado");
         var guid = dholeRateId is Guid supplied && supplied != Guid.Empty
             ? supplied : Guid.TryParse(String(rate, "id"), out var extracted) && extracted != Guid.Empty
                 ? extracted : Guid.Empty;
-        if (hasRateGuidField && guid == Guid.Empty)
+        // execute-with-total always requires this immutable identity. For
+        // UPSERT, Dynamics constructs the approved alternate key from
+        // dholeRateId; the IDTRA lookups are never used as that key.
+        if (guid == Guid.Empty)
             throw new InvalidOperationException(
-                "Dynamics new_idtraasignado requires the permanent Dhole RateId GUID.");
+                "Dynamics synchronization requires the permanent Dhole RateId GUID.");
         // IDTRA is maintained only in the incident lookup slots. Never
         // overload the reserved GUID column with IDTRA CSV.
         if (idtraSlots.Count > 0 && Enumerable.Range(1, idtras.Length)
