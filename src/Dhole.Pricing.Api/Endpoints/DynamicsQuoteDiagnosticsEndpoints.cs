@@ -784,8 +784,6 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             : Results.Conflict(new { code = "sync_reconciliation_state_changed" });
     }
 
-    private sealed record RecoverRejectedRequest(string Confirmation, string Reason);
-
     private static bool CanApproveRecovery(ClaimsPrincipal principal)
     {
         if (principal.Identity?.IsAuthenticated != true) return false;
@@ -796,17 +794,14 @@ public static class DynamicsQuoteDiagnosticsEndpoints
     }
 
     private static async Task<IResult> RecoverRejectedAsync(
-        Guid rateId, RecoverRejectedRequest request, HttpContext http,
+        Guid rateId, HttpContext http,
         ServiceDbContext db, IHttpClientFactory clients,
         IConfiguration configuration, CancellationToken ct)
     {
         if (!CanApproveRecovery(http.User)) return Results.Forbid();
-        if (request.Confirmation != "RECUPERAR_QUO" ||
-            request.Reason?.Trim().Length is not (>= 10 and <= 500))
-            return Results.BadRequest(new {
-                code = "recovery_explicit_confirmation_required",
-                message = "Se requiere RECUPERAR_QUO y un motivo de 10 a 500 caracteres."
-            });
+        // The button click is the explicit authorization. The server records
+        // a fixed, auditable reason and actor; no free-text or checkbox is
+        // required. Ledger and read-only preview still gate every new key.
         var rate = await db.RateHeaders.IgnoreQueryFilters().AsNoTracking()
             .Where(r => r.Id == rateId)
             .Select(r => new { r.IsDeleted, r.Status, r.RevisionNumber, r.IdtraNumber })
@@ -912,7 +907,9 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 j.RecoveryAttempt == job.RecoveryAttempt)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(j => j.RecoveryAttempt, nextAttempt)
-                .SetProperty(j => j.RecoveryReason, request.Reason.Trim())
+                .SetProperty(j => j.RecoveryReason,
+                    "Reenvío solicitado desde Dynamics: HTTP 4xx rechazado, " +
+                    "sin cabecera ni línea creadas; historial y mapeo validados.")
                 .SetProperty(j => j.RecoveryApprovedBy, actor)
                 .SetProperty(j => j.RecoveryApprovedAtUtc, DateTime.UtcNow)
                 .SetProperty(j => j.Status, "Pending")
@@ -924,8 +921,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         return changed == 1
             ? Results.Accepted($"/api/pricing/rates/{rateId}/dynamics-sync",
                 new { status = "Pending", recoveryAttempt = nextAttempt,
-                    detail = "Recuperación aprobada. Worker utilizará una nueva clave -r" +
-                        nextAttempt + " tras validar el historial; no se realizó POST desde esta solicitud." })
+                    detail = "Reenvío seguro autorizado; el worker procesa la QUO en su siguiente ciclo (1 segundo). Nueva clave -r" +
+                        nextAttempt + ". El POST de esta solicitud no escribe directamente en Dataverse." })
             : Results.Conflict(new { code = "recovery_concurrent_change" });
     }
 
