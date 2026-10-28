@@ -1,67 +1,109 @@
-# Pricing → Dynamics 365: Quote al aceptar la cotización
+# Pricing → Dynamics 365: sincronización de QUO por RateId
 
-## Disparador y garantías
+## Cuándo se envía
 
-El POST al comando `crear_oferta` se prepara **únicamente** cuando la tarifa
-cambia a `AcceptedByClient` y tiene `IdtraNumber` no vacío. La aprobación
-interna de margen no genera una Quote. El trabajo queda persistido con la
-revisión aceptada dentro de la misma transacción de Pricing y un worker
-lo envía de forma independiente.
+Pricing encola una revisión de una tarifa cuando **ya está aceptada por el cliente
+(`AcceptedByClient`) y tiene uno o más IDTRA**:
 
-Se envía siempre la cabecera `Idempotency-Key` estable:
-`dhole-pricing-quote-{rateId:N}-v{revisionNumber}`. Un reintento no usa
-una clave diferente. Si el conector no confirma `succeeded` o devuelve
-un estado ambiguo, el trabajo queda `NeedsAttention` para conciliación;
-no se intenta una nueva creación con otra clave.
+- al aceptar la tarifa con IDTRA asignado;
+- al asignar el IDTRA después de aceptarla;
+- al guardar una nueva revisión de una tarifa que permanece aceptada con IDTRA.
 
-## Credencial de servidor
+La aprobación interna por margen, por sí sola, **no crea una QUO en Dynamics**.
+El cambio de estado y la cola de sincronización se guardan en la misma
+transacción. Cada revisión se identifica por `RateId` y
+`RevisionNumber`, para evitar trabajos duplicados.
 
-Configurar `DynamicsQuoteSync__ApiKey` **solo como secreto del backend de
-Pricing API** mediante el gestor de secretos/entorno privado de despliegue.
-Nunca incluirla en el repositorio, archivo de configuración versionado,
-frontend, URL o prueba.
+El backend usa exclusivamente:
 
-La clave publicada en una conversación debe revocarse y reemplazarse por
-una clave nueva autorizada para la plantilla `crear_oferta` de la conexión
-`principal`. El proceso deja los trabajos en cola si falta la clave.
-Puede deshabilitarse explícitamente con `DynamicsQuoteSync__Enabled=false`.
+`POST /api/dynamics-connector/keyed/templates/crear_oferta/execute-with-total`
 
-El servicio requiere salida HTTPS a
-`https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta`.
-No usa ni guarda tokens OAuth de Dataverse.
+Con `X-Dhole-Api-Key` y la clave estable por revisión:
 
-## Mapeo de campos
+`Idempotency-Key: dhole-pricing-quote-{rateId:N}-v{revisionNumber}`
 
-| Campo Dynamics | Valor |
+No usar `/execute` desde Pricing: ese endpoint no garantiza la creación ni
+actualización de la línea de venta. El conector `execute-with-total`
+administra la cabecera y la línea y valida las autorizaciones previamente.
+
+## Identidad y creación/modificación
+
+El payload incluye siempre `connectionCode = principal`,
+`dholeRateId = RateHeader.Id` (GUID real), `totalSaleAmount`,
+`totalCostAmount` e `inputs`, obtenidos de la revisión aceptada.
+
+La plantilla activa `crear_oferta` puede ser `create` o `upsert`.
+Para **crear y modificar la MISMA oferta** en Dynamics, publicar la
+plantilla como **upsert** y aprobar su clave alternativa única
+`cr933_dholerateid` (o el campo heredado `new_idtraasignado` si sigue
+siendo la clave registrada). El conector construye `keys` de forma confiable
+a partir del GUID `dholeRateId`; Pricing no necesita enviar `keys`
+separadamente a `execute-with-total`. Ningún IDTRA puede convertirse en
+clave alternativa.
+
+Si la plantilla está en `create`, cada revisión puede crear otra oferta:
+no es apropiado para modificar una QUO existente. Tampoco se debe modificar
+o recrear a ciegas una QUO histórica creada antes de registrar la clave
+alternativa; el conector exige conciliación antes de continuar.
+
+## Mapeo comercial
+
+| Campo de Dynamics | Origen en Pricing |
 | --- | --- |
-| `customeridtype` | `quote` |
-| `name` | `RateName` o `RateCode` |
-| `description` | Descripción a partir de código, cliente, modalidad, moneda e IDTRA |
-| `effectivefrom`, `effectiveto` | `ValidFrom`, `ValidTo` |
-| `new_equipo` | Valor real de Picklist obtenido del esquema, según equipo |
-| `new_cantidadequipos` | Cantidad y tipo de los contenedores de la revisión |
-| `new_categoriatarifa` | `100000001` |
-| `new_preestado` | `100000003` |
-| `new_proyecctoespecifico` | `100000004` |
-| `new_tipodecliente` | `100000000` |
-| `new_flete` | `TotalSaleAmount` (venta total al cliente, no costo) |
-| `new_monto9` | `TotalCostAmount` |
-| `msdyn_invoicesetuptotals` | `TotalSaleAmount` |
-| `new_idtraasignado` | `IdtraNumber` |
-| `new_pol`, `new_poe`, `new_pod` | Nombres de los puertos de la revisión |
-| `new_tarifaincluye`, `new_tarifasujetaa`, `new_noincluye` | Incluye, sujeta a, excluye |
-| `new_tiempodetransitoaprox` | Tiempo de tránsito |
+| `new_flete` | `TotalSaleAmount` (venta TOTAL, no flete del transportista) |
+| `new_monto1` | `TotalCostAmount` (costo TOTAL de proveedor) |
+| `new_monto2` … `new_monto9` | `0` numérico |
+| `new_equipo` | Equipo seleccionado: opción real del esquema activo de Dynamics |
+| `new_cantidadequipos` | Cantidad/tipo de equipos, o cantidad facturable en LCL/LTL |
+| `new_idtra1` … `new_idtra10` | IDTRA asignados, uno por campo lookup disponible, en orden |
+| `cr933_dholerateid` | GUID permanente `RateHeader.Id`, cuando forma parte de la plantilla |
+| `new_idtraasignado` | GUID permanente `RateHeader.Id` SOLO para plantillas heredadas que lo emplean como identidad |
+| `name`, `description` | Nombre o número QUO, información de la tarifa y los IDTRA |
+| `effectivefrom`, `effectiveto` | Fechas de validez de la tarifa |
+| `new_pol`, `new_poe`, `new_pod` | Origen, entrada y destino almacenados |
+| `new_categoriatarifa` | Opción aprobada, preferencia `100000001` |
+| `new_preestado` | Opción aprobada, preferencia `100000003` |
+| `new_proyecctoespecifico` | Opción aprobada, preferencia `100000004` |
+| `new_tipodecliente` | Opción aprobada, preferencia `100000000` |
+| `transactioncurrencyid` | GUID obtenido en Dynamics para ISO `USD` o `CRC` |
+| `msdyn_invoicesetuptotals` | Venta total, solo si está publicado en la plantilla |
 
-El total de costo y el total de venta se consideran **en la moneda de la tarifa**.
-No se aplica conversión implícita.
+El conector reafirma los nueve montos y `new_flete` desde los importes
+confiables del nivel superior; no acepta valores financieros arbitrarios
+del template. La moneda corresponde a la tarifa; no se convierte tácitamente.
 
-El comando publicado `crear_oferta` debe incluir todos los campos necesarios
-(especialmente `customeridtype`, `new_equipo`,
-`msdyn_invoicesetuptotals`, `new_flete`, `new_monto9` y las opciones fijas).
-El worker obtiene su esquema y valida los valores Picklist antes del POST.
-Si falta un campo u opción, no construye una Quote con información parcial.
+Los IDTRA se normalizan al prefijo `IDTRA999.`, sin anexos `// QUO`;
+se eliminan duplicados y se valida un máximo de diez. Los campos IDTRA
+no utilizados se omiten si son opcionales; nunca se inventan referencias.
+Un número mayor de IDTRA que de lookups disponibles produce un error
+explícito antes de escribir. `cr933_dholerateid` nunca contiene IDTRA.
 
-## Diagnóstico
+## Línea de venta
+
+`execute-with-total` crea **una** línea administrada por Dhole
+(`quotedetailname = Total venta de tarifa Dhole`) con cantidad `1` y
+precio unitario `TotalSaleAmount`. Dataverse calcula su `totalamount`.
+En `upsert`, el conector conserva la misma QUO y actualiza esa línea
+existente; si detecta líneas ajenas o un estado ambiguo, exige conciliación
+en vez de duplicar datos.
+
+## Clave y autorización
+
+La API key del conector se lee en el backend de Pricing a través de
+`DynamicsQuoteSync__ApiKey` en `/opt/dhole/.env`. No debe incorporarse al
+repositorio, frontend ni registros. Debe corresponder a la **versión
+activa** de `principal/crear_oferta`, con permisos de cabecera, búsqueda
+de clientes/IDTRA/moneda y lectura/escritura de quotedetail. Para
+`upsert` también se requieren los grants del alternate key y
+actualización de cabecera y línea.
+
+`/write-readiness` y `/schema` permiten comprobar la autorización
+sin escribir en Dataverse. HTTP 401 implica clave no válida para la versión
+activa; HTTP 403/409 puede señalar grants, autorización de escrituras o
+clave alternativa no registrada. No regenerar idempotencia ni hacer POST
+manual como respuesta automática a esos errores.
+
+## Diagnóstico y verificación
 
 ```sql
 SELECT "RateId", "RevisionNumber", "Status", "Attempts",
@@ -71,16 +113,10 @@ ORDER BY "CreatedAtUtc" DESC
 LIMIT 50;
 ```
 
-Estados: `Pending`, `Processing`, `Retry`, `Completed`, `NeedsAttention`.
-Un trabajo `NeedsAttention` debe conciliarse en el conector de Dynamics
-antes de cualquier intervención sobre su envío, para evitar duplicados.
-
-## Validación previa a producción
-
-1. Configurar clave nueva como secreto privado en el backend.
-2. Confirmar que el comando activo tiene los campos indicados, los valores
-   Picklist autorizados y que permite escribir `msdyn_invoicesetuptotals`.
-3. Comprobar una cotización de prueba con IDTRA y equipamiento real.
-4. Verificar en Dataverse el GUID y montos de la Quote creada.
-5. Reintentar con la misma clave de idempotencia y verificar que no aparezca
-   una segunda Quote.
+Estados de la cola: `Pending`, `Processing`, `Retry`,
+`Completed`, `NeedsAttention`. Antes de reintentar una operación con
+resultado ambiguo, conciliar cabecera y línea en Dynamics. Probar:
+alta aceptada + IDTRA, IDTRA posterior, segunda revisión aceptada,
+repetición con la misma idempotencia, 10 IDTRA y una tarifa con
+venta/costo diferentes. Confirmar que hay una QUO y una línea por RateId,
+y que los montos se actualizan, sin crear duplicados.
