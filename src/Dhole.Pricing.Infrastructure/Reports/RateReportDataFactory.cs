@@ -322,11 +322,15 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             ? string.Join(" / ", freightCarrierNames)
             : Text(rate.CarrierName, "No asignada");
 
-        // The client PDF must match the complete persisted table, including
-        // deliberately selected zero-value rows. Nothing is inferred from catalogs.
-        var reportDetails = rate.RateDetails
+        // Keep every persisted line in tabular exports and in the Pricing UI.
+        // The customer-facing PDF alone hides charges with zero sale value.
+        // Filtering zero-value lines cannot change the payable total or taxes.
+        var persistedDetails = rate.RateDetails
             .OrderBy(x => x.CostDetailType)
             .ThenBy(x => x.Name)
+            .ToArray();
+        var reportDetails = persistedDetails
+            .Where(detail => detail.SaleAmount > 0m)
             .ToArray();
 
         // Use the exact tax selection persisted on each priced line. Do not infer IVA
@@ -522,7 +526,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     ["Notas"] = string.Empty
                 }
             }
-            : reportDetails
+            : persistedDetails
                 .Select(detail => new Dictionary<string, object?>
                 {
                     ["Concepto"] = DetailNameWithCarrier(detail, ReportDetailName(detail)),
