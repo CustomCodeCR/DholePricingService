@@ -58,7 +58,7 @@ alternativa; el conector exige conciliación antes de continuar.
 | `new_idtra1` … `new_idtra10` | IDTRA asignados, uno por campo lookup disponible, en orden |
 | `cr933_dholerateid` | GUID permanente `RateHeader.Id`, cuando forma parte de la plantilla |
 | `new_idtraasignado` | GUID permanente `RateHeader.Id` SOLO para plantillas heredadas que lo emplean como identidad |
-| `name` | `RateName` completo de Pricing: `QUO - Tarifa/equipos - Incoterm - Origen To Destino Via Entrada - Cliente`. Solo se usa `RateCode` si falta el nombre histórico |\n| `description` | Consecutivo QUO, modo, moneda e IDTRA; sin vínculo de cliente ni nombre duplicado |\n| `Notif. Respuesta Cotizacion` (campo booleano aprobado) | `true` al aceptar el cliente, si está publicado en el esquema `crear_oferta` como Boolean/TwoOptions y autorizado |
+| `name` | `RateName` completo de Pricing: `QUO - Tarifa/equipos - Incoterm - Origen To Destino Via Entrada - Cliente`. Solo se usa `RateCode` si falta el nombre histórico |\n| `description` | Consecutivo QUO, modo, moneda e IDTRA; sin vínculo de cliente ni nombre duplicado |\n| `new_notifrespuestacotizacion` | `100000000` (opción numérica de Picklist), obligatorio en toda QUO nueva creada/actualizada por Pricing |
 | `effectivefrom`, `effectiveto` | Fechas de validez de la tarifa |
 | `new_pol`, `new_poe`, `new_pod` | Origen, entrada y destino almacenados |
 | `new_categoriatarifa` | Opción aprobada, preferencia `100000001` |
@@ -72,7 +72,7 @@ El conector reafirma los nueve montos y `new_flete` desde los importes
 confiables del nivel superior; no acepta valores financieros arbitrarios
 del template. La moneda corresponde a la tarifa; no se convierte tácitamente.
 
-El campo de notificación no se inventa: debe estar presente como campo de tipo Boolean/TwoOptions en la versión activa de `crear_oferta`, con permisos aprobados para `create`/`upsert`. Si no está publicado, no se envía y debe incorporarse mediante la administración CRUD antes de atribuirle un cambio en Dataverse. El nombre completo se valida contra el MaxLength real del tenant y jamás se trunca silenciosamente; un límite insuficiente se informa antes de escribir.\n\nLos IDTRA se normalizan al prefijo `IDTRA999.`, sin anexos `// QUO`;
+El campo `new_notifrespuestacotizacion` debe estar mapeado en la versión activa de `crear_oferta` como entrada `integer` vinculada a un atributo Picklist de Dataverse con la opción `100000000`. Además, la clave activa requiere permiso de escritura sobre ese atributo para `create`/`upsert`. Si falta el campo, la opción o el permiso, la sincronización se detiene antes de crear la QUO y la API reporta el ajuste pendiente; jamás se omite silenciosamente ni se envía `true`. La verificación de disponibilidad del conector incluye el campo y sus permisos. El nombre completo se valida contra el MaxLength real del tenant y jamás se trunca silenciosamente; un límite insuficiente se informa antes de escribir.\n\nLos IDTRA se normalizan al prefijo `IDTRA999.`, sin anexos `// QUO`;
 se eliminan duplicados y se valida un máximo de diez. Los campos IDTRA
 no utilizados se omiten si son opcionales; nunca se inventan referencias.
 Un número mayor de IDTRA que de lookups disponibles produce un error
