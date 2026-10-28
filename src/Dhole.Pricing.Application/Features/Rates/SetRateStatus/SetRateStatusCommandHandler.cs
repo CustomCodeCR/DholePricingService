@@ -101,6 +101,8 @@ public sealed class SetRateStatusCommandHandler(
                     rate.ClosedReason,
                     rate.ClosedAtUtc,
                     rate.ClosedBy,
+                    AcceptanceObservations = command.Status == RateStatus.AcceptedByClient
+                        ? command.AcceptanceObservations : null,
                 }
             ),
             cancellationToken
