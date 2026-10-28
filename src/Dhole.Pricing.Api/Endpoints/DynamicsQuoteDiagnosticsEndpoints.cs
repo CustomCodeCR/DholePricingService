@@ -214,11 +214,12 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             });
 
         var normalized = text.ToLowerInvariant();
+        var rateGuid = Guid.TryParse(text, out var parsedId) ? parsedId : Guid.Empty;
         var eligible = await db.RateHeaders.AsNoTracking()
             .Where(rate => !rate.IsDeleted &&
                 rate.Status == RateStatus.AcceptedByClient &&
                 rate.IdtraNumber != null && rate.IdtraNumber != "" &&
-                (rate.Id.ToString().ToLower().Contains(normalized) ||
+                (rate.Id == rateGuid ||
                  rate.RateCode.ToLower().Contains(normalized) ||
                  (rate.RateName != null && rate.RateName.ToLower().Contains(normalized)) ||
                  (rate.ClientName != null && rate.ClientName.ToLower().Contains(normalized)) ||
