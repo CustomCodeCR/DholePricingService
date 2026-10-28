@@ -89,10 +89,24 @@ public sealed class PricingAuditService(ServiceDbContext dbContext) : IPricingAu
                 StringProp(before, "status") == "AcceptedByClient" &&
                 string.IsNullOrWhiteSpace(StringProp(before, "idtraNumber")) &&
                 !string.IsNullOrWhiteSpace(StringProp(after, "idtraNumber"));
+            // A modified, already-accepted rate must refresh the SAME Dynamics
+            // quote on its new commercial revision, even when IDTRA is unchanged.
+            // Repeated audit events for the same revision must not enqueue writes.
+            var acceptedRevisionUpdated =
+                acceptedNow &&
+                StringProp(before, "status") == "AcceptedByClient" &&
+                !string.IsNullOrWhiteSpace(StringProp(after, "idtraNumber")) &&
+                before.TryGetProperty("revisionNumber", out var previousRevision) &&
+                previousRevision.TryGetInt32(out var previousNumber) &&
+                after.TryGetProperty("revisionNumber", out var nextRevision) &&
+                nextRevision.TryGetInt32(out var nextNumber) &&
+                nextNumber > previousNumber;
             if (acceptedNow && StringProp(before, "status") != "AcceptedByClient")
                 integrationEvent = "pricing.rate.accepted_by_client";
             else if (idtraAssignedAfterAcceptance)
                 integrationEvent = "pricing.rate.idtra_assigned";
+            else if (acceptedRevisionUpdated)
+                integrationEvent = "pricing.rate.accepted_revision_updated";
             else if (auditEvent.EventType == PricingAuditEventTypes.RateHeaderApprovalChanged &&
                 BoolProp(before,"requiredApproval") && !BoolProp(after,"requiredApproval"))
                 integrationEvent = "pricing.rate.margin_approved";
@@ -132,7 +146,8 @@ public sealed class PricingAuditService(ServiceDbContext dbContext) : IPricingAu
                 // Queue the exact accepted revision in the same SaveChanges transaction as
                 // the state transition. No HTTP call or credential is used here.
                 if ((integrationEvent == "pricing.rate.accepted_by_client" ||
-                     integrationEvent == "pricing.rate.idtra_assigned") &&
+                     integrationEvent == "pricing.rate.idtra_assigned" ||
+                     integrationEvent == "pricing.rate.accepted_revision_updated") &&
                     StringProp(after, "idtraNumber") is { Length: > 0 } idtra &&
                     !string.IsNullOrWhiteSpace(idtra) &&
                     after.TryGetProperty("revisionNumber", out var rev) &&
