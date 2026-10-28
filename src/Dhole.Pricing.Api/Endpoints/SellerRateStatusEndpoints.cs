@@ -134,6 +134,15 @@ public static class SellerRateStatusEndpoints
             });
         }
 
+        if (request.Observations?.Trim().Length > 2000)
+            return Results.BadRequest(new {
+                code = "Pricing.SellerAcceptanceObservationsTooLong",
+                message = "Las observaciones de apertura no pueden superar 2000 caracteres.",
+            });
+
+        var acceptanceObservations = status == RateStatus.AcceptedByClient
+            ? request.Observations?.Trim() : null;
+
         if (status == RateStatus.RejectedByClient && string.IsNullOrWhiteSpace(request.Reason))
         {
             return Results.BadRequest(new
@@ -181,6 +190,7 @@ public static class SellerRateStatusEndpoints
                         currentRate.IdtraNumber,
                         Source = "SellerClientDecision",
                         IdtraPending = true,
+                        AcceptanceObservations = acceptanceObservations,
                     }
                 ),
                 cancellationToken
@@ -188,7 +198,7 @@ public static class SellerRateStatusEndpoints
 
             await db.SaveChangesAsync(cancellationToken);
             await cache.RemoveRateHeaderCacheAsync(currentRate.Id, cancellationToken);
-            await openingsNotificationService.QueueAsync(currentRate.Id, RateAcceptanceActor.Seller, cancellationToken);
+            await openingsNotificationService.QueueAsync(currentRate.Id, RateAcceptanceActor.Seller, cancellationToken, acceptanceObservations);
             return Results.NoContent();
         }
 
@@ -198,13 +208,14 @@ public static class SellerRateStatusEndpoints
                 status,
                 request.Reason,
                 status == RateStatus.AcceptedByClient ? request.IdtraNumber : null,
-                currentUserId
+                currentUserId,
+                AcceptanceObservations: acceptanceObservations
             ),
             cancellationToken
         );
 
         if (result.IsSuccess && status == RateStatus.AcceptedByClient)
-            await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Seller, cancellationToken);
+            await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Seller, cancellationToken, acceptanceObservations);
 
         return EndpointResults.FromResult(result, httpContext);
     }
@@ -212,6 +223,7 @@ public static class SellerRateStatusEndpoints
     private sealed record SellerRateStatusRequest(
         string Status,
         string? Reason,
-        string? IdtraNumber
+        string? IdtraNumber,
+        string? Observations
     );
 }
