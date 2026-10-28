@@ -224,6 +224,16 @@ public sealed class DynamicsQuoteDeliveryWorker(
             }
             var schemaText = await schemaResponse.Content.ReadAsStringAsync(ct);
             var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
+            // A CREATE template cannot modify a previously issued Quote.
+            // Never create a second Dataverse quote for a newer Pricing revision.
+            // The administrator must publish UPSERT with the approved RateId
+            // alternate key; execute-with-total will then update its sales line.
+            if (schema.Operation == "create" &&
+                await dbContext.DynamicsQuoteSyncJobs.AsNoTracking().AnyAsync(previous =>
+                    previous.RateId == job.RateId &&
+                    previous.RevisionNumber < job.RevisionNumber, ct))
+                throw new InvalidOperationException(
+                    "A previous revision was queued for this RateId. Publish crear_oferta as UPSERT with cr933_dholerateid and reconcile the existing Quote before synchronizing this revision.");
             using var source = JsonDocument.Parse(job.PayloadJson);
             if (!source.RootElement.TryGetProperty("totalSaleAmount", out var saleElement) ||
                 !saleElement.TryGetDecimal(out var totalSaleAmount) || totalSaleAmount < 0 ||
