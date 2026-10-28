@@ -134,6 +134,31 @@ public sealed class DynamicsQuoteFailureDiagnosticsTests
     }
 
     [TestMethod]
+    public void MissingDynamicsCustomerHasActionableSafePreWriteDiagnostic()
+    {
+        var response = """
+            {"type":"about:blank","code":"quote_customer_required",
+             "lookupInput":"customerid","lookupSearchField":"name",
+             "untrustedName":"AUTOMANIA"}
+            """;
+        var (field, searchField) =
+            DynamicsQuoteFailureDiagnostics.ReadProviderLookup(response);
+        Assert.AreEqual("customerid", field);
+        Assert.AreEqual("name", searchField);
+        Assert.IsTrue(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure(
+            "quote_customer_required"));
+        var (display, diagnostic) = DynamicsQuoteFailureDiagnostics.Format(
+            "execute", new HttpRequestException("sensitive URL"), false,
+            HttpStatusCode.UnprocessableEntity, "quote_customer_required",
+            "Quote rejected", field, searchField);
+        StringAssert.Contains(display, "customerid_account");
+        StringAssert.Contains(display, "cliente");
+        Assert.IsFalse(diagnostic.Contains("AUTOMANIA", StringComparison.Ordinal));
+        using var parsed = JsonDocument.Parse(diagnostic);
+        Assert.IsFalse(parsed.RootElement.GetProperty("postAttempted").GetBoolean());
+    }
+
+    [TestMethod]
     public void PriorTextLimitPreflightCanBeRetriedButOtherPostResultsCannot()
     {
         const string oldResponse = """
