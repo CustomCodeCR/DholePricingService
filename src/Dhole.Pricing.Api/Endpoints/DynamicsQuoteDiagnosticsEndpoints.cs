@@ -38,6 +38,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         // Exposes the complete operator queue, including pending/in-flight
         // jobs and recently confirmed success, not just errors.
         group.MapGet("/dynamics-sync/queue", GetIssuesAsync);
+        group.MapGet("/dynamics-sync/eligible-rates", SearchEligibleRatesAsync);
         group.MapGet("/dynamics-sync/write-readiness", GetReadinessAsync);
         group.MapPost("/{rateId:guid}/dynamics-sync/retry", RetryPreWriteAsync);
         // Manual recovery is different from retry: the former is allowed only
@@ -196,6 +197,65 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         });
     }
 
+
+    // Search all accepted Pricing rates, not just the first few
+    // queue incidents. Explicit user selection is required for any write.
+    // No records are created by this read-only discovery operation.
+    private static async Task<IResult> SearchEligibleRatesAsync(
+        string? search, HttpContext http, ServiceDbContext db,
+        CancellationToken cancellationToken)
+    {
+        if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
+        var text = search?.Trim() ?? "";
+        if (text.Length is < 2 or > 100)
+            return Results.BadRequest(new {
+                code = "dynamics_rate_search_invalid",
+                message = "Buscá por QUO, cliente, IDTRA o GUID (2 a 100 caracteres)."
+            });
+
+        var normalized = text.ToLowerInvariant();
+        var eligible = await db.RateHeaders.AsNoTracking()
+            .Where(rate => !rate.IsDeleted &&
+                rate.Status == RateStatus.AcceptedByClient &&
+                rate.IdtraNumber != null && rate.IdtraNumber != "" &&
+                (rate.Id.ToString().ToLower().Contains(normalized) ||
+                 rate.RateCode.ToLower().Contains(normalized) ||
+                 (rate.RateName != null && rate.RateName.ToLower().Contains(normalized)) ||
+                 (rate.ClientName != null && rate.ClientName.ToLower().Contains(normalized)) ||
+                 rate.IdtraNumber.ToLower().Contains(normalized)))
+            .OrderByDescending(rate => rate.ValidFrom)
+            .Take(25)
+            .Select(rate => new {
+                rateId = rate.Id, rate.RateCode, rate.RateName, rate.ClientName,
+                rate.IdtraNumber, rate.RevisionNumber, rate.TotalSaleAmount,
+                rate.CurrencyCode
+            })
+            .ToListAsync(cancellationToken);
+        var ids = eligible.Select(rate => rate.rateId).ToArray();
+        var jobs = await db.DynamicsQuoteSyncJobs.AsNoTracking()
+            .Where(job => ids.Contains(job.RateId))
+            .Select(job => new { job.RateId, job.RevisionNumber,
+                job.Status, job.ResponseJson })
+            .ToListAsync(cancellationToken);
+        var indexed = jobs.ToDictionary(
+            job => (job.RateId, job.RevisionNumber),
+            job => job);
+        return Results.Ok(new {
+            results = eligible.Select(rate => {
+                indexed.TryGetValue((rate.rateId, rate.RevisionNumber),
+                    out var job);
+                return new {
+                    rate.rateId, rate.RateCode, rate.RateName, rate.ClientName,
+                    rate.IdtraNumber, rate.RevisionNumber, rate.TotalSaleAmount,
+                    rate.CurrencyCode,
+                    jobStatus = job?.Status ?? "NotQueued",
+                    canRetry = job is not null && CanRetry(
+                        job.Status, job.ResponseJson)
+                };
+            }),
+            noPostExecuted = true
+        });
+    }
 
     // These fields come from the immutable accepted snapshot for THIS
     // revision; do not show newer edited commercial details on an old job.
