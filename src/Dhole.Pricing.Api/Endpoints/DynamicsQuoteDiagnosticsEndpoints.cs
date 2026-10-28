@@ -863,7 +863,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         }
 
         // Before reserving a new generation, validate current fields, allowed
-        // lookups, customerid and schema; all read-only to Dataverse.
+        // lookups, text limits and schema; all read-only to Dataverse.
         object payload;
         try
         {
@@ -900,11 +900,9 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             }
             using var check = JsonDocument.Parse(await result.Content.ReadAsStringAsync(ct));
             if (!check.RootElement.TryGetProperty("noPostExecuted", out var readOnly) ||
-                readOnly.ValueKind != JsonValueKind.True ||
-                check.RootElement.TryGetProperty("customerOmitted", out var omitted) &&
-                omitted.ValueKind == JsonValueKind.True)
-                return Results.Conflict(new { code = "recovery_customer_required",
-                    message = "Dynamics exige un cliente válido. Vinculá primero la cuenta real de la tarifa." });
+                readOnly.ValueKind != JsonValueKind.True)
+                return Results.Conflict(new { code = "recovery_validation_unconfirmed",
+                    message = "No se confirmó la validación de solo lectura. No se reenvió la QUO." });
         }
         var actor = http.User.Claims.FirstOrDefault(c =>
             c.Type is ClaimTypes.NameIdentifier or "sub")?.Value ?? "dynamics-admin";
@@ -1020,7 +1018,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                         : providerCode == "lookup_name_ambiguous"
                         ? "La búsqueda devolvió varios registros. Debe existir un único registro coincidente."
                         : providerCode == "quote_customer_required"
-                        ? "La plantilla crear_oferta no resolvió el cliente obligatorio customerid_account/customerid_contact de Dynamics. Configurá la relación nativa customerid y asegurá que el cliente exista en Cuentas antes de recuperar la QUO. No se creó ninguna QUO."
+                        ? "El conector está usando una versión anterior que todavía exige customerid. Actualizá el conector para enviar QUO sin cliente; no se realizó ningún POST."
                         : providerCode is "client_denied" or "lookup_target_denied" or
                           "lookup_name_field_not_authorized" or "lookup_target_fields_denied"
                         ? "La clave de Pricing no puede consultar una relación requerida. Autorizá la lectura de Cuenta, IDTRA y divisa con «Autorizar vínculos y venta total» para la clave realmente configurada en Pricing. Volvé a diagnosticar antes de recuperar; esta consulta no crea QUO."
@@ -1029,23 +1027,20 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 });
             }
             using var previewResult = JsonDocument.Parse(lookupJson);
-            var customerOmitted = previewResult.RootElement.ValueKind == JsonValueKind.Object &&
-                previewResult.RootElement.TryGetProperty("customerOmitted", out var omission) &&
-                omission.ValueKind == JsonValueKind.True;
-            // Older connector versions can report a successful preview while
-            // silently omitting customerid. Such a response is never eligible
-            // for an administrative recovery.
+            var verifiedReadOnly = previewResult.RootElement.ValueKind == JsonValueKind.Object &&
+                previewResult.RootElement.TryGetProperty("noPostExecuted", out var proof) &&
+                proof.ValueKind == JsonValueKind.True;
             return Results.Ok(new
             {
-                valid = !customerOmitted, stage = "lookup",
-                code = customerOmitted
-                    ? "quote_customer_required" : "DYNAMICS_LOOKUPS_VALID",
+                valid = verifiedReadOnly, stage = "lookup",
+                code = verifiedReadOnly ? "DYNAMICS_LOOKUPS_VALID" :
+                    "DYNAMICS_PREVIEW_NOT_VERIFIED",
                 schemaVersion = schema.Version,
-                customerOmitted,
-                message = customerOmitted
-                    ? "La cuenta del cliente no se resolvió. Corregí customerid en crear_oferta antes de continuar."
-                    : "El cliente obligatorio, el mapeo y los registros relacionados fueron validados sin crear QUO.",
-                noPostExecuted = true
+                customerRequired = false,
+                message = verifiedReadOnly
+                    ? "IDTRA, divisa, vínculos permitidos y límites de texto verificados sin enviar cliente ni crear QUO."
+                    : "El conector no confirmó la validación de solo lectura.",
+                noPostExecuted = verifiedReadOnly
             });
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
