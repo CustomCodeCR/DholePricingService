@@ -32,7 +32,7 @@ public static class DynamicsQuotePayloadBuilder
         Guid? dholeRateId = null)
     {
         if (schema.Name != "crear_oferta" || schema.EntityName != "quote" ||
-            schema.Operation != "create" || schema.ConnectionCode != "principal" ||
+            schema.Operation is not ("create" or "upsert") || schema.ConnectionCode != "principal" ||
             schema.Fields is null)
             throw new InvalidOperationException("Unexpected Dynamics CRUD template.");
         using var document = JsonDocument.Parse(acceptedSnapshot);
@@ -79,6 +79,11 @@ public static class DynamicsQuotePayloadBuilder
         if (cost < 0 || sale < 0) throw new InvalidOperationException("Invalid rate totals.");
         var values = new Dictionary<string, object>(StringComparer.Ordinal);
         var fields = schema.Fields.ToDictionary(x => x.Target, StringComparer.Ordinal);
+        // Both CREATE and UPSERT carry the same immutable RateId. The
+        // alternate key is supplied by the connector, never by the seller.
+        if (schema.Operation == "upsert" && guid == Guid.Empty)
+            throw new InvalidOperationException("UPSERT requires the immutable Dhole RateId.");
+
         // The published CRUD template is user-configurable. The reserved
         // GUID field is optional for legacy CREATE but when present is always
         // populated with the immutable Pricing RateId.
@@ -125,6 +130,7 @@ public static class DynamicsQuotePayloadBuilder
                 "new_proyecctoespecifico" => ConfiguredChoice(field, 100000004, configuration),
                 "new_tipodecliente" => ConfiguredChoice(field, 100000000, configuration),
                 "new_idtraasignado" => guid.ToString("D"),
+                "cr933_dholerateid" => guid.ToString("D"),
                 "new_divisa" or "new_moneda" => CurrencyForSchema(rate, field),
                 // The mapped target is a trusted navigation property in the
                 // published schema, never an arbitrary caller-provided OData key.
