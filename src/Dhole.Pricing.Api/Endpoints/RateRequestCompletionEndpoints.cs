@@ -166,12 +166,47 @@ public static class RateRequestCompletionEndpoints
         // PDF generation and SMTP availability. Store this transition first.
         if (!alreadyCompleted)
         {
-            entity.AttachRate(request.RateId);
-            if (isModification)
-                entity.MarkSellerModificationReadyForDelivery(DateTime.UtcNow);
-            else
-                entity.MarkCompleted(DateTime.UtcNow);
-            await db.SaveChangesAsync(cancellationToken);
+            try
+            {
+                entity.AttachRate(request.RateId);
+                if (isModification)
+                    entity.MarkSellerModificationReadyForDelivery(DateTime.UtcNow);
+                else
+                    entity.MarkCompleted(DateTime.UtcNow);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (InvalidOperationException error) when (!cancellationToken.IsCancellationRequested)
+            {
+                loggerFactory.CreateLogger("RateRequestCompletion").LogError(
+                    error,
+                    "Complete-rate rejected an invalid request state. RequestId={RequestId}, RateId={RateId}, " +
+                    "Status={Status}, PreparedRevisionNumber={PreparedRevision}, ActualRevision={ActualRevision}, TraceId={TraceId}",
+                    requestId, request.RateId, entity.Status, entity.PreparedRevisionNumber,
+                    rate.RevisionNumber, httpContext.TraceIdentifier);
+                return Results.Conflict(new
+                {
+                    code = "Pricing.RateRequestCompletionInvalidState",
+                    message = "No se pudo completar esta solicitud porque su estado no permite el cierre. La QUO existente no debe duplicarse.",
+                    requestId,
+                    rateId = request.RateId,
+                });
+            }
+            catch (DbUpdateException error) when (!cancellationToken.IsCancellationRequested)
+            {
+                loggerFactory.CreateLogger("RateRequestCompletion").LogError(
+                    error,
+                    "Complete-rate could not persist request transition. RequestId={RequestId}, RateId={RateId}, " +
+                    "Status={Status}, PreparedRevisionNumber={PreparedRevision}, ActualRevision={ActualRevision}, TraceId={TraceId}",
+                    requestId, request.RateId, entity.Status, entity.PreparedRevisionNumber,
+                    rate.RevisionNumber, httpContext.TraceIdentifier);
+                return Results.Json(new
+                {
+                    code = "Pricing.RateRequestCompletionPersistenceFailed",
+                    message = "La revisión de la QUO puede estar guardada, pero no se pudo persistir el cierre de la solicitud. Revise el diagnóstico antes de reintentar.",
+                    requestId,
+                    rateId = request.RateId,
+                }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
         }
 
         // Never bypass an approval. The approval hook and background reconciler
