@@ -26,6 +26,23 @@ public sealed class PricingMarketCurrencyExchangeRateProvider(
             );
         }
 
+        if (currency == "EUR")
+        {
+            var euro = await exchangeRateProvider.GetEurUsdAsync(cancellationToken);
+            if (euro is null || euro.DollarsPerEuro <= 0m)
+            {
+                return null;
+            }
+
+            return new MarketExchangeRateQuote(
+                "EUR",
+                "USD",
+                euro.DollarsPerEuro,
+                NormalizeUtc(euro.RateDate),
+                euro.Source
+            );
+        }
+
         if (currency != "CRC")
         {
             return null;
