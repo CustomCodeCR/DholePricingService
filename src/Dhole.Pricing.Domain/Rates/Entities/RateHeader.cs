@@ -1761,6 +1761,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                 ChargeBasis.PerCbm or
                 ChargeBasis.PerChargeableCbm or
                 ChargeBasis.PerKg or
+                ChargeBasis.PerLb or
                 ChargeBasis.Per100Kg or
                 ChargeBasis.PerTon or
                 ChargeBasis.PerPallet or
