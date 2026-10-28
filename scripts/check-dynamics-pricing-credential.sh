@@ -97,7 +97,7 @@ try:
     version = schema["version"]
     fields = schema["fields"]
     if (schema.get("name") != "crear_oferta" or schema.get("entityName") != "quote"
-            or schema.get("operation") != "create" or schema.get("connectionCode") != "principal"
+            or schema.get("operation") not in ("create", "upsert") or schema.get("connectionCode") != "principal"
             or not isinstance(version, int)):
         raise ValueError("The key does not resolve to a valid active crear_oferta schema.")
     currency = [field for field in fields
