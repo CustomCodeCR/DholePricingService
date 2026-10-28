@@ -205,6 +205,58 @@ public sealed class RateReportDestinationTaxTests
             .GetProperty("lineTotalAmount").GetDecimal());
     }
 
+    [TestMethod]
+    public void ZeroSaleCharge_IsHiddenInClientPdfButKeptInTabularExport()
+    {
+        var rate = CreateRate();
+        AddLine(rate, "Cargos en Origen", 0m);
+        AddLine(rate, "Manejos", 55m);
+
+        using var report = Report(rate);
+        var clientItems = report.RootElement.GetProperty("items").EnumerateArray().ToArray();
+        Assert.AreEqual(1, clientItems.Length);
+        Assert.AreEqual("Manejos", clientItems[0].GetProperty("description").GetString());
+
+        var exportRows = report.RootElement.GetProperty("rows").EnumerateArray().ToArray();
+        Assert.AreEqual(2, exportRows.Length, "Excel must still show every saved charge.");
+        Assert.IsTrue(exportRows.Any(x =>
+            x.GetProperty("Concepto").GetString() == "Cargos en Origen" &&
+            x.GetProperty("Precio unitario").GetDecimal() == 0m));
+
+        Assert.AreEqual(55m,
+            report.RootElement.GetProperty("currencyTotals")[0].GetProperty("amount").GetDecimal());
+    }
+
+    [TestMethod]
+    public void AllZeroSaleCharges_ProduceNoPdfItems_AndRemainAvailableToExport()
+    {
+        var rate = CreateRate();
+        AddLine(rate, "AWB", 0m);
+        AddLine(rate, "Cargos en Origen", 0m);
+
+        using var report = Report(rate);
+        Assert.AreEqual(0, report.RootElement.GetProperty("items").GetArrayLength());
+        Assert.AreEqual(2, report.RootElement.GetProperty("rows").GetArrayLength());
+        Assert.AreEqual(0, report.RootElement.GetProperty("currencyTotals").GetArrayLength());
+    }
+
+    [TestMethod]
+    public void AllInQuote_ExcludesZeroSaleChargesWithoutChangingPayableAmount()
+    {
+        var rate = CreateRate();
+        rate.ConfigureCommercialPresentation(true);
+        AddLine(rate, "AWB sin venta", 0m);
+        AddLine(rate, "Manejos", 75m);
+
+        using var report = Report(rate);
+        var item = report.RootElement.GetProperty("items")[0];
+        Assert.AreEqual(1, report.RootElement.GetProperty("items").GetArrayLength());
+        Assert.AreEqual("ALL IN", item.GetProperty("description").GetString());
+        Assert.AreEqual(75m, item.GetProperty("lineTotalAmount").GetDecimal());
+        Assert.AreEqual(75m,
+            report.RootElement.GetProperty("currencyTotals")[0].GetProperty("amount").GetDecimal());
+    }
+
     private static RateDetail AddLine(RateHeader rate, string name, decimal sale) =>
         rate.AddRateDetail(
             rate.Id, null, name, CostDetailType.DestinationCharge, CostType.Variable,
