@@ -292,14 +292,16 @@ public static class DynamicsQuotePayloadBuilder
         static string Flat(string? text) =>
             new((text ?? "").Where(char.IsLetterOrDigit)
                 .Select(char.ToLowerInvariant).ToArray());
-        return new[] { Flat(field.Name), Flat(field.Target) }.Any(name =>
-            name.Contains("notif", StringComparison.Ordinal) &&
-            (name.Contains("respuesta", StringComparison.Ordinal) ||
-             name.Contains("response", StringComparison.Ordinal) ||
-             name.Contains("resp", StringComparison.Ordinal)) &&
-            (name.Contains("cotiz", StringComparison.Ordinal) ||
-             name.Contains("quote", StringComparison.Ordinal) ||
-             name.Contains("oferta", StringComparison.Ordinal)));
+        // Only the Dataverse logical TARGET determines which column is
+        // updated. An arbitrary input alias must not enable another flag.
+        var target = Flat(field.Target);
+        return target.Contains("notif", StringComparison.Ordinal) &&
+            (target.Contains("respuesta", StringComparison.Ordinal) ||
+             target.Contains("response", StringComparison.Ordinal) ||
+             target.Contains("resp", StringComparison.Ordinal)) &&
+            (target.Contains("cotiz", StringComparison.Ordinal) ||
+             target.Contains("quote", StringComparison.Ordinal) ||
+             target.Contains("oferta", StringComparison.Ordinal));
     }
 
     private static bool PricingCustomerTarget(string target) =>
