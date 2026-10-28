@@ -18,6 +18,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
     private const string OriginOfficeMessage = "Estos son los datos de Castro Fallas en origen.";
     private const decimal MiamiCftPerCbm = 35.3146667m;
     private const decimal MiamiKgPerCft = 14.16m;
+    private const decimal AirPoundsPerKg = 2.20462262m;
 
     public string CreateDataJson(RateHeader rate)
     {
@@ -93,11 +94,23 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         // Reconcile only previously persisted Miami CFT freight corrupted by
         // the old 1-CBM floor. Modern, correctly saved CFT lines are unchanged.
         var miamiBillableCft = CalculateMiamiBillableCft(rate);
+        // Air LCL per-pound catalog prices are shown per KG in the wizard.
+        // Project the same commercial unit in PDFs/exports, including legacy
+        // quotes saved with quantity=1 before PerLb was supported by Pricing.
+        bool IsAirPoundCharge(RateDetail detail) =>
+            isAirLcl && detail.ChargeBasis == ChargeBasis.PerLb && !IsPickupCharge(detail);
+        decimal ReportUnitSale(RateDetail detail) =>
+            IsAirPoundCharge(detail) ? detail.SaleAmount * AirPoundsPerKg : detail.SaleAmount;
+        decimal LineSubtotal(RateDetail detail) => ReportUnitSale(detail) * ReportQuantity(detail);
+
         decimal ReportQuantity(RateDetail detail)
         {
             // Recolecta is a flat fee per concept, even on historical rows persisted as CFT/CBM.
             if (IsPickupCharge(detail))
                 return 1m;
+
+            if (IsAirPoundCharge(detail) && rate.TotalWeightKg > 0m)
+                return rate.TotalWeightKg;
 
             if (!miamiBillableCft.HasValue
                 || detail.CostDetailType != CostDetailType.Freight
@@ -180,7 +193,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var airKgFreight = isAirLcl
             ? rate.RateDetails.FirstOrDefault(detail =>
                 detail.CostDetailType == CostDetailType.Freight
-                && detail.ChargeBasis == ChargeBasis.PerKg)
+                && detail.ChargeBasis is ChargeBasis.PerKg or ChargeBasis.PerLb)
             : null;
         var lclChargeableLabel = airKgFreight is not null
             ? $"LCL aéreo · {ReportQuantity(airKgFreight).ToString("N3", MoneyCulture)} KG cobrables"
@@ -308,17 +321,15 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             ? string.Join(" / ", freightCarrierNames)
             : Text(rate.CarrierName, "No asignada");
 
+        // The client PDF must match the complete persisted table, including
+        // deliberately selected zero-value rows. Nothing is inferred from catalogs.
         var reportDetails = rate.RateDetails
-            // Una recolecta seleccionada debe figurar aunque su precio siga en cero;
-            // no inventamos importes ni mostramos otros conceptos automáticos sin precio.
-            .Where(detail => IsPickupCharge(detail) || detail.SaleAmount * ReportQuantity(detail) != 0m)
             .OrderBy(x => x.CostDetailType)
             .ThenBy(x => x.Name)
             .ToArray();
 
         // Use the exact tax selection persisted on each priced line. Do not infer IVA
         // from the description/notes or introduce it on untaxed quotations.
-        decimal LineSubtotal(RateDetail detail) => detail.SaleAmount * ReportQuantity(detail);
         decimal LineTax(RateDetail detail) =>
             detail.ApplyDestinationTax && detail.DestinationTaxRate > 0m
                 ? decimal.Round(LineSubtotal(detail) * detail.DestinationTaxRate / 100m, 2, MidpointRounding.AwayFromZero)
@@ -333,7 +344,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             && reportDetails.Length > 0
             && CanConsolidateAllIn(rate, reportDetails, CurrencyIso);
         var allInAmount = useAllInPresentation
-            ? CalculateAllInAmount(rate, reportDetails, CurrencyIso, ReportQuantity)
+            ? CalculateAllInAmount(rate, reportDetails, CurrencyIso, ReportQuantity, LineSubtotal)
             : 0m;
         var allInTax = useAllInPresentation
             ? CalculateAllInAmount(rate, reportDetails, CurrencyIso, ReportQuantity, LineTax)
@@ -368,10 +379,10 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     quantity = ReportQuantity(detail),
                     currency = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
                     currencyCode = detail.CurrencyCode,
-                    unitSale = DetailMoney(detail, detail.SaleAmount),
-                    unitSaleAmount = detail.SaleAmount,
-                    lineTotal = DetailMoney(detail, detail.SaleAmount * ReportQuantity(detail)),
-                    lineTotalAmount = detail.SaleAmount * ReportQuantity(detail),
+                    unitSale = DetailMoney(detail, ReportUnitSale(detail)),
+                    unitSaleAmount = ReportUnitSale(detail),
+                    lineTotal = DetailMoney(detail, LineSubtotal(detail)),
+                    lineTotalAmount = LineSubtotal(detail),
                     lineTaxAmount = LineTax(detail),
                     lineTotalWithTaxAmount = LineSubtotal(detail) + LineTax(detail),
                     destinationTaxLabel = TaxLabel(detail),
@@ -516,8 +527,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     ["Concepto"] = DetailNameWithCarrier(detail, ReportDetailName(detail)),
                     ["Cantidad"] = ReportQuantity(detail),
                     ["Moneda"] = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
-                    ["Precio unitario"] = detail.SaleAmount,
-                    ["Total"] = detail.SaleAmount * ReportQuantity(detail),
+                    ["Precio unitario"] = ReportUnitSale(detail),
+                    ["Total"] = LineSubtotal(detail),
                     ["Notas"] = ClientDetailNotes(detail)
                 })
                 .ToArray();
