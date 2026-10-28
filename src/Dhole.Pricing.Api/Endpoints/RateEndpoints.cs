@@ -1095,6 +1095,12 @@ public static class RateEndpoints
             return Results.Forbid();
         }
 
+        if (status == RateStatus.AcceptedByClient && request.Observations?.Trim().Length > 2000)
+            return EndpointResults.BadRequest(
+                "Pricing.AcceptanceObservationsTooLong",
+                "Las observaciones de apertura no pueden superar 2000 caracteres.",
+                httpContext);
+
         // Preparar el PDF y el correo en Outbox antes de persistir el cambio
         // de estado. El handler confirma ambos en la misma transacción.
         if (status == RateStatus.Sent)
@@ -1126,12 +1132,6 @@ public static class RateEndpoints
                         "Pricing.RateSentEmailNotQueued", emailError, httpContext);
             }
         }
-
-        if (request.Observations?.Trim().Length > 2000)
-            return EndpointResults.BadRequest(
-                "Pricing.AcceptanceObservationsTooLong",
-                "Las observaciones de apertura no pueden superar 2000 caracteres.",
-                httpContext);
 
         var acceptanceObservations = status == RateStatus.AcceptedByClient
             ? request.Observations?.Trim() : null;
