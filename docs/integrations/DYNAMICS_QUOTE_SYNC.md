@@ -58,7 +58,7 @@ alternativa; el conector exige conciliación antes de continuar.
 | `new_idtra1` … `new_idtra10` | IDTRA asignados, uno por campo lookup disponible, en orden |
 | `cr933_dholerateid` | GUID permanente `RateHeader.Id`, cuando forma parte de la plantilla |
 | `new_idtraasignado` | GUID permanente `RateHeader.Id` SOLO para plantillas heredadas que lo emplean como identidad |
-| `name`, `description` | Nombre o número QUO, información de la tarifa y los IDTRA |
+| `name`, `description` | Consecutivo QUO e información de modo, moneda e IDTRA; nunca el nombre del cliente |
 | `effectivefrom`, `effectiveto` | Fechas de validez de la tarifa |
 | `new_pol`, `new_poe`, `new_pod` | Origen, entrada y destino almacenados |
 | `new_categoriatarifa` | Opción aprobada, preferencia `100000001` |
@@ -93,9 +93,11 @@ La API key del conector se lee en el backend de Pricing a través de
 `DynamicsQuoteSync__ApiKey` en `/opt/dhole/.env`. No debe incorporarse al
 repositorio, frontend ni registros. Debe corresponder a la **versión
 activa** de `principal/crear_oferta`, con permisos de cabecera, búsqueda
-de clientes/IDTRA/moneda y lectura/escritura de quotedetail. Para
+de IDTRA/moneda y lectura/escritura de quotedetail. Para
 `upsert` también se requieren los grants del alternate key y
 actualización de cabecera y línea.
+
+En el flujo de Pricing no se envían `customerid`, `customeridtype`, `msdyn_account` ni el nombre del cliente, aunque la plantilla CRUD los declare como requeridos. Esto no modifica el comportamiento de CRUD manual ni obliga a registrar cuentas. Las reglas o plugins propios de Dataverse pueden imponer condiciones distintas y deben diagnosticarse por separado.
 
 `/write-readiness` y `/schema` permiten comprobar la autorización
 sin escribir en Dataverse. HTTP 401 implica clave no válida para la versión
