@@ -55,6 +55,9 @@ jobs:
           echo "DHOLE_ENV_FILE=$RUNNER_TEMP/dhole-env/.env.staging" >> "$GITHUB_ENV"
       - name: Verify staging server
         run: docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -f "$COMPOSE_OVERRIDE" -p "$COMPOSE_PROJECT" config -q
+      - name: Test Dynamics credential preflight without network
+        shell: bash
+        run: bash scripts/tests/test-check-dynamics-pricing-credential.sh
       - name: Verify EF migrations are synchronized
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

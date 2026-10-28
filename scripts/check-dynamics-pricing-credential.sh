@@ -52,10 +52,26 @@ read_status() {
     -H "Accept: application/json" \
     --output "$output" --write-out "%{http_code}" "$base/$path?connectionCode=principal"
 }
+# An external Dynamics 401 must not block unrelated Pricing deployments.
+# Key format and canonical/Compose parity are still mandatory. The delivery
+# worker requires a positive write-readiness probe before sending any QUO.
+report_unauthorized() {
+  local endpoint="$1"
+  local message="Dynamics returned HTTP 401 from $endpoint for principal/crear_oferta. Pricing reads the same key as /opt/dhole/.env but Dynamics does not authorize it (possibly expired, revoked or bound to an older template version). In Dynamics > API CRUD > crear_oferta, rebind the existing nonexpired key to the active revision; otherwise replace it and update /opt/dhole/.env. Pricing deployment can continue, but Dynamics QUO delivery stays PAUSED until write-readiness is positive. No Dataverse write was attempted."
+  if [[ "${DYNAMICS_PREFLIGHT_STRICT:-0}" == "1" ]]; then
+    echo "::error::$message"
+    return 1
+  fi
+  echo "::warning::$message"
+  if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    printf '%s\n' '### Pricing / Dynamics: requiere atención' '' 'Dynamics rechazó la credencial del entorno para principal/crear_oferta (HTTP 401).' 'Se permite desplegar Pricing. La cola QUO a Dynamics sigue pausada hasta reautorizar la clave en la plantilla activa. No se escribió en Dataverse.' >> "$GITHUB_STEP_SUMMARY"
+  fi
+}
 schema_status="$(read_status schema "$workspace/schema.json")"
 if [[ "$schema_status" != "200" ]]; then
   if [[ "$schema_status" == "401" ]]; then
-    echo "::error::Dynamics rejected the Pricing key for principal/crear_oferta (HTTP 401). The credential may be tied to an older template version, revoked, expired or different from the installed secret. In Dynamics > API CRUD > crear_oferta, use 'Reutilizar clave seleccionada' for a still-valid key; only if it is expired/revoked, create a replacement and securely update DynamicsQuoteSync__ApiKey in /opt/dhole/.env. No containers were changed."
+    report_unauthorized "schema" || exit 1
+    exit 0
   else
     echo "::error::Dynamics could not validate the installed Pricing key against the active principal/crear_oferta schema (HTTP $schema_status). No containers were changed."
   fi
@@ -63,6 +79,10 @@ if [[ "$schema_status" != "200" ]]; then
 fi
 ready_status="$(read_status write-readiness "$workspace/readiness.json")"
 if [[ "$ready_status" != "200" ]]; then
+  if [[ "$ready_status" == "401" ]]; then
+    report_unauthorized "write-readiness" || exit 1
+    exit 0
+  fi
   echo "::error::Dynamics write-readiness could not validate the installed Pricing API key (HTTP $ready_status). No containers have been changed."
   exit 1
 fi
