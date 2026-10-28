@@ -49,6 +49,10 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         // confirmed succeeded in the connector's durable ledger. No POST.
         group.MapPost("/{rateId:guid}/dynamics-sync/reconcile-confirmed",
             ReconcileConfirmedAsync);
+        // Only a VERIFIED RateId link to the unique historical CREATE quote
+        // can resume the original revision. Never create a replacement QUO.
+        group.MapPost("/{rateId:guid}/dynamics-sync/resume-linked-legacy",
+            ResumeLinkedLegacyAsync);
         // Explicitly queue an already accepted rate with IDTRA if it predated
         // the integration or the acceptance event was not recorded. Does not
         // perform a Dataverse write in the HTTP request.
@@ -753,6 +757,109 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             ? Results.Accepted($"/api/pricing/rates/{rateId}/dynamics-sync",
                 new { rateId, status = "Pending", detail = "Reintento encolado con el mismo identificador." })
             : Results.Conflict(new { code = "sync_status_changed" });
+    }
+
+    private sealed record LegacyLinkProof(
+        bool Linked, Guid QuoteId, bool CurrentRevisionUnsent, bool NoPostExecuted);
+
+    private static async Task<IResult> ResumeLinkedLegacyAsync(
+        Guid rateId, HttpContext http, ServiceDbContext db,
+        IHttpClientFactory clients, IConfiguration configuration, CancellationToken ct)
+    {
+        if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
+        var rate = await db.RateHeaders.IgnoreQueryFilters().AsNoTracking()
+            .Where(x => x.Id == rateId)
+            .Select(x => new { x.Status, x.RevisionNumber, x.IdtraNumber, x.IsDeleted })
+            .SingleOrDefaultAsync(ct);
+        if (rate is null || rate.IsDeleted ||
+            rate.Status != RateStatus.AcceptedByClient ||
+            string.IsNullOrWhiteSpace(rate.IdtraNumber))
+            return Results.Conflict(new {
+                code = "legacy_quote_rate_not_accepted",
+                message = "La tarifa ya no está aceptada y vigente para la revisión actual."
+            });
+        var job = await db.DynamicsQuoteSyncJobs.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.RateId == rateId &&
+                x.RevisionNumber == rate.RevisionNumber, ct);
+        if (job is null || job.Status != "NeedsAttention")
+            return Results.Conflict(new { code = "legacy_quote_job_not_ready" });
+
+        // A different error or an ambiguous downstream write is never
+        // transformed into an authorized retry.
+        try
+        {
+            using var diagnostic = JsonDocument.Parse(job.ResponseJson ?? "");
+            var root = diagnostic.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("providerCode", out var provider) ||
+                provider.GetString() != "legacy_quote_requires_rate_key_linking" ||
+                !root.TryGetProperty("stage", out var stage) ||
+                stage.GetString() != "execute")
+                return Results.Conflict(new { code = "legacy_quote_diagnostic_mismatch" });
+        }
+        catch (JsonException)
+        {
+            return Results.Conflict(new { code = "legacy_quote_diagnostic_missing" });
+        }
+
+        var ready = await CheckQuoteReadinessAsync(clients, configuration, ct);
+        if (!ready.Ready)
+            return Results.Conflict(new {
+                code = "dynamics_quote_writes_not_ready", providerCode = ready.Code,
+                message = ready.Message
+            });
+        var apiKey = configuration["DynamicsQuoteSync:ApiKey"];
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return Results.Conflict(new { code = "dynamics_api_key_missing" });
+        LegacyLinkProof? proof;
+        try
+        {
+            const string endpoint = "https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta/legacy-link-status";
+            var url = endpoint + "?connectionCode=principal&dholeRateId=" +
+                Uri.EscapeDataString(rateId.ToString("D")) +
+                "&revisionNumber=" + rate.RevisionNumber;
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+            using var response = await clients.CreateClient("DynamicsQuoteSync")
+                .SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+                return Results.Conflict(new {
+                    code = "legacy_quote_link_not_verified",
+                    message = "El conector no confirmó el vínculo de RateId. No se reenviará la QUO."
+                });
+            proof = await response.Content.ReadFromJsonAsync<LegacyLinkProof>(
+                cancellationToken: ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception)
+        {
+            return Results.Conflict(new { code = "legacy_quote_verification_unavailable" });
+        }
+        if (proof is not { Linked: true, CurrentRevisionUnsent: true,
+            NoPostExecuted: true } || proof.QuoteId == Guid.Empty)
+            return Results.Conflict(new {
+                code = "legacy_quote_link_not_verified",
+                message = "La QUO histórica no está vinculada o la revisión ya registró una escritura. No se reenviará."
+            });
+
+        // The previous request was rejected BEFORE reservation. Resume with
+        // exactly the original idempotency key and immutable revision.
+        var changed = await db.DynamicsQuoteSyncJobs
+            .Where(x => x.Id == job.Id && x.Status == "NeedsAttention" &&
+                x.RevisionNumber == rate.RevisionNumber &&
+                x.ResponseJson == job.ResponseJson)
+            .ExecuteUpdateAsync(up => up
+                .SetProperty(x => x.Status, "Pending")
+                .SetProperty(x => x.Attempts, 0)
+                .SetProperty(x => x.LastError, (string?)null)
+                .SetProperty(x => x.ResponseJson, (string?)null)
+                .SetProperty(x => x.NextAttemptAtUtc, DateTime.UtcNow)
+                .SetProperty(x => x.LeaseExpiresAtUtc, (DateTime?)null), ct);
+        return changed == 1
+            ? Results.Accepted($"/api/pricing/rates/{rateId}/dynamics-sync",
+                new { status = "Pending", existingQuoteId = proof.QuoteId,
+                    message = "La revisión se reanudó con su misma clave de idempotencia. Se actualizará la QUO existente, sin crear otra." })
+            : Results.Conflict(new { code = "legacy_quote_concurrent_change" });
     }
 
     private sealed record ConfirmedWriteResult(
