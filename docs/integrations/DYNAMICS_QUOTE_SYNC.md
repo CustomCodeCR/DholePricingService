@@ -105,6 +105,36 @@ activa; HTTP 403/409 puede señalar grants, autorización de escrituras o
 clave alternativa no registrada. No regenerar idempotencia ni hacer POST
 manual como respuesta automática a esos errores.
 
+## Recuperación de una QUO histórica CREATE (HTTP 409)
+
+El código `legacy_quote_requires_rate_key_linking` **no autoriza** crear otra oferta.
+Significa que el registro de escrituras identifica una cabecera CREATE anterior
+para el mismo RateId y la plantilla UPSERT no puede encontrarla por la clave
+alternativa aprobada. Un ledger vacío en la revisión actual no demuestra ausencia
+de registros históricos.
+
+En Dynamics > Cola de ofertas > **Verificar en Dynamics**, el conector muestra
+las revisiones históricas, un identificador único si lo hay y su verificación
+de existencia en Dataverse. Solo si la cabecera histórica tiene **un único GUID**
+con lectura confirmada, el administrador puede seleccionar
+**Vincular QUO existente y reenviar revisión**. Antes debe comprobar manualmente
+el cliente, IDTRA y documento. La acción requiere confirmación explícita.
+
+El endpoint de conciliación administrativa valida el historial de todas las claves,
+la clave alternativa activa, el campo escribible y la versión ETag del registro.
+Ejecuta exclusivamente un PATCH de la clave RateId sobre la cabecera **existente**.
+No crea una oferta. Si falta el GUID, hay resultados ambiguos, existe otro RateId
+o no hay permiso, rechaza el enlace; nunca inventa una relación. En caso de
+timeout, se debe comprobar el vínculo antes de repetir la acción.
+
+Después de vincularla, Pricing solicita `legacy-link-status` con la clave activa.
+Solo si el conector confirma que la QUO histórica se resuelve por RateId, que
+no existe escritura registrada de la revisión actual y que la comprobación
+no ejecutó POST, se reanuda el trabajo original con su **misma clave de idempotencia**.
+La operación `UPSERT` actualizará el encabezado existente y reutilizará o
+actualizará la línea total administrada por Dhole según las políticas del conector.
+El proceso no recupera ni reenvía automáticamente un estado incierto.
+
 ## Diagnóstico y verificación
 
 ```sql
