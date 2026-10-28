@@ -11,5 +11,6 @@ public sealed record SetRateStatusCommand(
     string? IdtraNumber,
     Guid? UpdatedBy,
     bool AllowDirectClientDecision = false,
-    string? OtherReferences = null
+    string? OtherReferences = null,
+    string? AcceptanceObservations = null
 ) : ICommand<Result>;
