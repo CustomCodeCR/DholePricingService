@@ -274,10 +274,9 @@ public sealed class DynamicsQuotePayloadBuilderTests
     {
         foreach (var operation in new[] { "create", "upsert" })
         {
-            var schemaText = Schema.Replace(
-                "\\"operation\\":\\"create\\"", "\\"operation\\":\\"" + operation + "\\"",
-                StringComparison.Ordinal);
-            var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
+            var schemaNode = JsonNode.Parse(Schema)!.AsObject();
+            schemaNode["operation"] = operation;
+            var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaNode.ToJsonString());
             using var outgoing = JsonDocument.Parse(JsonSerializer.Serialize(
                 BuildForTest(Accepted, schema)));
             var inputs = outgoing.RootElement.GetProperty("inputs");
