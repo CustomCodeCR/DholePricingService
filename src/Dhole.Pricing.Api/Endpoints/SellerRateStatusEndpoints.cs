@@ -224,6 +224,6 @@ public static class SellerRateStatusEndpoints
         string Status,
         string? Reason,
         string? IdtraNumber,
-        string? Observations
+        string? Observations = null
     );
 }
