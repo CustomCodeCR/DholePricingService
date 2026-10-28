@@ -113,6 +113,24 @@ public sealed class DynamicsQuoteFailureDiagnosticsTests
 
 
     [TestMethod]
+    public void LegacyQuote409ShowsHistoricalRateIdLinkingAndNeverAllowsBlindRetry()
+    {
+        var (message, diagnostic) = DynamicsQuoteFailureDiagnostics.Format(
+            "execute", new HttpRequestException("sensitive URL"), true,
+            HttpStatusCode.Conflict, "legacy_quote_requires_rate_key_linking",
+            "Pricing quote creation rejected by Dataverse connector policy.");
+        StringAssert.Contains(message, "CREATE");
+        StringAssert.Contains(message, "RateId");
+        StringAssert.Contains(message, "antes");
+        using var parsed = JsonDocument.Parse(diagnostic);
+        Assert.AreEqual("legacy_quote_requires_rate_key_linking",
+            parsed.RootElement.GetProperty("providerCode").GetString());
+        Assert.IsTrue(parsed.RootElement.GetProperty("postAttempted").GetBoolean());
+        Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure(
+            "legacy_quote_requires_rate_key_linking"));
+    }
+
+    [TestMethod]
     public void TextLimit422IsAProvenPreWriteFailureWithFieldDiagnostic()
     {
         Assert.IsTrue(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure(
