@@ -56,7 +56,38 @@ jobs:
         run: docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" config -q
       - name: Validate configured Dynamics key against active template before redeploy
         shell: bash
-        run: bash scripts/check-dynamics-pricing-credential.sh "$DHOLE_ENV_FILE"
+        run: |
+          set -euo pipefail
+          # The secret always comes from the canonical production host file,
+          # never from a GitHub secret or the disposable prepared copy.
+          bash scripts/check-dynamics-pricing-credential.sh /opt/dhole/.env "$DHOLE_ENV_FILE"
+          # Fail closed if Compose overrides or omits the same key on pricing-api.
+          # docker compose config contains secrets, so inspect it only in memory.
+          python3 - "$DHOLE_ENV_FILE" "$COMPOSE_FILE" "$COMPOSE_PROJECT" <<'PY'
+          import json
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          source = Path("/opt/dhole/.env").read_text(encoding="utf-8")
+          entries = [line.split("=", 1)[1].strip().strip("\\r")
+                     for line in source.splitlines()
+                     if line.startswith("DynamicsQuoteSync__ApiKey=")]
+          if len(entries) != 1:
+              raise SystemExit("::error::Expected exactly one Dynamics key in /opt/dhole/.env.")
+          expected = entries[0].strip('"').strip("'")
+          command = ["docker", "compose", "--env-file", sys.argv[1],
+                     "-f", sys.argv[2], "-p", sys.argv[3], "config", "--format", "json"]
+          result = subprocess.run(command, text=True, capture_output=True, check=True)
+          data = json.loads(result.stdout)
+          service = data.get("services", {}).get("pricing-api", {})
+          env = service.get("environment") or {}
+          if isinstance(env, list):
+              env = dict(entry.split("=", 1) for entry in env if "=" in entry)
+          if env.get("DynamicsQuoteSync__ApiKey") != expected:
+              raise SystemExit("::error::pricing-api Compose configuration does not receive the canonical DynamicsQuoteSync__ApiKey from /opt/dhole/.env. No containers changed.")
+          print("Pricing API runtime Dynamics key matches the canonical /opt/dhole/.env (secret hidden).")
+          PY
       - name: Verify EF migrations are synchronized
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
