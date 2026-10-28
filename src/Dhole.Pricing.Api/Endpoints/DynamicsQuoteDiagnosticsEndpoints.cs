@@ -842,10 +842,25 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             check.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
             using var result = await client.SendAsync(check, ct);
             if (!result.IsSuccessStatusCode)
+            {
+                // Do not hide the downstream cause as an opaque HTTP 409.
+                // Report only the connector's vetted code and status, never
+                // raw response payloads, credentials or ledger contents.
+                var failure = await result.Content.ReadAsStringAsync(ct);
+                var (providerCode, _) =
+                    DynamicsQuoteFailureDiagnostics.ReadProviderError(failure);
                 return Results.Conflict(new {
                     code = "recovery_ledger_unavailable",
-                    message = "No se pudo verificar el historial. No se autorizó ningún nuevo envío."
+                    providerCode = providerCode ?? "connector_recovery_read_failed",
+                    connectorHttpStatus = (int)result.StatusCode,
+                    message = providerCode == "quote_write_key_required"
+                        ? "El conector no acepta todavía UPSERT para verificar recuperaciones; actualizá Dynamics Connector y volvé a intentar."
+                        : providerCode == "crud_key_invalid"
+                        ? "La clave activa de Pricing fue rechazada por Dynamics Connector."
+                        : "La verificación del historial fue rechazada por Dynamics Connector. Revisá el código y estado del proveedor; no se reenvió la QUO.",
+                    noPostExecuted = true
                 });
+            }
             using var json = JsonDocument.Parse(await result.Content.ReadAsStringAsync(ct));
             if (!json.RootElement.TryGetProperty("eligible", out var eligible) ||
                 eligible.ValueKind != JsonValueKind.True ||
