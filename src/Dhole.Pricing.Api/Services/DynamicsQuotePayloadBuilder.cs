@@ -22,6 +22,8 @@ public sealed record DynamicsCrudSchema(string Name, int Version, string EntityN
 public static class DynamicsQuotePayloadBuilder
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private const string QuoteResponseNotificationField = "new_notifrespuestacotizacion";
+    private const int QuoteResponseNotificationValue = 100000000;
 
     public static DynamicsCrudSchema ReadSchema(string response) =>
         JsonSerializer.Deserialize<DynamicsCrudSchema>(response, Json)
@@ -82,6 +84,20 @@ public static class DynamicsQuotePayloadBuilder
         if (cost < 0 || sale < 0) throw new InvalidOperationException("Invalid rate totals.");
         var values = new Dictionary<string, object>(StringComparer.Ordinal);
         var fields = schema.Fields.ToDictionary(x => x.Target, StringComparer.Ordinal);
+        // Prevent creating a new QUO without the exact, authorized Dataverse
+        // response-notification choice. A Boolean or similarly named field is
+        // not equivalent to the approved option value 100000000.
+        if (!fields.TryGetValue(QuoteResponseNotificationField, out var notification))
+            throw new InvalidOperationException(
+                "Published crear_oferta is missing new_notifrespuestacotizacion. Add its integer Picklist mapping and grant before syncing Quotes.");
+        if (notification.Type != "integer" ||
+            notification.DataverseType is not ("Picklist" or "Status" or "State") ||
+            notification.Options is null || !notification.Options.Any(option =>
+                option.Value.ValueKind == JsonValueKind.Number &&
+                option.Value.TryGetInt32(out var choice) &&
+                choice == QuoteResponseNotificationValue))
+            throw new InvalidOperationException(
+                "new_notifrespuestacotizacion must be an integer Dynamics choice with approved option 100000000.");
         // Both CREATE and UPSERT carry the same immutable RateId. The
         // alternate key is supplied by the connector, never by the seller.
         if (schema.Operation == "upsert" && guid == Guid.Empty)
@@ -122,7 +138,7 @@ public static class DynamicsQuotePayloadBuilder
                 // Incoterm - POL To POD Via POE - customer. Do not overwrite
                 // it with the short tracking number (RateCode).
                 "name" => String(rate, "rateName") ?? String(rate, "rateCode"),
-                var target when IsQuoteResponseNotification(field) => true,
+                QuoteResponseNotificationField => QuoteResponseNotificationValue,
                 "description" => Description(rate, idtras),
                 "effectivefrom" => Date(rate, "validFrom"),
                 "effectiveto" => Date(rate, "validTo"),
@@ -282,32 +298,6 @@ public static class DynamicsQuotePayloadBuilder
         string.Join(" | ", new[] { String(rate, "rateCode"),
             String(rate, "shipmentMode"), String(rate, "currencyCode"),
             string.Join(", ", idtras) }.Where(x => !string.IsNullOrWhiteSpace(x)));
-
-    // Map the published Dataverse Two Options field "Notif. Respuesta
-    // Cotizacion" on accepted client responses. The actual logical column
-    // name can vary between solutions, so match only schema-declared Boolean
-    // columns using their *real* input/target name. Never guess an OData
-    // property or write to other notification switches.
-    private static bool IsQuoteResponseNotification(DynamicsCrudField field)
-    {
-        if (field.Target.EndsWith("@odata.bind", StringComparison.Ordinal) ||
-            field.Type is not ("boolean" or "bool") &&
-            field.DataverseType is not ("Boolean" or "TwoOptions"))
-            return false;
-        static string Flat(string? text) =>
-            new((text ?? "").Where(char.IsLetterOrDigit)
-                .Select(char.ToLowerInvariant).ToArray());
-        // Only the Dataverse logical TARGET determines which column is
-        // updated. An arbitrary input alias must not enable another flag.
-        var target = Flat(field.Target);
-        return target.Contains("notif", StringComparison.Ordinal) &&
-            (target.Contains("respuesta", StringComparison.Ordinal) ||
-             target.Contains("response", StringComparison.Ordinal) ||
-             target.Contains("resp", StringComparison.Ordinal)) &&
-            (target.Contains("cotiz", StringComparison.Ordinal) ||
-             target.Contains("quote", StringComparison.Ordinal) ||
-             target.Contains("oferta", StringComparison.Ordinal));
-    }
 
     private static bool PricingCustomerTarget(string target) =>
         target.Equals("customerid", StringComparison.OrdinalIgnoreCase) ||
