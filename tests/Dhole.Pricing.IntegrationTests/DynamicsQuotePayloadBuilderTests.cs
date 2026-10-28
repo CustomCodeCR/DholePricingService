@@ -38,6 +38,8 @@ public sealed class DynamicsQuotePayloadBuilderTests
              "options":[{"label":"Proyecto","value":100000004}]},
             {"name":"new_tipodecliente","target":"new_tipodecliente","type":"integer","dataverseType":"Picklist","required":true,
              "options":[{"label":"Cliente","value":100000000}]},
+            {"name":"new_notifrespuestacotizacion","target":"new_notifrespuestacotizacion","type":"integer","dataverseType":"Picklist","required":false,
+             "options":[{"label":"Notif. Respuesta Cotizacion","value":100000000}]},
             {"name":"customeridtype","target":"customeridtype","type":"string","dataverseType":"EntityName","required":true,
              "options":[{"label":"Quote","value":"quote"}]},
             {"name":"new_idtraasignado","target":"new_idtraasignado","type":"string","dataverseType":"String","required":false,"options":[]},
@@ -268,29 +270,63 @@ public sealed class DynamicsQuotePayloadBuilderTests
     }
 
     [TestMethod]
-    public void DynamicsQuoteResponseNotificationMarksAcceptedRateOnlyWhenFieldExists()
+    public void NewQuotesAlwaysSendExactResponseNotificationChoiceForCreateAndUpsert()
     {
-        var schemaNode = JsonNode.Parse(Schema)!.AsObject();
-        var fields = schemaNode["fields"]!.AsArray();
-        fields.Add(JsonNode.Parse("""
-            {"name":"notifRespuestaCotizacion","target":"new_notif_respuestacotizacion",
-             "type":"boolean","dataverseType":"Boolean","required":false,"options":[]}
-            """));
-        fields.Add(JsonNode.Parse("""
+        foreach (var operation in new[] { "create", "upsert" })
+        {
+            var schemaText = Schema.Replace(
+                "\\"operation\\":\\"create\\"", "\\"operation\\":\\"" + operation + "\\"",
+                StringComparison.Ordinal);
+            var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
+            using var outgoing = JsonDocument.Parse(JsonSerializer.Serialize(
+                BuildForTest(Accepted, schema)));
+            var inputs = outgoing.RootElement.GetProperty("inputs");
+            Assert.AreEqual(100000000,
+                inputs.GetProperty("new_notifrespuestacotizacion").GetInt32());
+        }
+    }
+
+    [TestMethod]
+    public void MissingOrIncorrectNotificationChoiceStopsQuoteBeforeWrite()
+    {
+        var node = JsonNode.Parse(Schema)!.AsObject();
+        var fields = node["fields"]!.AsArray();
+        var index = fields.ToList().FindIndex(x =>
+            x?["target"]?.GetValue<string>() == "new_notifrespuestacotizacion");
+        Assert.IsTrue(index >= 0);
+        var notification = fields[index]!.DeepClone();
+        fields.RemoveAt(index);
+        var missing = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            BuildForTest(Accepted, DynamicsQuotePayloadBuilder.ReadSchema(node.ToJsonString())));
+        StringAssert.Contains(missing.Message, "new_notifrespuestacotizacion");
+
+        fields.Insert(index, notification);
+        fields[index]!["type"] = "boolean";
+        fields[index]!["dataverseType"] = "Boolean";
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            BuildForTest(Accepted, DynamicsQuotePayloadBuilder.ReadSchema(node.ToJsonString())));
+
+        fields[index]!["type"] = "integer";
+        fields[index]!["dataverseType"] = "Picklist";
+        fields[index]!["options"] = JsonNode.Parse(
+            """[{"label":"Otro estado","value":100000001}]""");
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            BuildForTest(Accepted, DynamicsQuotePayloadBuilder.ReadSchema(node.ToJsonString())));
+    }
+
+    [TestMethod]
+    public void UnrelatedBooleanNotificationIsNeverWritten()
+    {
+        var node = JsonNode.Parse(Schema)!.AsObject();
+        node["fields"]!.AsArray().Add(JsonNode.Parse("""
             {"name":"notifInicioCotizacion","target":"new_notif_iniciocotizacion",
              "type":"boolean","dataverseType":"Boolean","required":false,"options":[]}
             """));
-        var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaNode.ToJsonString());
         using var outgoing = JsonDocument.Parse(JsonSerializer.Serialize(
-            BuildForTest(Accepted, schema)));
+            BuildForTest(Accepted, DynamicsQuotePayloadBuilder.ReadSchema(node.ToJsonString()))));
         var inputs = outgoing.RootElement.GetProperty("inputs");
-        Assert.IsTrue(inputs.GetProperty("notifRespuestaCotizacion").GetBoolean());
+        Assert.AreEqual(100000000, inputs.GetProperty("new_notifrespuestacotizacion").GetInt32());
         Assert.IsFalse(inputs.TryGetProperty("notifInicioCotizacion", out _));
-
-        using var defaultOutgoing = JsonDocument.Parse(JsonSerializer.Serialize(
-            BuildForTest(Accepted, DynamicsQuotePayloadBuilder.ReadSchema(Schema))));
-        Assert.IsFalse(defaultOutgoing.RootElement.GetProperty("inputs")
-            .TryGetProperty("notifRespuestaCotizacion", out _));
     }
 
     [TestMethod]
