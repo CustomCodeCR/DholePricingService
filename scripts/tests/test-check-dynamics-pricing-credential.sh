@@ -22,7 +22,7 @@ done
 test -n "$output"
 case "$route" in
   schema)
-    printf '%s\n' '{"name":"crear_oferta","version":7,"fields":[{"name":"transactioncurrencyid","target":"transactioncurrencyid@odata.bind"}],"operation":"create","entityName":"quote","connectionCode":"principal"}' > "$output"
+    printf '{"name":"crear_oferta","version":7,"fields":[{"name":"transactioncurrencyid","target":"transactioncurrencyid@odata.bind"}],"operation":"%s","entityName":"quote","connectionCode":"principal"}\n' "${MOCK_OPERATION:-create}" > "$output"
     printf '%s' "${MOCK_SCHEMA_STATUS:-200}" ;;
   readiness)
     printf '%s\n' '{"ready":true,"code":"DYNAMICS_QUOTE_WRITES_READY"}' > "$output"
@@ -49,6 +49,8 @@ run_case() {
   echo "PASS: $label"
 }
 run_case 'valid schema and grants' 0 'Verified current Pricing key: active crear_oferta v7'
+run_case 'upsert schema and grants are accepted' 0 'Verified current Pricing key: active crear_oferta v7' MOCK_OPERATION=upsert
+run_case 'unsupported update operation remains blocked' 1 'valid active crear_oferta schema' MOCK_OPERATION=update
 run_case 'schema HTTP 401 pauses QUO without blocking deployment' 0 'delivery stays PAUSED' MOCK_SCHEMA_STATUS=401
 run_case 'readiness HTTP 401 pauses QUO without blocking deployment' 0 'delivery stays PAUSED' MOCK_READINESS_STATUS=401
 run_case 'strict mode still blocks unauthorized key' 1 '::error::Dynamics returned HTTP 401' MOCK_SCHEMA_STATUS=401 DYNAMICS_PREFLIGHT_STRICT=1
