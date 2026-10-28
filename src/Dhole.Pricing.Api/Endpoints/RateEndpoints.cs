@@ -65,6 +65,10 @@ public static class RateEndpoints
             .MapGet("/exchange-rate/usd-crc", GetUsdCrcExchangeRateAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
 
+        group
+            .MapGet("/exchange-rate/eur-usd", GetEurUsdExchangeRateAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
+
         group.MapPost("/", CreateRateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateCreate);
 
         group
@@ -120,6 +124,31 @@ public static class RateEndpoints
         {
             purchase = snapshot.Purchase,
             sale = snapshot.Sale,
+            rateDate = snapshot.RateDate,
+            capturedAtUtc = snapshot.CapturedAtUtc,
+            source = snapshot.Source
+        });
+    }
+
+    private static async Task<IResult> GetEurUsdExchangeRateAsync(
+        IPricingExchangeRateProvider exchangeRateProvider,
+        CancellationToken cancellationToken
+    )
+    {
+        var snapshot = await exchangeRateProvider.GetEurUsdAsync(cancellationToken);
+        if (snapshot is null)
+        {
+            return Results.Problem(
+                title: "Tipo de cambio no disponible",
+                detail: "No fue posible consultar el tipo de cambio EUR a USD en Hacienda en este momento.",
+                statusCode: StatusCodes.Status503ServiceUnavailable
+            );
+        }
+
+        return EndpointResults.Ok(new
+        {
+            dollars = snapshot.DollarsPerEuro,
+            colones = snapshot.ColonesPerEuro,
             rateDate = snapshot.RateDate,
             capturedAtUtc = snapshot.CapturedAtUtc,
             source = snapshot.Source
