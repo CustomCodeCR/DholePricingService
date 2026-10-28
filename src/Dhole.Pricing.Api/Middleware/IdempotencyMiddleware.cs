@@ -67,7 +67,27 @@ public sealed class IdempotencyMiddleware
 
         context.Response.Headers[HeaderName] = publicKey;
 
-        if (await TryStartAsync(keyHash, requestHash, context.RequestAborted))
+        // Idempotency persistence runs *before* the endpoint handler. Missing
+        // migrations or unavailable PostgreSQL must not surface as the generic
+        // complete-rate HTTP 500 with no indication of which phase failed.
+        async Task<bool?> TryStartSafelyAsync()
+        {
+            try { return await TryStartAsync(keyHash, requestHash, context.RequestAborted); }
+            catch (DbException error)
+            {
+                _logger.LogError(error,
+                    "Pricing idempotency storage failed before {Method} {Path}. TraceId={TraceId}",
+                    context.Request.Method, context.Request.Path, context.TraceIdentifier);
+                await WriteErrorAsync(context, StatusCodes.Status503ServiceUnavailable,
+                    "Pricing.IdempotencyStorageUnavailable",
+                    "No se pudo validar la idempotencia en la base de datos. La operación no se ejecutó.");
+                return null;
+            }
+        }
+
+        var acquired = await TryStartSafelyAsync();
+        if (acquired is null) return;
+        if (acquired.Value)
         {
             await ExecuteAndStoreAsync(context, keyHash, requestHash, explicitKey);
             return;
@@ -76,10 +96,23 @@ public sealed class IdempotencyMiddleware
         var deadline = DateTimeOffset.UtcNow.Add(ConcurrentWait);
         while (DateTimeOffset.UtcNow < deadline)
         {
-            var existing = await GetAsync(keyHash, context.RequestAborted);
+            IdempotencyRecord? existing;
+            try { existing = await GetAsync(keyHash, context.RequestAborted); }
+            catch (DbException error)
+            {
+                _logger.LogError(error,
+                    "Pricing idempotency lookup failed before {Method} {Path}. TraceId={TraceId}",
+                    context.Request.Method, context.Request.Path, context.TraceIdentifier);
+                await WriteErrorAsync(context, StatusCodes.Status503ServiceUnavailable,
+                    "Pricing.IdempotencyStorageUnavailable",
+                    "No se pudo consultar la idempotencia en la base de datos. La operación no se ejecutó.");
+                return;
+            }
             if (existing is null)
             {
-                if (await TryStartAsync(keyHash, requestHash, context.RequestAborted))
+                acquired = await TryStartSafelyAsync();
+                if (acquired is null) return;
+                if (acquired.Value)
                 {
                     await ExecuteAndStoreAsync(context, keyHash, requestHash, explicitKey);
                     return;
