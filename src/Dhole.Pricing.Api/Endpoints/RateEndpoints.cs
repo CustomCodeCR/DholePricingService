@@ -1127,6 +1127,15 @@ public static class RateEndpoints
             }
         }
 
+        if (request.Observations?.Trim().Length > 2000)
+            return EndpointResults.BadRequest(
+                "Pricing.AcceptanceObservationsTooLong",
+                "Las observaciones de apertura no pueden superar 2000 caracteres.",
+                httpContext);
+
+        var acceptanceObservations = status == RateStatus.AcceptedByClient
+            ? request.Observations?.Trim() : null;
+
         var result = await dispatcher.DispatchAsync(
             new SetRateStatusCommand(
                 rateId,
@@ -1135,13 +1144,14 @@ public static class RateEndpoints
                 request.IdtraNumber,
                 httpContext.GetCurrentUserId(),
                 canApproveLowMargin,
-                request.OtherReferences
+                request.OtherReferences,
+                acceptanceObservations
             ),
             cancellationToken
         );
 
         if (result.IsSuccess && status == RateStatus.AcceptedByClient)
-            await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Pricing, cancellationToken);
+            await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Pricing, cancellationToken, acceptanceObservations);
 
         return EndpointResults.FromResult(result, httpContext);
     }
