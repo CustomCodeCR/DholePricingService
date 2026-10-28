@@ -134,7 +134,7 @@ public static class SellerRateStatusEndpoints
             });
         }
 
-        if (request.Observations?.Trim().Length > 2000)
+        if (status == RateStatus.AcceptedByClient && request.Observations?.Trim().Length > 2000)
             return Results.BadRequest(new {
                 code = "Pricing.SellerAcceptanceObservationsTooLong",
                 message = "Las observaciones de apertura no pueden superar 2000 caracteres.",
