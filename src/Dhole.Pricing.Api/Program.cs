@@ -66,6 +66,7 @@ builder.Services.AddScoped<LowMarginApprovedNotificationService>();
 builder.Services.AddScoped<CompetitorTariffImportProcessor>();
 builder.Services.AddHostedService<CompetitorTariffImportWorker>();
 builder.Services.AddHostedService<ManualImportExtractionWorker>();
+builder.Services.AddSingleton<DynamicsQuoteWorkerState>();
 builder.Services.AddHostedService<DynamicsQuoteDeliveryWorker>();
 builder.Services.AddHttpClient("DynamicsQuoteSync", client =>
 {

@@ -95,7 +95,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
     }
 
     private static async Task<IResult> GetIssuesAsync(
-        HttpContext http, ServiceDbContext db, CancellationToken cancellationToken)
+        HttpContext http, ServiceDbContext db, DynamicsQuoteWorkerState workerState,
+        CancellationToken cancellationToken)
     {
         if (!CanInspectQuoteSync(http.User)) return Results.Forbid();
         // Nonterminal jobs remain visible throughout the entire lifecycle.
@@ -163,6 +164,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             missingQueuedJobs = notQueued,
             missingQueuedCountShown = notQueued.Count,
             refreshedAtUtc = DateTime.UtcNow,
+            worker = workerState.Snapshot(),
             queue = new
             {
                 pending = Count("Pending"),

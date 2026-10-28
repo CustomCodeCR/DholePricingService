@@ -13,7 +13,8 @@ namespace Dhole.Pricing.Api.Services;
 /// </summary>
 public sealed class DynamicsQuoteDeliveryWorker(
     IServiceScopeFactory scopes, IHttpClientFactory clients,
-    IConfiguration configuration, ILogger<DynamicsQuoteDeliveryWorker> logger)
+    IConfiguration configuration, DynamicsQuoteWorkerState workerState,
+    ILogger<DynamicsQuoteDeliveryWorker> logger)
     : BackgroundService
 {
     private const int MaxAttempts = 10;
@@ -30,10 +31,15 @@ public sealed class DynamicsQuoteDeliveryWorker(
     {
         // A missing secret must preserve queued approvals instead of issuing
         // unauthenticated requests or accidentally creating malformed Quotes.
-        if (!configuration.GetValue("DynamicsQuoteSync:Enabled", true)) return;
+        if (!configuration.GetValue("DynamicsQuoteSync:Enabled", true))
+        {
+            workerState.Report(false, "DYNAMICS_SYNC_DISABLED");
+            return;
+        }
         var apiKey = configuration["DynamicsQuoteSync:ApiKey"];
         if (string.IsNullOrWhiteSpace(apiKey))
         {
+            workerState.Report(false, "DYNAMICS_API_KEY_MISSING");
             logger.LogWarning("Dynamics quote synchronization is awaiting its backend API key.");
             return;
         }
@@ -92,31 +98,47 @@ public sealed class DynamicsQuoteDeliveryWorker(
                 ex.GetType().Name);
         }
         var quoteWritesReady = false;
+        var lastReadinessCode = "";
         var nextReadinessCheckUtc = DateTime.MinValue;
+        workerState.Report(false, "DYNAMICS_WORKER_STARTING");
         while (!stoppingToken.IsCancellationRequested)
         {
+            workerState.Heartbeat();
             // Keep approved acceptance jobs queued without consuming attempts
             // while the connector is still in production read-only mode.
             if (DateTime.UtcNow >= nextReadinessCheckUtc)
             {
-                quoteWritesReady = await ProbeWriteReadinessAsync(apiKey, stoppingToken);
+                var probe = await ProbeWriteReadinessAsync(apiKey, stoppingToken);
+                quoteWritesReady = probe.Ready;
+                workerState.Report(probe.Ready, probe.Code);
                 nextReadinessCheckUtc = DateTime.UtcNow.Add(quoteWritesReady
                     ? HealthyReadinessInterval : BlockedReadinessInterval);
-                if (!quoteWritesReady)
-                    logger.LogWarning(
-                        "Dynamics quote queue paused: production write approval or connector readiness is missing.");
+                if (lastReadinessCode != probe.Code)
+                {
+                    if (quoteWritesReady)
+                        logger.LogInformation("Dynamics quote queue resumed: connector writes are ready.");
+                    else
+                        logger.LogWarning("Dynamics quote queue paused. Reason: {Code}. No quote was sent.", probe.Code);
+                    lastReadinessCode = probe.Code;
+                }
             }
             try
             {
                 // Drain ready jobs back-to-back. Every job is atomically
                 // claimed with FOR UPDATE SKIP LOCKED and keeps the same
                 // idempotency key: this does not create duplicate Quotes.
-                if (quoteWritesReady && await ProcessNextAsync(apiKey, stoppingToken))
-                    continue;
+                if (quoteWritesReady)
+                {
+                    var processed = await ProcessNextAsync(apiKey, stoppingToken);
+                    // A successful database claim check clears a previous iteration error.
+                    workerState.Report(true, "DYNAMICS_QUOTE_WRITES_READY");
+                    if (processed) continue;
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
             catch (Exception ex)
             {
+                workerState.Report(false, "DYNAMICS_WORKER_ITERATION_FAILED");
                 logger.LogError("Dynamics quote worker iteration failed ({Type}).",
                     ex.GetType().Name);
             }
@@ -125,7 +147,7 @@ public sealed class DynamicsQuoteDeliveryWorker(
         }
     }
 
-    private async Task<bool> ProbeWriteReadinessAsync(string apiKey, CancellationToken ct)
+    private async Task<(bool Ready, string Code)> ProbeWriteReadinessAsync(string apiKey, CancellationToken ct)
     {
         try
         {
@@ -134,22 +156,41 @@ public sealed class DynamicsQuoteDeliveryWorker(
             request.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
             using var response = await clients.CreateClient("DynamicsQuoteSync")
                 .SendAsync(request, ct);
-            if (!response.IsSuccessStatusCode) return false;
+            if (!response.IsSuccessStatusCode)
+            {
+                var providerBody = await response.Content.ReadAsStringAsync(ct);
+                var (code, _) = DynamicsQuoteFailureDiagnostics.ReadProviderError(providerBody);
+                return (false, SafeReadinessCode(code,
+                    "DYNAMICS_PREFLIGHT_HTTP_" + (int)response.StatusCode));
+            }
             using var body = JsonDocument.Parse(
                 await response.Content.ReadAsStringAsync(ct));
             var root = body.RootElement;
-            return root.ValueKind == JsonValueKind.Object &&
-                root.TryGetProperty("ready", out var value) &&
-                value.ValueKind == JsonValueKind.True;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("ready", out var value) ||
+                value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                return (false, "DYNAMICS_PREFLIGHT_INVALID");
+
+            var ready = value.GetBoolean();
+            var codeText = root.TryGetProperty("code", out var codeElement) &&
+                codeElement.ValueKind == JsonValueKind.String
+                ? codeElement.GetString() : null;
+            return (ready, SafeReadinessCode(codeText,
+                ready ? "DYNAMICS_QUOTE_WRITES_READY" : "DYNAMICS_PREFLIGHT_BLOCKED"));
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception)
         {
-            // Failed health checks must not dispatch writes. No tokens or
-            // HTTP bodies from the remote service are logged.
-            return false;
+            // Failed health checks must not dispatch writes. Never expose
+            // secrets, tokens, or raw connector response bodies in queue data.
+            return (false, "DYNAMICS_PREFLIGHT_UNAVAILABLE");
         }
     }
+
+    private static string SafeReadinessCode(string? code, string fallback) =>
+        !string.IsNullOrWhiteSpace(code) && code.Length <= 80 &&
+        code.All(ch => char.IsAsciiLetterOrDigit(ch) || ch is '_' or '-')
+            ? code : fallback;
 
     private async Task<bool> ProcessNextAsync(string apiKey, CancellationToken ct)
     {
