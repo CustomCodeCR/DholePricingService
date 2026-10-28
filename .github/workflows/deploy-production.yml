@@ -60,7 +60,6 @@ jobs:
           set -euo pipefail
           # The secret always comes from the canonical production host file,
           # never from a GitHub secret or the disposable prepared copy.
-          bash scripts/check-dynamics-pricing-credential.sh /opt/dhole/.env "$DHOLE_ENV_FILE"
           # Fail closed if Compose overrides or omits the same key on pricing-api.
           # docker compose config contains secrets, so inspect it only in memory.
           python3 - "$DHOLE_ENV_FILE" "$COMPOSE_FILE" "$COMPOSE_PROJECT" <<'PY'
@@ -70,7 +69,7 @@ jobs:
           from pathlib import Path
 
           source = Path("/opt/dhole/.env").read_text(encoding="utf-8")
-          entries = [line.split("=", 1)[1].strip().strip("\\r")
+          entries = [line.split("=", 1)[1].strip()
                      for line in source.splitlines()
                      if line.startswith("DynamicsQuoteSync__ApiKey=")]
           if len(entries) != 1:
@@ -88,6 +87,8 @@ jobs:
               raise SystemExit("::error::pricing-api Compose configuration does not receive the canonical DynamicsQuoteSync__ApiKey from /opt/dhole/.env. No containers changed.")
           print("Pricing API runtime Dynamics key matches the canonical /opt/dhole/.env (secret hidden).")
           PY
+          # Only the canonical key is sent to the read-only Dynamics preflight.
+          bash scripts/check-dynamics-pricing-credential.sh /opt/dhole/.env "$DHOLE_ENV_FILE"
       - name: Verify EF migrations are synchronized
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
