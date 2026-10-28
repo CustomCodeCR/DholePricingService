@@ -1095,6 +1095,12 @@ public static class RateEndpoints
             return Results.Forbid();
         }
 
+        if (status == RateStatus.AcceptedByClient && request.Observations?.Trim().Length > 2000)
+            return EndpointResults.BadRequest(
+                "Pricing.AcceptanceObservationsTooLong",
+                "Las observaciones de apertura no pueden superar 2000 caracteres.",
+                httpContext);
+
         // Preparar el PDF y el correo en Outbox antes de persistir el cambio
         // de estado. El handler confirma ambos en la misma transacción.
         if (status == RateStatus.Sent)
@@ -1127,6 +1133,9 @@ public static class RateEndpoints
             }
         }
 
+        var acceptanceObservations = status == RateStatus.AcceptedByClient
+            ? request.Observations?.Trim() : null;
+
         var result = await dispatcher.DispatchAsync(
             new SetRateStatusCommand(
                 rateId,
@@ -1135,13 +1144,14 @@ public static class RateEndpoints
                 request.IdtraNumber,
                 httpContext.GetCurrentUserId(),
                 canApproveLowMargin,
-                request.OtherReferences
+                request.OtherReferences,
+                acceptanceObservations
             ),
             cancellationToken
         );
 
         if (result.IsSuccess && status == RateStatus.AcceptedByClient)
-            await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Pricing, cancellationToken);
+            await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Pricing, cancellationToken, acceptanceObservations);
 
         return EndpointResults.FromResult(result, httpContext);
     }

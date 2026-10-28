@@ -62,7 +62,8 @@ public sealed class AcceptedRateOpeningsNotificationService(
     public async Task QueueAsync(
         Guid rateId,
         RateAcceptanceActor actor,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? acceptanceObservations = null)
     {
         try
         {
@@ -81,14 +82,12 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 return;
             }
 
-            // La aceptación debe estar persistida y el IDTRA todavía sin asignar.
-            if (!HasPendingIdtra(rate.Status, rate.IdtraNumber))
-            {
-                logger.LogInformation(
-                    "No corresponde notificar IDTRA pendiente para tarifa {RateId}; estado {Status}, tiene IDTRA {HasIdtra}.",
-                    rate.Id, rate.Status, !string.IsNullOrWhiteSpace(rate.IdtraNumber));
+            // Every accepted commercial quote goes to Apertura, with or without IDTRA.
+            // An assigned IDTRA must never be announced as pending.
+            if (rate.Status != RateStatus.AcceptedByClient)
                 return;
-            }
+            var idtraPending = string.IsNullOrWhiteSpace(rate.IdtraNumber);
+            var idtraLabel = idtraPending ? "PENDIENTE DE ASIGNAR" : rate.IdtraNumber!.Trim();
 
             var recipientEmail = RecipientFor(actor);
             var recipientName = "Apertura de Trámite";
@@ -230,8 +229,18 @@ public sealed class AcceptedRateOpeningsNotificationService(
             if (string.IsNullOrWhiteSpace(servicesText))
                 servicesText = "—";
 
+            // Store escaped text in the outbox email at acceptance time, so
+            // retries never depend on a later edit or request context.
+            var observations = acceptanceObservations?.Trim();
+            if (observations?.Length > 2000) observations = observations[..2000];
+            var observationsRow = string.IsNullOrWhiteSpace(observations)
+                ? string.Empty
+                : $"<tr><td style=\"padding:5px 10px\"><strong>Observaciones del vendedor para apertura</strong></td><td style=\"padding:5px 10px\">{WebUtility.HtmlEncode(observations).Replace("\r\n", "\n").Replace("\n", "<br />")}</td></tr>";
+
             var emailBody = $"""
-                <p>Hay una nueva tarifa aceptada con <strong>IDTRA pendiente de asignación</strong>.
+                <p>{(idtraPending
+                    ? "Hay una nueva tarifa aceptada con <strong>IDTRA pendiente de asignación</strong>."
+                    : "Hay una nueva tarifa aceptada para <strong>apertura de trámite</strong>.")}
                    Se adjunta el PDF de la cotización para continuar con el trámite.</p>
                 <table style="border-collapse:collapse; width:100%; max-width:820px">
                   <tr><td style="padding:5px 10px"><strong>QUO</strong></td><td style="padding:5px 10px">{Html(quoteNumber)}</td></tr>
@@ -250,10 +259,13 @@ public sealed class AcceptedRateOpeningsNotificationService(
                   <tr><td style="padding:5px 10px"><strong>Vigencia</strong></td><td style="padding:5px 10px">{rate.ValidFrom:dd/MM/yyyy} - {rate.ValidTo:dd/MM/yyyy}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Peso / volumen</strong></td><td style="padding:5px 10px">{rate.TotalWeightKg:0.###} kg / {rate.TotalVolumeCbm:0.###} m³</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Estado</strong></td><td style="padding:5px 10px">Aceptada por el cliente</td></tr>
-                  <tr><td style="padding:5px 10px"><strong>IDTRA</strong></td><td style="padding:5px 10px"><strong>PENDIENTE DE ASIGNAR</strong></td></tr>
+                  {observationsRow}
+                  <tr><td style="padding:5px 10px"><strong>IDTRA</strong></td><td style="padding:5px 10px"><strong>{Html(idtraLabel)}</strong></td></tr>
                 </table>
                 <p><a href="{Html(rateUrl)}">Consultar tarifa en Dhole</a></p>
-                <p>Favor registrar el IDTRA en la tarifa y continuar con el proceso correspondiente.</p>
+                <p>{(idtraPending
+                    ? "Favor registrar el IDTRA en la tarifa y continuar con el proceso correspondiente."
+                    : "Favor continuar con la apertura de trámite utilizando el IDTRA indicado.")}</p>
                 <p><strong>Adjunto:</strong> PDF comercial de la cotización aceptada.</p>
                 """;
 
@@ -263,11 +275,15 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 NotificationEventName,
                 new
                 {
-                    notificationType = "pricing.rate.accepted.idtra-pending",
+                    notificationType = idtraPending
+                        ? "pricing.rate.accepted.idtra-pending"
+                        : "pricing.rate.accepted.opening",
                     channel = "Email",
                     entityType = "RateHeader",
                     entityId = rate.Id.ToString(),
-                    subject = $"IDTRA pendiente de asignar - {quoteNumber} - {clientText}",
+                    subject = idtraPending
+                        ? $"IDTRA pendiente de asignar - {quoteNumber} - {clientText}"
+                        : $"Apertura de trámite - {quoteNumber} - {clientText}",
                     body = emailBody,
                     payload = new
                     {
@@ -275,7 +291,9 @@ public sealed class AcceptedRateOpeningsNotificationService(
                         rateCode = rate.RateCode,
                         revisionNumber = rate.RevisionNumber,
                         acceptanceOrigin,
-                        idtraPending = true,
+                        acceptanceObservations = observations,
+                        idtraPending,
+                        idtraNumber = idtraPending ? null : idtraLabel,
                         rateUrl,
                         cc = ccRecipients,
                         quo = quoteNumber,
@@ -314,7 +332,9 @@ public sealed class AcceptedRateOpeningsNotificationService(
                         },
                     },
                 },
-                $"pricing-idtra-pending:{rate.Id:N}:rev:{rate.RevisionNumber}:actor:{actor}",
+                idtraPending
+                    ? $"pricing-idtra-pending:{rate.Id:N}:rev:{rate.RevisionNumber}:actor:{actor}"
+                    : $"pricing-opening:{rate.Id:N}:rev:{rate.RevisionNumber}:actor:{actor}",
                 cancellationToken
             );
 
