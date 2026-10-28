@@ -352,7 +352,54 @@ public static class SellerRateRequestEndpoints
             request.DestinationName,
             request.Payload.GetRawText());
         entity.SetRoute(request.PoeId, request.PoeName, request.PodId, request.PodName);
-        await db.SaveChangesAsync(cancellationToken);
+
+        // Both seller edits and Pricing claims must compete in the database, not
+        // against an earlier in-memory snapshot. A claim between the GET above
+        // and this write must win: stale seller tabs cannot overwrite Pricing work.
+        var now = DateTime.UtcNow;
+        var updated = await db.RateRequests
+            .Where(x => x.Id == id && x.SellerUserId == currentUserId.Value
+                && x.Status == Dhole.Pricing.Domain.Rates.Enums.RateRequestStatus.Open
+                && x.RateId == null
+                && (x.LockExpiresAtUtc == null || x.LockExpiresAtUtc <= now))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Priority, entity.Priority)
+                .SetProperty(x => x.DueAtUtc, entity.DueAtUtc)
+                .SetProperty(x => x.SlaReminderSentAtUtc, entity.SlaReminderSentAtUtc)
+                .SetProperty(x => x.ClientName, entity.ClientName)
+                .SetProperty(x => x.ExecutiveName, entity.ExecutiveName)
+                .SetProperty(x => x.ShipmentMode, entity.ShipmentMode)
+                .SetProperty(x => x.OriginName, entity.OriginName)
+                .SetProperty(x => x.DestinationName, entity.DestinationName)
+                .SetProperty(x => x.PayloadJson, entity.PayloadJson)
+                .SetProperty(x => x.PoeId, entity.PoeId)
+                .SetProperty(x => x.PoeName, entity.PoeName)
+                .SetProperty(x => x.PodId, entity.PodId)
+                .SetProperty(x => x.PodName, entity.PodName),
+                cancellationToken);
+
+        if (updated != 1)
+        {
+            var latest = await db.RateRequests.AsNoTracking()
+                .Where(x => x.Id == id && x.SellerUserId == currentUserId.Value)
+                .Select(x => new { x.LockExpiresAtUtc, x.LockedByName })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (latest is null) return Results.NotFound();
+            if (latest.LockExpiresAtUtc > DateTime.UtcNow)
+                return Results.Conflict(new
+                {
+                    code = "Pricing.RateRequestAlreadyClaimed",
+                    message = $"La solicitud está siendo atendida por {latest.LockedByName ?? "Pricing"}. No se guardaron los cambios.",
+                    ownerName = latest.LockedByName,
+                    expiresAtUtc = latest.LockExpiresAtUtc,
+                });
+            return Results.Conflict(new
+            {
+                code = "Pricing.RateRequestEditConflict",
+                message = "La solicitud cambió de estado o fue vinculada a una tarifa. No se guardaron los cambios.",
+            });
+        }
+
         return Results.Ok(entity.Id);
     }
 
@@ -412,6 +459,9 @@ public static class SellerRateRequestEndpoints
             request.CancellationDetails,
             request.SlaReminderSentAtUtc,
             request.RateId,
+            request.LockedByUserId,
+            request.LockedByName,
+            request.LockExpiresAtUtc,
             request.SellerUserId,
             request.SellerName,
             request.SellerEmail,
