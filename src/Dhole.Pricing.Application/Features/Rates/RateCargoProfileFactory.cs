@@ -109,7 +109,13 @@ internal static class RateCargoProfileFactory
             // La cabecera conserva los bultos que declaró Ventas, incluso si viajan dentro de tarimas.
             fallbackPackages > 0 ? fallbackPackages : packages,
             pallets,
-            Math.Round(weight, 4, MidpointRounding.AwayFromZero),
+            // En FCL/FTL el peso declarado en el equipo no debe perderse cuando
+            // una línea descriptiva de carga histórica conserva WeightKg = 0.
+            Math.Round(
+                shipmentMode is ShipmentMode.Fcl or ShipmentMode.Ftl && weight == 0m && fallbackWeightKg > 0m
+                    ? fallbackWeightKg
+                    : weight,
+                4, MidpointRounding.AwayFromZero),
             Math.Round(volume, 6, MidpointRounding.AwayFromZero),
             effectiveFactor,
             JsonSerializer.Serialize(snapshots)
