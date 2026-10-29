@@ -42,6 +42,7 @@ public sealed class RateCommercialQuoteSnapshot
     public IReadOnlyDictionary<Guid, RateCommercialLineSnapshot> Lines => _lines;
     public IReadOnlyList<RateCommercialCurrencyTotal> CurrencyTotals { get; }
     public bool UseAllIn { get; }
+    public bool IsAirLcl { get; }
     public bool HasEquivalentCurrencies { get; }
     public decimal? AppliedExchangeRate { get; }
     public decimal AllInSubtotal { get; }
@@ -52,6 +53,7 @@ public sealed class RateCommercialQuoteSnapshot
         IReadOnlyDictionary<Guid, RateCommercialLineSnapshot> lines,
         IReadOnlyList<RateCommercialCurrencyTotal> currencyTotals,
         bool useAllIn,
+        bool isAirLcl,
         bool hasEquivalentCurrencies,
         decimal? appliedExchangeRate,
         decimal allInSubtotal,
@@ -61,6 +63,7 @@ public sealed class RateCommercialQuoteSnapshot
         _lines = lines;
         CurrencyTotals = currencyTotals;
         UseAllIn = useAllIn;
+        IsAirLcl = isAirLcl;
         HasEquivalentCurrencies = hasEquivalentCurrencies;
         AppliedExchangeRate = appliedExchangeRate;
         AllInSubtotal = allInSubtotal;
@@ -200,7 +203,7 @@ public sealed class RateCommercialQuoteSnapshot
         }
 
         return new RateCommercialQuoteSnapshot(projections, totals, useAllIn,
-            hasEquivalent, fx, allInSubtotal, allInTax, miamiCft);
+            isAirLcl, hasEquivalent, fx, allInSubtotal, allInTax, miamiCft);
     }
 
     private static bool CanConvert(string from, string to, decimal? exchangeRate) =>
