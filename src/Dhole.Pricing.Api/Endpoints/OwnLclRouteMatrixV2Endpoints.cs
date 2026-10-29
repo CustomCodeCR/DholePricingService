@@ -159,19 +159,27 @@ public static class OwnLclRouteMatrixV2Endpoints
         if (OwnLclPricingLineCatalog.IsMiamiOrigin(consolidation.PolCode, consolidation.PolName))
             return await CalculateMiamiAsync(consolidation, request, destination, incoterm, db, ct);
 
-        var requestedPol = NormalizeChinaPol(request.PolCode);
-        if (requestedPol is null && !string.IsNullOrWhiteSpace(request.PolCode))
+        var isShanghaiMatrix = OwnLclOriginScope.UsesShanghaiMatrix(consolidation.PolCode, consolidation.PolName);
+        string requestedPol;
+        if (isShanghaiMatrix)
         {
-            return Results.BadRequest(new
+            var normalizedPol = NormalizeChinaPol(request.PolCode);
+            if (normalizedPol is null && !string.IsNullOrWhiteSpace(request.PolCode))
             {
-                code = "Pricing.OwnLclPolInvalid",
-                message = $"No se pudo resolver el POL '{request.PolCode}'. Envíe el nombre o UN/LOCODE del puerto (por ejemplo Ningbo/CNNGB).",
-            });
+                return Results.BadRequest(new
+                {
+                    code = "Pricing.OwnLclPolInvalid",
+                    message = $"No se pudo resolver el POL '{request.PolCode}'. Envíe el nombre o UN/LOCODE del puerto (por ejemplo Ningbo/CNNGB).",
+                });
+            }
+            requestedPol = normalizedPol ?? "SHANGHAI";
         }
-
-        requestedPol ??= NormalizeChinaPol(consolidation.PolName)
-            ?? NormalizeChinaPol(consolidation.PolCode)
-            ?? "SHANGHAI";
+        else
+        {
+            if (!OwnLclOriginScope.MatchesSelectedPol(request.PolCode, consolidation.PolCode, consolidation.PolName))
+                return Results.BadRequest(new { code = "Pricing.OwnLclPolDoesNotMatchConsolidation", message = "Este consolidado solo admite cotizaciones desde su POL seleccionado." });
+            requestedPol = OwnLclOriginScope.Resolve(consolidation.PolCode, consolidation.PolName);
+        }
 
         var cargo = request.CargoLines.Select(CalculateCargoLine).ToArray();
         var chargeableCbm = cargo.Sum(line => line.ChargeableCbm);
@@ -199,7 +207,7 @@ public static class OwnLclRouteMatrixV2Endpoints
         var configuredFreightProfitPerCbm = await LoadFreightProfitPerCbmAsync(consolidation.Id, db, ct);
         // El HTML usa exactamente el mismo diferencial de origen que Panamá
         // para Nicaragua, Honduras, Guatemala y El Salvador.
-        var originSurchargePerCbm = OriginSurcharges.GetValueOrDefault(requestedPol);
+        var originSurchargePerCbm = isShanghaiMatrix ? OriginSurcharges.GetValueOrDefault(requestedPol) : 0m;
         var pricingLineOverrides = await LoadPricingLineOverridesAsync(consolidation.Id, db, ct);
         if (isCentralAmerica && !pricingLineOverrides.ContainsKey("CA_TRANSSHIPMENT"))
         {

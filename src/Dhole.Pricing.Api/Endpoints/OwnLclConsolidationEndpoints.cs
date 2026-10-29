@@ -290,8 +290,13 @@ public static class OwnLclConsolidationEndpoints
 
         var maximumCbm = consolidation.MaximumCbm > 0 ? consolidation.MaximumCbm : DefaultMaximumCbm;
         var baseOceanCost = consolidation.OceanFreight / maximumCbm;
-        var originPort = NormalizeOriginPort(request.PolCode ?? consolidation.PolCode);
-        var originSurcharge = OriginSurcharges.GetValueOrDefault(originPort);
+        var isShanghaiMatrix = OwnLclOriginScope.UsesShanghaiMatrix(consolidation.PolCode, consolidation.PolName);
+        if (!isShanghaiMatrix && !OwnLclOriginScope.MatchesSelectedPol(request.PolCode, consolidation.PolCode, consolidation.PolName))
+            return Results.BadRequest(new { code = "Pricing.OwnLclPolDoesNotMatchConsolidation", message = "Este consolidado solo admite cotizaciones desde su POL seleccionado." });
+        var originPort = isShanghaiMatrix
+            ? NormalizeOriginPort(request.PolCode ?? consolidation.PolName ?? consolidation.PolCode)
+            : OwnLclOriginScope.Resolve(consolidation.PolCode, consolidation.PolName);
+        var originSurcharge = isShanghaiMatrix ? OriginSurcharges.GetValueOrDefault(originPort) : 0m;
         var oceanCostWithOrigin = baseOceanCost + originSurcharge;
         var destinationCostPerCbm = consolidation.CarrierDestinationCostTotal / maximumCbm;
         var consolidationPricingLines = await LoadConsolidationPricingLinesAsync(id, destinationCostPerCbm, db, ct);
