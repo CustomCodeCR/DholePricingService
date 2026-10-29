@@ -39,6 +39,19 @@ public static class OwnLclOriginScope
         || (string.Equals(Normalize(requestedPol), "GUANGZHOU", StringComparison.OrdinalIgnoreCase)
             && string.Equals(Resolve(polCode, polName), "YANTIAN", StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// Yantian (Shenzhen) is priced with the existing SHENZHEN differential only
+    /// when a physical Shanghai consolidation is selected. Never use this
+    /// alias to change the POL of a Yantian-owned consolidation.
+    /// </summary>
+    public static string ShanghaiRateOrigin(string? requestedPol)
+    {
+        var normalized = Normalize(requestedPol) ?? string.Empty;
+        return string.Equals(normalized, "YANTIAN", StringComparison.OrdinalIgnoreCase)
+            ? "SHENZHEN"
+            : normalized;
+    }
+
     public static IReadOnlyDictionary<string, decimal> ScenarioOrigins(
         string? polCode, string? polName, IReadOnlyDictionary<string, decimal> shanghaiMatrix)
     {
