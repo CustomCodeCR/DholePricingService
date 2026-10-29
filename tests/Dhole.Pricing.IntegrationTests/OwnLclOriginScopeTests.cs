@@ -84,4 +84,40 @@ public sealed class OwnLclOriginScopeTests
         Assert.AreEqual(0m, yantian["YANTIAN"]);
         Assert.IsFalse(yantian.ContainsKey("SHENZHEN"));
     }
+
+    [TestMethod]
+    [DataRow("Shanghai, China", "SHANGHAI", 0)]
+    [DataRow("CNNGB", "NINGBO", 52)]
+    [DataRow("Qingdao, China", "QINGDAO", 52)]
+    [DataRow("Xiamen", "XIAMEN", 57)]
+    [DataRow("Shantou", "SHANTOU", 57)]
+    [DataRow("Dalian", "DALIAN", 57)]
+    [DataRow("Chongqing", "CHONGQING", 57)]
+    [DataRow("Fuzhou", "FUZHOU", 57)]
+    [DataRow("Shenzhen", "SHENZHEN", 62)]
+    [DataRow("Xingang", "XINGANG", 62)]
+    [DataRow("Shekou", "SHEKOU", 62)]
+    [DataRow("Guangzhou, China", "GUANGZHOU", 62)]
+    [DataRow("Yantian, China", "SHENZHEN", 62)]
+    [DataRow("CNYTN", "SHENZHEN", 62)]
+    public void ShanghaiMatrix_MatchesSelectedPolToExactConfiguredFreight(
+        string selectedPol, string expectedTariffPol, int expectedSurcharge)
+    {
+        var matched = OwnLclOriginScope.TryMatchShanghaiRate(
+            selectedPol, out var commercialPol, out var matrixPol, out var surcharge);
+        Assert.IsTrue(matched, $"Missing rate for {selectedPol}");
+        Assert.AreEqual(expectedTariffPol, matrixPol);
+        Assert.AreEqual((decimal)expectedSurcharge, surcharge);
+        if (selectedPol.StartsWith("Yantian", StringComparison.OrdinalIgnoreCase) || selectedPol == "CNYTN")
+            Assert.AreEqual("YANTIAN", commercialPol);
+    }
+
+    [TestMethod]
+    public void ShanghaiMatrix_RejectsUnknownPorts_InsteadOfChargingShanghaiZero()
+    {
+        Assert.IsFalse(OwnLclOriginScope.TryMatchShanghaiRate(
+            "POL-2026-999", out _, out _, out _));
+        Assert.IsFalse(OwnLclOriginScope.TryMatchShanghaiRate(
+            "Invalid Chinese Port", out _, out _, out _));
+    }
 }
