@@ -7,6 +7,21 @@ namespace Dhole.Pricing.UnitTests;
 public sealed class RateCargoProfileFactoryTests
 {
     [TestMethod]
+    public void FclDescriptiveCargoLine_DoesNotClearContainerWeight()
+    {
+        var profile = RateCargoProfileFactory.Create(
+            ShipmentMode.Fcl,
+            500m,
+            [new RateCargoLineCommandItem("Observaciones del embarque", 0, 0, 0m, 0m, 0m, 0m, true)],
+            0, 0, 15000m, 0m,
+            "40HC"
+        );
+
+        Assert.AreEqual(15000m, profile.TotalWeightKg);
+        Assert.AreEqual(0m, RateCargoProfileFactory.Deserialize(profile.CargoLinesJson).Single().WeightKg);
+    }
+
+    [TestMethod]
     public void HeightAtSeventyInches_ForcesNonStackableAndBillsAt266Cm()
     {
         var profile = RateCargoProfileFactory.Create(
