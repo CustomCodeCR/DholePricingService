@@ -80,6 +80,7 @@ public sealed class SentRateEmailNotificationService(
         // Evitar que una dirección aparezca simultáneamente en Para y CC.
         var toRecipients = emails.Take(1).ToArray();
         var ccRecipients = CommercialCopyRecipients
+            .Where(email => CastroFallasRateEmailRecipientPolicy.CanReceive(executiveName, email))
             .Where(email => !toRecipients.Contains(email, StringComparer.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
