@@ -58,4 +58,30 @@ public sealed class OwnLclOriginScopeTests
         Assert.AreEqual(0m, origins["YANTIAN"]);
         Assert.IsFalse(origins.ContainsKey("SHANGHAI"));
     }
+
+    [TestMethod]
+    public void Yantian_UsesShenzhenDifferentialOnlyWhenTheConsolidationIsShanghai()
+    {
+        // Existing CNCA matrix: the Shenzhen row is 62 USD/CBM above Shanghai.
+        var shanghaiSurcharges = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["SHANGHAI"] = 0m,
+            ["SHENZHEN"] = 62m,
+        };
+        var matrixRateOrigin = OwnLclOriginScope.ShanghaiRateOrigin("YANTIAN");
+        Assert.AreEqual("SHENZHEN", matrixRateOrigin);
+        Assert.AreEqual("SHENZHEN", OwnLclOriginScope.ShanghaiRateOrigin("CNYTN"));
+        Assert.AreEqual(62m, shanghaiSurcharges[matrixRateOrigin]);
+        Assert.AreEqual("SHENZHEN", OwnLclOriginScope.ShanghaiRateOrigin("CNSZX"));
+        Assert.AreEqual("GUANGZHOU", OwnLclOriginScope.ShanghaiRateOrigin("CNCAN"));
+
+        // The own Yantian consolidation has no Shanghai pickup surcharge and
+        // must never be treated as a Shanghai sailing.
+        Assert.IsFalse(OwnLclOriginScope.UsesShanghaiMatrix("POL-2026-102", "Yantian, China"));
+        var yantian = OwnLclOriginScope.ScenarioOrigins(
+            "POL-2026-102", "Yantian, China", shanghaiSurcharges);
+        Assert.AreEqual(1, yantian.Count);
+        Assert.AreEqual(0m, yantian["YANTIAN"]);
+        Assert.IsFalse(yantian.ContainsKey("SHENZHEN"));
+    }
 }
