@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Dhole.Pricing.Application.Abstractions.Reports;
 using Dhole.Pricing.Contracts.Rates.Response;
 using Dhole.Pricing.Domain.Costs.Enums;
+using Dhole.Pricing.Domain.Rates;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Microsoft.Extensions.Configuration;
@@ -76,42 +77,12 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var pickupLocations = CreatePickupLocations(
             rate.PickupLocationsJson, rate.PickupAddress, rate.IncotermCode, rate.IncotermName);
 
-        // Reconcile only previously persisted Miami CFT freight corrupted by
-        // the old 1-CBM floor. Modern, correctly saved CFT lines are unchanged.
-        var isAirLcl = IsAirLcl(rate);
-        var miamiBillableCft = CalculateMiamiBillableCft(rate);
-        // Air LCL per-pound catalog prices are shown per KG in the wizard.
-        // Project the same commercial unit in PDFs/exports, including legacy
-        // quotes saved with quantity=1 before PerLb was supported by Pricing.
-        bool IsAirPoundCharge(RateDetail detail) =>
-            isAirLcl && rate.TotalWeightKg > 0m
-            && detail.ChargeBasis == ChargeBasis.PerLb && !IsPickupCharge(detail);
-        decimal ReportUnitSale(RateDetail detail) =>
-            IsAirPoundCharge(detail) ? detail.SaleAmount * AirPoundsPerKg : detail.SaleAmount;
-        decimal LineSubtotal(RateDetail detail) => ReportUnitSale(detail) * ReportQuantity(detail);
-
-        decimal ReportQuantity(RateDetail detail)
-        {
-            // Recolecta is a flat fee per concept, even on historical rows persisted as CFT/CBM.
-            if (IsPickupCharge(detail))
-                return 1m;
-
-            if (IsAirPoundCharge(detail) && rate.TotalWeightKg > 0m)
-                return rate.TotalWeightKg;
-
-            if (!miamiBillableCft.HasValue
-                || detail.CostDetailType != CostDetailType.Freight
-                || detail.ChargeBasis != ChargeBasis.PerChargeableCft)
-                return detail.Quantity;
-
-            var legacyCftFromCbmFloor = Math.Max(rate.ChargeableQuantity, 1m) * MiamiCftPerCbm;
-            var legacyFloorApplied =
-                Math.Abs(detail.Quantity - legacyCftFromCbmFloor) < 0.05m
-                && miamiBillableCft.Value + 0.05m < detail.Quantity;
-
-            return legacyFloorApplied ? miamiBillableCft.Value : detail.Quantity;
-        }
-
+        // These values are calculated once in the canonical Pricing snapshot.
+        // The document mapper only formats/prints them; it never resolves a charge basis.
+        decimal ReportQuantity(RateDetail detail) => commercial.For(detail).Quantity;
+        decimal ReportUnitSale(RateDetail detail) => commercial.For(detail).UnitSale;
+        decimal LineSubtotal(RateDetail detail) => commercial.For(detail).SaleSubtotal;
+        decimal LineTax(RateDetail detail) => commercial.For(detail).TaxAmount;
 
         // Visual-only Miami matrix component detail for the customer quote.
         // Reconcile to the persisted cost, never add new RateDetails or sale amounts.
@@ -304,31 +275,18 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             .ThenBy(x => x.Name)
             .ToArray();
         var reportDetails = persistedDetails
-            .Where(detail => detail.SaleAmount > 0m)
+            .Where(detail => commercial.For(detail).ShowOnClientPdf)
             .ToArray();
 
-        // Use the exact tax selection persisted on each priced line. Do not infer IVA
-        // from the description/notes or introduce it on untaxed quotations.
-        decimal LineTax(RateDetail detail) =>
-            detail.ApplyDestinationTax && detail.DestinationTaxRate > 0m
-                ? decimal.Round(LineSubtotal(detail) * detail.DestinationTaxRate / 100m, 2, MidpointRounding.AwayFromZero)
-                : 0m;
+        // PDF receives finalized commercial amounts, including line IVA and ALL IN.
         string TaxLabel(RateDetail detail) => LineTax(detail) > 0m
             ? $"IVA {detail.DestinationTaxRate.ToString("0.##", MoneyCulture)}%: {DetailMoney(detail, LineTax(detail))}"
             : string.Empty;
 
-        // Preserve each priced currency rather than merging incompatible totals.
-        // Historic ALL IN quotations without a usable FX snapshot must still render.
-        var useAllInPresentation = rate.UseAllInPresentation
-            && reportDetails.Length > 0
-            && CanConsolidateAllIn(rate, reportDetails, CurrencyIso);
-        var allInAmount = useAllInPresentation
-            ? CalculateAllInAmount(rate, reportDetails, CurrencyIso, ReportQuantity, LineSubtotal)
-            : 0m;
-        var allInTax = useAllInPresentation
-            ? CalculateAllInAmount(rate, reportDetails, CurrencyIso, ReportQuantity, LineTax)
-            : 0m;
-        var hasDestinationTax = reportDetails.Any(detail => LineTax(detail) > 0m);
+        var useAllInPresentation = commercial.UseAllIn;
+        var allInAmount = commercial.AllInSubtotal;
+        var allInTax = commercial.AllInTax;
+        var hasDestinationTax = reportDetails.Any(detail => commercial.For(detail).TaxAmount > 0m);
 
         var items = useAllInPresentation
             ? new[]
@@ -363,121 +321,32 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     lineTotal = DetailMoney(detail, LineSubtotal(detail)),
                     lineTotalAmount = LineSubtotal(detail),
                     lineTaxAmount = LineTax(detail),
-                    lineTotalWithTaxAmount = LineSubtotal(detail) + LineTax(detail),
+                    lineTotalWithTaxAmount = commercial.For(detail).SaleTotal,
                     destinationTaxLabel = TaxLabel(detail),
                     miamiBreakdown = MiamiFreightBreakdown(detail),
                     notes = ClientDetailNotes(detail)
                 })
                 .ToArray();
 
-        // Agrupar por la moneda que realmente se muestra al cliente. Algunos registros
-        // históricos tienen CurrencyCode distintos/legacy aunque CurrencyName sea el mismo
-        // (por ejemplo USD), lo que antes generaba dos tarjetas USD en el mismo PDF.
-        var originalCurrencyTotals = useAllInPresentation
-            ? new[]
-            {
-                new
-                {
-                    currency = currencyValue,
-                    currencyCode = Text(rate.CurrencyCode, string.Empty),
-                    subtotalAmount = allInAmount,
-                    taxAmount = allInTax,
-                    amount = allInAmount + allInTax,
-                    subtotal = $"{currencyValue} {allInAmount.ToString("N2", MoneyCulture)}",
-                    tax = $"{currencyValue} {allInTax.ToString("N2", MoneyCulture)}",
-                    total = $"{currencyValue} {(allInAmount + allInTax).ToString("N2", MoneyCulture)}"
-                }
-            }
-            : reportDetails
-                .GroupBy(CurrencyGroupKey, StringComparer.OrdinalIgnoreCase)
-                .Select(group =>
-                {
-                    var first = group.First();
-                    var displayCurrency = CurrencyValue(first.CurrencyName, first.CurrencyCode);
-                    var subtotalAmount = group.Sum(LineSubtotal);
-                    var taxAmount = group.Sum(LineTax);
-                    var amount = subtotalAmount + taxAmount;
-                    var canonicalCode = Regex.IsMatch(group.Key, "^[A-Z]{3}$")
-                        ? group.Key
-                        : Text(first.CurrencyCode, string.Empty);
-
-                    return new
-                    {
-                        currency = displayCurrency,
-                        currencyCode = canonicalCode,
-                        subtotalAmount,
-                        taxAmount,
-                        amount,
-                        subtotal = $"{displayCurrency} {subtotalAmount.ToString("N2", MoneyCulture)}",
-                        tax = $"{displayCurrency} {taxAmount.ToString("N2", MoneyCulture)}",
-                        total = $"{displayCurrency} {amount.ToString("N2", MoneyCulture)}"
-                    };
-                })
-                .OrderBy(x => x.currencyCode)
-                .ThenBy(x => x.currency)
-                .ToArray();
-
-        // Use the exchange-rate snapshot saved with the quote, never an external/current FX rate.
-        // Convert the same normalized detail quantities that the PDF prints, so both cards
-        // represent ONE payable total rather than two independent subtotals.
-        var appliedExchangeRate = rate.ExchangeRateApplied is > 0m
-            ? rate.ExchangeRateApplied
-            : rate.ExchangeRateSale;
-        var canShowEquivalentTotals = appliedExchangeRate is > 0m
-            && (useAllInPresentation
-                ? CurrencyIso(rate.CurrencyCode, rate.CurrencyName) is "USD" or "CRC"
-                : reportDetails.All(detail =>
-                    CurrencyIso(detail.CurrencyCode, detail.CurrencyName) is "USD" or "CRC"));
-        var nativeUsdSubtotal = useAllInPresentation
-            ? (CurrencyIso(rate.CurrencyCode, rate.CurrencyName) == "USD" ? allInAmount : 0m)
-            : reportDetails.Where(detail => CurrencyIso(detail.CurrencyCode, detail.CurrencyName) == "USD")
-                .Sum(LineSubtotal);
-        var nativeCrcSubtotal = useAllInPresentation
-            ? (CurrencyIso(rate.CurrencyCode, rate.CurrencyName) == "CRC" ? allInAmount : 0m)
-            : reportDetails.Where(detail => CurrencyIso(detail.CurrencyCode, detail.CurrencyName) == "CRC")
-                .Sum(LineSubtotal);
-        var nativeUsdTax = useAllInPresentation
-            ? (CurrencyIso(rate.CurrencyCode, rate.CurrencyName) == "USD" ? allInTax : 0m)
-            : reportDetails.Where(detail => CurrencyIso(detail.CurrencyCode, detail.CurrencyName) == "USD")
-                .Sum(LineTax);
-        var nativeCrcTax = useAllInPresentation
-            ? (CurrencyIso(rate.CurrencyCode, rate.CurrencyName) == "CRC" ? allInTax : 0m)
-            : reportDetails.Where(detail => CurrencyIso(detail.CurrencyCode, detail.CurrencyName) == "CRC")
-                .Sum(LineTax);
-        var equivalentUsdSubtotal = canShowEquivalentTotals
-            ? decimal.Round(nativeUsdSubtotal + nativeCrcSubtotal / appliedExchangeRate!.Value, 2, MidpointRounding.AwayFromZero)
-            : 0m;
-        var equivalentCrcSubtotal = canShowEquivalentTotals
-            ? decimal.Round(nativeCrcSubtotal + nativeUsdSubtotal * appliedExchangeRate!.Value, 2, MidpointRounding.AwayFromZero)
-            : 0m;
-        var equivalentUsdTax = canShowEquivalentTotals
-            ? decimal.Round(nativeUsdTax + nativeCrcTax / appliedExchangeRate!.Value, 2, MidpointRounding.AwayFromZero)
-            : 0m;
-        var equivalentCrcTax = canShowEquivalentTotals
-            ? decimal.Round(nativeCrcTax + nativeUsdTax * appliedExchangeRate!.Value, 2, MidpointRounding.AwayFromZero)
-            : 0m;
-        var currencyTotals = canShowEquivalentTotals
-            ? new[]
-            {
-                new { currency = "USD", currencyCode = "USD",
-                    subtotalAmount = equivalentUsdSubtotal, taxAmount = equivalentUsdTax,
-                    amount = equivalentUsdSubtotal + equivalentUsdTax,
-                    subtotal = $"USD {equivalentUsdSubtotal.ToString("N2", MoneyCulture)}",
-                    tax = $"USD {equivalentUsdTax.ToString("N2", MoneyCulture)}",
-                    total = $"USD {(equivalentUsdSubtotal + equivalentUsdTax).ToString("N2", MoneyCulture)}" },
-                new { currency = "CRC", currencyCode = "CRC",
-                    subtotalAmount = equivalentCrcSubtotal, taxAmount = equivalentCrcTax,
-                    amount = equivalentCrcSubtotal + equivalentCrcTax,
-                    subtotal = $"CRC {equivalentCrcSubtotal.ToString("N2", MoneyCulture)}",
-                    tax = $"CRC {equivalentCrcTax.ToString("N2", MoneyCulture)}",
-                    total = $"CRC {(equivalentCrcSubtotal + equivalentCrcTax).ToString("N2", MoneyCulture)}" }
-            }
-            : originalCurrencyTotals;
+        // All grouping, FX conversion and totals have already been resolved
+        // in Pricing. This layer has no independent financial formulas.
+        var currencyTotals = commercial.CurrencyTotals.Select(total => new
+        {
+            currency = total.Currency,
+            currencyCode = total.CurrencyCode,
+            subtotalAmount = total.Subtotal,
+            taxAmount = total.Tax,
+            amount = total.Amount,
+            subtotal = $"{total.Currency} {total.Subtotal.ToString("N2", MoneyCulture)}",
+            tax = $"{total.Currency} {total.Tax.ToString("N2", MoneyCulture)}",
+            total = $"{total.Currency} {total.Amount.ToString("N2", MoneyCulture)}"
+        }).ToArray();
         var hasSingleCurrency = currencyTotals.Length == 1;
         var hasMultipleCurrencies = currencyTotals.Length > 1;
+        var canShowEquivalentTotals = commercial.HasEquivalentCurrencies;
         var hasSeparateCurrencyTotals = hasMultipleCurrencies && !canShowEquivalentTotals;
-        var exchangeRateNote = canShowEquivalentTotals
-            ? $"Tipo de cambio aplicado: CRC {appliedExchangeRate!.Value.ToString("N4", MoneyCulture)} por USD 1.00"
+        var exchangeRateNote = canShowEquivalentTotals && commercial.AppliedExchangeRate is > 0m
+            ? $"Tipo de cambio aplicado: CRC {commercial.AppliedExchangeRate.Value.ToString("N4", MoneyCulture)} por USD 1.00"
                 + (rate.ExchangeRateDate.HasValue ? $" · {rate.ExchangeRateDate.Value:dd/MM/yyyy}" : string.Empty)
             : string.Empty;
         var reportTotal = hasSingleCurrency
