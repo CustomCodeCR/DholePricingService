@@ -41,4 +41,21 @@ public sealed class OwnLclOriginScopeTests
         Assert.IsFalse(OwnLclOriginScope.MatchesSelectedPol("CNSHA", "CNNGB", "Ningbo, China"));
         Assert.AreEqual("YANTIAN", OwnLclOriginScope.Resolve("CNYTN", "Yantian, Shenzhen, China"));
     }
+
+    [TestMethod]
+    public void Guangzhou_CanUseYantianOwnConsolidation_ButNeverShanghai()
+    {
+        // Both commercial name and UN/LOCODE must resolve to the physical Yantian departure.
+        Assert.IsTrue(OwnLclOriginScope.MatchesSelectedPol("GUANGZHOU", "POL-2026-102", "Yantian, China"));
+        Assert.IsTrue(OwnLclOriginScope.MatchesSelectedPol("CNCAN", "CNYTN", "Yantian, Shenzhen, China"));
+        Assert.IsFalse(OwnLclOriginScope.MatchesSelectedPol("GUANGZHOU", "CNSHA", "Shanghai, China"));
+        Assert.IsFalse(OwnLclOriginScope.MatchesSelectedPol("CNCAN", "CNNGB", "Ningbo, China"));
+        Assert.IsFalse(OwnLclOriginScope.MatchesSelectedPol("SHANGHAI", "CNYTN", "Yantian, China"));
+        Assert.IsFalse(OwnLclOriginScope.MatchesSelectedPol("YANTIAN", "CNCAN", "Guangzhou, China"));
+
+        var origins = OwnLclOriginScope.ScenarioOrigins("CNYTN", "Yantian, China", ShanghaiMatrix);
+        Assert.AreEqual(1, origins.Count);
+        Assert.AreEqual(0m, origins["YANTIAN"]);
+        Assert.IsFalse(origins.ContainsKey("SHANGHAI"));
+    }
 }
