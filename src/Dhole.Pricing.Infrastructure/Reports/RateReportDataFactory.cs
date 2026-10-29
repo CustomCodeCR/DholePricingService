@@ -262,7 +262,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                     lineTotalAmount = allInAmount,
                     // Values consumed by the client-facing PDF's IVA and payable-total columns.
                     lineTaxAmount = allInTax,
-                    lineTotalWithTaxAmount = allInAmount + allInTax,
+                    lineTotalWithTaxAmount = commercial.AllInTotal,
                     destinationTaxLabel = allInTax > 0m ? $"IVA: {currencyValue} {allInTax.ToString("N2", MoneyCulture)}" : string.Empty,
                     miamiBreakdown = string.Empty,
                     notes = string.Empty
