@@ -133,7 +133,8 @@ public sealed record RateDto(
 
         foreach (var detail in RateDetails)
         {
-            var tax = detail.DestinationTaxAmount;
+            var tax = detail.CommercialQuantity > 0m
+                ? detail.CommercialTaxAmount : detail.DestinationTaxAmount;
             if (tax <= 0m) continue;
 
             var code = detail.CurrencyCode.Trim().ToUpperInvariant();
