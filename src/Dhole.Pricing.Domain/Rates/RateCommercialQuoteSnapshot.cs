@@ -45,6 +45,7 @@ public sealed class RateCommercialQuoteSnapshot
     public bool HasEquivalentCurrencies { get; }
     public decimal? AppliedExchangeRate { get; }
     public decimal AllInSubtotal { get; }
+    public decimal? MiamiBillableCft { get; }
     public decimal AllInTax { get; }
 
     private RateCommercialQuoteSnapshot(
@@ -54,7 +55,8 @@ public sealed class RateCommercialQuoteSnapshot
         bool hasEquivalentCurrencies,
         decimal? appliedExchangeRate,
         decimal allInSubtotal,
-        decimal allInTax)
+        decimal allInTax,
+        decimal? miamiBillableCft)
     {
         _lines = lines;
         CurrencyTotals = currencyTotals;
@@ -63,6 +65,7 @@ public sealed class RateCommercialQuoteSnapshot
         AppliedExchangeRate = appliedExchangeRate;
         AllInSubtotal = allInSubtotal;
         AllInTax = allInTax;
+        MiamiBillableCft = miamiBillableCft;
     }
 
     public RateCommercialLineSnapshot For(RateDetail detail) => _lines[detail.Id];
@@ -159,7 +162,7 @@ public sealed class RateCommercialQuoteSnapshot
                         code, subtotal, tax, subtotal + tax);
                 }).OrderBy(group => group.CurrencyCode).ThenBy(group => group.Currency).ToList();
 
-        var hasEquivalent = fx is > 0m && (useAllIn
+        var hasEquivalent = visible.Length > 0 && fx is > 0m && (useAllIn
             ? target is "USD" or "CRC"
             : visible.All(detail => CurrencyIso(detail.CurrencyCode, detail.CurrencyName) is "USD" or "CRC"));
         if (hasEquivalent)
@@ -197,7 +200,7 @@ public sealed class RateCommercialQuoteSnapshot
         }
 
         return new RateCommercialQuoteSnapshot(projections, totals, useAllIn,
-            hasEquivalent, fx, allInSubtotal, allInTax);
+            hasEquivalent, fx, allInSubtotal, allInTax, miamiCft);
     }
 
     private static bool CanConvert(string from, string to, decimal? exchangeRate) =>
