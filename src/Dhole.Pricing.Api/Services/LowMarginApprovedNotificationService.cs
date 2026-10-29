@@ -108,7 +108,12 @@ public sealed class LowMarginApprovedNotificationService(
                 queued = true;
             }
 
-            if (!string.IsNullOrWhiteSpace(recipient.Email))
+            if (!string.IsNullOrWhiteSpace(recipient.Email)
+                && CastroFallasRateEmailRecipientPolicy.CanReceive(
+                    string.IsNullOrWhiteSpace(rate.ExecutiveName)
+                        ? request?.ExecutiveName
+                        : rate.ExecutiveName,
+                    recipient.Email))
             {
                 await QueueAsync(
                     channel: "Email",
