@@ -294,7 +294,7 @@ public static class OwnLclConsolidationEndpoints
         if (!isShanghaiMatrix && !OwnLclOriginScope.MatchesSelectedPol(request.PolCode, consolidation.PolCode, consolidation.PolName))
             return Results.BadRequest(new { code = "Pricing.OwnLclPolDoesNotMatchConsolidation", message = "Este consolidado solo admite cotizaciones desde su POL seleccionado." });
         var originPort = isShanghaiMatrix
-            ? NormalizeOriginPort(request.PolCode ?? consolidation.PolName ?? consolidation.PolCode)
+            ? OwnLclOriginScope.ShanghaiRateOrigin(NormalizeOriginPort(request.PolCode ?? consolidation.PolName ?? consolidation.PolCode))
             : OwnLclOriginScope.Resolve(consolidation.PolCode, consolidation.PolName);
         var originSurcharge = isShanghaiMatrix ? OriginSurcharges.GetValueOrDefault(originPort) : 0m;
         var oceanCostWithOrigin = baseOceanCost + originSurcharge;
