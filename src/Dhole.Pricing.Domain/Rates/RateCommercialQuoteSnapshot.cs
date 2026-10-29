@@ -12,6 +12,8 @@ namespace Dhole.Pricing.Domain.Rates;
 /// totals, and customer documents consume these figures rather than applying
 /// their own unit/weight/volume/tax mathematics.
 /// </summary>
+public sealed record RateCommercialMiamiBreakdownLine(string Name, decimal Rate, decimal Quantity, decimal CostAmount);
+
 public sealed record RateCommercialLineSnapshot(
     Guid DetailId,
     decimal Quantity,
@@ -25,6 +27,7 @@ public sealed record RateCommercialLineSnapshot(
 )
 {
     public decimal UtilitySubtotal => SaleSubtotal - CostSubtotal;
+    public IReadOnlyList<RateCommercialMiamiBreakdownLine> MiamiBreakdown { get; init; } = [];
 }
 
 public sealed record RateCommercialCurrencyTotal(
@@ -119,7 +122,10 @@ public sealed class RateCommercialQuoteSnapshot
             projections.Add(detail.Id, new RateCommercialLineSnapshot(
                 detail.Id, quantity, unitCost, unitSale,
                 unitCost * quantity, subtotal, tax, subtotal + tax,
-                detail.SaleAmount > 0m));
+                detail.SaleAmount > 0m)
+            {
+                MiamiBreakdown = CalculateMiamiBreakdown(detail, quantity, miamiCft)
+            });
         }
 
         // A zero-sale line remains in the internal quote and Excel but cannot
@@ -207,6 +213,48 @@ public sealed class RateCommercialQuoteSnapshot
 
         return new RateCommercialQuoteSnapshot(projections, totals, useAllIn,
             isAirLcl, hasEquivalent, fx, allInSubtotal, allInTax, miamiCft);
+    }
+
+    private static IReadOnlyList<RateCommercialMiamiBreakdownLine> CalculateMiamiBreakdown(
+        RateDetail detail, decimal quantity, decimal? billableCft)
+    {
+        if (!billableCft.HasValue
+            || detail.CostDetailType != CostDetailType.Freight
+            || detail.ChargeBasis != ChargeBasis.PerChargeableCft
+            || (!detail.Name.Contains("Flete Miami", StringComparison.OrdinalIgnoreCase)
+                && detail.Notes?.Contains("Plan Miami:", StringComparison.OrdinalIgnoreCase) != true))
+            return [];
+
+        var plan = Regex.Match(detail.Notes ?? string.Empty,
+            @"Plan Miami:\s*(NVOCC-A|NVOCC-B|LITTLE|A|B|C|D)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        if (!plan.Success) return [];
+        (string Name, decimal Rate)[] parts = plan.Groups[1].Value.ToUpperInvariant() switch
+        {
+            "A" => [("Flete", 1.75m), ("Bunker", 0.70m), ("THC", 0.35m)],
+            "B" => [("Flete", 1.80m), ("Bunker", 0.80m), ("THC", 0.35m)],
+            "C" => [("Flete", 1.85m), ("Bunker", 0.80m), ("THC", 0.35m)],
+            "D" => [("Flete", 1.85m), ("Bunker", 0.72m), ("THC", 0.35m)],
+            "NVOCC-B" => [("Flete", 1.85m), ("Bunker", 0.70m), ("THC", 0.35m)],
+            "NVOCC-A" => [("Flete", 2.04m), ("GRI", 0.22m), ("THC", 0.34m)],
+            _ => []
+        };
+        var totalRate = parts.Sum(part => part.Rate);
+        if (quantity <= 0m || totalRate <= 0m) return [];
+
+        var cost = detail.CostAmount * quantity;
+        decimal allocated = 0m;
+        var lines = new List<RateCommercialMiamiBreakdownLine>(parts.Length);
+        for (var index = 0; index < parts.Length; index++)
+        {
+            var part = parts[index];
+            var lineCost = index == parts.Length - 1
+                ? decimal.Round(cost - allocated, 2, MidpointRounding.AwayFromZero)
+                : decimal.Round(cost * part.Rate / totalRate, 2, MidpointRounding.AwayFromZero);
+            allocated += lineCost;
+            lines.Add(new(part.Name, part.Rate, quantity, lineCost));
+        }
+        return lines;
     }
 
     private static bool CanConvert(string from, string to, decimal? exchangeRate) =>
