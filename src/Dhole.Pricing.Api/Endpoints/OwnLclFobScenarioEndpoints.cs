@@ -16,23 +16,6 @@ public static class OwnLclFobScenarioEndpoints
     private const decimal CentralAmericaOperationBaseCbm = 70m;
     private const decimal CostaRicaWarehouseOperation = 415m;
 
-    private static readonly IReadOnlyDictionary<string, decimal> OriginSurcharges =
-        new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["SHANGHAI"] = 0m,
-            ["NINGBO"] = 52m,
-            ["QINGDAO"] = 52m,
-            ["XIAMEN"] = 57m,
-            ["SHANTOU"] = 57m,
-            ["DALIAN"] = 57m,
-            ["CHONGQING"] = 57m,
-            ["FUZHOU"] = 57m,
-            ["SHENZHEN"] = 62m,
-            ["XINGANG"] = 62m,
-            ["SHEKOU"] = 62m,
-            ["GUANGZHOU"] = 62m,
-        };
-
     private static readonly IReadOnlyDictionary<string, (string Name, decimal Inland)> Destinations =
         new Dictionary<string, (string Name, decimal Inland)>(StringComparer.OrdinalIgnoreCase)
         {
@@ -150,7 +133,7 @@ public static class OwnLclFobScenarioEndpoints
         var crTransferPerCbm = (panamaToCr + bunker) / crBase;
         var warehousePerCbm = CostaRicaWarehouseOperation / CentralAmericaOperationBaseCbm;
 
-        var scopedOrigins = OwnLclOriginScope.ScenarioOrigins(polCode, polName, OriginSurcharges);
+        var scopedOrigins = OwnLclOriginScope.ScenarioOrigins(polCode, polName, OwnLclOriginScope.ShanghaiOriginSurcharges);
         var countries = Destinations.Select(destination =>
         {
             var code = destination.Key;
@@ -232,7 +215,7 @@ public static class OwnLclFobScenarioEndpoints
             });
         }
 
-        var scopedOrigins = OwnLclOriginScope.ScenarioOrigins(polCode, polName, OriginSurcharges);
+        var scopedOrigins = OwnLclOriginScope.ScenarioOrigins(polCode, polName, OwnLclOriginScope.ShanghaiOriginSurcharges);
         await using var tx = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
         foreach (var row in request.Rows)
         {
