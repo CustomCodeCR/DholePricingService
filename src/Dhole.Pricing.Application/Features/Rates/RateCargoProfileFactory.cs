@@ -130,9 +130,9 @@ internal static class RateCargoProfileFactory
             fallbackPackages > 0 ? fallbackPackages : packages,
             pallets,
             // En FCL/FTL el peso declarado en el equipo no debe perderse cuando
-            // una línea descriptiva de carga histórica conserva WeightKg = 0.
+            // la descripción de carga usa un peso faltante o desactualizado.
             Math.Round(
-                shipmentMode is ShipmentMode.Fcl or ShipmentMode.Ftl && weight == 0m && fallbackWeightKg > 0m
+                shipmentMode is ShipmentMode.Fcl or ShipmentMode.Ftl && fallbackWeightKg > 0m
                     ? fallbackWeightKg
                     : weight,
                 4, MidpointRounding.AwayFromZero),
