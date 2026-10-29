@@ -1208,10 +1208,13 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         TotalUtilityAmount = 0m;
         var exchangeRate = ExchangeRateApplied is > 0m ? ExchangeRateApplied.Value : ExchangeRateSale;
         decimal costUsd = 0m, saleUsd = 0m, costCrc = 0m, saleCrc = 0m;
+        // Use the same canonical commercial snapshot as the API and PDFs.
+        var commercial = RateCommercialQuoteSnapshot.Create(this);
         foreach (var detail in _rateDetails)
         {
-            var cost = detail.CostAmount * detail.Quantity;
-            var sale = detail.SaleAmount * detail.Quantity;
+            var pricedLine = commercial.For(detail);
+            var cost = pricedLine.CostSubtotal;
+            var sale = pricedLine.SaleSubtotal;
             var code = ResolveCurrencyIso(detail.CurrencyCode, detail.CurrencyName);
             if (code == "USD")
             {
