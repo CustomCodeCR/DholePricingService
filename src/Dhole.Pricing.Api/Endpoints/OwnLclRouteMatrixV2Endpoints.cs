@@ -105,6 +105,8 @@ public static class OwnLclRouteMatrixV2Endpoints
             ["XINGANG"] = "XINGANG", ["TIANJIN"] = "XINGANG", ["CNTSN"] = "XINGANG", ["CNTXG"] = "XINGANG",
             ["SHEKOU"] = "SHEKOU", ["CNSHK"] = "SHEKOU",
             ["GUANGZHOU"] = "GUANGZHOU", ["CNCAN"] = "GUANGZHOU",
+            // Yantian is a Shenzhen port. Apply its published Shenzhen matrix rate.
+            ["YANTIAN"] = "SHENZHEN", ["CNYTN"] = "SHENZHEN",
         };
 
     private const decimal CentralAmericaDestinationCostPerCbm = 18.825m;
