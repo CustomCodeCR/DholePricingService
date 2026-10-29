@@ -76,6 +76,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var cargoDetails = CreateCargoDetails(rate.CargoLinesJson);
         var pickupLocations = CreatePickupLocations(
             rate.PickupLocationsJson, rate.PickupAddress, rate.IncotermCode, rate.IncotermName);
+        var commercial = RateCommercialQuoteSnapshot.Create(rate);
+        var isAirLcl = commercial.IsAirLcl;
+        var miamiBillableCft = commercial.MiamiBillableCft;
 
         // These values are calculated once in the canonical Pricing snapshot.
         // The document mapper only formats/prints them; it never resolves a charge basis.
