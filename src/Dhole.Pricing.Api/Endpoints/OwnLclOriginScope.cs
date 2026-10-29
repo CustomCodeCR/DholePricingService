@@ -6,6 +6,40 @@ namespace Dhole.Pricing.Api.Endpoints;
 /// </summary>
 public static class OwnLclOriginScope
 {
+    /// <summary>
+    /// Única matriz de diferenciales de origen para consolidados físicos Shanghai.
+    /// La tarifa final añade el diferencial del POL comercial a la base del
+    /// consolidado y a los cargos del país de destino.
+    /// </summary>
+    public static IReadOnlyDictionary<string, decimal> ShanghaiOriginSurcharges { get; } =
+        new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["SHANGHAI"] = 0m,
+            ["NINGBO"] = 52m,
+            ["QINGDAO"] = 52m,
+            ["XIAMEN"] = 57m,
+            ["SHANTOU"] = 57m,
+            ["DALIAN"] = 57m,
+            ["CHONGQING"] = 57m,
+            ["FUZHOU"] = 57m,
+            ["SHENZHEN"] = 62m,
+            ["XINGANG"] = 62m,
+            ["SHEKOU"] = 62m,
+            ["GUANGZHOU"] = 62m,
+        };
+
+    /// <summary>
+    /// Resuelve el POL de la cotización y su fila de tarifa. Nunca se toma el
+    /// diferencial SHANGHAI=0 para un POL que no se pueda reconocer.
+    /// </summary>
+    public static bool TryMatchShanghaiRate(
+        string? selectedPol, out string commercialPol, out string matrixPol, out decimal surcharge)
+    {
+        commercialPol = Normalize(selectedPol) ?? "SHANGHAI";
+        matrixPol = ShanghaiRateOrigin(commercialPol);
+        return ShanghaiOriginSurcharges.TryGetValue(matrixPol, out surcharge);
+    }
+
     private static readonly IReadOnlyDictionary<string, string> Aliases =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -34,8 +68,8 @@ public static class OwnLclOriginScope
         string.IsNullOrWhiteSpace(requestedPol)
         || string.Equals(Normalize(requestedPol), Resolve(polCode, polName), StringComparison.OrdinalIgnoreCase)
         || string.Equals(requestedPol.Trim(), polCode?.Trim(), StringComparison.OrdinalIgnoreCase)
-        // Guangzhou embarca desde Yantian. Es la única excepción a la igualdad
-        // estricta de POL; ningún consolidado Shanghai se comparte con Yantian.
+        // Guangzhou también puede utilizar el consolidado propio de Yantian.
+        // Las matrices de Shanghai se validan aparte por el POL comercial.
         || (string.Equals(Normalize(requestedPol), "GUANGZHOU", StringComparison.OrdinalIgnoreCase)
             && string.Equals(Resolve(polCode, polName), "YANTIAN", StringComparison.OrdinalIgnoreCase));
 
