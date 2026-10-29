@@ -20,4 +20,16 @@ public sealed record RateDetailDto(
     decimal DestinationTaxRate,
     decimal DestinationTaxAmount,
     string? BillToClient
-);
+)
+{
+    // Commercial snapshot produced by Pricing. The UI/PDF must display these
+    // figures verbatim; Quantity/SaleAmount remain the original persisted basis.
+    public decimal CommercialQuantity { get; init; }
+    public decimal CommercialUnitCost { get; init; }
+    public decimal CommercialUnitSale { get; init; }
+    public decimal CommercialCostSubtotal { get; init; }
+    public decimal CommercialSaleSubtotal { get; init; }
+    public decimal CommercialTaxAmount { get; init; }
+    public decimal CommercialSaleTotal { get; init; }
+    public bool ShowOnClientPdf { get; init; }
+}
