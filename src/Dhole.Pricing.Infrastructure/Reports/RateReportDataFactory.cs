@@ -86,8 +86,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         // persisted KG freight basis, cargo flight context or airport IATA route.
         // Do not convert legacy CBM quantities in a PDF: doing so would silently
         // change the customer's payable total without a new commercial quotation.
-        var isAirLcl = IsAirLcl(rate);
         var commercial = RateCommercialQuoteSnapshot.Create(rate);
+        var isAirLcl = commercial.IsAirLcl;
         var miamiBillableCft = commercial.MiamiBillableCft;
         string ReportDetailName(RateDetail detail) =>
             isAirLcl && detail.CostDetailType == CostDetailType.Freight
