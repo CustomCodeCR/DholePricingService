@@ -82,7 +82,7 @@ public sealed class RateCommercialQuoteSnapshot
 
     public static RateCommercialQuoteSnapshot Create(RateHeader rate)
     {
-        var isAirLcl = IsAirLcl(rate);
+        var isAirLcl = DetectAirLcl(rate);
         var miamiCft = CalculateLegacyMiamiBillableCft(rate);
         var projections = new Dictionary<Guid, RateCommercialLineSnapshot>();
 
@@ -287,7 +287,7 @@ public sealed class RateCommercialQuoteSnapshot
             || name.StartsWith("Pick up", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsAirLcl(RateHeader rate) =>
+    private static bool DetectAirLcl(RateHeader rate) =>
         rate.ShipmentMode == ShipmentMode.Lcl
         && (rate.RateDetails.Any(detail => detail.CostDetailType == CostDetailType.Freight
                 && detail.ChargeBasis is ChargeBasis.PerKg or ChargeBasis.PerLb or ChargeBasis.Per100Kg)
