@@ -121,19 +121,21 @@ public static class OwnLclPricingMatrixEndpoints
         if (incoterm is null)
             return Results.BadRequest(new { code = "Pricing.OwnLclIncotermInvalid", message = "El Incoterm debe ser FOB, FCA o EXW." });
 
-        var requestedPol = NormalizeChinaPol(request.PolCode);
-        if (requestedPol is null && !string.IsNullOrWhiteSpace(request.PolCode))
+        var isShanghaiMatrix = OwnLclOriginScope.UsesShanghaiMatrix(consolidation.PolCode, consolidation.PolName);
+        string requestedPol;
+        if (isShanghaiMatrix)
         {
-            return Results.BadRequest(new
-            {
-                code = "Pricing.OwnLclPolInvalid",
-                message = $"No se pudo resolver el POL '{request.PolCode}'. Envíe el nombre o UN/LOCODE del puerto (por ejemplo Ningbo/CNNGB).",
-            });
+            var normalizedPol = NormalizeChinaPol(request.PolCode);
+            if (normalizedPol is null && !string.IsNullOrWhiteSpace(request.PolCode))
+                return Results.BadRequest(new { code = "Pricing.OwnLclPolInvalid", message = $"No se pudo resolver el POL '{request.PolCode}'." });
+            requestedPol = normalizedPol ?? "SHANGHAI";
         }
-
-        requestedPol ??= NormalizeChinaPol(consolidation.PolName)
-            ?? NormalizeChinaPol(consolidation.PolCode)
-            ?? "SHANGHAI";
+        else
+        {
+            if (!OwnLclOriginScope.MatchesSelectedPol(request.PolCode, consolidation.PolCode, consolidation.PolName))
+                return Results.BadRequest(new { code = "Pricing.OwnLclPolDoesNotMatchConsolidation", message = "Este consolidado solo admite cotizaciones desde su POL seleccionado." });
+            requestedPol = OwnLclOriginScope.Resolve(consolidation.PolCode, consolidation.PolName);
+        }
 
         var cargo = request.CargoLines.Select(CalculateCargoLine).ToArray();
         var chargeableCbm = cargo.Sum(line => line.ChargeableCbm);
@@ -142,7 +144,7 @@ public static class OwnLclPricingMatrixEndpoints
             return Results.BadRequest(new { code = "Pricing.OwnLclChargeableCbmRequired", message = "La carga no genera CBM cobrable." });
 
         var baseOceanCost = consolidation.OceanCostPerCbm;
-        var originSurcharge = OriginSurcharges.GetValueOrDefault(requestedPol);
+        var originSurcharge = isShanghaiMatrix ? OriginSurcharges.GetValueOrDefault(requestedPol) : 0m;
         var destinationCostPerCbm = consolidation.DestinationCostPerCbm;
         var panamaBaseCostPerCbm = consolidation.PanamaBaseCostPerCbm;
         var crTransferCostPerCbm = consolidation.PanamaToCostaRicaCostPerCbm;

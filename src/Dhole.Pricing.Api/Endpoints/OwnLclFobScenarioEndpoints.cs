@@ -150,11 +150,12 @@ public static class OwnLclFobScenarioEndpoints
         var crTransferPerCbm = (panamaToCr + bunker) / crBase;
         var warehousePerCbm = CostaRicaWarehouseOperation / CentralAmericaOperationBaseCbm;
 
+        var scopedOrigins = OwnLclOriginScope.ScenarioOrigins(polCode, polName, OriginSurcharges);
         var countries = Destinations.Select(destination =>
         {
             var code = destination.Key;
 
-            var ports = OriginSurcharges.Select(origin =>
+            var ports = scopedOrigins.Select(origin =>
             {
                 // El escenario FOB representa únicamente el flete marítimo.
                 var cost = code == "CR"
@@ -231,12 +232,13 @@ public static class OwnLclFobScenarioEndpoints
             });
         }
 
+        var scopedOrigins = OwnLclOriginScope.ScenarioOrigins(polCode, polName, OriginSurcharges);
         await using var tx = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
         foreach (var row in request.Rows)
         {
             var destination = Normalize(row.DestinationCode);
             var pol = Normalize(row.PolCode);
-            if (!Destinations.ContainsKey(destination) || !OriginSurcharges.ContainsKey(pol) || row.SalePerCbm < 0m)
+            if (!Destinations.ContainsKey(destination) || !scopedOrigins.ContainsKey(pol) || row.SalePerCbm < 0m)
             {
                 await tx.RollbackAsync(ct);
                 return Results.BadRequest(new { code = "Pricing.OwnLclScenarioInvalid", message = $"Escenario inválido: {destination}/{pol}." });
@@ -256,7 +258,7 @@ public static class OwnLclFobScenarioEndpoints
             Add(command, "destination", destination);
             Add(command, "pol", pol);
             var salePerCbm = IsCentralAmericaDestination(destination)
-                ? (oceanFreight / maximumCbm) + OriginSurcharges[pol] + freightProfitPerCbm
+                ? (oceanFreight / maximumCbm) + scopedOrigins[pol] + freightProfitPerCbm
                 : row.SalePerCbm;
             Add(command, "sale", salePerCbm);
             Add(command, "valid_to", validTo);
