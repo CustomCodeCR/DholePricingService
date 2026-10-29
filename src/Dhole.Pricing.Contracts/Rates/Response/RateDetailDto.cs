@@ -31,5 +31,6 @@ public sealed record RateDetailDto(
     public decimal CommercialSaleSubtotal { get; init; }
     public decimal CommercialTaxAmount { get; init; }
     public decimal CommercialSaleTotal { get; init; }
+    public decimal CommercialUtilitySubtotal { get; init; }
     public bool ShowOnClientPdf { get; init; }
 }
