@@ -18,8 +18,6 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
     private static readonly CultureInfo MoneyCulture = CultureInfo.GetCultureInfo("en-US");
     private const string OriginOfficeMessage = "Estos son los datos de Castro Fallas en origen.";
     private const decimal MiamiCftPerCbm = 35.3146667m;
-    private const decimal MiamiKgPerCft = 14.16m;
-    private const decimal AirPoundsPerKg = 2.20462262m;
 
     public string CreateDataJson(RateHeader rate)
     {
@@ -640,130 +638,6 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         }
     }
 
-    // Same physical cargo rule used by Miami quote calculation. LITTLE is volume-only.
-    // Do not read ChargeableQuantity: legacy LCL headers clamp it to >= 1 CBM.
-    private static decimal? CalculateMiamiBillableCft(RateHeader rate)
-    {
-        if (rate.ShipmentMode != ShipmentMode.Lcl)
-            return null;
-
-        var polCode = (rate.PolCode ?? string.Empty).Trim().ToUpperInvariant();
-        var polName = rate.PolName ?? string.Empty;
-        if (polCode is not ("MIA" or "USMIA")
-            && !polName.Contains("Miami", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        // Only own maritime Miami matrices use the 14.16 kg/CFT rule.
-        // An air LCL quote departing Miami can also show CFT, but its billing
-        // rules are different and must never be reconciled with this matrix.
-        var hasMiamiMatrixFreight = rate.RateDetails.Any(detail =>
-            detail.CostDetailType == CostDetailType.Freight
-            && detail.ChargeBasis == ChargeBasis.PerChargeableCft
-            && (detail.Name.Contains("Flete Miami", StringComparison.OrdinalIgnoreCase)
-                || detail.Notes?.Contains("Plan Miami:", StringComparison.OrdinalIgnoreCase) == true));
-        if (!hasMiamiMatrixFreight)
-            return null;
-
-        decimal billableCbm = 0m;
-        if (!string.IsNullOrWhiteSpace(rate.CargoLinesJson))
-        {
-            try
-            {
-                var cargoLines = JsonSerializer.Deserialize<RateCargoLineDto[]>(
-                    rate.CargoLinesJson, JsonOptions);
-                if (cargoLines is { Length: > 0 })
-                {
-                    billableCbm = cargoLines.Sum(line =>
-                        Math.Max(line.BillableVolumeCbm > 0m
-                            ? line.BillableVolumeCbm
-                            : line.VolumeCbm, 0m));
-                }
-            }
-            catch (JsonException)
-            {
-                // Historic quotes may contain only their header cargo metrics.
-            }
-        }
-
-        if (billableCbm <= 0m)
-            billableCbm = Math.Max(0m, rate.TotalVolumeCbm);
-
-        var volumeCft = billableCbm * MiamiCftPerCbm;
-        var isLittle = rate.RateDetails.Any(detail =>
-            detail.Notes?.Contains("Plan Miami: LITTLE", StringComparison.OrdinalIgnoreCase) == true);
-        var result = isLittle
-            ? volumeCft
-            : Math.Max(volumeCft, Math.Max(0m, rate.TotalWeightKg) / MiamiKgPerCft);
-        return result > 0m ? result : null;
-    }
-
-    private static bool CanConsolidateAllIn(
-        RateHeader rate,
-        IReadOnlyCollection<RateDetail> details,
-        Func<string?, string?, string> currencyIso)
-    {
-        var targetCurrency = currencyIso(rate.CurrencyCode, rate.CurrencyName);
-        var exchangeRate = rate.ExchangeRateApplied is > 0m
-            ? rate.ExchangeRateApplied
-            : rate.ExchangeRateSale;
-
-        return details.All(detail =>
-        {
-            var sourceCurrency = currencyIso(detail.CurrencyCode, detail.CurrencyName);
-            if (string.Equals(sourceCurrency, targetCurrency, StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            return exchangeRate is > 0m
-                && (sourceCurrency is "USD" or "CRC")
-                && (targetCurrency is "USD" or "CRC");
-        });
-    }
-
-    private static decimal CalculateAllInAmount(
-        RateHeader rate,
-        IReadOnlyCollection<RateDetail> details,
-        Func<string?, string?, string> currencyIso,
-        Func<RateDetail, decimal>? quantityResolver = null,
-        Func<RateDetail, decimal>? amountResolver = null)
-    {
-        var targetCurrency = currencyIso(rate.CurrencyCode, rate.CurrencyName);
-        var exchangeRate = rate.ExchangeRateApplied is > 0m
-            ? rate.ExchangeRateApplied.Value
-            : rate.ExchangeRateSale;
-        decimal total = 0m;
-
-        foreach (var detail in details)
-        {
-            var amount = amountResolver?.Invoke(detail)
-                ?? detail.SaleAmount * (quantityResolver?.Invoke(detail) ?? detail.Quantity);
-            var sourceCurrency = currencyIso(detail.CurrencyCode, detail.CurrencyName);
-
-            if (string.Equals(sourceCurrency, targetCurrency, StringComparison.OrdinalIgnoreCase))
-            {
-                total += amount;
-                continue;
-            }
-
-            if (exchangeRate is > 0m && sourceCurrency == "USD" && targetCurrency == "CRC")
-            {
-                total += amount * exchangeRate.Value;
-                continue;
-            }
-
-            if (exchangeRate is > 0m && sourceCurrency == "CRC" && targetCurrency == "USD")
-            {
-                total += amount / exchangeRate.Value;
-                continue;
-            }
-
-            throw new InvalidOperationException(
-                $"No se puede consolidar ALL IN entre {sourceCurrency} y {targetCurrency} sin una conversión compatible."
-            );
-        }
-
-        return decimal.Round(total, 2, MidpointRounding.AwayFromZero);
-    }
-
     private static string CompactLandEquipmentLabel(string? name, string? code)
     {
         var source = $"{code} {name}";
@@ -786,7 +660,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         rate.ShipmentMode == ShipmentMode.Lcl &&
         (rate.RateDetails.Any(detail =>
             detail.CostDetailType == CostDetailType.Freight &&
-            detail.ChargeBasis is ChargeBasis.PerKg or ChargeBasis.Per100Kg)
+            detail.ChargeBasis is ChargeBasis.PerKg or ChargeBasis.PerLb or ChargeBasis.Per100Kg)
          || Regex.IsMatch(rate.CargoLinesJson ?? string.Empty,
              @"a[eé]re[ao]|aviaci[oó]n|aeropuerto|airport|vuelos?",
              RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
