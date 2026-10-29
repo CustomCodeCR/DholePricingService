@@ -1,5 +1,6 @@
 using Dhole.Pricing.Contracts.Rates.Response;
 using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Rates;
 using Dhole.Pricing.Domain.Rates.Enums;
 
 namespace Dhole.Pricing.Application.Features.Rates;
@@ -9,6 +10,7 @@ internal static class RateMappings
     public static RateDto ToDto(this RateHeader rate)
     {
         var isLand = rate.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
+        var commercial = RateCommercialQuoteSnapshot.Create(rate);
         var agentName = isLand ? "Grupo Castro Fallas" : rate.AgentName;
         var agentCode = isLand ? "GCF" : rate.AgentCode;
         var carrierName = rate.ShipmentMode == ShipmentMode.Ftl ? "TIGSA" : rate.CarrierName;
@@ -145,7 +147,17 @@ internal static class RateMappings
                     x.DestinationTaxRate,
                     x.DestinationTaxAmount,
                     x.BillToClient
-                ))
+                )
+                {
+                    CommercialQuantity = commercial.For(x).Quantity,
+                    CommercialUnitCost = commercial.For(x).UnitCost,
+                    CommercialUnitSale = commercial.For(x).UnitSale,
+                    CommercialCostSubtotal = commercial.For(x).CostSubtotal,
+                    CommercialSaleSubtotal = commercial.For(x).SaleSubtotal,
+                    CommercialTaxAmount = commercial.For(x).TaxAmount,
+                    CommercialSaleTotal = commercial.For(x).SaleTotal,
+                    ShowOnClientPdf = commercial.For(x).ShowOnClientPdf,
+                })
                 .ToList(),
             rate.RateServices
                 .OrderBy(x => x.ServiceName)
