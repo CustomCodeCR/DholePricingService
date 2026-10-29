@@ -63,24 +63,6 @@ public static class OwnLclRouteMatrixV2Endpoints
             ["LITTLE"] = new("CARGAS LITTLE", 0m, 0m, 0m, 0m, 0m, 0m, 0m, 35m, 15m, 0m, 0m, 20m, 0m, 0.50m, 10m, true),
         };
 
-    // CNCA matrices: negotiated China origin differential for Costa Rica / Panama.
-    private static readonly IReadOnlyDictionary<string, decimal> OriginSurcharges =
-        new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["SHANGHAI"] = 0m,
-            ["NINGBO"] = 52m,
-            ["QINGDAO"] = 52m,
-            ["XIAMEN"] = 57m,
-            ["SHANTOU"] = 57m,
-            ["DALIAN"] = 57m,
-            ["CHONGQING"] = 57m,
-            ["FUZHOU"] = 57m,
-            ["SHENZHEN"] = 62m,
-            ["XINGANG"] = 62m,
-            ["SHEKOU"] = 62m,
-            ["GUANGZHOU"] = 62m,
-        };
-
     private static readonly IReadOnlyDictionary<string, (string Name, decimal InlandTotal)> CentralAmericaInland =
         new Dictionary<string, (string, decimal)>(StringComparer.OrdinalIgnoreCase)
         {
@@ -88,25 +70,6 @@ public static class OwnLclRouteMatrixV2Endpoints
             ["HN"] = ("Honduras / San Pedro Sula", 1825m),
             ["SV"] = ("El Salvador / San Salvador", 2200m),
             ["GT"] = ("Guatemala", 2450m),
-        };
-
-    private static readonly IReadOnlyDictionary<string, string> ChinaPolAliases =
-        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["SHANGHAI"] = "SHANGHAI", ["CNSHA"] = "SHANGHAI",
-            ["NINGBO"] = "NINGBO", ["CNNGB"] = "NINGBO",
-            ["QINGDAO"] = "QINGDAO", ["CNTAO"] = "QINGDAO", ["CNQNG"] = "QINGDAO",
-            ["XIAMEN"] = "XIAMEN", ["CNXMN"] = "XIAMEN",
-            ["SHANTOU"] = "SHANTOU", ["CNSWA"] = "SHANTOU",
-            ["DALIAN"] = "DALIAN", ["CNDLC"] = "DALIAN",
-            ["CHONGQING"] = "CHONGQING", ["CNCKG"] = "CHONGQING",
-            ["FUZHOU"] = "FUZHOU", ["CNFOC"] = "FUZHOU",
-            ["SHENZHEN"] = "SHENZHEN", ["CNSZX"] = "SHENZHEN",
-            ["XINGANG"] = "XINGANG", ["TIANJIN"] = "XINGANG", ["CNTSN"] = "XINGANG", ["CNTXG"] = "XINGANG",
-            ["SHEKOU"] = "SHEKOU", ["CNSHK"] = "SHEKOU",
-            ["GUANGZHOU"] = "GUANGZHOU", ["CNCAN"] = "GUANGZHOU",
-            // Yantian is a Shenzhen port. Apply its published Shenzhen matrix rate.
-            ["YANTIAN"] = "SHENZHEN", ["CNYTN"] = "SHENZHEN",
         };
 
     private const decimal CentralAmericaDestinationCostPerCbm = 18.825m;
@@ -163,24 +126,27 @@ public static class OwnLclRouteMatrixV2Endpoints
 
         var isShanghaiMatrix = OwnLclOriginScope.UsesShanghaiMatrix(consolidation.PolCode, consolidation.PolName);
         string requestedPol;
+        decimal originSurchargePerCbm;
         if (isShanghaiMatrix)
         {
-            var normalizedPol = NormalizeChinaPol(request.PolCode);
-            if (normalizedPol is null && !string.IsNullOrWhiteSpace(request.PolCode))
-            {
+            if (!OwnLclOriginScope.TryMatchShanghaiRate(
+                    request.PolCode ?? consolidation.PolName ?? consolidation.PolCode,
+                    out requestedPol, out _, out originSurchargePerCbm))
                 return Results.BadRequest(new
                 {
                     code = "Pricing.OwnLclPolInvalid",
-                    message = $"No se pudo resolver el POL '{request.PolCode}'. Envíe el nombre o UN/LOCODE del puerto (por ejemplo Ningbo/CNNGB).",
+                    message = $"El POL '{request.PolCode}' no tiene un flete configurado en la matriz Shanghai.",
                 });
-            }
-            requestedPol = normalizedPol ?? "SHANGHAI";
         }
         else
         {
             if (!OwnLclOriginScope.MatchesSelectedPol(request.PolCode, consolidation.PolCode, consolidation.PolName))
                 return Results.BadRequest(new { code = "Pricing.OwnLclPolDoesNotMatchConsolidation", message = "Este consolidado solo admite cotizaciones desde su POL seleccionado." });
-            requestedPol = OwnLclOriginScope.Resolve(consolidation.PolCode, consolidation.PolName);
+            requestedPol = OwnLclOriginScope.Normalize(request.PolCode)
+                ?? OwnLclOriginScope.Resolve(consolidation.PolCode, consolidation.PolName);
+            // El consolidado físico de Yantian ya tiene el flete de origen
+            // incorporado; no aplicar recargos de Shanghai.
+            originSurchargePerCbm = 0m;
         }
 
         var cargo = request.CargoLines.Select(CalculateCargoLine).ToArray();
@@ -209,7 +175,6 @@ public static class OwnLclRouteMatrixV2Endpoints
         var configuredFreightProfitPerCbm = await LoadFreightProfitPerCbmAsync(consolidation.Id, db, ct);
         // El HTML usa exactamente el mismo diferencial de origen que Panamá
         // para Nicaragua, Honduras, Guatemala y El Salvador.
-        var originSurchargePerCbm = isShanghaiMatrix ? OriginSurcharges.GetValueOrDefault(requestedPol) : 0m;
         var pricingLineOverrides = await LoadPricingLineOverridesAsync(consolidation.Id, db, ct);
         if (isCentralAmerica && !pricingLineOverrides.ContainsKey("CA_TRANSSHIPMENT"))
         {
@@ -926,23 +891,6 @@ if (string.Equals(originPol, "SHANGHAI", StringComparison.OrdinalIgnoreCase))
         if (normalized.Contains("EXW")) return "EXW";
         if (normalized.Contains("FCA")) return "FCA";
         if (normalized.Contains("FOB")) return "FOB";
-        return null;
-    }
-
-    private static string? NormalizeChinaPol(string? value)
-    {
-        var normalized = Normalize(value);
-        if (normalized.Length == 0) return null;
-        var compact = new string(normalized.Where(char.IsLetterOrDigit).ToArray());
-
-        foreach (var pair in ChinaPolAliases.OrderByDescending(pair => pair.Key.Length))
-        {
-            var alias = new string(pair.Key.Where(char.IsLetterOrDigit).ToArray());
-            if (compact.Equals(alias, StringComparison.OrdinalIgnoreCase)
-                || compact.Contains(alias, StringComparison.OrdinalIgnoreCase))
-                return pair.Value;
-        }
-
         return null;
     }
 
