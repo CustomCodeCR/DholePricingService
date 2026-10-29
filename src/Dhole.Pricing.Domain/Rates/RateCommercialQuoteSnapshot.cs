@@ -22,7 +22,10 @@ public sealed record RateCommercialLineSnapshot(
     decimal TaxAmount,
     decimal SaleTotal,
     bool ShowOnClientPdf
-);
+)
+{
+    public decimal UtilitySubtotal => SaleSubtotal - CostSubtotal;
+}
 
 public sealed record RateCommercialCurrencyTotal(
     string Currency,
