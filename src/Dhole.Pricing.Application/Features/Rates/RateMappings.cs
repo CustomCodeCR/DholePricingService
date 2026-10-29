@@ -156,6 +156,7 @@ internal static class RateMappings
                     CommercialSaleSubtotal = commercial.For(x).SaleSubtotal,
                     CommercialTaxAmount = commercial.For(x).TaxAmount,
                     CommercialSaleTotal = commercial.For(x).SaleTotal,
+                    CommercialUtilitySubtotal = commercial.For(x).UtilitySubtotal,
                     ShowOnClientPdf = commercial.For(x).ShowOnClientPdf,
                 })
                 .ToList(),
