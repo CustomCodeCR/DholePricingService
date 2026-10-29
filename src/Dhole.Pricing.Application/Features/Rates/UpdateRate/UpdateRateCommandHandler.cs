@@ -699,13 +699,20 @@ public sealed class UpdateRateCommandHandler(
 
             rate.ReplaceContainerAllocations(containerSpecs, command.UpdatedBy);
 
+            // La suma de pesos por contenedor es autoritativa para FCL/FTL.
+            // La descripción de carga puede seguir guardada con peso 0 sin anularla.
+            var equipmentWeightKg = containerSpecs.Sum(x => x.UnitWeightsKg?.Sum() ?? 0m);
+            var effectiveDeclaredWeightKg =
+                command.ShipmentMode is ShipmentMode.Fcl or ShipmentMode.Ftl && equipmentWeightKg > 0m
+                    ? equipmentWeightKg
+                    : command.TotalWeightKg;
             var cargoProfile = RateCargoProfileFactory.Create(
                 command.ShipmentMode,
                 command.KgPerCbm,
                 command.CargoLines,
                 command.TotalPackages,
                 command.TotalPallets,
-                command.TotalWeightKg,
+                effectiveDeclaredWeightKg,
                 command.TotalVolumeCbm,
                 command.ContainerTypeCode
             );
@@ -799,7 +806,10 @@ public sealed class UpdateRateCommandHandler(
             // resincronizamos. De lo contrario SynchronizeAsync elimina los detalles fijos antiguos
             // y el bucle anterior intenta actualizar sus IDs ya eliminados, produciendo
             // "El detalle de la tarifa no existe" al cambiar, por ejemplo, la naviera.
-            if (costSelectorsChanged || command.ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl)
+            // Pantalla 7 envía el snapshot definitivo con sus precios y exclusiones.
+            // Nunca reconstruir costos fijos desde el catálogo después de aplicar
+            // un snapshot completo, incluso si cambió el agente/POE/naviera.
+            if (!command.ReplaceExtraDetails && (costSelectorsChanged || command.ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl))
             {
                 await fixedCostSynchronizer.SynchronizeAsync(
                     rate,
