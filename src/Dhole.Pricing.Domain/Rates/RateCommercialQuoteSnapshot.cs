@@ -54,6 +54,7 @@ public sealed class RateCommercialQuoteSnapshot
     public decimal AllInSubtotal { get; }
     public decimal? MiamiBillableCft { get; }
     public decimal AllInTax { get; }
+    public decimal AllInTotal => AllInSubtotal + AllInTax;
 
     private RateCommercialQuoteSnapshot(
         IReadOnlyDictionary<Guid, RateCommercialLineSnapshot> lines,
