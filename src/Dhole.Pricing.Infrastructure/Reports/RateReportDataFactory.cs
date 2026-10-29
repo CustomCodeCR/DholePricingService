@@ -25,27 +25,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
         string CurrencyValue(string? name, string? code) =>
             Text(name, Text(code, "USD"));
-        string CurrencyGroupKey(RateDetail detail) =>
-            CurrencyValue(detail.CurrencyName, detail.CurrencyCode).Trim().ToUpperInvariant();
         string DetailMoney(RateDetail detail, decimal amount) =>
             $"{CurrencyValue(detail.CurrencyName, detail.CurrencyCode)} {amount.ToString("N2", MoneyCulture)}";
-        string CurrencyIso(string? code, string? name)
-        {
-            var normalizedCode = (code ?? string.Empty).Trim().ToUpperInvariant();
-            var normalizedName = (name ?? string.Empty).Trim().ToUpperInvariant();
-            if (normalizedCode is "USD" or "CRC") return normalizedCode;
-            if (normalizedName.Contains("USD", StringComparison.Ordinal)) return "USD";
-            if (normalizedName.Contains("CRC", StringComparison.Ordinal)
-                || normalizedName.Contains("COLON", StringComparison.Ordinal)
-                || normalizedName.Contains("COLÓN", StringComparison.Ordinal)) return "CRC";
-            return normalizedCode;
-        }
-        bool IsPickupCharge(RateDetail detail) =>
-            detail.Name.Trim().StartsWith("Recolecta", StringComparison.OrdinalIgnoreCase)
-            || detail.Name.Trim().StartsWith("Recolección", StringComparison.OrdinalIgnoreCase)
-            || detail.Name.Trim().StartsWith("Pickup", StringComparison.OrdinalIgnoreCase)
-            || detail.Name.Trim().StartsWith("Pick up", StringComparison.OrdinalIgnoreCase);
-
         var currencyValue = CurrencyValue(rate.CurrencyName, rate.CurrencyCode);
         var commercialTerms = ExclusiveCommercialTerms(rate.Includes, rate.SubjectTo, rate.Excludes);
         var originOfficePublicUrl = CreateOriginOfficePublicUrl(rate);
