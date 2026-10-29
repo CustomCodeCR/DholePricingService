@@ -33,7 +33,11 @@ public static class OwnLclOriginScope
     public static bool MatchesSelectedPol(string? requestedPol, string? polCode, string? polName) =>
         string.IsNullOrWhiteSpace(requestedPol)
         || string.Equals(Normalize(requestedPol), Resolve(polCode, polName), StringComparison.OrdinalIgnoreCase)
-        || string.Equals(requestedPol.Trim(), polCode?.Trim(), StringComparison.OrdinalIgnoreCase);
+        || string.Equals(requestedPol.Trim(), polCode?.Trim(), StringComparison.OrdinalIgnoreCase)
+        // Guangzhou embarca desde Yantian. Es la única excepción a la igualdad
+        // estricta de POL; ningún consolidado Shanghai se comparte con Yantian.
+        || (string.Equals(Normalize(requestedPol), "GUANGZHOU", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Resolve(polCode, polName), "YANTIAN", StringComparison.OrdinalIgnoreCase));
 
     public static IReadOnlyDictionary<string, decimal> ScenarioOrigins(
         string? polCode, string? polName, IReadOnlyDictionary<string, decimal> shanghaiMatrix)
