@@ -18,23 +18,6 @@ public static class OwnLclConsolidationEndpoints
     private const decimal CostaRicaWarehouseOperation = 415m;
     private static readonly Guid MiamiSystemConsolidationId = Guid.Parse("4d49414d-4900-4000-8000-000000000001");
 
-    private static readonly IReadOnlyDictionary<string, decimal> OriginSurcharges =
-        new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["SHANGHAI"] = 0m,
-            ["NINGBO"] = 52m,
-            ["QINGDAO"] = 52m,
-            ["XIAMEN"] = 57m,
-            ["SHANTOU"] = 57m,
-            ["DALIAN"] = 57m,
-            ["CHONGQING"] = 57m,
-            ["FUZHOU"] = 57m,
-            ["SHENZHEN"] = 62m,
-            ["XINGANG"] = 62m,
-            ["SHEKOU"] = 62m,
-            ["GUANGZHOU"] = 62m,
-        };
-
     private static readonly IReadOnlyDictionary<string, (string Label, decimal Total)> CentralAmericaLandFreight =
         new Dictionary<string, (string Label, decimal Total)>(StringComparer.OrdinalIgnoreCase)
         {
@@ -293,12 +276,28 @@ public static class OwnLclConsolidationEndpoints
         var maximumCbm = consolidation.MaximumCbm > 0 ? consolidation.MaximumCbm : DefaultMaximumCbm;
         var baseOceanCost = consolidation.OceanFreight / maximumCbm;
         var isShanghaiMatrix = OwnLclOriginScope.UsesShanghaiMatrix(consolidation.PolCode, consolidation.PolName);
-        if (!isShanghaiMatrix && !OwnLclOriginScope.MatchesSelectedPol(request.PolCode, consolidation.PolCode, consolidation.PolName))
-            return Results.BadRequest(new { code = "Pricing.OwnLclPolDoesNotMatchConsolidation", message = "Este consolidado solo admite cotizaciones desde su POL seleccionado." });
-        var originPort = isShanghaiMatrix
-            ? OwnLclOriginScope.ShanghaiRateOrigin(NormalizeOriginPort(request.PolCode ?? consolidation.PolName ?? consolidation.PolCode))
-            : OwnLclOriginScope.Resolve(consolidation.PolCode, consolidation.PolName);
-        var originSurcharge = isShanghaiMatrix ? OriginSurcharges.GetValueOrDefault(originPort) : 0m;
+        string commercialPol;
+        string originPort;
+        decimal originSurcharge;
+        if (isShanghaiMatrix)
+        {
+            // Resolver siempre el POL que eligió el usuario. Shanghai es la base
+            // de su matriz, no necesariamente el POL comercial del embarque.
+            if (!OwnLclOriginScope.TryMatchShanghaiRate(
+                    request.PolCode ?? consolidation.PolName ?? consolidation.PolCode,
+                    out commercialPol, out originPort, out originSurcharge))
+                return Results.BadRequest(new { code = "Pricing.OwnLclPolInvalid", message = "El POL no tiene tarifa configurada en la matriz Shanghai. Revise el puerto seleccionado." });
+        }
+        else
+        {
+            // Yantian, Miami y otros consolidados propios conservan su tarifa
+            // física y nunca reciben el diferencial Shanghai.
+            if (!OwnLclOriginScope.MatchesSelectedPol(request.PolCode, consolidation.PolCode, consolidation.PolName))
+                return Results.BadRequest(new { code = "Pricing.OwnLclPolDoesNotMatchConsolidation", message = "Este consolidado solo admite cotizaciones desde su POL seleccionado." });
+            originPort = OwnLclOriginScope.Resolve(consolidation.PolCode, consolidation.PolName);
+            commercialPol = OwnLclOriginScope.Normalize(request.PolCode) ?? originPort;
+            originSurcharge = 0m;
+        }
         var oceanCostWithOrigin = baseOceanCost + originSurcharge;
         var destinationCostPerCbm = consolidation.CarrierDestinationCostTotal / maximumCbm;
         var consolidationPricingLines = await LoadConsolidationPricingLinesAsync(id, destinationCostPerCbm, db, ct);
@@ -353,7 +352,7 @@ public static class OwnLclConsolidationEndpoints
             consolidation.ConsolidationNumber,
             consolidation.Name,
             consolidation.MatrixVersion,
-            originPort,
+            commercialPol,
             destination,
             incoterm,
             cargo,
@@ -712,24 +711,6 @@ public static class OwnLclConsolidationEndpoints
         if (normalized.Contains("GUATEMALA") || normalized is "GT") return "GT";
         if (normalized.Contains("EL SALVADOR") || normalized.Contains("SAN SALVADOR") || normalized is "SV") return "SV";
         return null;
-    }
-
-    private static string NormalizeOriginPort(string? value)
-    {
-        var normalized = NormalizeCode(value);
-        if (string.IsNullOrWhiteSpace(normalized)) return string.Empty;
-
-        foreach (var port in OriginSurcharges.Keys)
-        {
-            if (normalized.Equals(port, StringComparison.OrdinalIgnoreCase)
-                || normalized.StartsWith($"{port},", StringComparison.OrdinalIgnoreCase)
-                || normalized.StartsWith($"{port} ", StringComparison.OrdinalIgnoreCase))
-            {
-                return port;
-            }
-        }
-
-        return normalized;
     }
 
     private static decimal CeilingCent(decimal value) => Math.Ceiling(value * 100m) / 100m;
