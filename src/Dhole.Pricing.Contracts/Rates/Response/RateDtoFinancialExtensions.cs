@@ -17,8 +17,12 @@ public static class RateDtoFinancialExtensions
         foreach (var detail in rate.RateDetails)
         {
             var quantity = detail.Quantity > 0m ? detail.Quantity : 1m;
-            var cost = detail.CostAmount * quantity;
-            var sale = detail.SaleAmount * quantity;
+            // The same resolved commercial figures exposed to the UI and PDF.
+            // Fallback preserves DTOs constructed by legacy callers/tests.
+            var cost = detail.CommercialQuantity > 0m
+                ? detail.CommercialCostSubtotal : detail.CostAmount * quantity;
+            var sale = detail.CommercialQuantity > 0m
+                ? detail.CommercialSaleSubtotal : detail.SaleAmount * quantity;
             var code = CanonicalCurrency(detail.CurrencyCode, detail.CurrencyName);
 
             if (code == "USD")
