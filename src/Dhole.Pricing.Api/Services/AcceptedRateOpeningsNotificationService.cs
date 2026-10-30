@@ -20,7 +20,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
     SentRateEmailNotificationService sellerEmailNotifications,
     ILogger<AcceptedRateOpeningsNotificationService> logger)
 {
-    private const string OpeningRecipient = "aperturatramite@grupocastrofallas.com";
+    private const string OpeningRecipient = "aperturatramites@grupocastrofallas.com";
     private const string SellerAcceptanceCc = "pricingcf@castrofallas.com";
     private const string NotificationEventName = "notifications.notification.requested";
 
