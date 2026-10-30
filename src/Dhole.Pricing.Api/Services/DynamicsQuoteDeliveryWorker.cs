@@ -239,6 +239,9 @@ public sealed class DynamicsQuoteDeliveryWorker(
         var dbContext = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
         var job = await dbContext.DynamicsQuoteSyncJobs
             .SingleAsync(x => x.Id == jobId, ct);
+        // Only a trusted administrative action can approve adoption.
+        var adoptSingleUnmanagedLine = IsAuthorizedSingleLineAdoption(
+            job.ResponseJson, job.RateId, job.RevisionNumber);
 
         var stage = "schema";
         var postAttempted = false;
@@ -339,7 +342,8 @@ public sealed class DynamicsQuoteDeliveryWorker(
                 dholeRateId = job.RateId,
                 totalSaleAmount,
                 totalCostAmount,
-                inputs = inputJson
+                inputs = inputJson,
+                adoptSingleUnmanagedLine
             };
             stage = "execute";
 
@@ -418,6 +422,29 @@ public sealed class DynamicsQuoteDeliveryWorker(
 
     private static bool Transient(HttpStatusCode code) =>
         code == HttpStatusCode.TooManyRequests || (int)code >= 500;
+
+    public static bool IsAuthorizedSingleLineAdoption(
+        string? jobDiagnosticJson, Guid rateId, int revision)
+    {
+        if (string.IsNullOrWhiteSpace(jobDiagnosticJson) ||
+            rateId == Guid.Empty || revision < 1) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(jobDiagnosticJson);
+            var root = document.RootElement;
+            return root.ValueKind == JsonValueKind.Object &&
+                root.TryGetProperty("adoptSingleUnmanagedLine", out var approved) &&
+                approved.ValueKind == JsonValueKind.True &&
+                root.TryGetProperty("rateId", out var authorizedRate) &&
+                authorizedRate.ValueKind == JsonValueKind.String &&
+                Guid.TryParse(authorizedRate.GetString(), out var authorizedId) &&
+                authorizedId == rateId &&
+                root.TryGetProperty("revisionNumber", out var authorizedRevision) &&
+                authorizedRevision.ValueKind == JsonValueKind.Number &&
+                authorizedRevision.TryGetInt32(out var number) && number == revision;
+        }
+        catch (JsonException) { return false; }
+    }
 
     private sealed class DeliveryException(string message, bool canRetry)
         : Exception(message)
