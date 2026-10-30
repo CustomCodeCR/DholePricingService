@@ -49,6 +49,10 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         // confirmed succeeded in the connector's durable ledger. No POST.
         group.MapPost("/{rateId:guid}/dynamics-sync/reconcile-confirmed",
             ReconcileConfirmedAsync);
+        // Admin-only, read-only proof that a legacy line ALREADY equals the
+        // immutable Pricing revision. Never generates a Dynamics write.
+        group.MapPost("/{rateId:guid}/dynamics-sync/reconcile-existing",
+            ReconcileConfirmedAsync);
         // Recover the missing sale line on a confirmed, existing UPSERT header.
         // Never use this for CREATE, ambiguous line writes or stale revisions.
         group.MapPost("/{rateId:guid}/dynamics-sync/resume-partial",
@@ -876,7 +880,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         bool Confirmed, string? HeaderStatus, string? TotalStatus,
         Guid? QuoteId, Guid? LineId, bool NoPostExecuted,
         bool PartialResumeSafe = false, bool LiveConfirmed = false,
-        string? LiveStatus = null);
+        string? LiveStatus = null, bool ExistingSaleMatches = false,
+        Guid? ExistingLineId = null);
 
     private static async Task<IResult> ResumePartialAsync(
         Guid rateId, HttpContext http, ServiceDbContext db,
@@ -1016,6 +1021,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         IHttpClientFactory clients, IConfiguration configuration, CancellationToken ct)
     {
         if (!CanApproveRecovery(http.User)) return Results.Forbid();
+        var reconcileExisting = http.Request.Path.Value?.EndsWith(
+            "/reconcile-existing", StringComparison.Ordinal) == true;
         var rate = await db.RateHeaders.AsNoTracking()
             .Where(x => x.Id == rateId && !x.IsDeleted)
             .Select(x => new { x.Status, x.RevisionNumber })
@@ -1082,21 +1089,33 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 message = "No se pudo consultar Dynamics. No se modificó la tarifa."
             });
         }
-        if (confirmation is not {
+        var ledgerVerified = confirmation is {
             Confirmed: true, LiveConfirmed: true, NoPostExecuted: true,
             HeaderStatus: "succeeded", TotalStatus: "succeeded",
-            QuoteId: Guid quoteId, LineId: Guid lineId
-        } || quoteId == Guid.Empty || lineId == Guid.Empty)
+            QuoteId: Guid, LineId: Guid
+        };
+        var existingVerified = confirmation is {
+            ExistingSaleMatches: true, NoPostExecuted: true,
+            HeaderStatus: "succeeded", TotalStatus: "not_sent",
+            QuoteId: Guid, ExistingLineId: Guid
+        };
+        if (reconcileExisting ? !existingVerified : !ledgerVerified)
             return Results.Conflict(new {
                 code = "sync_reconciliation_not_confirmed",
-                message = "La cabecera, línea e importe comercial deben verificarse en Dynamics para esta revisión. No se envió una segunda QUO.",
+                message = "No se confirmó la cabecera, la única línea y el importe real para esta revisión. No se modificó Dynamics.",
                 liveStatus = confirmation?.LiveStatus
             });
+        var quoteId = confirmation!.QuoteId!.Value;
+        var lineId = (reconcileExisting
+            ? confirmation.ExistingLineId : confirmation.LineId)!.Value;
+        if (quoteId == Guid.Empty || lineId == Guid.Empty)
+            return Results.Conflict(new { code = "sync_reconciliation_missing_record" });
 
         var now = DateTime.UtcNow;
         var resultJson = JsonSerializer.Serialize(new {
             state = "succeeded", recordId = quoteId, lineRecordId = lineId,
-            stage = "completed", reconciledFromLedger = true, noPostExecuted = true
+            stage = "completed", reconciledFromLedger = !reconcileExisting,
+            reconciledExistingSale = reconcileExisting, noPostExecuted = true
         });
         var affected = await db.DynamicsQuoteSyncJobs
             .Where(x => x.Id == job.Id && x.Status == "NeedsAttention")
@@ -1110,7 +1129,9 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         return affected == 1
             ? Results.Ok(new {
                 status = "Completed", quoteId, lineId,
-                message = "QUO y línea de venta conciliadas sin otro POST a Dataverse."
+                message = reconcileExisting
+                    ? "La única línea existente ya coincide con la venta de la revisión. Conciliada sin escribir en Dynamics."
+                    : "QUO y línea de venta conciliadas sin otro POST a Dataverse."
             })
             : Results.Conflict(new { code = "sync_reconciliation_state_changed" });
     }
