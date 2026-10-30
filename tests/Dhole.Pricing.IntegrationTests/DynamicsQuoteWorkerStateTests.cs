@@ -9,7 +9,7 @@ public sealed class DynamicsQuoteWorkerStateTests
     [TestMethod]
     public void OnlyExactAdminRecoveryMarkerCanAuthorizeSingleLineAdoption()
     {
-        var rateId = Guid.Parse("7f730a45-386e-4f12-be40-9db110736d36");
+        var rateId = Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
         var json = System.Text.Json.JsonSerializer.Serialize(new {
             adoptSingleUnmanagedLine = true,
             rateId = rateId.ToString("D"),
