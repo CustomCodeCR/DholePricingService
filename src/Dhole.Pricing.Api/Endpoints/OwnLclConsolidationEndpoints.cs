@@ -896,7 +896,10 @@ public sealed record CalculateOwnLclQuoteRequest(
     int SedQty = 1,
     bool IsDangerousCargo = false,
     bool IsBonded = false,
-    bool UseUnlistedChinaOriginFallback = false);
+    // Legacy compatibility; existing callers may still send this flag.
+    bool UseUnlistedChinaOriginFallback = false,
+    // Generalized POL -> Shanghai fallback, regardless of the origin country.
+    bool UseShanghaiPickupFallback = false);
 
 // Own-LCL cargo DTOs include stackability because Miami and the consolidated-cargo UI calculate billable dead space from it.
 public sealed record OwnLclCargoLineRequest(
