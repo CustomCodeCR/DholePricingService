@@ -134,8 +134,8 @@ public static class OwnLclRouteMatrixV2Endpoints
                     request.PolCode ?? consolidation.PolName ?? consolidation.PolCode,
                     out requestedPol, out _, out originSurchargePerCbm))
             {
-                // Nunca usar SHANGHAI=0 para un origen desconocido. El fallback
-                // debe solicitarse explícitamente y llevar recolecta real.
+                // No usar SHANGHAI=0 para un origen desconocido. La recolecta
+                // se calcula como línea independiente y se edita en Pantalla 7.
                 if (!request.UseUnlistedChinaOriginFallback)
                     return Results.BadRequest(new
                     {
@@ -143,14 +143,15 @@ public static class OwnLclRouteMatrixV2Endpoints
                         message = $"El POL '{request.PolCode}' no tiene un flete configurado en la matriz Shanghai.",
                     });
                 if (string.IsNullOrWhiteSpace(request.PolCode) ||
-                    request.PickupCost <= 0m || request.PickupSale <= 0m)
+                    request.PickupCost < 0m || request.PickupSale < 0m)
                     return Results.BadRequest(new
                     {
-                        code = "Pricing.OwnLclUnlistedOriginPickupRequired",
-                        message = "El origen no tarifado requiere costo y venta de recolecta mayores a cero.",
+                        code = "Pricing.OwnLclUnlistedOriginPickupInvalid",
+                        message = "Indique importes no negativos; la recolecta se completa en Pantalla 7.",
                     });
                 requestedPol = OwnLclOriginScope.Normalize(request.PolCode)!;
-                originSurchargePerCbm = OwnLclOriginScope.ShanghaiOriginSurcharges.Values.Max();
+                // Guangzhou corresponde al diferencial más alto vigente de la matriz.
+                originSurchargePerCbm = OwnLclOriginScope.ShanghaiOriginSurcharges["GUANGZHOU"];
                 unlistedChinaOrigin = true;
             }
         }
