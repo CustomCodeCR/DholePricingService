@@ -7,6 +7,23 @@ namespace Dhole.Pricing.IntegrationTests;
 public sealed class DynamicsQuoteWorkerStateTests
 {
     [TestMethod]
+    public void OnlyExactAdminRecoveryMarkerCanAuthorizeSingleLineAdoption()
+    {
+        var rateId = Guid.Parse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+        var json = System.Text.Json.JsonSerializer.Serialize(new {
+            adoptSingleUnmanagedLine = true,
+            rateId = rateId.ToString("D"),
+            revisionNumber = 3
+        });
+        Assert.IsTrue(DynamicsQuoteDeliveryWorker.IsAuthorizedSingleLineAdoption(json, rateId, 3));
+        Assert.IsFalse(DynamicsQuoteDeliveryWorker.IsAuthorizedSingleLineAdoption(json, rateId, 4));
+        Assert.IsFalse(DynamicsQuoteDeliveryWorker.IsAuthorizedSingleLineAdoption(json, Guid.NewGuid(), 3));
+        Assert.IsFalse(DynamicsQuoteDeliveryWorker.IsAuthorizedSingleLineAdoption("{}", rateId, 3));
+        Assert.IsFalse(DynamicsQuoteDeliveryWorker.IsAuthorizedSingleLineAdoption("{invalid", rateId, 3));
+        Assert.IsFalse(DynamicsQuoteDeliveryWorker.IsAuthorizedSingleLineAdoption(null, rateId, 3));
+    }
+
+    [TestMethod]
     public void StartsUnreadyAndNeverAssumesTheWorkerIsRunning()
     {
         var state = new DynamicsQuoteWorkerState();
