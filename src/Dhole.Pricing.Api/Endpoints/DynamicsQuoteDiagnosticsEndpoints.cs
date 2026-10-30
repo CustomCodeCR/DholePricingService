@@ -875,7 +875,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
     private sealed record ConfirmedWriteResult(
         bool Confirmed, string? HeaderStatus, string? TotalStatus,
         Guid? QuoteId, Guid? LineId, bool NoPostExecuted,
-        bool PartialResumeSafe = false);
+        bool PartialResumeSafe = false, bool LiveConfirmed = false,
+        string? LiveStatus = null);
 
     private static async Task<IResult> ResumePartialAsync(
         Guid rateId, HttpContext http, ServiceDbContext db,
@@ -1029,6 +1030,21 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             return Results.Ok(new { status = "Completed", alreadyReconciled = true });
         if (job.Status != "NeedsAttention")
             return Results.Conflict(new { code = "sync_job_not_ready_for_reconciliation" });
+        // The comparison amount comes exclusively from the persisted immutable
+        // Pricing revision, never a browser-supplied value.
+        decimal expectedSale;
+        try
+        {
+            using var snapshot = JsonDocument.Parse(job.PayloadJson);
+            if (!snapshot.RootElement.TryGetProperty("totalSaleAmount", out var amount) ||
+                !amount.TryGetDecimal(out expectedSale) ||
+                expectedSale < 0 || expectedSale > 999999999999m)
+                return Results.Conflict(new { code = "sync_sale_snapshot_invalid" });
+        }
+        catch (JsonException)
+        {
+            return Results.Conflict(new { code = "sync_sale_snapshot_invalid" });
+        }
         var apiKey = configuration["DynamicsQuoteSync:ApiKey"];
         if (string.IsNullOrWhiteSpace(apiKey))
             return Results.Conflict(new { code = "dynamics_key_missing" });
@@ -1040,7 +1056,9 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         var url = prefix + "/write-result?connectionCode=principal&dholeRateId=" +
             Uri.EscapeDataString(rateId.ToString("D")) +
             "&revisionNumber=" + rate.RevisionNumber.ToString(
-                System.Globalization.CultureInfo.InvariantCulture);
+                System.Globalization.CultureInfo.InvariantCulture) +
+            "&expectedSaleAmount=" + Uri.EscapeDataString(expectedSale.ToString(
+                System.Globalization.CultureInfo.InvariantCulture));
         ConfirmedWriteResult? confirmation;
         try
         {
@@ -1065,13 +1083,14 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             });
         }
         if (confirmation is not {
-            Confirmed: true, NoPostExecuted: true,
+            Confirmed: true, LiveConfirmed: true, NoPostExecuted: true,
             HeaderStatus: "succeeded", TotalStatus: "succeeded",
             QuoteId: Guid quoteId, LineId: Guid lineId
         } || quoteId == Guid.Empty || lineId == Guid.Empty)
             return Results.Conflict(new {
                 code = "sync_reconciliation_not_confirmed",
-                message = "No hay dos operaciones confirmadas para esta misma tarifa y revisión. No se enviará otra QUO."
+                message = "La cabecera, línea e importe comercial deben verificarse en Dynamics para esta revisión. No se envió una segunda QUO.",
+                liveStatus = confirmation?.LiveStatus
             });
 
         var now = DateTime.UtcNow;
