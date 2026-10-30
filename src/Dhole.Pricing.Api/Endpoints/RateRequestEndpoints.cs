@@ -583,6 +583,15 @@ public static class RateRequestEndpoints
 
         var entity = await db.RateRequests.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (entity is null) return Results.NotFound();
+        // An advancing quote revision now completes the seller modification
+        // atomically. Older browser tabs can still call prepare-modification:
+        // accept an exact already-completed revision without reclaiming a lease
+        // or changing an existing work item.
+        if (entity.Status == RateRequestStatus.Completed
+            && RateModificationRequestPayload.IsModification(entity.PayloadJson)
+            && entity.RateId == request.RateId
+            && entity.PreparedRevisionNumber == request.RevisionNumber)
+            return Results.Ok(new { entity.PreparedRevisionNumber });
         if (entity.Status != RateRequestStatus.Open
             || !RateModificationRequestPayload.IsModification(entity.PayloadJson)
             || entity.RateId != request.RateId)
