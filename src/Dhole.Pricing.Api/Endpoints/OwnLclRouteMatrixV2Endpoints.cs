@@ -142,6 +142,15 @@ public static class OwnLclRouteMatrixV2Endpoints
                         code = "Pricing.OwnLclPolInvalid",
                         message = $"El POL '{request.PolCode}' no tiene un flete configurado en la matriz Shanghai.",
                     });
+                // La matriz con recolecta hacia Shanghai SOLO aplica a China.
+                // Se valida también en el backend: la UI no basta para impedir
+                // solicitudes de otros países o llamadas directas a la API.
+                if (!OwnLclOriginScope.IsChinaPol(request.PolCode))
+                    return Results.BadRequest(new
+                    {
+                        code = "Pricing.OwnLclShanghaiPickupChinaOnly",
+                        message = "La ruta de recolecta a Shanghai únicamente admite POL de China.",
+                    });
                 if (string.IsNullOrWhiteSpace(request.PolCode) ||
                     request.PickupCost < 0m || request.PickupSale < 0m)
                     return Results.BadRequest(new
