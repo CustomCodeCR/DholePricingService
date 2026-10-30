@@ -895,7 +895,8 @@ public sealed record CalculateOwnLclQuoteRequest(
     bool IncludeSed = true,
     int SedQty = 1,
     bool IsDangerousCargo = false,
-    bool IsBonded = false);
+    bool IsBonded = false,
+    bool UseUnlistedChinaOriginFallback = false);
 
 // Own-LCL cargo DTOs include stackability because Miami and the consolidated-cargo UI calculate billable dead space from it.
 public sealed record OwnLclCargoLineRequest(
