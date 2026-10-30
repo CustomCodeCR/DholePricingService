@@ -11,7 +11,7 @@ public sealed class AcceptedRateIdtraNotificationPolicyTests
     public void SellerAcceptanceGoesToAperturaWithPricingInCopy()
     {
         Assert.AreEqual(
-            "aperturatramite@grupocastrofallas.com",
+            "aperturatramites@grupocastrofallas.com",
             AcceptedRateOpeningsNotificationService.RecipientFor(RateAcceptanceActor.Seller));
         CollectionAssert.AreEqual(
             new[] { "pricingcf@castrofallas.com" },
@@ -29,7 +29,7 @@ public sealed class AcceptedRateIdtraNotificationPolicyTests
                     " RChaves@castrofallas.com ",
                     "rchaves@castrofallas.com",
                     "pricingcf@castrofallas.com",
-                    "aperturatramite@grupocastrofallas.com",
+                    "aperturatramites@grupocastrofallas.com",
                     "dirección inválida",
                 ]));
     }
@@ -48,7 +48,7 @@ public sealed class AcceptedRateIdtraNotificationPolicyTests
     public void PricingAcceptanceGoesToAperturaTramiteWithoutCopy()
     {
         Assert.AreEqual(
-            "aperturatramite@grupocastrofallas.com",
+            "aperturatramites@grupocastrofallas.com",
             AcceptedRateOpeningsNotificationService.RecipientFor(RateAcceptanceActor.Pricing));
         Assert.AreEqual(
             0,
