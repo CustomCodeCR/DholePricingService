@@ -113,9 +113,12 @@ public sealed class OwnLclOriginScopeTests
     }
 
     [TestMethod]
-    public void UnknownChinaPol_UsesGuangzhouReferenceWithoutTreatingWuhanAsShanghai()
+    public void UnknownPolFromAnyCountry_DoesNotMatchShanghaiConfiguredOrigins()
     {
         Assert.IsFalse(OwnLclOriginScope.TryMatchShanghaiRate("Wuhan, China", out _, out _, out _));
+        Assert.IsFalse(OwnLclOriginScope.TryMatchShanghaiRate("Tokyo, Japan", out _, out _, out _));
+        Assert.IsFalse(OwnLclOriginScope.TryMatchShanghaiRate("Rotterdam, Netherlands", out _, out _, out _));
+        Assert.IsFalse(OwnLclOriginScope.TryMatchShanghaiRate("Miami, United States", out _, out _, out _));
         Assert.AreEqual(62m, OwnLclOriginScope.ShanghaiOriginSurcharges["GUANGZHOU"]);
         Assert.IsTrue(OwnLclOriginScope.ShanghaiOriginSurcharges.Values.All(
             surcharge => surcharge <= OwnLclOriginScope.ShanghaiOriginSurcharges["GUANGZHOU"]));
