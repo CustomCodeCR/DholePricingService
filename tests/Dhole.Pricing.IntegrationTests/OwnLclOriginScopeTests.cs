@@ -125,6 +125,20 @@ public sealed class OwnLclOriginScopeTests
     }
 
     [TestMethod]
+    public void PickupFallback_IsChinaOnly_IncludingApiCallsWithLegacyFlag()
+    {
+        Assert.IsTrue(OwnLclOriginScope.IsChinaPol("Wuhan, China"));
+        Assert.IsTrue(OwnLclOriginScope.IsChinaPol("Xian, Shaanxi, China"));
+        Assert.IsTrue(OwnLclOriginScope.IsChinaPol("CNWUH"));
+        Assert.IsFalse(OwnLclOriginScope.IsChinaPol("Tokyo, Japan"));
+        Assert.IsFalse(OwnLclOriginScope.IsChinaPol("Rotterdam, Netherlands"));
+        Assert.IsFalse(OwnLclOriginScope.IsChinaPol("Miami, United States"));
+        Assert.IsFalse(OwnLclOriginScope.IsChinaPol("POL-2026-999"));
+        Assert.IsFalse(OwnLclOriginScope.IsChinaPol("Wuhan"));
+        Assert.IsFalse(OwnLclOriginScope.IsChinaPol(null));
+    }
+
+    [TestMethod]
     public void ShanghaiMatrix_RejectsUnknownPorts_InsteadOfChargingShanghaiZero()
     {
         Assert.IsFalse(OwnLclOriginScope.TryMatchShanghaiRate(
