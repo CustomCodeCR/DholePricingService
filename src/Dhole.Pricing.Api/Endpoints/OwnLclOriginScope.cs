@@ -58,6 +58,25 @@ public static class OwnLclOriginScope
             ["CNYTN"] = "YANTIAN", ["YANTIAN"] = "YANTIAN",
         };
 
+    /// <summary>
+    /// Acepta únicamente POL de China continental por país indicado en el
+    /// nombre o UN/LOCODE CNxxx. Los identificadores POL-2026-xxx no
+    /// acreditan el país; se debe enviar el nombre completo del catálogo.
+    /// </summary>
+    public static bool IsChinaPol(string? polNameOrCode)
+    {
+        if (string.IsNullOrWhiteSpace(polNameOrCode)) return false;
+        var text = polNameOrCode.Trim().ToUpperInvariant();
+        if (text.Length == 5 && text.StartsWith("CN", StringComparison.Ordinal)
+            && text.Skip(2).All(ch => ch is >= 'A' and <= 'Z')) return true;
+
+        var parts = text.Split(new[] { ',', ';', '|', '(', ')', '（', '）' },
+            StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return parts.Any(part => part is "CHINA" or "CN" or "CHN" or "PRC"
+            or "MAINLAND CHINA" or "CHINA CONTINENTAL"
+            or "REPUBLICA POPULAR CHINA" or "PEOPLE'S REPUBLIC OF CHINA" or "中国");
+    }
+
     public static string Resolve(string? polCode, string? polName) =>
         Normalize(polName) ?? Normalize(polCode) ?? string.Empty;
 
