@@ -49,6 +49,10 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         // confirmed succeeded in the connector's durable ledger. No POST.
         group.MapPost("/{rateId:guid}/dynamics-sync/reconcile-confirmed",
             ReconcileConfirmedAsync);
+        // Recover the missing sale line on a confirmed, existing UPSERT header.
+        // Never use this for CREATE, ambiguous line writes or stale revisions.
+        group.MapPost("/{rateId:guid}/dynamics-sync/resume-partial",
+            ResumePartialAsync);
         // Only a VERIFIED RateId link to the unique historical CREATE quote
         // can resume the original revision. Never create a replacement QUO.
         group.MapPost("/{rateId:guid}/dynamics-sync/resume-linked-legacy",
@@ -866,7 +870,119 @@ public static class DynamicsQuoteDiagnosticsEndpoints
 
     private sealed record ConfirmedWriteResult(
         bool Confirmed, string? HeaderStatus, string? TotalStatus,
-        Guid? QuoteId, Guid? LineId, bool NoPostExecuted);
+        Guid? QuoteId, Guid? LineId, bool NoPostExecuted,
+        bool PartialResumeSafe = false);
+
+    private static async Task<IResult> ResumePartialAsync(
+        Guid rateId, HttpContext http, ServiceDbContext db,
+        IHttpClientFactory clients, IConfiguration configuration, CancellationToken ct)
+    {
+        if (!CanApproveRecovery(http.User)) return Results.Forbid();
+        var rate = await db.RateHeaders.AsNoTracking()
+            .Where(x => x.Id == rateId && !x.IsDeleted)
+            .Select(x => new { x.Status, x.RevisionNumber, x.IdtraNumber })
+            .SingleOrDefaultAsync(ct);
+        if (rate is null || rate.Status != RateStatus.AcceptedByClient ||
+            string.IsNullOrWhiteSpace(rate.IdtraNumber))
+            return Results.Conflict(new {
+                code = "partial_resume_rate_not_eligible",
+                message = "La tarifa ya no está aceptada con IDTRA para su revisión actual."
+            });
+
+        var job = await db.DynamicsQuoteSyncJobs.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.RateId == rateId &&
+                x.RevisionNumber == rate.RevisionNumber, ct);
+        if (job is null || job.Status != "NeedsAttention" || job.RecoveryAttempt != 0)
+            return Results.Conflict(new {
+                code = "partial_resume_job_not_ready",
+                message = "La revisión ya cambió, está en curso o usa otra generación de recuperación."
+            });
+
+        // Do not turn unrelated HTTP 409 responses into retry authorization.
+        try
+        {
+            using var diagnostic = JsonDocument.Parse(job.ResponseJson ?? "");
+            var root = diagnostic.RootElement;
+            if (root.ValueKind != JsonValueKind.Object ||
+                !root.TryGetProperty("providerCode", out var provider) ||
+                provider.GetString() != "quote_total_partial_requires_reconciliation" ||
+                !root.TryGetProperty("stage", out var stage) ||
+                stage.GetString() != "execute")
+                return Results.Conflict(new { code = "partial_resume_diagnostic_mismatch" });
+        }
+        catch (JsonException)
+        {
+            return Results.Conflict(new { code = "partial_resume_diagnostic_missing" });
+        }
+
+        var apiKey = configuration["DynamicsQuoteSync:ApiKey"];
+        if (string.IsNullOrWhiteSpace(apiKey))
+            return Results.Conflict(new { code = "dynamics_api_key_missing" });
+
+        ConfirmedWriteResult? proof;
+        try
+        {
+            const string endpoint =
+                "https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta/write-result";
+            var url = endpoint + "?connectionCode=principal&dholeRateId=" +
+                Uri.EscapeDataString(rateId.ToString("D")) +
+                "&revisionNumber=" + rate.RevisionNumber.ToString(
+                    System.Globalization.CultureInfo.InvariantCulture);
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.TryAddWithoutValidation("X-Dhole-Api-Key", apiKey);
+            using var response = await clients.CreateClient("DynamicsQuoteSync")
+                .SendAsync(request, ct);
+            if (!response.IsSuccessStatusCode)
+                return Results.Conflict(new {
+                    code = "partial_resume_ledger_unavailable",
+                    message = "No fue posible comprobar ambas operaciones. No se reintentó."
+                });
+            proof = await response.Content.ReadFromJsonAsync<ConfirmedWriteResult>(
+                cancellationToken: ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception)
+        {
+            return Results.Conflict(new { code = "partial_resume_verification_unavailable" });
+        }
+        if (proof is not {
+            PartialResumeSafe: true, NoPostExecuted: true,
+            HeaderStatus: "succeeded", TotalStatus: "not_sent",
+            QuoteId: Guid quoteId
+        } || quoteId == Guid.Empty || proof.LineId is not null)
+            return Results.Conflict(new {
+                code = "partial_resume_not_safe",
+                message = "La cabecera no está confirmada como UPSERT único, o la línea tiene una operación previa. No se creó otra QUO."
+            });
+
+        var readiness = await CheckQuoteReadinessAsync(clients, configuration, ct);
+        if (!readiness.Ready)
+            return Results.Conflict(new {
+                code = "dynamics_quote_writes_not_ready",
+                providerCode = readiness.Code,
+                message = readiness.Message
+            });
+
+        // Reuse the immutable payload, revision and ORIGINAL idempotency key.
+        // The connector replays the succeeded header without POST, and checks
+        // existing sale lines before creating or updating one.
+        var changed = await db.DynamicsQuoteSyncJobs
+            .Where(x => x.Id == job.Id && x.Status == "NeedsAttention" &&
+                x.RevisionNumber == rate.RevisionNumber && x.RecoveryAttempt == 0 &&
+                x.ResponseJson == job.ResponseJson)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Status, "Pending")
+                .SetProperty(x => x.Attempts, 0)
+                .SetProperty(x => x.LastError, (string?)null)
+                .SetProperty(x => x.ResponseJson, (string?)null)
+                .SetProperty(x => x.NextAttemptAtUtc, DateTime.UtcNow)
+                .SetProperty(x => x.LeaseExpiresAtUtc, (DateTime?)null), ct);
+        return changed == 1
+            ? Results.Accepted($"/api/pricing/rates/{rateId}/dynamics-sync",
+                new { status = "Pending", existingQuoteId = quoteId,
+                    message = "Se reanudó la revisión original para completar la línea de venta sobre la QUO existente, sin crear otra cabecera." })
+            : Results.Conflict(new { code = "partial_resume_state_changed" });
+    }
 
     private static async Task<IResult> ReconcileConfirmedAsync(
         Guid rateId, HttpContext http, ServiceDbContext db,
