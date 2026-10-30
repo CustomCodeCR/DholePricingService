@@ -127,7 +127,7 @@ public static class OwnLclRouteMatrixV2Endpoints
         var isShanghaiMatrix = OwnLclOriginScope.UsesShanghaiMatrix(consolidation.PolCode, consolidation.PolName);
         string requestedPol;
         decimal originSurchargePerCbm;
-        var unlistedChinaOrigin = false;
+        var requiresShanghaiPickup = false;
         if (isShanghaiMatrix)
         {
             if (!OwnLclOriginScope.TryMatchShanghaiRate(
@@ -136,7 +136,7 @@ public static class OwnLclRouteMatrixV2Endpoints
             {
                 // No usar SHANGHAI=0 para un origen desconocido. La recolecta
                 // se calcula como línea independiente y se edita en Pantalla 7.
-                if (!request.UseUnlistedChinaOriginFallback)
+                if (!request.UseShanghaiPickupFallback && !request.UseUnlistedChinaOriginFallback)
                     return Results.BadRequest(new
                     {
                         code = "Pricing.OwnLclPolInvalid",
@@ -150,9 +150,10 @@ public static class OwnLclRouteMatrixV2Endpoints
                         message = "Indique importes no negativos; la recolecta se completa en Pantalla 7.",
                     });
                 requestedPol = OwnLclOriginScope.Normalize(request.PolCode)!;
-                // Guangzhou corresponde al diferencial más alto vigente de la matriz.
+                // Guadalajara no aplica: Guangzhou es la referencia máxima de la matriz.
+                // Solo se usa como referencia conservadora; la recolecta se cotiza aparte.
                 originSurchargePerCbm = OwnLclOriginScope.ShanghaiOriginSurcharges["GUANGZHOU"];
-                unlistedChinaOrigin = true;
+                requiresShanghaiPickup = true;
             }
         }
         else
@@ -276,9 +277,9 @@ public static class OwnLclRouteMatrixV2Endpoints
             request.PickupSale,
             pricingLineOverrides);
 
-        // El traslado del POL comercial no tarifado al consolidado físico es
+        // El traslado de cualquier POL sin flete configurado al consolidado físico es
         // distinto del pickup EXW y se incluye aun cuando el Incoterm es FOB.
-        if (unlistedChinaOrigin)
+        if (requiresShanghaiPickup)
             AddLine(lines, $"Recolecta {requestedPol} → {consolidation.PolName ?? consolidation.PolCode}",
                 "Flat", 1m, request.PickupCost, request.PickupSale);
 
