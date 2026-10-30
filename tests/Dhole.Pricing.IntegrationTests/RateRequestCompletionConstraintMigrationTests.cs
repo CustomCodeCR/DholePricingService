@@ -27,4 +27,23 @@ public sealed class RateRequestCompletionConstraintMigrationTests
             StringComparison.OrdinalIgnoreCase));
         StringAssert.Contains(sql, "NOT VALID");
     }
+    [TestMethod]
+    public void SellerModificationClosureNeverRequiresEmailDeliveryFirst()
+    {
+        var migration = new EnforcePreparedSellerModificationCompletion();
+        var sql = string.Join("\n", migration.UpOperations
+            .OfType<SqlOperation>()
+            .Select(operation => operation.Sql));
+
+        StringAssert.Contains(sql, "DROP CONSTRAINT IF EXISTS ck_rate_requests_modification_requires_delivery");
+        StringAssert.Contains(sql, "DROP CONSTRAINT IF EXISTS ck_rate_requests_modification_requires_prepared_revision");
+        StringAssert.Contains(sql, "ADD CONSTRAINT ck_rate_requests_modification_requires_prepared_revision");
+        StringAssert.Contains(sql, "prepared_revision_number > 0");
+        StringAssert.Contains(sql, "rate_id IS NOT NULL");
+        StringAssert.Contains(sql, "completed_at_utc IS NOT NULL");
+        Assert.IsFalse(sql.Contains("AND delivery_confirmed_at_utc IS NOT NULL",
+            StringComparison.OrdinalIgnoreCase));
+        StringAssert.Contains(sql, "NOT VALID");
+    }
+
 }
