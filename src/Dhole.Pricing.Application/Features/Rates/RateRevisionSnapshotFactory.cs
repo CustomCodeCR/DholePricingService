@@ -20,18 +20,20 @@ internal static class RateRevisionSnapshotFactory
         var json = JsonSerializer.Serialize(new
         {
             rate.Id, rate.RateCode, rate.RateName, rate.RevisionNumber, rate.Status,
-            rate.ClientName, rate.ExecutiveName, rate.IdtraNumber, rate.QuoNumber,
+            rate.ClientName, rate.ExecutiveName, rate.IdtraNumber, rate.OtherReferences, rate.QuoNumber,
             rate.AgentId, rate.AgentName, rate.AgentCode,
             rate.LclGroupAgentId, rate.LclGroupAgentName, rate.LclGroupAgentCode, rate.CarrierId, rate.CarrierName, rate.CarrierCode,
             rate.PolId, rate.PolName, rate.PolCode, rate.PoeId, rate.PoeName, rate.PoeCode,
             rate.PodId, rate.PodName, rate.PodCode, rate.ContainerTypeId, rate.ContainerTypeName, rate.ContainerTypeCode,
-            rate.IncotermId, rate.IncotermName, rate.IncotermCode, rate.WarehouseId, rate.PickupAddress, rate.PickupLatitude, rate.PickupLongitude,
+            rate.IncotermId, rate.IncotermName, rate.IncotermCode, rate.WarehouseId, rate.PickupAddress, rate.PickupLatitude, rate.PickupLongitude, rate.PickupLocationsJson,
             rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode, rate.ExchangeRatePurchase, rate.ExchangeRateSale,
             rate.ExchangeRateApplied, rate.ExchangeRateDate, rate.ExchangeRateSource, rate.FreeDays, rate.ValidFrom, rate.ValidTo,
-            rate.ContainerQuantity, rate.ShipmentMode, rate.OperationType, rate.TotalPackages, rate.TotalPallets,
+            rate.ContainerQuantity, rate.ShipmentMode, rate.OperationType, rate.CargoValue, rate.StorageDays, rate.TotalPackages, rate.TotalPallets,
             rate.TotalWeightKg, rate.TotalVolumeCbm, rate.KgPerCbm, rate.ChargeableQuantity, rate.CargoLinesJson,
             rate.FinalBackupStorageIds,
-            rate.Includes, rate.SubjectTo, rate.Excludes, rate.TransitTime, rate.RateType,
+            rate.Includes, rate.SubjectTo, rate.Excludes, rate.TransitTime, rate.RateType, rate.UseAllInPresentation,
+            rate.PendingReapproval, rate.ReapprovalReason, rate.SellerReceivedAtUtc, rate.SellerReceivedBy,
+            rate.ClosedReason, rate.ClosedAtUtc, rate.ClosedBy,
             TotalCostAmount = ResolveHeaderAmount(rate, totals.CostUsd, totals.CostCrc),
             TotalSaleAmount = ResolveHeaderAmount(rate, totals.SaleUsd, totals.SaleCrc),
             TotalUtilityAmount = ResolveHeaderAmount(rate, totals.UtilityUsd, totals.UtilityCrc),
@@ -41,7 +43,7 @@ internal static class RateRevisionSnapshotFactory
             Containers = rate.RateContainers.Select(x => new { x.ContainerTypeId, x.ContainerTypeName, x.ContainerTypeCode, x.Quantity }),
             Services = rate.RateServices.Select(x => new { x.ServiceId, x.ServiceName, x.ServiceCode }),
             Details = rate.RateDetails.Select(x => new { x.Id, x.CostId, x.Name, x.CostDetailType, x.CostType, x.ChargeBasis,
-                x.CurrencyId, x.CurrencyName, x.CurrencyCode, x.CostAmount, x.SaleAmount, x.UtilityAmount, x.Quantity, x.Notes, x.ApplyDestinationTax, x.DestinationTaxRate, x.DestinationTaxAmount })
+                x.CurrencyId, x.CurrencyName, x.CurrencyCode, x.CostAmount, x.SaleAmount, x.UtilityAmount, x.Quantity, x.Notes, x.BillToClient, x.ApplyDestinationTax, x.DestinationTaxRate, x.DestinationTaxAmount })
         });
         return new(rate.Status.ToString(), rate.RateName, rate.IdtraNumber, rate.QuoNumber,
             totals.SaleUsd, totals.SaleCrc, totals.MarginPercentage, json);
