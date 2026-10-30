@@ -127,16 +127,32 @@ public static class OwnLclRouteMatrixV2Endpoints
         var isShanghaiMatrix = OwnLclOriginScope.UsesShanghaiMatrix(consolidation.PolCode, consolidation.PolName);
         string requestedPol;
         decimal originSurchargePerCbm;
+        var unlistedChinaOrigin = false;
         if (isShanghaiMatrix)
         {
             if (!OwnLclOriginScope.TryMatchShanghaiRate(
                     request.PolCode ?? consolidation.PolName ?? consolidation.PolCode,
                     out requestedPol, out _, out originSurchargePerCbm))
-                return Results.BadRequest(new
-                {
-                    code = "Pricing.OwnLclPolInvalid",
-                    message = $"El POL '{request.PolCode}' no tiene un flete configurado en la matriz Shanghai.",
-                });
+            {
+                // Nunca usar SHANGHAI=0 para un origen desconocido. El fallback
+                // debe solicitarse explícitamente y llevar recolecta real.
+                if (!request.UseUnlistedChinaOriginFallback)
+                    return Results.BadRequest(new
+                    {
+                        code = "Pricing.OwnLclPolInvalid",
+                        message = $"El POL '{request.PolCode}' no tiene un flete configurado en la matriz Shanghai.",
+                    });
+                if (string.IsNullOrWhiteSpace(request.PolCode) ||
+                    request.PickupCost <= 0m || request.PickupSale <= 0m)
+                    return Results.BadRequest(new
+                    {
+                        code = "Pricing.OwnLclUnlistedOriginPickupRequired",
+                        message = "El origen no tarifado requiere costo y venta de recolecta mayores a cero.",
+                    });
+                requestedPol = OwnLclOriginScope.Normalize(request.PolCode)!;
+                originSurchargePerCbm = OwnLclOriginScope.ShanghaiOriginSurcharges.Values.Max();
+                unlistedChinaOrigin = true;
+            }
         }
         else
         {
@@ -258,6 +274,12 @@ public static class OwnLclRouteMatrixV2Endpoints
             request.PickupCost,
             request.PickupSale,
             pricingLineOverrides);
+
+        // El traslado del POL comercial no tarifado al consolidado físico es
+        // distinto del pickup EXW y se incluye aun cuando el Incoterm es FOB.
+        if (unlistedChinaOrigin)
+            AddLine(lines, $"Recolecta {requestedPol} → {consolidation.PolName ?? consolidation.PolCode}",
+                "Flat", 1m, request.PickupCost, request.PickupSale);
 
         var totalCost = lines.Sum(line => line.CostTotal);
         var subtotalSale = lines.Sum(line => line.SaleTotal);
