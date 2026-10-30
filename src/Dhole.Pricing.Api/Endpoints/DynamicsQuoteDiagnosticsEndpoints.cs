@@ -53,6 +53,10 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         // Never use this for CREATE, ambiguous line writes or stale revisions.
         group.MapPost("/{rateId:guid}/dynamics-sync/resume-partial",
             ResumePartialAsync);
+        // Explicit administrative consent to replace the sole unmanaged line.
+        // The usual resume-partial endpoint never grants this permission.
+        group.MapPost("/{rateId:guid}/dynamics-sync/adopt-single-line",
+            ResumePartialAsync);
         // Only a VERIFIED RateId link to the unique historical CREATE quote
         // can resume the original revision. Never create a replacement QUO.
         group.MapPost("/{rateId:guid}/dynamics-sync/resume-linked-legacy",
@@ -878,6 +882,8 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         IHttpClientFactory clients, IConfiguration configuration, CancellationToken ct)
     {
         if (!CanApproveRecovery(http.User)) return Results.Forbid();
+        var adoptSingleUnmanagedLine = http.Request.Path.Value?.EndsWith(
+            "/adopt-single-line", StringComparison.Ordinal) == true;
         var rate = await db.RateHeaders.AsNoTracking()
             .Where(x => x.Id == rateId && !x.IsDeleted)
             .Select(x => new { x.Status, x.RevisionNumber, x.IdtraNumber })
@@ -914,6 +920,16 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         {
             return Results.Conflict(new { code = "partial_resume_diagnostic_missing" });
         }
+        // A dedicated, audited admin action is required. Never upgrade a
+        // routine retry into permission to overwrite a manually named line.
+        if (adoptSingleUnmanagedLine &&
+            job.LastError?.Contains(
+                "quote_line_unmanaged_requires_reconciliation",
+                StringComparison.Ordinal) != true)
+            return Results.Conflict(new {
+                code = "partial_resume_adoption_diagnostic_mismatch",
+                message = "No hay diagnóstico confirmado de una única línea con nombre distinto. No se alteró Dynamics."
+            });
 
         var apiKey = configuration["DynamicsQuoteSync:ApiKey"];
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -964,8 +980,16 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             });
 
         // Reuse the immutable payload, revision and ORIGINAL idempotency key.
-        // The connector replays the succeeded header without POST, and checks
-        // existing sale lines before creating or updating one.
+        // A one-time, server-owned marker records explicit administrative
+        // consent to adopt exactly one existing quote line. It is not part of
+        // the immutable business payload, nor a new idempotency generation.
+        var adoptionMarker = adoptSingleUnmanagedLine
+            ? JsonSerializer.Serialize(new {
+                adoptSingleUnmanagedLine = true,
+                rateId = rateId.ToString("D"),
+                revisionNumber = rate.RevisionNumber
+              })
+            : null;
         var changed = await db.DynamicsQuoteSyncJobs
             .Where(x => x.Id == job.Id && x.Status == "NeedsAttention" &&
                 x.RevisionNumber == rate.RevisionNumber && x.RecoveryAttempt == 0 &&
@@ -974,13 +998,15 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 .SetProperty(x => x.Status, "Pending")
                 .SetProperty(x => x.Attempts, 0)
                 .SetProperty(x => x.LastError, (string?)null)
-                .SetProperty(x => x.ResponseJson, (string?)null)
+                .SetProperty(x => x.ResponseJson, adoptionMarker)
                 .SetProperty(x => x.NextAttemptAtUtc, DateTime.UtcNow)
                 .SetProperty(x => x.LeaseExpiresAtUtc, (DateTime?)null), ct);
         return changed == 1
             ? Results.Accepted($"/api/pricing/rates/{rateId}/dynamics-sync",
                 new { status = "Pending", existingQuoteId = quoteId,
-                    message = "Se reanudó la revisión original para completar la línea de venta sobre la QUO existente, sin crear otra cabecera." })
+                    message = adoptSingleUnmanagedLine
+                        ? "Adopción autorizada: se procesará únicamente la línea existente de la QUO. No se creará otra cabecera."
+                        : "Se reanudó la revisión original para completar la línea de venta sobre la QUO existente, sin crear otra cabecera." })
             : Results.Conflict(new { code = "partial_resume_state_changed" });
     }
 
