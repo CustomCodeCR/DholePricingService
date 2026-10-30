@@ -150,7 +150,7 @@ public static class OwnLclRouteMatrixV2Endpoints
                         message = "Indique importes no negativos; la recolecta se completa en Pantalla 7.",
                     });
                 requestedPol = OwnLclOriginScope.Normalize(request.PolCode)!;
-                // Guadalajara no aplica: Guangzhou es la referencia máxima de la matriz.
+                // Guangzhou es la referencia conservadora de mayor diferencial en la matriz.
                 // Solo se usa como referencia conservadora; la recolecta se cotiza aparte.
                 originSurchargePerCbm = OwnLclOriginScope.ShanghaiOriginSurcharges["GUANGZHOU"];
                 requiresShanghaiPickup = true;
