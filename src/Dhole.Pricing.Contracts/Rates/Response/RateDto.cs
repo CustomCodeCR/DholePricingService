@@ -87,6 +87,7 @@ public sealed record RateDto(
 )
 {
     public Guid? ClientAccountId { get; init; }
+    public Guid? ClientLeadId { get; init; }
     public string? OtherReferences { get; init; }
     public bool PendingReapproval { get; init; }
     public string? ReapprovalReason { get; init; }

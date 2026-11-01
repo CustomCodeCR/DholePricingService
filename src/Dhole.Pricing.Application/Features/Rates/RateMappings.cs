@@ -167,6 +167,7 @@ internal static class RateMappings
         )
         {
             ClientAccountId = rate.ClientAccountId,
+            ClientLeadId = rate.ClientLeadId,
             OtherReferences = rate.OtherReferences,
             PendingReapproval = rate.PendingReapproval,
             ReapprovalReason = rate.ReapprovalReason,

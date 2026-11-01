@@ -455,6 +455,7 @@ public sealed class CreateRateCommandHandler(
             rate.ConfigureLclGroupAgent(command.LclGroupAgentId, command.LclGroupAgentName, command.LclGroupAgentCode);
             rate.ConfigureExecutive(command.ExecutiveName);
             rate.ConfigureClientAccount(command.ClientAccountId);
+            rate.ConfigureClientLead(command.ClientLeadId);
             if (command.OtherReferences is not null)
                 rate.SetOtherReferences(command.OtherReferences, command.CreatedBy);
             rate.ConfigureCommercialPresentation(command.UseAllInPresentation, command.CreatedBy);
