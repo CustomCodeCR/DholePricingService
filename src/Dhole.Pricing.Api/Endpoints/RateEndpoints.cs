@@ -116,6 +116,20 @@ public static class RateEndpoints
     public sealed record ReconcileLegacyQuotesRequest(
         Guid AccountId, string ClientName, Guid[] RateIds);
 
+    // Normalize only presentation differences (vowel accents/whitespace).
+    // Keep Ñ, punctuation, words and business suffixes: broader fuzzy matches
+    // could silently associate quotations belonging to different companies.
+    private static string LegacyClientKey(string? clientName)
+    {
+        var key = (clientName ?? string.Empty).Trim().ToUpperInvariant()
+            .Replace('Á', 'A').Replace('É', 'E').Replace('Í', 'I')
+            .Replace('Ó', 'O').Replace('Ú', 'U').Replace('Ü', 'U')
+            .Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
+        while (key.Contains("  ", StringComparison.Ordinal))
+            key = key.Replace("  ", " ", StringComparison.Ordinal);
+        return key;
+    }
+
     // Show candidates, never silently attach historical quotes by matching names.
     // CRM first checks that the caller can see the requested account and supplies
     // its stored legal name; Pricing requires its own rate viewing permission.
@@ -123,13 +137,18 @@ public static class RateEndpoints
         string? clientName, int? page, int? pageSize,
         ServiceDbContext db, CancellationToken ct)
     {
-        var expected = (clientName ?? string.Empty).Trim().ToUpperInvariant();
+        var expected = LegacyClientKey(clientName);
         if (expected.Length is < 3 or > 220) return Results.BadRequest();
         var number = Math.Clamp(page ?? 1, 1, 100000);
         var size = Math.Clamp(pageSize ?? 30, 1, 100);
         var query = db.RateHeaders.AsNoTracking().Where(x => !x.IsDeleted &&
             x.ClientAccountId == null && x.ClientLeadId == null &&
-            x.ClientName != null && x.ClientName.Trim().ToUpper() == expected &&
+            x.ClientName != null &&
+            x.ClientName.Trim().ToUpper()
+                .Replace("Á", "A").Replace("É", "E").Replace("Í", "I")
+                .Replace("Ó", "O").Replace("Ú", "U").Replace("Ü", "U")
+                .Replace("\t", " ").Replace("\r", " ").Replace("\n", " ")
+                .Replace("  ", " ").Replace("  ", " ").Replace("  ", " ") == expected &&
             (x.QuoNumber != null || x.RateCode.StartsWith("QUO-")));
         var total = await query.CountAsync(ct);
         var rows = await query.OrderByDescending(x => x.CreatedAtUtc)
@@ -142,7 +161,7 @@ public static class RateEndpoints
         return Results.Ok(new {
             items = rows.Select(x => new {
                 pricingQuoteId = x.Id,
-                quoteNumberSnapshot = x.QuoNumber ?? x.RateCode,
+                quoteNumberSnapshot = string.IsNullOrWhiteSpace(x.QuoNumber) ? x.RateCode : x.QuoNumber,
                 clientName = x.ClientName,
                 shipmentModeSnapshot = x.ShipmentMode.ToString(),
                 commercialStatusSnapshot = x.Status.ToString(),
@@ -161,7 +180,7 @@ public static class RateEndpoints
     private static async Task<IResult> ReconcileLegacyQuotesAsync(
         ReconcileLegacyQuotesRequest request, ServiceDbContext db, CancellationToken ct)
     {
-        var expected = (request.ClientName ?? string.Empty).Trim().ToUpperInvariant();
+        var expected = LegacyClientKey(request.ClientName);
         var ids = request.RateIds?.Distinct().ToArray() ?? [];
         if (request.AccountId == Guid.Empty || expected.Length is < 3 or > 220 ||
             ids.Length is < 1 or > 100 || ids.Any(x => x == Guid.Empty))
@@ -172,8 +191,8 @@ public static class RateEndpoints
             x.ClientLeadId != null ||
             (x.ClientAccountId != null && x.ClientAccountId != request.AccountId) ||
             string.IsNullOrWhiteSpace(x.ClientName) ||
-            !string.Equals(x.ClientName.Trim(), request.ClientName.Trim(),
-                StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(LegacyClientKey(x.ClientName), expected,
+                StringComparison.Ordinal) ||
             (x.QuoNumber == null && !x.RateCode.StartsWith("QUO-", StringComparison.OrdinalIgnoreCase))))
             return Results.Conflict(new {
                 message = "Una o más cotizaciones no coinciden con la razón social o ya pertenecen a otra cuenta."
