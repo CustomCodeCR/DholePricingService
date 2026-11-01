@@ -40,6 +40,9 @@ public static class RateEndpoints
 
         group.MapGet("/", GetRatesAsync).RequireScope(PricingConstants.Scopes.RateView);
 
+        group.MapGet("/crm-account/{accountId:guid}", GetAccountQuotesAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
+
         group
             .MapGet("/dashboard", GetRateDashboardAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
@@ -103,6 +106,37 @@ public static class RateEndpoints
         return app;
     }
 
+
+    // A quote belongs to a CRM account only when its immutable account identifier is saved.
+    // Do not guess an account from ClientName or expose unlinked quotes through this route.
+    private static async Task<IResult> GetAccountQuotesAsync(
+        Guid accountId, ServiceDbContext db, int? page, int? pageSize, CancellationToken ct)
+    {
+        if (accountId == Guid.Empty) return Results.BadRequest();
+        var number = Math.Max(1, page ?? 1);
+        var size = Math.Clamp(pageSize ?? 30, 1, 100);
+        var query = db.RateHeaders.AsNoTracking()
+            .Where(x => !x.IsDeleted && x.ClientAccountId == accountId);
+        var total = await query.CountAsync(ct);
+        var snapshots = await query.OrderByDescending(x => x.CreatedAtUtc)
+            .ThenBy(x => x.Id)
+            .Skip((number - 1) * size).Take(size)
+            .Select(x => new { x.Id, x.QuoNumber, x.RateCode, x.ShipmentMode,
+                x.Status, x.PolName, x.PoeName, x.PodName, x.RevisionNumber,
+                x.CreatedAtUtc }).ToListAsync(ct);
+        var items = snapshots.Select(x => new {
+            pricingQuoteId = x.Id,
+            quoteNumberSnapshot = string.IsNullOrWhiteSpace(x.QuoNumber) ? x.RateCode : x.QuoNumber,
+            shipmentModeSnapshot = x.ShipmentMode.ToString(),
+            commercialStatusSnapshot = x.Status.ToString(),
+            linkedAt = x.CreatedAtUtc,
+            polName = x.PolName, poeName = x.PoeName, podName = x.PodName,
+            revisionNumber = x.RevisionNumber,
+            available = !string.IsNullOrWhiteSpace(x.PolName)
+                && (!string.IsNullOrWhiteSpace(x.PodName) || !string.IsNullOrWhiteSpace(x.PoeName))
+        }).ToArray();
+        return Results.Ok(new { items, total, page = number, pageSize = size });
+    }
 
     private static async Task<IResult> GetUsdCrcExchangeRateAsync(
         IPricingExchangeRateProvider exchangeRateProvider,

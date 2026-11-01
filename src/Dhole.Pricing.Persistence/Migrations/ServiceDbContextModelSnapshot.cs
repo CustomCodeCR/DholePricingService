@@ -2628,6 +2628,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDefaultValue(1m)
                         .HasColumnName("chargeable_quantity");
 
+                    b.Property<Guid?>("ClientAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_account_id");
+
                     b.Property<string>("ClientName")
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)")
@@ -3059,6 +3063,9 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasName("p_k_rate_headers");
 
                     b.HasIndex("AgentId");
+
+                    b.HasIndex("ClientAccountId")
+                        .HasDatabaseName("ix_rate_headers_client_account_id");
 
                     b.HasIndex("CarrierId");
 
