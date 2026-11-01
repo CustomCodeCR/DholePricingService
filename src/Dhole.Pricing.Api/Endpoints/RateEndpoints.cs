@@ -44,6 +44,10 @@ public static class RateEndpoints
             .RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/crm-lead/{leadId:guid}", GetLeadQuotesAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapGet("/crm-legacy-candidates", GetLegacyCandidatesAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapPost("/crm-legacy-reconcile", ReconcileLegacyQuotesAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
 
         group
             .MapGet("/dashboard", GetRateDashboardAsync)
@@ -108,6 +112,82 @@ public static class RateEndpoints
         return app;
     }
 
+
+    public sealed record ReconcileLegacyQuotesRequest(
+        Guid AccountId, string ClientName, Guid[] RateIds);
+
+    // Show candidates, never silently attach historical quotes by matching names.
+    // CRM first checks that the caller can see the requested account and supplies
+    // its stored legal name; Pricing requires its own rate viewing permission.
+    private static async Task<IResult> GetLegacyCandidatesAsync(
+        string? clientName, int? page, int? pageSize,
+        ServiceDbContext db, CancellationToken ct)
+    {
+        var expected = (clientName ?? string.Empty).Trim().ToUpperInvariant();
+        if (expected.Length is < 3 or > 220) return Results.BadRequest();
+        var number = Math.Clamp(page ?? 1, 1, 100000);
+        var size = Math.Clamp(pageSize ?? 30, 1, 100);
+        var query = db.RateHeaders.AsNoTracking().Where(x => !x.IsDeleted &&
+            x.ClientAccountId == null && x.ClientLeadId == null &&
+            x.ClientName != null && x.ClientName.Trim().ToUpper() == expected &&
+            (x.QuoNumber != null || x.RateCode.StartsWith("QUO-")));
+        var total = await query.CountAsync(ct);
+        var rows = await query.OrderByDescending(x => x.CreatedAtUtc)
+            .ThenBy(x => x.Id).Skip((number - 1) * size).Take(size)
+            .Select(x => new {
+                x.Id, x.QuoNumber, x.RateCode, x.ClientName,
+                x.ShipmentMode, x.Status, x.PolName, x.PoeName,
+                x.PodName, x.RevisionNumber, x.CreatedAtUtc
+            }).ToArrayAsync(ct);
+        return Results.Ok(new {
+            items = rows.Select(x => new {
+                pricingQuoteId = x.Id,
+                quoteNumberSnapshot = x.QuoNumber ?? x.RateCode,
+                clientName = x.ClientName,
+                shipmentModeSnapshot = x.ShipmentMode.ToString(),
+                commercialStatusSnapshot = x.Status.ToString(),
+                linkedAt = x.CreatedAtUtc,
+                polName = x.PolName, poeName = x.PoeName, podName = x.PodName,
+                revisionNumber = x.RevisionNumber,
+                available = !string.IsNullOrWhiteSpace(x.PolName) &&
+                    (!string.IsNullOrWhiteSpace(x.PodName) ||
+                     !string.IsNullOrWhiteSpace(x.PoeName))
+            }).ToArray(), total, page = number, pageSize = size
+        });
+    }
+
+    // A human-confirmed reconciliation is atomic, conservative, and idempotent:
+    // never steal an existing lead/account link or change commercial amounts.
+    private static async Task<IResult> ReconcileLegacyQuotesAsync(
+        ReconcileLegacyQuotesRequest request, ServiceDbContext db, CancellationToken ct)
+    {
+        var expected = (request.ClientName ?? string.Empty).Trim().ToUpperInvariant();
+        var ids = request.RateIds?.Distinct().ToArray() ?? [];
+        if (request.AccountId == Guid.Empty || expected.Length is < 3 or > 220 ||
+            ids.Length is < 1 or > 100 || ids.Any(x => x == Guid.Empty))
+            return Results.BadRequest(new { message = "Cuenta, razón social y cotizaciones requeridas." });
+        var rates = await db.RateHeaders
+            .Where(x => ids.Contains(x.Id) && !x.IsDeleted).ToListAsync(ct);
+        if (rates.Count != ids.Length || rates.Any(x =>
+            x.ClientLeadId != null ||
+            (x.ClientAccountId != null && x.ClientAccountId != request.AccountId) ||
+            string.IsNullOrWhiteSpace(x.ClientName) ||
+            !string.Equals(x.ClientName.Trim(), request.ClientName.Trim(),
+                StringComparison.OrdinalIgnoreCase) ||
+            (x.QuoNumber == null && !x.RateCode.StartsWith("QUO-", StringComparison.OrdinalIgnoreCase))))
+            return Results.Conflict(new {
+                message = "Una o más cotizaciones no coinciden con la razón social o ya pertenecen a otra cuenta."
+            });
+        var modified = 0;
+        foreach (var rate in rates)
+        {
+            if (rate.ClientAccountId == request.AccountId) continue;
+            rate.ConfigureClientAccount(request.AccountId);
+            modified++;
+        }
+        if (modified > 0) await db.SaveChangesAsync(ct);
+        return Results.Ok(new { linked = modified, total = rates.Count });
+    }
 
     // Quotes retain the CRM lead that originated them. CRM supplies only conversion
     // mappings confirmed in its own database; never infer identity from a name.
