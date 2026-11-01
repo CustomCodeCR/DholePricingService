@@ -19,6 +19,7 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.SourceTariffRateId).IsRequired(false);
         builder.Property(x => x.SourceTariffRevisionNumber).IsRequired(false);
 
+        builder.Property(x => x.ClientAccountId).IsRequired(false);
         builder.Property(x => x.ClientName).HasMaxLength(250).IsRequired(false);
 
         builder.Property(x => x.ExecutiveName).HasMaxLength(250).IsRequired(false);
@@ -196,6 +197,7 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Navigation(x => x.RateContainers).UsePropertyAccessMode(PropertyAccessMode.Field);
 
+        builder.HasIndex(x => x.ClientAccountId).HasDatabaseName("ix_rate_headers_client_account_id");
         builder.HasIndex(x => x.SourceImportFclRateId);
         builder.HasIndex(x => x.SourceTariffRateId)
             .HasDatabaseName("ix_rate_headers_source_tariff_rate_id");

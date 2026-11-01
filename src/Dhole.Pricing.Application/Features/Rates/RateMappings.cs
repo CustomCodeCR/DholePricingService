@@ -166,6 +166,7 @@ internal static class RateMappings
                 .ToList()
         )
         {
+            ClientAccountId = rate.ClientAccountId,
             OtherReferences = rate.OtherReferences,
             PendingReapproval = rate.PendingReapproval,
             ReapprovalReason = rate.ReapprovalReason,

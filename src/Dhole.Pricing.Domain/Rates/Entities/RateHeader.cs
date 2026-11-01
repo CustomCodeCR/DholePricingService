@@ -231,6 +231,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string? CargoLinesJson { get; private set; }
     public Guid[] FinalBackupStorageIds { get; private set; } = [];
 
+    public Guid? ClientAccountId { get; private set; }
     public string? ClientName { get; private set; }
     public string? ExecutiveName { get; private set; }
     public string? IdtraNumber { get; private set; }
@@ -267,6 +268,14 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public IReadOnlyCollection<RateDetail> RateDetails => _rateDetails.AsReadOnly();
     public IReadOnlyCollection<RateService> RateServices => _rateServices.AsReadOnly();
     public IReadOnlyCollection<RateContainerAllocation> RateContainers => _rateContainers.AsReadOnly();
+
+    // The CRM account identifier is stable across name and seller changes.
+    // Older update clients omit the identifier; preserve the existing link.
+    public void ConfigureClientAccount(Guid? accountId)
+    {
+        if (accountId is { } value && value != Guid.Empty)
+            ClientAccountId = value;
+    }
 
     public void ConfigureLclGroupAgent(Guid? agentId, string? agentName, string? agentCode)
     {

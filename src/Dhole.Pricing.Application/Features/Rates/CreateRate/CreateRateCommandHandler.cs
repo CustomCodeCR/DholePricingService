@@ -454,6 +454,7 @@ public sealed class CreateRateCommandHandler(
             rate.ConfigurePickupLocations(command.PickupLocationsJson);
             rate.ConfigureLclGroupAgent(command.LclGroupAgentId, command.LclGroupAgentName, command.LclGroupAgentCode);
             rate.ConfigureExecutive(command.ExecutiveName);
+            rate.ConfigureClientAccount(command.ClientAccountId);
             if (command.OtherReferences is not null)
                 rate.SetOtherReferences(command.OtherReferences, command.CreatedBy);
             rate.ConfigureCommercialPresentation(command.UseAllInPresentation, command.CreatedBy);

@@ -63,6 +63,7 @@ public sealed record CreateRateRequest(
 )
 {
     // Referencias internas de Dhole; no se exportan como IDTRA a Dynamics.
+    public Guid? ClientAccountId { get; init; }
     public string? OtherReferences { get; init; }
     public IReadOnlyCollection<RatePickupLocationRequest>? PickupLocations { get; init; }
     public int? StorageDays { get; init; }
