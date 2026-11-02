@@ -154,7 +154,8 @@ public sealed class ExtractAndPersistFclPricingImportService(
                 // One approval notification per batch, even when the extraction contains many rows.
                 await rateChangeNotifications.QueueApprovalRequiredNotificationsAsync(
                     newRates[0],
-                    cancellationToken
+                    cancellationToken,
+                    newRates
                 );
             }
 
