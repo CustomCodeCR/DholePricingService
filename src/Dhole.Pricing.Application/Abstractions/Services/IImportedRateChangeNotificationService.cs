@@ -11,6 +11,7 @@ public interface IImportedRateChangeNotificationService
 
     Task QueueApprovalRequiredNotificationsAsync(
         ImportFclRates currentRate,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<ImportFclRates>? batchRates = null
     );
 }
