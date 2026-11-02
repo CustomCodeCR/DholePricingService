@@ -84,6 +84,13 @@ public static class RateOperationsReportEndpoints
         var requests = await history.OrderByDescending(request => request.RequestedAtUtc)
             .ToListAsync(ct);
 
+        var responseRateIds = requests.Where(request => request.RateId.HasValue)
+            .Select(request => request.RateId!.Value).Distinct().ToArray();
+        var quoteNumbers = await db.RateHeaders.AsNoTracking()
+            .Where(rate => responseRateIds.Contains(rate.Id) && !rate.IsDeleted)
+            .Select(rate => new { rate.Id, rate.QuoNumber, rate.RateCode })
+            .ToDictionaryAsync(rate => rate.Id, rate => rate.QuoNumber ?? rate.RateCode, ct);
+
         // Fetch request-to-rate associations separately without applying the history range.
         // Seller ownership must not disappear when a request is old or modified.
         var linked = await visibleRequests
@@ -182,8 +189,8 @@ public static class RateOperationsReportEndpoints
                 originName = request.OriginName ?? "",
                 destinationName = request.PodName ?? request.DestinationName ?? "",
                 quoNumber = request.RateId.HasValue
-                    ? pendingRates.FirstOrDefault(rate => rate.Id == request.RateId.Value)?.QuoNumber
-                    : null
+                    && quoteNumbers.TryGetValue(request.RateId.Value, out var quoNumber)
+                    ? quoNumber : null
             }).ToArray(),
             pendingSellerRates = pending
         });
