@@ -75,8 +75,9 @@ public static class RateOperationsReportEndpoints
         // Keep all open requests on the dashboard regardless of report period: otherwise
         // the oldest overdue items would disappear when the default range is applied.
         // Completed/cancelled requests are restricted by their original submission date.
-        var fromUtc = from?.Date;
-        var toExclusive = to?.Date.AddDays(1);
+        // The UI sends YYYY-MM-DD. PostgreSQL timestamptz requires UTC-kind parameters.
+        var fromUtc = from.HasValue ? DateTime.SpecifyKind(from.Value.Date, DateTimeKind.Utc) : (DateTime?)null;
+        var toExclusive = to.HasValue ? DateTime.SpecifyKind(to.Value.Date.AddDays(1), DateTimeKind.Utc) : (DateTime?)null;
         var history = visibleRequests.Where(request =>
             request.Status == RateRequestStatus.Open
             || ((!fromUtc.HasValue || request.RequestedAtUtc >= fromUtc.Value)
