@@ -454,7 +454,12 @@ public static class OwnLclRouteMatrixV2Endpoints
             freightSaleTotal = Math.Max(calculatedFreightSale, commercialRate.MinimumFreightSale);
         }
 
-        var freightSalePerCft = chargeableCft > 0m ? freightSaleTotal / chargeableCft : 0m;
+        // RateDetails.SaleAmount has precision (18, 2). Round UP the unit price
+        // before returning it, so persistence cannot reduce a minimum freight
+        // (e.g. NVOCC-A USD 95) below the agreed amount.
+        var freightSalePerCft = chargeableCft > 0m
+            ? decimal.Ceiling(freightSaleTotal / chargeableCft * 100m) / 100m
+            : 0m;
         var lines = new List<OwnLclQuoteLine>();
         AddLine(lines, "Flete Miami → Costa Rica", "CFT", chargeableCft, freightCostPerCft, freightSalePerCft);
 
