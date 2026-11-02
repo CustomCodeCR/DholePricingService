@@ -22,6 +22,8 @@ public static class CostRoutePortEndpoints
 
         group.MapPut("/{costId:guid}/route-ports", ReplaceAsync)
             .RequireScope(PricingScopeNames.CostUpdate);
+        group.MapGet("/payees", GetPayeesAsync)
+            .RequireScope(PricingScopeNames.CostView);
         group.MapGet("/{costId:guid}/payee", GetPayeeAsync)
             .RequireScope(PricingScopeNames.CostView);
         group.MapPut("/{costId:guid}/payee", ReplacePayeeAsync)
@@ -104,6 +106,48 @@ public static class CostRoutePortEndpoints
 
     // Operational association (naviera/agente) and actual payable party
     // are independent; no carrier/agent filters change with this snapshot.
+    private static async Task<IResult> GetPayeesAsync(
+        Guid[]? costId, ServiceDbContext db, CancellationToken ct)
+    {
+        var ids = (costId ?? []).Where(x => x != Guid.Empty).Distinct().ToArray();
+        if (ids.Length > 100)
+            return Results.BadRequest(new { code = "Pricing.CostPayeeLookupLimit" });
+        if (ids.Length == 0)
+            return Results.Ok(new Dictionary<Guid, CostSupplierPayeeSnapshot>());
+        var connection = db.Database.GetDbConnection();
+        var closeConnection = connection.State != ConnectionState.Open;
+        if (closeConnection) await connection.OpenAsync(ct);
+        try
+        {
+            await using var command = connection.CreateCommand();
+            var names = new List<string>();
+            for (var index = 0; index < ids.Length; index++)
+            {
+                var name = "@id" + index;
+                names.Add(name);
+                var parameter = command.CreateParameter();
+                parameter.ParameterName = name;
+                parameter.DbType = DbType.Guid;
+                parameter.Value = ids[index];
+                command.Parameters.Add(parameter);
+            }
+            command.CommandText = $"""
+                SELECT cost_id, supplier_id, supplier_name, supplier_code, supplier_type
+                FROM pricing."CostSupplierPayees"
+                WHERE cost_id IN ({string.Join(", ", names)})
+                """;
+            var results = new Dictionary<Guid, CostSupplierPayeeSnapshot>();
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+                results[reader.GetGuid(0)] = new CostSupplierPayeeSnapshot(
+                    reader.GetGuid(1), reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4));
+            return Results.Ok(results);
+        }
+        finally { if (closeConnection) await connection.CloseAsync(); }
+    }
+
     private static async Task<IResult> GetPayeeAsync(
         Guid costId, ICostRepository costs, ServiceDbContext db, CancellationToken ct)
     {
