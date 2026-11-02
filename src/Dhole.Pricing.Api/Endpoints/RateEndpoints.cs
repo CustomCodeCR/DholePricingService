@@ -887,6 +887,28 @@ public static class RateEndpoints
         var termValidation = ValidateExclusiveRateTerms(request.Includes, request.SubjectTo, request.Excludes, httpContext);
         if (termValidation is not null) return termValidation;
 
+        // A seller amendment is bound to one open work item. A later retry of
+        // the same completed request must not create another quote revision.
+        if (request.ModificationRequestId is { } modificationRequestId)
+        {
+            var modification = await db.RateRequests.AsNoTracking()
+                .Where(x => x.Id == modificationRequestId)
+                .Select(x => new { x.RateId, x.Status, x.PayloadJson })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (modification is null || modification.RateId != rateId
+                || !RateModificationRequestPayload.IsModification(modification.PayloadJson)
+                || modification.Status != RateRequestStatus.Open)
+                return Results.Conflict(new {
+                    code = "Pricing.ModificationAlreadyCompletedOrInvalid",
+                    message = "Esta solicitud de modificación ya se completó o no pertenece a la cotización. Recargue la tarifa; no cree otra revisión."
+                });
+            if (request.ExpectedRevisionNumber is null)
+                return Results.BadRequest(new {
+                    code = "Pricing.ModificationExpectedRevisionRequired",
+                    message = "La modificación requiere la revisión original para evitar guardados duplicados."
+                });
+        }
+
         var extraDetails = new List<UpsertRateExtraDetailCommandItem>();
 
         foreach (var detail in request.ExtraDetails)
@@ -1079,6 +1101,8 @@ public static class RateEndpoints
                 SourceImportFclRateId = request.SourceImportFclRateId,
                 UpdateReason = request.UpdateReason,
                 ReplaceExtraDetails = request.ReplaceExtraDetails,
+                ExpectedRevisionNumber = request.ExpectedRevisionNumber,
+                ModificationRequestId = request.ModificationRequestId,
                 PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
                 StorageDays = request.StorageDays,
                 CargoValue = request.CargoValue,

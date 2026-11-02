@@ -59,6 +59,11 @@ public sealed class UpdateRateCommandHandler(
             return Result.Failure(PricingErrors.RateInvalidStatus);
         }
 
+        // A repeated submission of an earlier wizard version is not a new edit.
+        if (command.ExpectedRevisionNumber is { } expectedRevision && rate.RevisionNumber != expectedRevision)
+            return Result.Failure(PricingErrors.RateUpdateValidationFailed(
+                "La cotización cambió desde que inició esta edición. Recargue la revisión actual antes de guardar."));
+
         // Conservar la versión anterior en el historial para CADA edición guardada,
         // no solo para cotizaciones previamente aceptadas.
         var previousRevision = RateRevisionSnapshotFactory.Capture(rate);
@@ -301,6 +306,14 @@ public sealed class UpdateRateCommandHandler(
             requestedDetails,
             existingDetails.ToDictionary(pair => pair.Key, pair => pair.Value.CostId)
         );
+
+        // A full LCL snapshot missing its existing freight is incomplete, not a
+        // request to delete it. Fail before mutating rate details or revision.
+        if (command.ReplaceExtraDetails && command.ShipmentMode == ShipmentMode.Lcl
+            && !excludesQuotedFreight && previousFreightDetailIds.Count > 0
+            && !extraDetails.Any(detail => detail.CostDetailType == CostDetailType.Freight))
+            return Result.Failure(PricingErrors.RateUpdateValidationFailed(
+                "El flete internacional de la cotización no está en el guardado. Recargue la tarifa y conserve o actualice el flete antes de guardar."));
 
         var removedIds = (command.RemovedExtraDetailIds ?? Array.Empty<Guid>())
             .Where(x => x != Guid.Empty)
