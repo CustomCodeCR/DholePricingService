@@ -25,15 +25,18 @@ public static class RateUpdateEligibilityEndpoints
             .FirstOrDefaultAsync(cancellationToken);
         if (!rateStatus.HasValue) return Results.NotFound();
 
-        // Compatibility endpoint for older DholeWeb builds. Updating a rate no longer has
-        // an artificial window or mandatory reason just because it is an update.
+        // Keep the eligibility advertised to the wizard consistent with PUT
+        // /api/pricing/rates/{id}. Closed quotes are immutable; other states
+        // can create an auditable revision.
+        var decision = Dhole.Pricing.Api.Services.RateUpdateWindowPolicy.Evaluate(
+            rateStatus.Value, hasLinkedRequest: false, requestStillOpen: false);
         return Results.Ok(new
         {
-            canUpdate = true,
-            requiresReason = false,
+            canUpdate = decision.CanUpdate,
+            requiresReason = decision.CanUpdate,
             rateStatus = rateStatus.Value.ToString(),
-            updateWindow = (string?)null,
-            message = "La tarifa puede actualizarse con las mismas reglas funcionales de una tarifa nueva.",
+            updateWindow = decision.UpdateWindow,
+            message = decision.Message,
             requestIds = Array.Empty<Guid>(),
         });
     }

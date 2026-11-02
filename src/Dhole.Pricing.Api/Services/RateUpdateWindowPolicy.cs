@@ -8,6 +8,12 @@ public sealed record RateUpdateWindowDecision(
     string Message
 );
 
+/// <summary>
+/// The quote edit window must be consistent with UpdateRateCommandHandler:
+/// editing a commercial quote creates a new revision (including an accepted
+/// or expired quote); a finalized Closed quote remains immutable.
+/// An unrelated completed seller request must not disable manual editing.
+/// </summary>
 public static class RateUpdateWindowPolicy
 {
     public static RateUpdateWindowDecision Evaluate(
@@ -15,35 +21,23 @@ public static class RateUpdateWindowPolicy
         bool hasLinkedRequest,
         bool requestStillOpen)
     {
-        if (status is RateStatus.AcceptedByClient
-            or RateStatus.RejectedByClient
-            or RateStatus.Closed
-            or RateStatus.Expired)
-        {
-            return new RateUpdateWindowDecision(false, null,
-                "La tarifa ya no puede actualizarse porque el vendedor ya tomó una decisión o la tarifa está cerrada/vencida.");
-        }
+        if (status == RateStatus.Closed)
+            return new(false, null,
+                "La tarifa está cerrada y no se puede modificar. Cree una nueva cotización si necesita cambiarla.");
 
-        var beforePricingSends = hasLinkedRequest
-            && requestStillOpen
-            && status is RateStatus.PendingApproval
-                or RateStatus.ApprovedByManagement
-                or RateStatus.RejectedByManagement
-                or RateStatus.Open;
+        if (hasLinkedRequest && requestStillOpen)
+            return new(true, "LinkedRequestOpen",
+                "Puede editar la cotización vinculada a una solicitud abierta. Indique el motivo del cambio.");
 
-        if (beforePricingSends)
-        {
-            return new RateUpdateWindowDecision(true, "BeforePricingSend",
-                "Puede actualizar la misma solicitud antes de que el operativo de Pricing la envíe. Debe indicar el motivo de la actualización.");
-        }
+        if (status is RateStatus.AcceptedByClient or RateStatus.RejectedByClient or RateStatus.Expired)
+            return new(true, "NewRevision",
+                "Puede crear una nueva revisión sin alterar el historial comercial anterior. Indique el motivo del cambio.");
 
-        if (status == RateStatus.Sent)
-        {
-            return new RateUpdateWindowDecision(true, "WaitingSellerDecision",
-                "La tarifa está enviada y puede actualizarse mientras el vendedor no la acepte ni la rechace. Debe indicar el motivo de la actualización.");
-        }
+        if (status is RateStatus.Sent or RateStatus.RequestedByClient)
+            return new(true, "CommercialRevision",
+                "Puede modificar la tarifa y generar una revisión nueva pendiente de envío. Indique el motivo del cambio.");
 
-        return new RateUpdateWindowDecision(false, null,
-            "La tarifa solo puede actualizarse dentro de la misma solicitud antes del envío de Pricing o cuando está Enviada y pendiente de aceptación/rechazo del vendedor.");
+        return new(true, "EditableQuotation",
+            "Puede guardar modificaciones a la tarifa y se conservará el historial de revisiones. Indique el motivo del cambio.");
     }
 }
