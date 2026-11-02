@@ -73,4 +73,6 @@ public sealed record UpdateRateRequest(
     // True only when the caller sends the full editable detail snapshot.
     public bool ReplaceExtraDetails { get; init; }
     public Guid? LclGroupAgentId { get; init; }
+    public int? ExpectedRevisionNumber { get; init; }
+    public Guid? ModificationRequestId { get; init; }
 }

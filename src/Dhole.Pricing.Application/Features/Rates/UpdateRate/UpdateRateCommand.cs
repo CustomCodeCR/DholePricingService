@@ -103,6 +103,8 @@ public sealed record UpdateRateCommand(
     public decimal? CargoValue { get; init; }
     public int? TransitDays { get; init; }
     public bool ReplaceExtraDetails { get; init; }
+    public int? ExpectedRevisionNumber { get; init; }
+    public Guid? ModificationRequestId { get; init; }
     public Guid? LclGroupAgentId { get; init; }
     public string? LclGroupAgentName { get; init; }
     public string? LclGroupAgentCode { get; init; }
