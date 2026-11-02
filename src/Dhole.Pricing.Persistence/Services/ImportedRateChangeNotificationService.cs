@@ -2,6 +2,8 @@ using System.Text.Json;
 using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Features.Rates.CreateRate;
+using Dhole.Pricing.Application.Imports;
+using Dhole.Pricing.Domain.Imports.Services;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Imports.Entities;
 using Dhole.Pricing.Domain.Imports.Enums;
@@ -28,7 +30,8 @@ public sealed class ImportedRateChangeNotificationService(
 
     public async Task QueueApprovalRequiredNotificationsAsync(
         ImportFclRates currentRate,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<ImportFclRates>? batchRates = null
     )
     {
         if (!configuration.GetValue("Pricing:ImportApprovalNotifications:Enabled", true))
@@ -75,25 +78,43 @@ public sealed class ImportedRateChangeNotificationService(
             return;
         }
 
-        var subject = "Nuevas tarifas preautorizadas pendientes de preaprobación";
-        var body =
-            $"Hay nuevas tarifas recibidas por correo que ya pasaron la preautorización automática y están pendientes de preaprobación. "
-            + $"Naviera: {currentRate.CarrierName}; ruta: {currentRate.PolName} → {currentRate.PoeName} → {currentRate.PodName}; "
-            + $"equipo: {currentRate.ContainerTypeName}. Abra Pricing > Tarifas recibidas para revisarlas y aprobarlas o rechazarlas.";
+        // A single batch may contain many routes, carriers and equipment types.
+        // Summarize the full batch, never the first imported tariff.
+        var eligibleRates = (batchRates ?? [currentRate])
+            .Where(rate => rate.ImportBatchId == currentRate.ImportBatchId
+                && rate.SourceType == ImportSourceType.Email
+                && rate.Status is ImportStatus.Pending or ImportStatus.PreAuthorized)
+            .ToArray();
+        if (eligibleRates.Length == 0)
+            return;
+
+        var content = ImportedRateBatchApprovalNotificationBuilder.Build(
+            currentRate.ImportBatchId,
+            eligibleRates.Length,
+            eligibleRates.Select(rate => rate.ShipmentMode switch
+            {
+                ImportedShipmentMode.Fcl => "FCL",
+                ImportedShipmentMode.LclColoader => "LCL",
+                ImportedShipmentMode.AirLclColoader => "Aéreo",
+                ImportedShipmentMode.Ltl => "LTL",
+                _ => "Por clasificar",
+            }),
+            eligibleRates.Select(rate => rate.CarrierName),
+            configuration["Pricing:ImportApprovalNotifications:PublicWebBaseAddress"]
+                ?? configuration["Reports:PublicWebBaseAddress"]);
+        var subject = content.Subject;
+        var body = content.Body;
 
         var payload = new
         {
             type = "pricing.imported-rate.approval-required",
             currentRate.ImportBatchId,
-            firstImportRateId = currentRate.Id,
+            totalRates = content.TotalRates,
             sourceType = currentRate.SourceType.ToString(),
-            currentRate.CarrierName,
-            currentRate.PolName,
-            currentRate.PoeName,
-            currentRate.PodName,
-            currentRate.ContainerTypeName,
+            modalityCount = eligibleRates.Select(x => x.ShipmentMode).Distinct().Count(),
+            providerCount = eligibleRates.Select(x => x.CarrierId).Distinct().Count(),
             action = "review-imported-rates",
-            route = "/pricing/imports",
+            route = content.Route,
         };
 
         foreach (var recipient in recipients)
@@ -109,7 +130,8 @@ public sealed class ImportedRateChangeNotificationService(
                     payload,
                     currentRate.Id,
                     $"pricing-approval:{currentRate.ImportBatchId:N}:system:{recipient.UserId:N}",
-                    cancellationToken
+                    cancellationToken,
+                    importBatchId: currentRate.ImportBatchId
                 );
             }
 
@@ -123,8 +145,9 @@ public sealed class ImportedRateChangeNotificationService(
                     body,
                     payload,
                     currentRate.Id,
-                    $"pricing-approval:{currentRate.ImportBatchId:N}:email:{recipient.Email}",
-                    cancellationToken
+                    $"pricing-approval:{currentRate.ImportBatchId:N}:email:{recipient.Email.Trim().ToLowerInvariant()}",
+                    cancellationToken,
+                    importBatchId: currentRate.ImportBatchId
                 );
             }
         }
@@ -666,7 +689,8 @@ public sealed class ImportedRateChangeNotificationService(
         object payload,
         Guid importRateId,
         string correlationId,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        Guid? importBatchId = null
     ) => outbox.WriteAsync(
         EventName,
         EventName,
@@ -679,7 +703,8 @@ public sealed class ImportedRateChangeNotificationService(
             subject,
             body,
             payload,
-            importRateId
+            importRateId,
+            importBatchId
         ),
         correlationId: correlationId,
         cancellationToken: cancellationToken
@@ -694,14 +719,15 @@ public sealed class ImportedRateChangeNotificationService(
         string subject,
         string body,
         object payload,
-        Guid importRateId
+        Guid importRateId,
+        Guid? importBatchId
     ) => new
     {
         notificationType,
         templateCode = (string?)null,
         channel,
-        entityType = "ImportFclRate",
-        entityId = importRateId.ToString(),
+        entityType = importBatchId.HasValue ? "ImportRateBatch" : "ImportFclRate",
+        entityId = (importBatchId ?? importRateId).ToString(),
         subject,
         body,
         payload,
