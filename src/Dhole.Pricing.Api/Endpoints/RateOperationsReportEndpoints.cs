@@ -43,7 +43,8 @@ public static class RateOperationsReportEndpoints
         // rate.view permission must never grant access to every seller's information.
         var canReadAll = visibilityService.HasScope(context.User, PricingConstants.Scopes.RateRequestReportViewAll)
             || visibilityService.HasScope(context.User, PricingConstants.Scopes.RateRequestViewAll)
-            || visibilityService.HasScope(context.User, PricingConstants.Scopes.RateUpdate);
+            || visibilityService.HasScope(context.User, PricingConstants.Scopes.RateUpdate)
+            || visibilityService.HasScope(context.User, PricingConstants.Scopes.RateCreate);
 
         var visibility = canReadAll
             ? new SellerVisibilityContext(currentUserId.Value, SellerVisibilityMode.All, new HashSet<Guid>())
