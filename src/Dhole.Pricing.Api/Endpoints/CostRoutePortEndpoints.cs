@@ -1,6 +1,9 @@
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
+using Dhole.Pricing.Persistence.DbContexts;
+using Microsoft.EntityFrameworkCore;
+using System.Data;
 
 namespace Dhole.Pricing.Api.Endpoints;
 
@@ -18,6 +21,10 @@ public static class CostRoutePortEndpoints
             .RequireScope(PricingScopeNames.CostView);
 
         group.MapPut("/{costId:guid}/route-ports", ReplaceAsync)
+            .RequireScope(PricingScopeNames.CostUpdate);
+        group.MapGet("/{costId:guid}/payee", GetPayeeAsync)
+            .RequireScope(PricingScopeNames.CostView);
+        group.MapPut("/{costId:guid}/payee", ReplacePayeeAsync)
             .RequireScope(PricingScopeNames.CostUpdate);
 
         return app;
@@ -95,6 +102,72 @@ public static class CostRoutePortEndpoints
         return Results.Ok(await routePorts.GetAsync(costId, cancellationToken));
     }
 
+    // Operational association (naviera/agente) and actual payable party
+    // are independent; no carrier/agent filters change with this snapshot.
+    private static async Task<IResult> GetPayeeAsync(
+        Guid costId, ICostRepository costs, ServiceDbContext db, CancellationToken ct)
+    {
+        if (await costs.GetByIdWithIncotermsAsync(costId, ct) is null)
+            return Results.NotFound();
+        var connection = db.Database.GetDbConnection();
+        var closeConnection = connection.State != ConnectionState.Open;
+        if (closeConnection) await connection.OpenAsync(ct);
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT supplier_id, supplier_name, supplier_code, supplier_type
+                FROM pricing."CostSupplierPayees" WHERE cost_id = @costId
+                """;
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "@costId";
+            parameter.DbType = DbType.Guid;
+            parameter.Value = costId;
+            command.Parameters.Add(parameter);
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct))
+                return Results.Ok(new CostSupplierPayeeSnapshot(null, null, null, null));
+            return Results.Ok(new CostSupplierPayeeSnapshot(reader.GetGuid(0),
+                reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3)));
+        }
+        finally { if (closeConnection) await connection.CloseAsync(); }
+    }
+
+    private static async Task<IResult> ReplacePayeeAsync(
+        Guid costId, CostSupplierPayeeRequest request, ICostRepository costs,
+        ServiceDbContext db, CancellationToken ct)
+    {
+        if (await costs.GetByIdWithIncotermsAsync(costId, ct) is null)
+            return Results.NotFound();
+        if (request.SupplierId is null)
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM pricing.\"CostSupplierPayees\" WHERE cost_id = {costId}", ct);
+            return Results.Ok(new CostSupplierPayeeSnapshot(null, null, null, null));
+        }
+        var name = request.SupplierName?.Trim();
+        var code = request.SupplierCode?.Trim();
+        var type = request.SupplierType?.Trim();
+        if (request.SupplierId == Guid.Empty || string.IsNullOrWhiteSpace(name) ||
+            name.Length > 220 || code?.Length > 100 || type?.Length > 60)
+            return Results.BadRequest(new { code = "Pricing.InvalidSrmPayee",
+                message = "Seleccione un proveedor SRM válido." });
+        // Retain the original payee name/code even if its SRM profile changes.
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO pricing."CostSupplierPayees"
+                (cost_id, supplier_id, supplier_name, supplier_code, supplier_type, updated_at_utc)
+            VALUES ({costId}, {request.SupplierId.Value}, {name}, {code}, {type}, now())
+            ON CONFLICT (cost_id) DO UPDATE SET
+                supplier_id = EXCLUDED.supplier_id,
+                supplier_name = EXCLUDED.supplier_name,
+                supplier_code = EXCLUDED.supplier_code,
+                supplier_type = EXCLUDED.supplier_type,
+                updated_at_utc = now()
+            """, ct);
+        return Results.Ok(new CostSupplierPayeeSnapshot(request.SupplierId, name, code, type));
+    }
+
     private static Guid[] Normalize(IReadOnlyCollection<Guid>? ids) =>
         ids is null
             ? []
@@ -108,3 +181,7 @@ public sealed record CostRoutePortSelectionRequest(
     IReadOnlyCollection<Guid>? CarrierIds = null,
     IReadOnlyCollection<Guid>? AgentIds = null
 );
+public sealed record CostSupplierPayeeRequest(
+    Guid? SupplierId, string? SupplierName, string? SupplierCode, string? SupplierType);
+public sealed record CostSupplierPayeeSnapshot(
+    Guid? SupplierId, string? SupplierName, string? SupplierCode, string? SupplierType);
