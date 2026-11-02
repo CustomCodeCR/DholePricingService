@@ -164,6 +164,7 @@ app.MapRateRequestLeaseEndpoints();
 app.MapSellerRateRequestEndpoints();
 app.MapRateRequestCompletionEndpoints();
 app.MapRateRequestReportingEndpoints();
+app.MapRateOperationsReportEndpoints();
 app.MapRateTermItemEndpoints();
 app.MapPricingRuleConfigurationEndpoints();
 app.MapCommercialTermEndpoints();
