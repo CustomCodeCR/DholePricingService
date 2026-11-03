@@ -21,7 +21,9 @@ public static class CommercialRateReportEndpoints
     // Costa Rica no utiliza horario de verano. El cierre comercial mensual se
     // calcula en hora local, no en el cambio de día UTC.
     private static readonly TimeZoneInfo BusinessZone =
-        TimeZoneInfo.FindSystemTimeZoneById("America/Costa_Rica");
+        TimeZoneInfo.CreateCustomTimeZone(
+            "Costa_Rica_UTC-6", TimeSpan.FromHours(-6),
+            "Costa Rica (UTC-6)", "Costa Rica");
 
     private static DateTime StartOfBusinessDayUtc(DateTime localDate) =>
         TimeZoneInfo.ConvertTimeToUtc(
