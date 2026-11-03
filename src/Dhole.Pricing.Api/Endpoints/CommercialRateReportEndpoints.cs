@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using System.Text.Json;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.Abstractions.Services;
@@ -36,6 +37,7 @@ public static class CommercialRateReportEndpoints
         string? seller,
         string? fromDate,
         string? toDate,
+        string? dateType,
         ServiceDbContext db,
         IPricingConfigCatalogClient configCatalog,
         SellerVisibilityService visibility,
@@ -60,7 +62,10 @@ public static class CommercialRateReportEndpoints
         if (from.HasValue && to.HasValue && from.Value > to.Value)
             return Results.BadRequest(new { message = "La fecha inicial no puede ser posterior a la fecha final." });
 
-        return Results.Ok(await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, from, to, ct));
+        if (!ValidDateType(dateType))
+            return Results.BadRequest(new { message = "El tipo de fecha debe ser created o approved." });
+
+        return Results.Ok(await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, from, to, dateType, ct));
     }
 
     private static async Task<IResult> ExportAsync(
@@ -70,6 +75,7 @@ public static class CommercialRateReportEndpoints
         string? seller,
         string? fromDate,
         string? toDate,
+        string? dateType,
         ServiceDbContext db,
         IPricingConfigCatalogClient configCatalog,
         SellerVisibilityService visibility,
@@ -94,7 +100,10 @@ public static class CommercialRateReportEndpoints
         if (from.HasValue && to.HasValue && from.Value > to.Value)
             return Results.BadRequest(new { message = "La fecha inicial no puede ser posterior a la fecha final." });
 
-        var rows = await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, from, to, ct);
+        if (!ValidDateType(dateType))
+            return Results.BadRequest(new { message = "El tipo de fecha debe ser created o approved." });
+
+        var rows = await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, from, to, dateType, ct);
         return Results.File(
             BuildWorkbook(rows),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -106,6 +115,11 @@ public static class CommercialRateReportEndpoints
         status.Equals("Sent", StringComparison.OrdinalIgnoreCase) ||
         status.Equals("AcceptedByClient", StringComparison.OrdinalIgnoreCase) ||
         status.Equals("RejectedByClient", StringComparison.OrdinalIgnoreCase);
+
+    private static bool ValidDateType(string? value) =>
+        string.IsNullOrWhiteSpace(value) ||
+        value.Equals("created", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("approved", StringComparison.OrdinalIgnoreCase);
 
     private static bool TryParseMonth(string? month, out DateTime? monthStart)
     {
@@ -139,7 +153,7 @@ public static class CommercialRateReportEndpoints
     private static async Task<List<CommercialQuote>> ReadRowsAsync(
         ServiceDbContext db, IPricingConfigCatalogClient configCatalog,
         string? status, string? search, string? seller, DateTime? monthStart,
-        DateTime? fromDate, DateTime? toDate, CancellationToken ct)
+        DateTime? fromDate, DateTime? toDate, string? dateType, CancellationToken ct)
     {
         var query = db.RateHeaders.AsNoTracking()
             .Where(rate => !rate.IsDeleted &&
@@ -159,8 +173,11 @@ public static class CommercialRateReportEndpoints
         else if (status?.Equals("RejectedByClient", StringComparison.OrdinalIgnoreCase) == true)
             query = query.Where(rate => rate.Status == RateStatus.RejectedByClient || rate.Status == RateStatus.Closed);
 
-        // Filtrar por mes de creación mediante un rango, sin funciones sobre la columna.
-        if (monthStart is { } from)
+        var filterByApprovedDate = dateType?.Equals("approved", StringComparison.OrdinalIgnoreCase) == true;
+
+        // Filtros por creación cuando se selecciona esa fecha. El modo aprobación se
+        // resuelve después de recuperar el historial de eventos de las tarifas antiguas.
+        if (!filterByApprovedDate && monthStart is { } from)
         {
             var until = from.AddMonths(1);
             query = query.Where(rate => rate.CreatedAtUtc >= from && rate.CreatedAtUtc < until);
@@ -168,10 +185,10 @@ public static class CommercialRateReportEndpoints
 
         // Fechas de creación en UTC: inicio inclusivo y fin inclusivo (hasta el final del día).
         // Usar límites directos permite aprovechar los índices sobre CreatedAtUtc.
-        if (fromDate is { } fromDateUtc)
+        if (!filterByApprovedDate && fromDate is { } fromDateUtc)
             query = query.Where(rate => rate.CreatedAtUtc >= fromDateUtc);
 
-        if (toDate is { } toDateUtc)
+        if (!filterByApprovedDate && toDate is { } toDateUtc)
         {
             var untilExclusive = toDateUtc == DateTime.MaxValue.Date
                 ? DateTime.MaxValue
@@ -226,6 +243,7 @@ public static class CommercialRateReportEndpoints
                 rate.TotalUtilityAmount,
                 rate.MarginPercentage,
                 rate.CreatedAtUtc,
+                rate.AcceptedAtUtc,
                 rate.ValidFrom,
                 rate.ValidTo,
                 rate.ClosedAtUtc,
@@ -243,7 +261,45 @@ public static class CommercialRateReportEndpoints
             .GroupBy(item => item.Id)
             .ToDictionary(group => group.Key, group => group.First().Value!.Trim());
 
-        return data.Select(rate => new CommercialQuote(
+        // Las tarifas aceptadas antes de agregar AcceptedAtUtc no deben recibir
+        // una fecha inventada (p. ej. UpdatedAtUtc). Reutilizar solo eventos reales
+        // de aceptación registrados en el outbox de auditoría.
+        var legacyDates = new Dictionary<Guid, DateTime>();
+        var missingDates = data
+            .Where(rate => rate.Status == RateStatus.AcceptedByClient && !rate.AcceptedAtUtc.HasValue)
+            .Select(rate => rate.Id)
+            .ToHashSet();
+        if (missingDates.Count > 0)
+        {
+            var events = await db.OutboxMessages.AsNoTracking()
+                .Where(message => message.EventName == "pricing.rate.accepted_by_client")
+                .Select(message => message.PayloadJson)
+                .ToListAsync(ct);
+            foreach (var payload in events)
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(payload);
+                    var root = doc.RootElement;
+                    if (!root.TryGetProperty("rateId", out var rateValue) ||
+                        !Guid.TryParse(rateValue.GetString(), out var rateId) ||
+                        !missingDates.Contains(rateId) ||
+                        !root.TryGetProperty("occurredAt", out var timeValue) ||
+                        !timeValue.TryGetDateTime(out var occurredAt))
+                        continue;
+                    var approvedAt = occurredAt.Kind == DateTimeKind.Utc
+                        ? occurredAt : occurredAt.ToUniversalTime();
+                    if (!legacyDates.TryGetValue(rateId, out var previous) || approvedAt > previous)
+                        legacyDates[rateId] = approvedAt;
+                }
+                catch (JsonException)
+                {
+                    // Un evento antiguo inválido no debe impedir consultar el reporte.
+                }
+            }
+        }
+
+        var result = data.Select(rate => new CommercialQuote(
             rate.Id,
             rate.RateCode,
             rate.QuoNumber,
@@ -264,6 +320,8 @@ public static class CommercialRateReportEndpoints
             rate.TotalUtilityAmount,
             rate.MarginPercentage,
             rate.CreatedAtUtc,
+            rate.AcceptedAtUtc ?? (legacyDates.TryGetValue(rate.Id, out var historicalDate)
+                ? historicalDate : (DateTime?)null),
             rate.ValidFrom,
             rate.ValidTo,
             rate.ClosedAtUtc,
@@ -271,6 +329,19 @@ public static class CommercialRateReportEndpoints
             rate.Status == RateStatus.AcceptedByClient ? "AcceptedByClient" :
             rate.Status is RateStatus.RejectedByClient or RateStatus.Closed ? "RejectedByClient" : "Sent"
         )).ToList();
+
+        if (!filterByApprovedDate ||
+            (!monthStart.HasValue && !fromDate.HasValue && !toDate.HasValue))
+            return result;
+
+        return result.Where(rate =>
+            rate.Status == "AcceptedByClient" &&
+            rate.AcceptedAtUtc is { } acceptedAt &&
+            (!monthStart.HasValue ||
+                (acceptedAt >= monthStart.Value && acceptedAt < monthStart.Value.AddMonths(1))) &&
+            (!fromDate.HasValue || acceptedAt >= fromDate.Value) &&
+            (!toDate.HasValue || acceptedAt.Date <= toDate.Value))
+            .ToList();
     }
 
     private sealed record CommercialQuote(
@@ -292,6 +363,7 @@ public static class CommercialRateReportEndpoints
         decimal TotalUtilityAmount,
         decimal MarginPercentage,
         DateTime CreatedAtUtc,
+        DateTime? AcceptedAtUtc,
         DateTime ValidFrom,
         DateTime ValidTo,
         DateTime? ClosedAtUtc,
@@ -354,7 +426,7 @@ public static class CommercialRateReportEndpoints
                 "Código", "Cotización", "IDTRA", "Cliente", "Vendedor", "Modalidad",
                 "POL", "POE", "POD", "Equipo", "Cantidad", "Moneda", "Venta",
                 "Costo", "Utilidad", "Margen (%)", "Estado", "Fecha creada",
-                "Vigente desde", "Vigente hasta", "Fecha cierre", "Motivo cierre"
+                "Fecha aprobación", "Vigente desde", "Vigente hasta", "Fecha cierre", "Motivo cierre"
             }, false);
 
             var rowNumber = 2;
@@ -372,6 +444,7 @@ public static class CommercialRateReportEndpoints
                     rate.MarginPercentage.ToString(CultureInfo.InvariantCulture),
                     rate.Status == "Sent" ? "Enviada" : rate.Status == "AcceptedByClient" ? "Aceptada" : "No aceptada",
                     rate.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
+                    rate.AcceptedAtUtc?.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? "",
                     rate.ValidFrom.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     rate.ValidTo.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     rate.ClosedAtUtc?.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? "",
