@@ -87,7 +87,9 @@ public static class OwnLclConsolidationEndpoints
         CancellationToken ct
     )
     {
-        var row = await LoadAsync(id, db, ct);
+        // Historical quotation review needs an exact-ID read even for closed/inactive
+        // consolidations. Other calls (including calculations) remain active-only.
+        var row = await LoadAsync(id, db, ct, includeInactive: true);
         if (row is null)
             return Results.NotFound();
 
@@ -661,7 +663,7 @@ public static class OwnLclConsolidationEndpoints
         }
     }
 
-    private static async Task<OwnLclConsolidationDto?> LoadAsync(Guid id, ServiceDbContext db, CancellationToken ct)
+    private static async Task<OwnLclConsolidationDto?> LoadAsync(Guid id, ServiceDbContext db, CancellationToken ct, bool includeInactive = false)
     {
         await using var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
@@ -674,10 +676,11 @@ public static class OwnLclConsolidationEndpoints
                    ocean_freight, maximum_cbm, carrier_destination_cost_total, panama_to_cr_cost,
                    bunker_cost, cr_transfer_base_cbm, freight_profit_per_cbm, matrix_version, status, is_active
             FROM pricing."OwnLclConsolidations"
-            WHERE id=@id AND is_active=TRUE
+            WHERE id=@id AND (is_active=TRUE OR @include_inactive=TRUE)
             LIMIT 1;
             """;
         Add(command, "id", id);
+        Add(command, "include_inactive", includeInactive);
         await using var reader = await command.ExecuteReaderAsync(ct);
         return await reader.ReadAsync(ct) ? ReadConsolidation(reader) : null;
     }
