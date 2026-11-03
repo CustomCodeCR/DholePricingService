@@ -34,6 +34,8 @@ public static class CommercialRateReportEndpoints
         string? search,
         string? month,
         string? seller,
+        string? fromDate,
+        string? toDate,
         ServiceDbContext db,
         IPricingConfigCatalogClient configCatalog,
         SellerVisibilityService visibility,
@@ -49,7 +51,16 @@ public static class CommercialRateReportEndpoints
         if (!TryParseMonth(month, out var monthStart))
             return Results.BadRequest(new { message = "El mes debe tener el formato AAAA-MM." });
 
-        return Results.Ok(await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, ct));
+        if (!TryParseDate(fromDate, out var from))
+            return Results.BadRequest(new { message = "La fecha inicial debe tener el formato AAAA-MM-DD." });
+
+        if (!TryParseDate(toDate, out var to))
+            return Results.BadRequest(new { message = "La fecha final debe tener el formato AAAA-MM-DD." });
+
+        if (from.HasValue && to.HasValue && from.Value > to.Value)
+            return Results.BadRequest(new { message = "La fecha inicial no puede ser posterior a la fecha final." });
+
+        return Results.Ok(await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, from, to, ct));
     }
 
     private static async Task<IResult> ExportAsync(
@@ -57,6 +68,8 @@ public static class CommercialRateReportEndpoints
         string? search,
         string? month,
         string? seller,
+        string? fromDate,
+        string? toDate,
         ServiceDbContext db,
         IPricingConfigCatalogClient configCatalog,
         SellerVisibilityService visibility,
@@ -72,7 +85,16 @@ public static class CommercialRateReportEndpoints
         if (!TryParseMonth(month, out var monthStart))
             return Results.BadRequest(new { message = "El mes debe tener el formato AAAA-MM." });
 
-        var rows = await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, ct);
+        if (!TryParseDate(fromDate, out var from))
+            return Results.BadRequest(new { message = "La fecha inicial debe tener el formato AAAA-MM-DD." });
+
+        if (!TryParseDate(toDate, out var to))
+            return Results.BadRequest(new { message = "La fecha final debe tener el formato AAAA-MM-DD." });
+
+        if (from.HasValue && to.HasValue && from.Value > to.Value)
+            return Results.BadRequest(new { message = "La fecha inicial no puede ser posterior a la fecha final." });
+
+        var rows = await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, from, to, ct);
         return Results.File(
             BuildWorkbook(rows),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -100,9 +122,24 @@ public static class CommercialRateReportEndpoints
         return true;
     }
 
+    private static bool TryParseDate(string? value, out DateTime? date)
+    {
+        date = null;
+        if (string.IsNullOrWhiteSpace(value)) return true;
+
+        if (value.Length != 10 ||
+            !DateTime.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var parsed))
+            return false;
+
+        date = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+        return true;
+    }
+
     private static async Task<List<CommercialQuote>> ReadRowsAsync(
         ServiceDbContext db, IPricingConfigCatalogClient configCatalog,
-        string? status, string? search, string? seller, DateTime? monthStart, CancellationToken ct)
+        string? status, string? search, string? seller, DateTime? monthStart,
+        DateTime? fromDate, DateTime? toDate, CancellationToken ct)
     {
         var query = db.RateHeaders.AsNoTracking()
             .Where(rate => !rate.IsDeleted &&
@@ -127,6 +164,19 @@ public static class CommercialRateReportEndpoints
         {
             var until = from.AddMonths(1);
             query = query.Where(rate => rate.CreatedAtUtc >= from && rate.CreatedAtUtc < until);
+        }
+
+        // Fechas de creación en UTC: inicio inclusivo y fin inclusivo (hasta el final del día).
+        // Usar límites directos permite aprovechar los índices sobre CreatedAtUtc.
+        if (fromDate is { } fromDateUtc)
+            query = query.Where(rate => rate.CreatedAtUtc >= fromDateUtc);
+
+        if (toDate is { } toDateUtc)
+        {
+            var untilExclusive = toDateUtc == DateTime.MaxValue.Date
+                ? DateTime.MaxValue
+                : toDateUtc.AddDays(1);
+            query = query.Where(rate => rate.CreatedAtUtc < untilExclusive);
         }
 
         if (!string.IsNullOrWhiteSpace(seller))
