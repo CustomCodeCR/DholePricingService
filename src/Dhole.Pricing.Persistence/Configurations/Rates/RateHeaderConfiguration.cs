@@ -166,6 +166,7 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.ReapprovalReason).HasColumnType("text").IsRequired(false);
 
         builder.Property(x => x.Status).HasConversion<string>().HasMaxLength(50).IsRequired();
+        builder.Property(x => x.AcceptedAtUtc).IsRequired(false);
         builder.Property(x => x.SellerReceivedAtUtc).IsRequired(false);
         builder.Property(x => x.SellerReceivedBy).IsRequired(false);
 
@@ -215,6 +216,7 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.HasIndex(x => x.RateType);
         builder.HasIndex(x => x.CurrencyId);
         builder.HasIndex(x => x.Status);
+        builder.HasIndex(x => x.AcceptedAtUtc);
         builder.HasIndex(x => x.RequiredApproval);
         builder.HasIndex(x => x.ValidFrom);
         builder.HasIndex(x => x.ValidTo);
