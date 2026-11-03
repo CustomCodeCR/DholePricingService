@@ -198,8 +198,8 @@ public static class CommercialRateReportEndpoints
         // Límites de fechas locales de Costa Rica convertidos a UTC para la consulta.
         if (!filterByApprovedDate && fromDate is { } fromDateLocal)
         {
-            var fromUtc = StartOfBusinessDayUtc(fromDateLocal);
-            query = query.Where(rate => rate.CreatedAtUtc >= fromUtc);
+            var creationFromUtc = StartOfBusinessDayUtc(fromDateLocal);
+            query = query.Where(rate => rate.CreatedAtUtc >= creationFromUtc);
         }
 
         if (!filterByApprovedDate && toDate is { } toDateLocal)
