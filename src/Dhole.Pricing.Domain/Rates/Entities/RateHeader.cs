@@ -258,6 +258,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public bool PendingReapproval { get; private set; }
     public string? ReapprovalReason { get; private set; }
     public RateStatus Status { get; private set; }
+    public DateTime? AcceptedAtUtc { get; private set; }
     public DateTime? SellerReceivedAtUtc { get; private set; }
     public Guid? SellerReceivedBy { get; private set; }
     public string? ClosedReason { get; private set; }
@@ -1428,6 +1429,10 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         }
 
         Status = status;
+        // La fecha real de aceptación no debe confundirse con una edición posterior.
+        // Una nueva aceptación comercial reemplaza la fecha de la revisión anterior.
+        if (status == RateStatus.AcceptedByClient)
+            AcceptedAtUtc = DateTime.UtcNow;
         RequiredApproval = false;
         if (status is RateStatus.AcceptedByClient or RateStatus.RejectedByClient or RateStatus.Closed or RateStatus.Cancelled)
         {
