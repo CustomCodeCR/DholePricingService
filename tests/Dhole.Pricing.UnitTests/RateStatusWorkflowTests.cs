@@ -214,6 +214,34 @@ public sealed class RateStatusWorkflowTests
     }
 
     [TestMethod]
+    public void ClientAcceptance_CapturesActualTimestamp_AndDoesNotChangeOnSubsequentEdits()
+    {
+        var rate = CreateRate();
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+
+        Assert.IsNull(rate.AcceptedAtUtc);
+        var earliest = DateTime.UtcNow.AddSeconds(-1);
+        rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
+        var firstAcceptance = rate.AcceptedAtUtc;
+
+        Assert.IsNotNull(firstAcceptance);
+        Assert.IsTrue(firstAcceptance.Value >= earliest);
+        Assert.AreEqual(DateTimeKind.Utc, firstAcceptance.Value.Kind);
+
+        rate.SetIdtraNumber("IDTRA999.10001", updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
+        Assert.AreEqual(firstAcceptance, rate.AcceptedAtUtc);
+
+        rate.BeginRevision(updatedBy: null, modificationReason: "Ajuste comercial");
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
+        Assert.IsNotNull(rate.AcceptedAtUtc);
+        Assert.IsTrue(rate.AcceptedAtUtc.Value >= firstAcceptance.Value);
+    }
+
+    [TestMethod]
     public void SentRate_CanBeAcceptedWithoutIdtra_AndAssignedLater()
     {
         var rate = CreateRate();
