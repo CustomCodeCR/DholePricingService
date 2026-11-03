@@ -18,6 +18,15 @@ namespace Dhole.Pricing.Api.Endpoints;
 /// </summary>
 public static class CommercialRateReportEndpoints
 {
+    // Costa Rica no utiliza horario de verano. El cierre comercial mensual se
+    // calcula en hora local, no en el cambio de día UTC.
+    private static readonly TimeZoneInfo BusinessZone =
+        TimeZoneInfo.FindSystemTimeZoneById("America/Costa_Rica");
+
+    private static DateTime StartOfBusinessDayUtc(DateTime localDate) =>
+        TimeZoneInfo.ConvertTimeToUtc(
+            DateTime.SpecifyKind(localDate.Date, DateTimeKind.Unspecified), BusinessZone);
+
     public static IEndpointRouteBuilder MapCommercialRateReportEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/pricing/rates")
@@ -132,7 +141,7 @@ public static class CommercialRateReportEndpoints
             (date.Year == 9999 && date.Month == 12))
             return false;
 
-        monthStart = DateTime.SpecifyKind(date, DateTimeKind.Utc);
+        monthStart = DateTime.SpecifyKind(date, DateTimeKind.Unspecified);
         return true;
     }
 
@@ -146,7 +155,7 @@ public static class CommercialRateReportEndpoints
                 DateTimeStyles.None, out var parsed))
             return false;
 
-        date = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+        date = DateTime.SpecifyKind(parsed, DateTimeKind.Unspecified);
         return true;
     }
 
@@ -179,20 +188,23 @@ public static class CommercialRateReportEndpoints
         // resuelve después de recuperar el historial de eventos de las tarifas antiguas.
         if (!filterByApprovedDate && monthStart is { } from)
         {
-            var until = from.AddMonths(1);
-            query = query.Where(rate => rate.CreatedAtUtc >= from && rate.CreatedAtUtc < until);
+            var utcFrom = StartOfBusinessDayUtc(from);
+            var until = StartOfBusinessDayUtc(from.AddMonths(1));
+            query = query.Where(rate => rate.CreatedAtUtc >= utcFrom && rate.CreatedAtUtc < until);
         }
 
-        // Fechas de creación en UTC: inicio inclusivo y fin inclusivo (hasta el final del día).
-        // Usar límites directos permite aprovechar los índices sobre CreatedAtUtc.
-        if (!filterByApprovedDate && fromDate is { } fromDateUtc)
-            query = query.Where(rate => rate.CreatedAtUtc >= fromDateUtc);
-
-        if (!filterByApprovedDate && toDate is { } toDateUtc)
+        // Límites de fechas locales de Costa Rica convertidos a UTC para la consulta.
+        if (!filterByApprovedDate && fromDate is { } fromDateLocal)
         {
-            var untilExclusive = toDateUtc == DateTime.MaxValue.Date
+            var fromUtc = StartOfBusinessDayUtc(fromDateLocal);
+            query = query.Where(rate => rate.CreatedAtUtc >= fromUtc);
+        }
+
+        if (!filterByApprovedDate && toDate is { } toDateLocal)
+        {
+            var untilExclusive = toDateLocal == DateTime.MaxValue.Date
                 ? DateTime.MaxValue
-                : toDateUtc.AddDays(1);
+                : StartOfBusinessDayUtc(toDateLocal.AddDays(1));
             query = query.Where(rate => rate.CreatedAtUtc < untilExclusive);
         }
 
@@ -334,13 +346,22 @@ public static class CommercialRateReportEndpoints
             (!monthStart.HasValue && !fromDate.HasValue && !toDate.HasValue))
             return result;
 
+        var monthFromUtc = monthStart.HasValue ? StartOfBusinessDayUtc(monthStart.Value) : (DateTime?)null;
+        var monthUntilUtc = monthStart.HasValue ? StartOfBusinessDayUtc(monthStart.Value.AddMonths(1)) : (DateTime?)null;
+        var fromUtc = fromDate.HasValue ? StartOfBusinessDayUtc(fromDate.Value) : (DateTime?)null;
+        var untilUtc = toDate.HasValue
+            ? (toDate.Value == DateTime.MaxValue.Date
+                ? DateTime.MaxValue
+                : StartOfBusinessDayUtc(toDate.Value.AddDays(1)))
+            : (DateTime?)null;
+
         return result.Where(rate =>
             rate.Status == "AcceptedByClient" &&
             rate.AcceptedAtUtc is { } acceptedAt &&
-            (!monthStart.HasValue ||
-                (acceptedAt >= monthStart.Value && acceptedAt < monthStart.Value.AddMonths(1))) &&
-            (!fromDate.HasValue || acceptedAt >= fromDate.Value) &&
-            (!toDate.HasValue || acceptedAt.Date <= toDate.Value))
+            (!monthFromUtc.HasValue || acceptedAt >= monthFromUtc.Value) &&
+            (!monthUntilUtc.HasValue || acceptedAt < monthUntilUtc.Value) &&
+            (!fromUtc.HasValue || acceptedAt >= fromUtc.Value) &&
+            (!untilUtc.HasValue || acceptedAt < untilUtc.Value))
             .ToList();
     }
 
@@ -385,6 +406,11 @@ public static class CommercialRateReportEndpoints
         return "SIN MONEDA";
     }
 
+    private static string BusinessDate(DateTime? utc) => utc is { } value
+        ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(value, DateTimeKind.Utc), BusinessZone)
+            .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
+        : string.Empty;
+
     private static byte[] BuildWorkbook(IReadOnlyList<CommercialQuote> rates)
     {
         using var stream = new MemoryStream();
@@ -425,8 +451,8 @@ public static class CommercialRateReportEndpoints
             {
                 "Código", "Cotización", "IDTRA", "Cliente", "Vendedor", "Modalidad",
                 "POL", "POE", "POD", "Equipo", "Cantidad", "Moneda", "Venta",
-                "Costo", "Utilidad", "Margen (%)", "Estado", "Fecha creada",
-                "Fecha aprobación", "Vigente desde", "Vigente hasta", "Fecha cierre", "Motivo cierre"
+                "Costo", "Utilidad", "Margen (%)", "Estado", "Fecha creada (CR)",
+                "Fecha aprobación (CR)", "Vigente desde", "Vigente hasta", "Fecha cierre", "Motivo cierre"
             }, false);
 
             var rowNumber = 2;
@@ -443,8 +469,8 @@ public static class CommercialRateReportEndpoints
                     rate.TotalUtilityAmount.ToString(CultureInfo.InvariantCulture),
                     rate.MarginPercentage.ToString(CultureInfo.InvariantCulture),
                     rate.Status == "Sent" ? "Enviada" : rate.Status == "AcceptedByClient" ? "Aceptada" : "No aceptada",
-                    rate.CreatedAtUtc.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
-                    rate.AcceptedAtUtc?.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? "",
+                    BusinessDate(rate.CreatedAtUtc),
+                    BusinessDate(rate.AcceptedAtUtc),
                     rate.ValidFrom.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     rate.ValidTo.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     rate.ClosedAtUtc?.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? "",
