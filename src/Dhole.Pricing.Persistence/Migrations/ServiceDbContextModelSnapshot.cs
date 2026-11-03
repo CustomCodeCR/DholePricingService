@@ -2752,6 +2752,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("excludes");
 
+                    b.Property<DateTime?>("AcceptedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at_utc");
+
                     b.Property<DateTime?>("SellerReceivedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("seller_received_at_utc");
@@ -3109,6 +3113,8 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.HasIndex("SourceTariffRateId")
                         .HasDatabaseName("ix_rate_headers_source_tariff_rate_id");
+
+                    b.HasIndex("AcceptedAtUtc");
 
                     b.HasIndex("Status");
 
