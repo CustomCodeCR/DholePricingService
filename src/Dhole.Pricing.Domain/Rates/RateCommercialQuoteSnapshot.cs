@@ -94,7 +94,7 @@ public sealed class RateCommercialQuoteSnapshot
 
             // Historical flat pickup rows may carry a volume basis despite being
             // a single explicitly selected charge.
-            if (IsPickup(detail) && detail.ChargeBasis != ChargeBasis.PerContainer)
+            if (IsPickup(detail) && !(rate.ShipmentMode == ShipmentMode.Fcl && detail.ChargeBasis == ChargeBasis.PerContainer))
             {
                 quantity = 1m;
             }
