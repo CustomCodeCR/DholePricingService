@@ -999,10 +999,10 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
 
-        var chargeBasis = IsFlatPickupChargeName(name) ? ChargeBasis.PerShipment : InferChargeBasis(costDetailType);
+        var chargeBasis = ResolvePickupChargeBasis(name, InferChargeBasis(costDetailType));
         var effectiveQuantity = costDetailType == CostDetailType.InlandTransport
-            ? ResolveChargeQuantity(chargeBasis)
-            : ResolveChargeQuantity(chargeBasis, quantity);
+            ? ResolvePickupChargeQuantity(name, chargeBasis, 0m)
+            : ResolvePickupChargeQuantity(name, chargeBasis, quantity);
 
         var detail = RateDetail.Create(
             Id,
@@ -1046,10 +1046,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             throw new InvalidOperationException("El detalle no corresponde a la tarifa.");
 
         ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
-        // Pickup/recolecta is a flat line: never multiply it by CBM, CFT or number of pickups.
-        if (IsFlatPickupChargeName(name))
-            chargeBasis = ChargeBasis.PerShipment;
-        var effectiveQuantity = ResolveChargeQuantity(chargeBasis, quantity);
+        // FCL pickup is billed per container; other shipment modes retain their flat pickup.
+        chargeBasis = ResolvePickupChargeBasis(name, chargeBasis);
+        var effectiveQuantity = ResolvePickupChargeQuantity(name, chargeBasis, quantity);
         var detail = RateDetail.Create(
             Id, costId, name.Trim(), costDetailType, costType, chargeBasis, currencyId,
             currencyName.Trim(), currencyCode.Trim(), costAmount, saleAmount, Normalize(notes),
@@ -1085,10 +1084,10 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
 
-        var chargeBasis = IsFlatPickupChargeName(name) ? ChargeBasis.PerShipment : InferChargeBasis(costDetailType);
+        var chargeBasis = ResolvePickupChargeBasis(name, InferChargeBasis(costDetailType));
         var effectiveQuantity = costDetailType == CostDetailType.InlandTransport
-            ? ResolveChargeQuantity(chargeBasis)
-            : ResolveChargeQuantity(chargeBasis, quantity);
+            ? ResolvePickupChargeQuantity(name, chargeBasis, 0m)
+            : ResolvePickupChargeQuantity(name, chargeBasis, quantity);
 
         detail.Update(
             costId,
@@ -1128,10 +1127,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         var detail = _rateDetails.FirstOrDefault(x => x.Id == rateDetailId)
             ?? throw new InvalidOperationException("El detalle de la tarifa no existe.");
         ValidateDetail(name, currencyId, currencyName, currencyCode, costAmount, saleAmount);
-        // Pickup/recolecta is a flat line: never multiply it by CBM, CFT or number of pickups.
-        if (IsFlatPickupChargeName(name))
-            chargeBasis = ChargeBasis.PerShipment;
-        var effectiveQuantity = ResolveChargeQuantity(chargeBasis, quantity);
+        // FCL pickup is billed per container; other shipment modes retain their flat pickup.
+        chargeBasis = ResolvePickupChargeBasis(name, chargeBasis);
+        var effectiveQuantity = ResolvePickupChargeQuantity(name, chargeBasis, quantity);
         detail.Update(costId, name.Trim(), costDetailType, costType, chargeBasis, currencyId,
             currencyName.Trim(), currencyCode.Trim(), costAmount, saleAmount, Normalize(notes), effectiveQuantity);
         MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
@@ -1785,6 +1783,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             // automatic fixed equipment costs still follow the shipment's equipment quantity.
             var followsAllEquipment =
                 detail.CostDetailType == CostDetailType.InlandTransport
+                || (ShipmentMode == ShipmentMode.Fcl && IsFlatPickupChargeName(detail.Name))
                 || (detail.CostId.HasValue && detail.CostType == CostType.Fixed);
 
             if (followsAllEquipment && detail.ChargeBasis is ChargeBasis.PerContainer or ChargeBasis.PerTruck)
@@ -1862,6 +1861,21 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
                 $"El ítem '{duplicate}' solo puede pertenecer a una categoría: Incluye, Sujeto a o No incluye."
             );
         }
+    }
+
+    private ChargeBasis ResolvePickupChargeBasis(string? name, ChargeBasis basis)
+    {
+        if (!IsFlatPickupChargeName(name)) return basis;
+        return ShipmentMode == ShipmentMode.Fcl ? ChargeBasis.PerContainer : ChargeBasis.PerShipment;
+    }
+
+    private decimal ResolvePickupChargeQuantity(string? name, ChargeBasis basis, decimal requestedQuantity)
+    {
+        // A pickup is a single service for LCL/other modes but FCL is priced
+        // per physical container. Ignore a stale quantity of 1 from legacy quotes.
+        if (ShipmentMode == ShipmentMode.Fcl && IsFlatPickupChargeName(name))
+            return ResolveChargeQuantity(ChargeBasis.PerContainer);
+        return ResolveChargeQuantity(basis, requestedQuantity);
     }
 
     private static bool IsFlatPickupChargeName(string? name)
