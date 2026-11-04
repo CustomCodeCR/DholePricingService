@@ -65,6 +65,69 @@ public sealed class RateFreightQuantityTests
     }
 
     [TestMethod]
+    public void FclRecolecta_PersistsPerContainerBasisQuantityAndCommercialTotals()
+    {
+        var rate = CreateRate(containerQuantity: 6);
+        var detail = rate.AddRateDetail(
+            rate.Id, Guid.NewGuid(), "Recolecta", CostDetailType.OriginCharge, CostType.Variable,
+            ChargeBasis.PerShipment,
+            rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            520m, 575m, "Cargo manual agregado desde Pricing", 1m, null
+        );
+        rate.SetAmounts(null);
+
+        Assert.AreEqual(ChargeBasis.PerContainer, detail.ChargeBasis);
+        Assert.AreEqual(6m, detail.Quantity);
+        Assert.AreEqual(3120m, rate.TotalCostAmount);
+        Assert.AreEqual(3450m, rate.TotalSaleAmount);
+        var commercial = Dhole.Pricing.Domain.Rates.RateCommercialQuoteSnapshot.Create(rate).For(detail);
+        Assert.AreEqual(6m, commercial.Quantity);
+        Assert.AreEqual(3450m, commercial.SaleSubtotal);
+    }
+
+    [TestMethod]
+    public void FclRecolecta_UpdateAndContainerQuantityChangeKeepPerContainer()
+    {
+        var rate = CreateRate(containerQuantity: 6);
+        var detail = rate.AddRateDetail(
+            rate.Id, null, "Recolecta", CostDetailType.OriginCharge, CostType.Variable,
+            ChargeBasis.PerShipment, rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            520m, 575m, null, 1m, null
+        );
+
+        rate.UpdateRateDetail(
+            detail.Id, null, "Recolecta", CostDetailType.OriginCharge, CostType.Variable,
+            ChargeBasis.PerShipment, rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            520m, 575m, null, 1m, null
+        );
+        Assert.AreEqual(ChargeBasis.PerContainer, detail.ChargeBasis);
+        Assert.AreEqual(6m, detail.Quantity);
+
+        rate.ReplaceContainerAllocations(
+            [new RateContainerAllocationSpec(rate.ContainerTypeId, rate.ContainerTypeName, rate.ContainerTypeCode, 3)],
+            null
+        );
+        rate.SetAmounts(null);
+        Assert.AreEqual(3m, detail.Quantity);
+        Assert.AreEqual(1725m, rate.TotalSaleAmount);
+    }
+
+    [TestMethod]
+    public void LclRecolecta_RemainsFlatByShipment()
+    {
+        var rate = CreateRate(containerQuantity: 1);
+        rate.ConfigureShipment(ShipmentMode.Lcl, 0, 0, 0m, 0m, 500m, null, null);
+        var detail = rate.AddRateDetail(
+            rate.Id, null, "Recolecta", CostDetailType.OriginCharge, CostType.Variable,
+            ChargeBasis.PerContainer, rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            520m, 575m, null, 6m, null
+        );
+        rate.SetAmounts(null);
+        Assert.AreEqual(ChargeBasis.PerShipment, detail.ChargeBasis);
+        Assert.AreEqual(1m, rate.TotalSaleAmount / 575m);
+    }
+
+    [TestMethod]
     public void MixedContainers_CanHaveDifferentInternationalFreightPerType()
     {
         var rate = CreateRate(containerQuantity: 2);
