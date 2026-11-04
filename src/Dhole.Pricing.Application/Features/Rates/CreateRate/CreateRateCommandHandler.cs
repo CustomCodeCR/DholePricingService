@@ -21,7 +21,6 @@ public sealed class CreateRateCommandHandler(
     IRateHeaderRepository rateHeaders,
     IImportFclRateRepository importedRates,
     IRateCodeGenerator rateCodeGenerator,
-    IRateFixedCostSynchronizer fixedCostSynchronizer,
     IRateExtraDetailResolver extraDetailResolver,
     IPricingConfigCatalogClient configCatalog,
     IPricingExchangeRateProvider exchangeRateProvider,
@@ -527,15 +526,12 @@ public sealed class CreateRateCommandHandler(
                 addedDetail.ConfigureBillToClient(detail.BillToClient);
             }
 
-            // Al crear, Details representa exactamente la selección explícita hecha por Pricing.
-            // La sincronización puede completar costos fijos faltantes, pero no debe borrar y
-            // volver a filtrar los costos fijos que ya llegaron en el payload.
-            await fixedCostSynchronizer.SynchronizeAsync(
-                rate,
-                command.CreatedBy,
-                cancellationToken,
-                preserveExplicitFixedDetails: true
-            );
+            // Pantalla 7 (Details) es el snapshot autoritativo de los rubros seleccionados.
+            // El flete importado se agregó arriba cuando corresponde. No ejecutar aquí
+            // RateFixedCostSynchronizer: añadiría cargos fijos del catálogo que el usuario
+            // NO incluyó (Carta Porte, DUCA-T, Manejos, Manifiesto, etc.) y alteraría los
+            // totales y el PDF al crear la tarifa. La sincronización para ediciones
+            // parciales/legadas continúa bajo UpdateRateCommandHandler.
 
             rate.SetAmounts(command.CreatedBy);
 
