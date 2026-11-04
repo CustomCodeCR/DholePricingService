@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Dhole.Pricing.Application.Abstractions.Services;
+using Dhole.Pricing.Application.Features.Rates.CreateRate;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates;
 using Dhole.Pricing.Domain.Rates.Entities;
@@ -76,6 +78,43 @@ public sealed class RateCommercialQuoteSnapshotTests
         Assert.AreEqual(2, doc.RootElement.GetProperty("rows").GetArrayLength());
         Assert.AreEqual(90m, doc.RootElement.GetProperty("currencyTotals")[0]
             .GetProperty("amount").GetDecimal());
+    }
+
+    [TestMethod]
+    public void Ftl_OnlyFreightLine_SelectedInPricing_HasExactSavedTotals()
+    {
+        // Regression QUO-00000-000518: POST included only freight 1100/1195,
+        // but a backend synchronizer incorrectly appended four catalog charges.
+        var rate = CreateRate();
+        rate.ConfigureShipment(ShipmentMode.Ftl, 0, 0, 15000m, 0m, 500m, null, null);
+        rate.AddRateDetail(rate.Id, null, "Flete Internacional",
+            CostDetailType.Freight, CostType.Variable, ChargeBasis.PerTruck,
+            rate.CurrencyId, "USD", "USD", 1100m, 1195m, null, 1m, null);
+
+        rate.SetAmounts(null);
+
+        Assert.AreEqual(1, rate.RateDetails.Count);
+        Assert.AreEqual("Flete Internacional", rate.RateDetails.Single().Name);
+        Assert.AreEqual(1100m, rate.TotalCostAmount);
+        Assert.AreEqual(1195m, rate.TotalSaleAmount);
+        Assert.AreEqual(95m, rate.TotalUtilityAmount);
+
+        using var document = JsonDocument.Parse(
+            new RateReportDataFactory(new ConfigurationBuilder().Build()).CreateDataJson(rate));
+        var rows = document.RootElement.GetProperty("rows").EnumerateArray().ToArray();
+        Assert.AreEqual(1, rows.Length);
+    }
+
+    [TestMethod]
+    public void CreateRateHandler_CannotAppendCatalogChargesThroughFixedCostSynchronizer()
+    {
+        // Creation must persist only the explicit detail snapshot, regardless of
+        // shipment mode. Partial legacy update synchronization remains separate.
+        var parameters = typeof(CreateRateCommandHandler).GetConstructors()
+            .Single().GetParameters();
+        Assert.IsFalse(parameters.Any(parameter =>
+            parameter.ParameterType == typeof(IRateFixedCostSynchronizer)),
+            "CreateRateCommandHandler must not inject automatic fixed costs.");
     }
 
     private static RateHeader CreateRate() => RateHeader.Create(
