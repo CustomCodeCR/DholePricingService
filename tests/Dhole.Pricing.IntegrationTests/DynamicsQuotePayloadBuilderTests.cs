@@ -338,10 +338,12 @@ public sealed class DynamicsQuotePayloadBuilderTests
             schemaText = schemaText.Replace(oldField, "", StringComparison.Ordinal);
         schemaText = schemaText.Replace(
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
-            """{"name":"customerid","target":"customerid_account@odata.bind","type":"string","dataverseType":"Customer","required":true,"options":[]},
+            """
+            {"name":"customerid","target":"customerid_account@odata.bind","type":"string","dataverseType":"Customer","required":true,"options":[]},
               {"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":true,"options":[]},
               {"name":"msdyn_account","target":"msdyn_account_account@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
-              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}
+            """,
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
@@ -359,10 +361,12 @@ public sealed class DynamicsQuotePayloadBuilderTests
     {
         var schemaText = Schema.Replace(
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
-            """{"name":"customerid","target":"customerid_account@odata.bind","type":"string","dataverseType":"Customer","required":true,"options":[]},
+            """
+            {"name":"customerid","target":"customerid_account@odata.bind","type":"string","dataverseType":"Customer","required":true,"options":[]},
               {"name":"msdyn_account","target":"msdyn_account_account@odata.bind","type":"string","dataverseType":"Lookup","required":true,"options":[]},
               {"name":"description","target":"description","type":"string","dataverseType":"Memo","required":true,"options":[]},
-              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}
+            """,
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
@@ -600,8 +604,10 @@ public sealed class DynamicsQuotePayloadBuilderTests
     {
         var fields = Schema.Replace(
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
-            """{"name":"new_idtra1","target":"new_IDTRA1@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
-              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            """
+            {"name":"new_idtra1","target":"new_IDTRA1@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
+            {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}
+            """,
             StringComparison.Ordinal);
         var accepted = Accepted.Replace("IDTRA-2026-045", "IDTRA12589-QUO11098");
         using var result = JsonDocument.Parse(JsonSerializer.Serialize(
@@ -617,10 +623,12 @@ public sealed class DynamicsQuotePayloadBuilderTests
     {
         var schemaText = Schema.Replace(
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
-            """{"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
+            """
+            {"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
               {"name":"new_idtra2","target":"new_idtra2_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
               {"name":"new_idtra3","target":"new_idtra3_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
-              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}
+            """,
             StringComparison.Ordinal);
         var multiSnapshot = Accepted.Replace("IDTRA-2026-045",
             "IDTRA IDTRA999.12565, IDTRA999.12566 // QUO-00000-000316 // QUO-11229-Q4X8M7",
@@ -641,8 +649,10 @@ public sealed class DynamicsQuotePayloadBuilderTests
     {
         var schemaText = Schema.Replace(
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
-            """{"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
-              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            """
+            {"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
+            {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}
+            """,
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         Assert.ThrowsExactly<InvalidOperationException>(() =>
