@@ -39,19 +39,15 @@ public sealed class DuplicateRateCommandHandler(
 
         if (command.ApplyTariff || command.IdenticalCopy)
         {
-            var tariffApplicationDate = DateTime.UtcNow.Date;
-            if (command.ApplyTariff && (
-                source.RateType != RateType.Tariff
-                || source.ClientName?.Contains("TARIFARIO", StringComparison.OrdinalIgnoreCase) != true
-                || source.Status is not (
-                    RateStatus.ApprovedByManagement
-                    or RateStatus.Open
-                    or RateStatus.Sent
-                    or RateStatus.RequestedByClient
-                    or RateStatus.AcceptedByClient
-                )
-                || source.ValidFrom.Date > tariffApplicationDate
-                || source.ValidTo.Date < tariffApplicationDate
+            // Future-dated tariffs may be quoted in advance. Validity is copied
+            // unchanged; expired masters and disallowed statuses remain blocked.
+            if (command.ApplyTariff && !TariffApplicationPolicy.CanApply(
+                source.RateType,
+                source.ClientName,
+                source.Status,
+                source.ValidFrom,
+                source.ValidTo,
+                DateTime.UtcNow.Date
             ))
             {
                 return Result.Failure<Guid>(PricingErrors.RateInvalidStatus);

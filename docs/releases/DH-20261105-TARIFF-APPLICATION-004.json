@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261105-TARIFF-APPLICATION-004",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.2.4",
+  "date": "2026-11-05",
+  "changes": [
+    {
+      "component": "DholePricingService",
+      "previousVersion": "1.2.3",
+      "newVersion": "1.2.4",
+      "changeType": "PATCH"
+    }
+  ],
+  "unmodifiedDependencies": [
+    {
+      "component": "DholeWeb",
+      "observedVersion": "1.2.0"
+    }
+  ],
+  "stagingRequired": true,
+  "productionDeploymentAuthorized": false,
+  "note": "Tariff application source validity gate; future-dated masters may generate open client QUOs without changing master snapshot."
+}
