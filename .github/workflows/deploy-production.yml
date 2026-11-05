@@ -1,15 +1,20 @@
 name: Deploy Dhole Pricing - Production
 
 on:
-  push:
-    branches: [master]
+  # Production is never deployed by a push or by re-running a push run.
   workflow_dispatch:
+    inputs:
+      confirm_production_deploy:
+        description: 'Autorizo desplegar Dhole Pricing en producción desde master'
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: write
   packages: read
 concurrency:
   group: dhole-pricing-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 env:
   COMPOSE_FILE: .dhole-system/deploy/docker-compose.services.yml
   DHOLE_IMAGE_TAG: latest
@@ -17,10 +22,19 @@ env:
   COMPOSE_PROJECT: dhole
 jobs:
   deploy:
-    # Production deployments require explicit workflow_dispatch authorization.
-    if: github.event_name == 'workflow_dispatch'
     runs-on: [self-hosted, linux, x64, dhole]
     steps:
+      - name: Confirm explicit production authorization on master
+        shell: bash
+        env:
+          CONFIRM_PRODUCTION: ${{ inputs.confirm_production_deploy }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/master" ] || [ "$CONFIRM_PRODUCTION" != "true" ]; then
+            echo '::error::Use Actions > Deploy Dhole Pricing - Production > Run workflow, select master and authorize production.'
+            exit 1
+          fi
+          echo 'Manual production authorization confirmed for master.'
       - name: Normalize runner workspace permissions
         run: |
           set -euo pipefail
@@ -133,6 +147,29 @@ jobs:
           SHA_TAG="${GITHUB_SHA::12}"
           docker build --pull --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-api:latest -t "dhole/pricing-api:$SHA_TAG" .
           docker build --pull --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Workers/Dockerfile -t dhole/pricing-workers:latest -t "dhole/pricing-workers:$SHA_TAG" .
+      - name: Verify production image FTL mapping before container replacement
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint cat dhole/pricing-api:latest /app/appsettings.Production.json | python3 -c '
+          import json, sys
+          configuration = json.load(sys.stdin)
+          actual = configuration.get("DynamicsQuoteSync", {}).get("EquipmentMappings", {}).get("24PIES5TONFTL")
+          if actual != "7 Ton / 24 pies":
+              raise SystemExit("::error::Production image is missing the approved 24PIES5TONFTL category mapping. Deployment aborted.")
+          print("Production image contains the approved 24-foot FTL mapping.")
+          '
+          docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" config --format json | python3 -c '
+          import json, sys
+          services = json.load(sys.stdin).get("services", {})
+          environment = services.get("pricing-api", {}).get("environment", {})
+          if isinstance(environment, list):
+              environment = dict(x.split("=", 1) for x in environment if "=" in x)
+          override = environment.get("DynamicsQuoteSync__EquipmentMappings__24PIES5TONFTL")
+          if override not in (None, "", "7 Ton / 24 pies"):
+              raise SystemExit("::error::Pricing production environment overrides the approved FTL mapping. Deployment aborted.")
+          print("No conflicting Docker Compose equipment override found.")
+          '
       - name: Deploy Pricing
         run: |
           set -euo pipefail
