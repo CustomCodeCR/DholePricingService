@@ -1,9 +1,14 @@
 name: Deploy Dhole Pricing - Production
 
 on:
-  push:
-    branches: [master]
+  # Production is never deployed by a push or by re-running a push run.
   workflow_dispatch:
+    inputs:
+      confirm_production_deploy:
+        description: 'Autorizo desplegar Dhole Pricing en producción desde master'
+        required: true
+        type: boolean
+        default: false
 permissions:
   contents: write
   packages: read
@@ -19,6 +24,26 @@ jobs:
   deploy:
     runs-on: [self-hosted, linux, x64, dhole]
     steps:
+      - name: Confirm explicit production authorization on master
+        shell: bash
+        env:
+          CONFIRM_PRODUCTION: ${{ inputs.confirm_production_deploy }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/master" ] || [ "$CONFIRM_PRODUCTION" != "true" ]; then
+            echo '::error::Use Actions > Deploy Dhole Pricing - Production > Run workflow, select master and authorize production.'
+            exit 1
+          fi
+          echo 'Manual production authorization confirmed for master.'
+      - name: Normalize runner workspace permissions
+        run: |
+          set -euo pipefail
+          if [ -d "$GITHUB_WORKSPACE" ]; then
+            RUNNER_UID="$(id -u)"
+            RUNNER_GID="$(id -g)"
+            docker run --rm -v "$GITHUB_WORKSPACE:/workspace" alpine:3.22 \
+              sh -c "chown -R ${RUNNER_UID}:${RUNNER_GID} /workspace"
+          fi
       - uses: actions/checkout@v4
       - name: Load Dhole deployment infrastructure
         run: |
@@ -45,6 +70,75 @@ jobs:
           echo "DHOLE_ENV_FILE=$RUNNER_TEMP/dhole-env/.env.production" >> "$GITHUB_ENV"
       - name: Verify production server
         run: docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" config -q
+      - name: Test Dynamics credential preflight without network
+        shell: bash
+        run: bash scripts/tests/test-check-dynamics-pricing-credential.sh
+      - name: Validate configured Dynamics key against active template before redeploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The secret always comes from the canonical production host file,
+          # never from a GitHub secret or the disposable prepared copy.
+          # Fail closed if Compose overrides or omits the same key on pricing-api.
+          # docker compose config contains secrets, so inspect it only in memory.
+          python3 - "$DHOLE_ENV_FILE" "$COMPOSE_FILE" "$COMPOSE_PROJECT" <<'PY'
+          import json
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          source = Path("/opt/dhole/.env").read_text(encoding="utf-8")
+          entries = [line.split("=", 1)[1].strip()
+                     for line in source.splitlines()
+                     if line.startswith("DynamicsQuoteSync__ApiKey=")]
+          if len(entries) != 1:
+              raise SystemExit("::error::Expected exactly one Dynamics key in /opt/dhole/.env.")
+          expected = entries[0].strip('"').strip("'")
+          command = ["docker", "compose", "--env-file", sys.argv[1],
+                     "-f", sys.argv[2], "-p", sys.argv[3], "config", "--format", "json"]
+          result = subprocess.run(command, text=True, capture_output=True, check=True)
+          data = json.loads(result.stdout)
+          service = data.get("services", {}).get("pricing-api", {})
+          env = service.get("environment") or {}
+          if isinstance(env, list):
+              env = dict(entry.split("=", 1) for entry in env if "=" in entry)
+          if env.get("DynamicsQuoteSync__ApiKey") != expected:
+              raise SystemExit("::error::pricing-api Compose configuration does not receive the canonical DynamicsQuoteSync__ApiKey from /opt/dhole/.env. No containers changed.")
+          print("Pricing API runtime Dynamics key matches the canonical /opt/dhole/.env (secret hidden).")
+          PY
+          # Only the canonical key is sent to the read-only Dynamics preflight.
+          bash scripts/check-dynamics-pricing-credential.sh /opt/dhole/.env "$DHOLE_ENV_FILE"
+      - name: Verify EF migrations are synchronized
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/src" \
+            -w /src \
+            -e HOME=/tmp \
+            -e DOTNET_CLI_HOME=/tmp \
+            -e GITHUB_ACTOR="$GITHUB_ACTOR" \
+            -e GITHUB_TOKEN="$GITHUB_TOKEN" \
+            mcr.microsoft.com/dotnet/sdk:10.0 \
+            bash -lc '
+              set -euo pipefail
+              export NuGetPackageSourceCredentials_github="Username=$GITHUB_ACTOR;Password=$GITHUB_TOKEN;ValidAuthenticationTypes=Basic"
+              dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile /src/NuGet.Config
+              # Compilar explícitamente para que Actions muestre los errores reales de C#
+              # en vez del mensaje opaco de dotnet-ef "Build failed".
+              dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
+                --no-restore \
+                --configuration Release \
+                --verbosity minimal
+              dotnet tool install --tool-path /tmp/ef dotnet-ef --version 10.0.9
+              /tmp/ef/dotnet-ef migrations has-pending-model-changes \
+                --no-build \
+                --configuration Release \
+                --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
+                --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj
+            '
       - name: Build images
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -53,6 +147,29 @@ jobs:
           SHA_TAG="${GITHUB_SHA::12}"
           docker build --pull --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-api:latest -t "dhole/pricing-api:$SHA_TAG" .
           docker build --pull --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Workers/Dockerfile -t dhole/pricing-workers:latest -t "dhole/pricing-workers:$SHA_TAG" .
+      - name: Verify production image FTL mapping before container replacement
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint cat dhole/pricing-api:latest /app/appsettings.Production.json | python3 -c '
+          import json, sys
+          configuration = json.load(sys.stdin)
+          actual = configuration.get("DynamicsQuoteSync", {}).get("EquipmentMappings", {}).get("24PIES5TONFTL")
+          if actual != "7 Ton / 24 pies":
+              raise SystemExit("::error::Production image is missing the approved 24PIES5TONFTL category mapping. Deployment aborted.")
+          print("Production image contains the approved 24-foot FTL mapping.")
+          '
+          docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT" config --format json | python3 -c '
+          import json, sys
+          services = json.load(sys.stdin).get("services", {})
+          environment = services.get("pricing-api", {}).get("environment", {})
+          if isinstance(environment, list):
+              environment = dict(x.split("=", 1) for x in environment if "=" in x)
+          override = environment.get("DynamicsQuoteSync__EquipmentMappings__24PIES5TONFTL")
+          if override not in (None, "", "7 Ton / 24 pies"):
+              raise SystemExit("::error::Pricing production environment overrides the approved FTL mapping. Deployment aborted.")
+          print("No conflicting Docker Compose equipment override found.")
+          '
       - name: Deploy Pricing
         run: |
           set -euo pipefail
@@ -87,38 +204,6 @@ jobs:
             head -c 4 /tmp/pricing-smoke-test.pdf | grep -q "%PDF"
             rm -f /tmp/pricing-smoke-test.pdf
           '
-      - name: Keep only master and develop branches
-        shell: bash
-        run: |
-          set -uo pipefail
-
-          # La limpieza de ramas no forma parte del deploy. Un fallo temporal de DNS
-          # hacia github.com no debe convertir un despliegue saludable en fallido.
-          fetched=0
-          for attempt in 1 2 3; do
-            if git fetch --prune origin '+refs/heads/*:refs/remotes/origin/*'; then
-              fetched=1
-              break
-            fi
-            echo "::warning::No se pudo contactar GitHub para limpiar ramas (intento $attempt/3)."
-            sleep $((attempt * 5))
-          done
-
-          if [ "$fetched" -ne 1 ]; then
-            echo "::warning::Se omite la limpieza de ramas por un problema temporal de red/DNS. El deploy ya fue completado."
-            exit 0
-          fi
-
-          git for-each-ref --format='%(refname:strip=3)' refs/remotes/origin |
-            grep -v '^HEAD$' |
-            while IFS= read -r branch; do
-              case "$branch" in master|develop) continue ;; esac
-              echo "Deleting obsolete branch: $branch"
-              if ! git push origin --delete "$branch"; then
-                echo "::warning::No se pudo eliminar la rama $branch; se continuará sin invalidar el deploy."
-              fi
-            done
-
       - name: Cleanup old images
         if: always()
         run: docker image prune -f
