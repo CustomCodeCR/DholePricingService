@@ -7,7 +7,6 @@ using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
 using Dhole.Pricing.Domain.Rates.Enums;
-using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -85,10 +84,9 @@ public static class SellerRateStatusEndpoints
         SellerRateStatusRequest request,
         ServiceDbContext db,
         ICommandDispatcher dispatcher,
-        IPricingAuditService audit,
-        IRateHeaderCacheService cache,
         AcceptedRateOpeningsNotificationService openingsNotificationService,
         SellerRateAccessService sellerAccess,
+        ILoggerFactory loggerFactory,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -123,6 +121,15 @@ public static class SellerRateStatusEndpoints
             && !await sellerAccess.IsAssignedExecutiveAsync(currentRate, currentUserId.Value, cancellationToken))
             return Results.Forbid();
 
+        // Reintentos después de guardar correctamente deben ser idempotentes.
+        // QueueAsync utiliza una clave estable para no duplicar correos de Apertura.
+        if (currentRate.Status == status)
+        {
+            if (status == RateStatus.AcceptedByClient)
+                await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Seller, cancellationToken);
+            return Results.NoContent();
+        }
+
         if (currentRate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient))
         {
             return Results.Conflict(new
@@ -150,61 +157,53 @@ public static class SellerRateStatusEndpoints
             });
         }
 
-        if (AcceptedRateOpeningsNotificationService.HasPendingIdtra(
-            status, currentRate.IdtraNumber, request.IdtraNumber))
+        // Único flujo de dominio para decisiones con IDTRA y sin IDTRA.
+        // SetCommercialStatus registra AcceptedAtUtc, revisión, auditoría y eventos.
+        // La capacidad del consolidado no es un requisito de aceptación comercial.
+        try
         {
-            // La aceptación comercial no depende de la capacidad física del consolidado.
-            // La disponibilidad de CBM se gestiona por separado en la planificación operativa.
-
-            var before = PricingAuditSnapshots.From(currentRate);
-
-            db.Entry(currentRate).Property(x => x.Status).CurrentValue = RateStatus.AcceptedByClient;
-            db.Entry(currentRate).Property(x => x.RequiredApproval).CurrentValue = false;
-
-            await audit.PublishAsync(
-                new PricingAuditEvent(
-                    EventType: PricingAuditEventTypes.RateHeaderUpdated,
-                    Action: PricingAuditActions.Updated,
-                    EntityType: PricingAuditEntityTypes.RateHeader,
-                    EntityId: currentRate.Id,
-                    ActorUserId: currentUserId,
-                    Before: before,
-                    After: PricingAuditSnapshots.From(currentRate),
-                    Payload: new
-                    {
-                        currentRate.Id,
-                        Status = currentRate.Status.ToString(),
-                        currentRate.IdtraNumber,
-                        Source = "SellerClientDecision",
-                        IdtraPending = true,
-                        AcceptanceObservations = acceptanceObservations,
-                    }
+            var result = await dispatcher.DispatchAsync(
+                new SetRateStatusCommand(
+                    rateId,
+                    status,
+                    request.Reason,
+                    status == RateStatus.AcceptedByClient ? request.IdtraNumber : null,
+                    currentUserId,
+                    AcceptanceObservations: acceptanceObservations
                 ),
                 cancellationToken
             );
 
-            await db.SaveChangesAsync(cancellationToken);
-            await cache.RemoveRateHeaderCacheAsync(currentRate.Id, cancellationToken);
-            await openingsNotificationService.QueueAsync(currentRate.Id, RateAcceptanceActor.Seller, cancellationToken, acceptanceObservations);
-            return Results.NoContent();
-        }
+            if (result.IsSuccess && status == RateStatus.AcceptedByClient)
+                await openingsNotificationService.QueueAsync(
+                    rateId,
+                    RateAcceptanceActor.Seller,
+                    cancellationToken,
+                    acceptanceObservations
+                );
 
-        var result = await dispatcher.DispatchAsync(
-            new SetRateStatusCommand(
+            return EndpointResults.FromResult(result, httpContext);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            loggerFactory.CreateLogger(nameof(SellerRateStatusEndpoints)).LogError(
+                exception,
+                "Error al registrar decisión de cliente. RateId={RateId} Status={Status} TraceId={TraceId}",
                 rateId,
                 status,
-                request.Reason,
-                status == RateStatus.AcceptedByClient ? request.IdtraNumber : null,
-                currentUserId,
-                AcceptanceObservations: acceptanceObservations
-            ),
-            cancellationToken
-        );
-
-        if (result.IsSuccess && status == RateStatus.AcceptedByClient)
-            await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Seller, cancellationToken, acceptanceObservations);
-
-        return EndpointResults.FromResult(result, httpContext);
+                httpContext.TraceIdentifier
+            );
+            return Results.Problem(
+                title: "No se pudo registrar la decisión del cliente.",
+                detail: "No se confirmó la operación. Revise el estado de la tarifa antes de reintentar.",
+                statusCode: StatusCodes.Status500InternalServerError,
+                extensions: new Dictionary<string, object?>
+                {
+                    ["code"] = "Pricing.SellerRateStatusFailed",
+                    ["traceId"] = httpContext.TraceIdentifier,
+                }
+            );
+        }
     }
 
     private sealed record SellerRateStatusRequest(
