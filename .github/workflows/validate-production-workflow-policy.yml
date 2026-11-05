@@ -1,0 +1,26 @@
+name: Validate Pricing Production Release Safety
+
+on:
+  pull_request:
+    branches: [develop, master]
+    paths:
+      - '.github/workflows/deploy-production.yml'
+      - '.github/workflows/validate-production-workflow-policy.yml'
+      - 'scripts/tests/test-production-workflow-policy.py'
+  push:
+    branches: [develop, master]
+    paths:
+      - '.github/workflows/deploy-production.yml'
+      - '.github/workflows/validate-production-workflow-policy.yml'
+      - 'scripts/tests/test-production-workflow-policy.py'
+
+permissions:
+  contents: read
+
+jobs:
+  production-release-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm manual-only production workflow and FTL image guard
+        run: python3 scripts/tests/test-production-workflow-policy.py
