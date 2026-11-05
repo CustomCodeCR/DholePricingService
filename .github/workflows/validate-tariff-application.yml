@@ -1,0 +1,41 @@
+name: Validate Pricing tariff application
+
+on:
+  pull_request:
+    branches: [develop, master]
+    paths:
+      - 'src/Dhole.Pricing.Application/Features/Rates/DuplicateRate/**'
+      - 'tests/Dhole.Pricing.UnitTests/TariffApplicationPolicyTests.cs'
+      - '.github/workflows/validate-tariff-application.yml'
+  push:
+    branches: [develop, master]
+    paths:
+      - 'src/Dhole.Pricing.Application/Features/Rates/DuplicateRate/**'
+      - 'tests/Dhole.Pricing.UnitTests/TariffApplicationPolicyTests.cs'
+      - '.github/workflows/validate-tariff-application.yml'
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  tariff-application:
+    name: Build Pricing API and validate tariff application
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Authenticate GitHub Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet nuget update source github --username github-actions --password "$GITHUB_TOKEN" --store-password-in-clear-text --configfile NuGet.Config
+      - name: Restore Pricing unit tests
+        run: dotnet restore tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj --configfile NuGet.Config
+      - name: Build Pricing unit tests
+        run: dotnet build tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj --configuration Release --no-restore
+      - name: Run tariff application regression suite
+        run: dotnet test tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj --configuration Release --no-build --filter FullyQualifiedName~TariffApplicationPolicyTests --logger "console;verbosity=normal"
+      - name: Build Pricing API
+        run: dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configuration Release

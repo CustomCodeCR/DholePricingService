@@ -76,7 +76,7 @@ public sealed class RateCargoProfileFactoryTests
     [TestMethod]
     public void Ltl_HeightAbove270Cm_IsRejected()
     {
-        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() =>
             RateCargoProfileFactory.Create(
                 ShipmentMode.Ltl,
                 330m,
@@ -91,7 +91,7 @@ public sealed class RateCargoProfileFactoryTests
     [TestMethod]
     public void MaritimeLcl_40HcHeightAbove269Cm_IsRejected()
     {
-        var exception = Assert.ThrowsException<InvalidOperationException>(() =>
+        var exception = Assert.ThrowsExactly<InvalidOperationException>(() =>
             RateCargoProfileFactory.Create(
                 ShipmentMode.Lcl,
                 500m,

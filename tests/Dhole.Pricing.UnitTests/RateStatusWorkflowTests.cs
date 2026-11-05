@@ -93,7 +93,7 @@ public sealed class RateStatusWorkflowTests
         rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
 
         Assert.ThrowsExactly<InvalidOperationException>(() => rate.AdvanceRevision(updatedBy: null));
-        rate.BeginRevision(updatedBy: null);
+        rate.BeginRevision(updatedBy: null, modificationReason: "Nueva revisión");
 
         Assert.AreEqual(2, rate.RevisionNumber);
         Assert.AreEqual(RateStatus.Open, rate.Status);
