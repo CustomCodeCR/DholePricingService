@@ -3,6 +3,7 @@ using CustomCodeFramework.Messaging.Outbox;
 using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Persistence.DbContexts;
+using Microsoft.EntityFrameworkCore;
 
 namespace Dhole.Pricing.Persistence.Auditing;
 
@@ -15,7 +16,7 @@ public sealed class PricingAuditService(ServiceDbContext dbContext) : IPricingAu
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public Task PublishAsync(
+    public async Task PublishAsync(
         PricingAuditEvent auditEvent,
         CancellationToken cancellationToken = default
     )
@@ -153,22 +154,35 @@ public sealed class PricingAuditService(ServiceDbContext dbContext) : IPricingAu
                     after.TryGetProperty("revisionNumber", out var rev) &&
                     rev.TryGetInt32(out var revisionNumber) && revisionNumber > 0)
                 {
-                    dbContext.DynamicsQuoteSyncJobs.Add(new DynamicsQuoteSyncJob
+                    // The DB enforces one Dynamics job per quote revision.
+                    // Replaying an audit event must not turn an accepted IDTRA
+                    // into a 500 due to a duplicate sync job.
+                    var alreadyQueued = dbContext.DynamicsQuoteSyncJobs.Local.Any(job =>
+                        job.RateId == rateId && job.RevisionNumber == revisionNumber);
+                    if (!alreadyQueued)
+                        alreadyQueued = await dbContext.DynamicsQuoteSyncJobs
+                            .AsNoTracking()
+                            .AnyAsync(job => job.RateId == rateId
+                                && job.RevisionNumber == revisionNumber, cancellationToken);
+
+                    if (!alreadyQueued)
                     {
-                        Id = Guid.NewGuid(),
-                        EventId = integrationEventId,
-                        RateId = rateId,
-                        RevisionNumber = revisionNumber,
-                        PayloadJson = after.GetRawText(),
-                        Status = "Pending",
-                        NextAttemptAtUtc = DateTime.UtcNow,
-                        CreatedAtUtc = DateTime.UtcNow
-                    });
+                        dbContext.DynamicsQuoteSyncJobs.Add(new DynamicsQuoteSyncJob
+                        {
+                            Id = Guid.NewGuid(),
+                            EventId = integrationEventId,
+                            RateId = rateId,
+                            RevisionNumber = revisionNumber,
+                            PayloadJson = after.GetRawText(),
+                            Status = "Pending",
+                            NextAttemptAtUtc = DateTime.UtcNow,
+                            CreatedAtUtc = DateTime.UtcNow
+                        });
+                    }
                 }
             }
         }
 
-        return Task.CompletedTask;
     }
 
     private static string? SerializeNullable(object? value)
