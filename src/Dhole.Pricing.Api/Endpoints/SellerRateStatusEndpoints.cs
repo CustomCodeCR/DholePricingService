@@ -156,7 +156,7 @@ public static class SellerRateStatusEndpoints
             // La aceptación comercial no depende de la capacidad física del consolidado.
             // La disponibilidad de CBM se gestiona por separado en la planificación operativa.
 
-                        var before = PricingAuditSnapshots.From(currentRate);
+            var before = PricingAuditSnapshots.From(currentRate);
 
             db.Entry(currentRate).Property(x => x.Status).CurrentValue = RateStatus.AcceptedByClient;
             db.Entry(currentRate).Property(x => x.RequiredApproval).CurrentValue = false;
