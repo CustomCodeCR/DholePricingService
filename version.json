@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.2.2",
-  "ecosystemVersion": "1.2.2",
-  "releaseId": "DH-20261105-FTL-MAPPING-002"
+  "version": "1.2.3",
+  "ecosystemVersion": "1.2.3",
+  "releaseId": "DH-20261105-MANUAL-PROD-WORKFLOW-003"
 }
