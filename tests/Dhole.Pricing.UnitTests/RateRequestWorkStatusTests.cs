@@ -72,7 +72,7 @@ public sealed class RateRequestWorkStatusTests
         var request = CreateModification();
         request.SetWorkStatus("Working", DateTime.UtcNow);
 
-        Assert.ThrowsException<InvalidOperationException>(() => request.MarkCompleted(DateTime.UtcNow));
+        Assert.ThrowsExactly<InvalidOperationException>(() => request.MarkCompleted(DateTime.UtcNow));
         Assert.AreEqual(RateRequestStatus.Open, request.Status);
         Assert.IsNull(request.CompletedAtUtc);
         Assert.IsNull(request.DeliveryConfirmedAtUtc);
@@ -82,7 +82,7 @@ public sealed class RateRequestWorkStatusTests
     public void SellerModificationCanOnlyCompleteWithPreparedDelivery()
     {
         var request = CreateModification();
-        Assert.ThrowsException<InvalidOperationException>(
+        Assert.ThrowsExactly<InvalidOperationException>(
             () => request.MarkSellerModificationDelivered(DateTime.UtcNow));
         request.PrepareModification(2);
         Assert.AreEqual(RateRequestStatus.Open, request.Status);
@@ -118,7 +118,7 @@ public sealed class RateRequestWorkStatusTests
         var request = CreateModification();
         request.AttachRate(Guid.NewGuid());
 
-        Assert.ThrowsException<InvalidOperationException>(
+        Assert.ThrowsExactly<InvalidOperationException>(
             () => request.MarkSellerModificationReadyForDelivery(DateTime.UtcNow));
         request.PrepareModification(2);
         request.MarkSellerModificationReadyForDelivery(DateTime.UtcNow);
@@ -133,10 +133,10 @@ public sealed class RateRequestWorkStatusTests
     public void OpenOrUnlinkedRequest_CannotConfirmDelivery()
     {
         var request = CreateRequest();
-        Assert.ThrowsException<InvalidOperationException>(
+        Assert.ThrowsExactly<InvalidOperationException>(
             () => request.MarkDeliveryQueued(DateTime.UtcNow));
         request.AttachRate(Guid.NewGuid());
-        Assert.ThrowsException<InvalidOperationException>(
+        Assert.ThrowsExactly<InvalidOperationException>(
             () => request.MarkDeliveryQueued(DateTime.UtcNow));
     }
 
@@ -145,7 +145,7 @@ public sealed class RateRequestWorkStatusTests
     {
         var request = CreateRequest();
         request.MarkCompleted(DateTime.UtcNow);
-        Assert.ThrowsException<InvalidOperationException>(
+        Assert.ThrowsExactly<InvalidOperationException>(
             () => request.PrepareModification(2));
     }
 
@@ -154,7 +154,7 @@ public sealed class RateRequestWorkStatusTests
     {
         var request = CreateRequest();
         request.MarkCompleted(DateTime.UtcNow);
-        Assert.ThrowsException<InvalidOperationException>(
+        Assert.ThrowsExactly<InvalidOperationException>(
             () => request.SetWorkStatus("Working", DateTime.UtcNow));
     }
 
@@ -162,7 +162,7 @@ public sealed class RateRequestWorkStatusTests
     public void WorkStatus_RejectsUnexpectedValues()
     {
         var request = CreateRequest();
-        Assert.ThrowsException<ArgumentException>(
+        Assert.ThrowsExactly<ArgumentException>(
             () => request.SetWorkStatus("Completed", DateTime.UtcNow));
     }
 
