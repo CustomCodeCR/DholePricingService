@@ -284,6 +284,47 @@ public sealed class DynamicsQuotePayloadBuilderTests
                 schema, invalidConfig));
     }
 
+
+    [TestMethod]
+    public void PublishedEnvironmentMappingsResolveFiveTonTwentyFourFootFTLWithoutChangingTotals()
+    {
+        // The business uses the existing seven-ton/24-foot category for a
+        // five-ton requirement, but the original requested equipment remains
+        // visible in the textual equipment description sent with the Quote.
+        var schema = WithEquipmentOptions("7 Ton / 24 pies", "24 TON FTL");
+        var snapshot = WithEquipment("24 pies / 5 TON", "Ftl");
+        foreach (var environment in new[] { "Development", "Staging", "Production" })
+        {
+            var folder = new DirectoryInfo(AppContext.BaseDirectory);
+            string? filename = null;
+            while (folder is not null)
+            {
+                var candidate = Path.Combine(folder.FullName,
+                    "src", "Dhole.Pricing.Api", "appsettings." + environment + ".json");
+                if (File.Exists(candidate))
+                {
+                    filename = candidate;
+                    break;
+                }
+                folder = folder.Parent;
+            }
+            Assert.IsNotNull(filename, "Missing Pricing config for " + environment);
+            using var stream = File.OpenRead(filename);
+            var configuration = new ConfigurationBuilder().AddJsonStream(stream).Build();
+            using var mapped = JsonDocument.Parse(JsonSerializer.Serialize(
+                BuildForTest(snapshot, schema, configuration)));
+            var inputs = mapped.RootElement.GetProperty("inputs");
+            Assert.AreEqual(100000010, inputs.GetProperty("new_equipo").GetInt32(),
+                environment);
+            Assert.AreEqual("2 x 24 pies / 5 TON",
+                inputs.GetProperty("new_cantidadequipos").GetString(), environment);
+            Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal(),
+                environment);
+            Assert.AreEqual(0m, inputs.GetProperty("new_monto9").GetDecimal(),
+                environment);
+        }
+    }
+
     [TestMethod]
     public void DuplicateDataverseEquipmentChoicesNeverSelectAnArbitraryValue()
     {

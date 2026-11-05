@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.2] - 2026-11-05
+
+- Enables an explicit, existing Dataverse 24-foot / 7-ton capacity category for Pricing 24-foot / 5-ton FTL requests, without inventing a Dynamics option.
+- Preserves the original 5-ton equipment text in `new_cantidadequipos` and never modifies rates, totals, IDTRA or RateId.
+- Adds environment-specific mapping configuration and integration regression tests for Development, Staging and Production.
+- Keeps all other unrecognized or ambiguous equipment choices blocked instead of guessing.
+
+
 ## [1.2.1] - 2026-11-05
 
 - Fixes Dynamics `new_equipo` resolution across the 22 catalog labels (FCL, FTL, LCL, LTL).

@@ -152,3 +152,27 @@ alta aceptada + IDTRA, IDTRA posterior, segunda revisión aceptada,
 repetición con la misma idempotencia, 10 IDTRA y una tarifa con
 venta/costo diferentes. Confirmar que hay una QUO y una línea por RateId,
 y que los montos se actualizan, sin crear duplicados.
+
+## FTL: categoría Dataverse compatible para vehículo de 24 pies / 5 toneladas (v1.2.2)
+
+La opción `new_equipo` actual de Dataverse no tiene una entrada exacta para
+`24 pies / 5 TON FTL`. El catálogo tiene `7 Ton / 24 pies`, la categoría
+operativa de 24 pies con capacidad superior. Dhole asigna **exclusivamente**
+este origen a esa opción existente a través de
+`DynamicsQuoteSync:EquipmentMappings:24PIES5TONFTL` en
+`appsettings.{Development,Staging,Production}.json`.
+
+Este es un **mapeo de categoría compatible, no una equivalencia física exacta**.
+La capacidad original sigue escrita en `new_cantidadequipos`
+(`1 x 24 pies / 5 TON`, según la cantidad del embarque). No modifica
+`new_flete`, costo, moneda, IDTRA ni el identificador de idempotencia.
+No se habilita un redondeo global de toneladas ni una selección arbitraria
+para otros tipos. Si el catálogo agrega la opción exacta de cinco toneladas,
+se debe retirar el mapeo y actualizar la metadata del conector.
+
+El cambio de configuración requiere publicar y desplegar la nueva imagen de
+Pricing: un reintento encolado no actualiza la configuración de producción.
+Antes de reintentar `QUO-00000-000476`, validar mediante el endpoint de
+solo lectura `GET /api/pricing/rates/{rateId}/dynamics-sync/validate` y
+reconciliar cabecera y línea en Dynamics cuando la verificación sea incierta.
+El reintento debe reutilizar la revisión y la clave idempotente existentes.
