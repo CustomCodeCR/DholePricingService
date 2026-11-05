@@ -58,21 +58,27 @@ public sealed class DynamicsQuoteFailureDiagnosticsTests
     public void Policy403FromMiddlewareIsSafeEvenForLegacyPostAttemptFlag()
     {
         using var approved = JsonDocument.Parse(
-            """{"stage":"execute","httpStatus":403,
+            """
+            {"stage":"execute","httpStatus":403,
                 "providerCode":"production_writes_not_approved",
-                "postAttempted":true}""");
+            "postAttempted":true}
+            """);
         Assert.IsTrue(DynamicsQuoteFailureDiagnostics.IsConfirmedPolicyDenial(
             approved.RootElement));
         using var notTrusted = JsonDocument.Parse(
-            """{"stage":"execute","httpStatus":403,
+            """
+            {"stage":"execute","httpStatus":403,
                 "providerCode":"write_grant_denied",
-                "postAttempted":true}""");
+            "postAttempted":true}
+            """);
         Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsConfirmedPolicyDenial(
             notTrusted.RootElement));
         using var ambiguous = JsonDocument.Parse(
-            """{"stage":"execute","httpStatus":504,
+            """
+            {"stage":"execute","httpStatus":504,
                 "providerCode":"production_writes_not_approved",
-                "postAttempted":true}""");
+            "postAttempted":true}
+            """);
         Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsConfirmedPolicyDenial(
             ambiguous.RootElement));
     }
@@ -118,8 +124,10 @@ public sealed class DynamicsQuoteFailureDiagnosticsTests
         Assert.AreEqual("quote_header_requires_reconciliation", header.Code);
         StringAssert.Contains(header.Title!, "cabecera");
         var total = DynamicsQuoteFailureDiagnostics.ReadProviderError(
-            """{"state":"requires_reconciliation","stage":"total",
-                "recordId":"00000000-0000-0000-0000-000000000001","replay":false}""");
+            """
+            {"state":"requires_reconciliation","stage":"total",
+            "recordId":"00000000-0000-0000-0000-000000000001","replay":false}
+            """);
         Assert.AreEqual("quote_total_requires_reconciliation", total.Code);
         StringAssert.Contains(total.Title!, "línea de venta");
         Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure(total.Code));
