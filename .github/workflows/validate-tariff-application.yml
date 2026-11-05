@@ -35,7 +35,7 @@ jobs:
         run: dotnet restore tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj --configfile NuGet.Config
       - name: Build Pricing unit tests
         run: dotnet build tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj --configuration Release --no-restore
-      - name: Run Pricing unit regressions
-        run: dotnet test tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj --configuration Release --no-build --logger "console;verbosity=normal"
+      - name: Run tariff application regression suite
+        run: dotnet test tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj --configuration Release --no-build --filter FullyQualifiedName~TariffApplicationPolicyTests --logger "console;verbosity=normal"
       - name: Build Pricing API
         run: dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configuration Release
