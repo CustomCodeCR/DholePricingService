@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.5] - 2026-11-05
+
+- Removes the redundant confirmation checkbox and typed approval gate from manual Pricing production releases; choosing Run workflow on master remains the release action.
+- Retains explicit manual-only production invocation, master branch validation, pre-deploy FTL image integrity check, non-cancelling releases and all existing health checks.
+- Updates production workflow policy regression assertions to prevent duplicate confirmations without allowing unreviewed push-triggered production deployments.
+
 ## [1.2.4] - 2026-11-05
 
 - Allows creating client QUOs from management-approved master tariffs before their validity start date, preserving both master validity dates and the exact commercial snapshot.
