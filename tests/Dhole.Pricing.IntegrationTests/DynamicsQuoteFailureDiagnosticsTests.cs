@@ -95,8 +95,10 @@ public sealed class DynamicsQuoteFailureDiagnosticsTests
         Assert.AreEqual("quote_header_requires_reconciliation", header.Code);
         StringAssert.Contains(header.Title!, "cabecera");
         var total = DynamicsQuoteFailureDiagnostics.ReadProviderError(
-            """{"state":"requires_reconciliation","stage":"total",
-                "recordId":"00000000-0000-0000-0000-000000000001","replay":false}""");
+            """
+            {"state":"requires_reconciliation","stage":"total",
+            "recordId":"00000000-0000-0000-0000-000000000001","replay":false}
+            """);
         Assert.AreEqual("quote_total_requires_reconciliation", total.Code);
         StringAssert.Contains(total.Title!, "línea de venta");
         Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsConfirmedPreWriteFailure(total.Code));
