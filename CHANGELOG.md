@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.3] - 2026-11-05
+
+- Removes the automatic `push` trigger from Pricing's production deploy workflow; production jobs no longer appear as skipped after each merge.
+- Requires an explicit, checked confirmation and the `master` branch for every manual production deployment.
+- Blocks production container replacement unless the built Pricing image contains the active FTL 5-ton category mapping and Docker Compose does not override it incorrectly.
+- Preserves existing Dynamics credential checks, EF migration validation, health probes and quote report smoke tests.
+- Aligns production workflow across `develop` and `master`, adds dedicated policy CI and prevents cancellation of an active release.
+
+
 ## [1.2.2] - 2026-11-05
 
 - Enables an explicit, existing Dataverse 24-foot / 7-ton capacity category for Pricing 24-foot / 5-ton FTL requests, without inventing a Dynamics option.
