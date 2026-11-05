@@ -7,6 +7,7 @@ using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
+using Microsoft.Extensions.Logging;
 
 namespace Dhole.Pricing.Application.Features.Rates.SetRateStatus;
 
@@ -14,7 +15,8 @@ public sealed class SetRateStatusCommandHandler(
     IRateHeaderRepository rateHeaders,
     IPricingAuditService audit,
     IRateHeaderCacheService cache,
-    IUnitOfWork unitOfWork
+    IUnitOfWork unitOfWork,
+    ILogger<SetRateStatusCommandHandler> logger
 ) : ICommandHandler<SetRateStatusCommand, Result>
 {
     public async Task<Result> HandleAsync(
@@ -109,7 +111,21 @@ public sealed class SetRateStatusCommandHandler(
         );
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        await cache.RemoveRateHeaderCacheAsync(rate.Id, cancellationToken);
+
+        // La transición ya está persistida: una caída temporal de Redis no debe
+        // convertir una aceptación exitosa en HTTP 500 ni provocar reintentos.
+        try
+        {
+            await cache.RemoveRateHeaderCacheAsync(rate.Id, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                exception,
+                "Estado comercial guardado para tarifa {RateId}, pero falló la invalidación de caché.",
+                rate.Id
+            );
+        }
 
         return Result.Success();
     }
