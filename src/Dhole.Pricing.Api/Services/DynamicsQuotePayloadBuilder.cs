@@ -147,7 +147,7 @@ public static class DynamicsQuotePayloadBuilder
                 // Consolidated supplier cost goes in monto1; monto2..9 = 0.
                 var target when montoIndex is >= 1 and <= 9 =>
                     montoIndex == 1 ? cost : 0m,
-                "new_equipo" => EquipmentForSchema(rate, field),
+                "new_equipo" => EquipmentForSchema(rate, field, configuration),
                 "new_cantidadequipos" => Quantity(rate),
                 // Exact choices configured by the business for crear_oferta.
                 "new_categoriatarifa" => ConfiguredChoice(field, 100000001, configuration),
@@ -328,9 +328,10 @@ public static class DynamicsQuotePayloadBuilder
             (String(rate, "containerTypeName") ?? String(rate, "shipmentMode") ?? "Equipo");
     }
 
-    private static object EquipmentForSchema(JsonElement rate, DynamicsCrudField field)
+    private static object EquipmentForSchema(JsonElement rate, DynamicsCrudField field,
+        IConfiguration? configuration)
     {
-        var numeric = Equipment(rate, field);
+        var numeric = Equipment(rate, field, configuration);
         if (field.Type == "integer") return numeric;
         if (field.Type != "string")
             throw new InvalidOperationException("Unsupported equipment schema type.");
@@ -340,7 +341,8 @@ public static class DynamicsQuotePayloadBuilder
         return option?.Label ?? throw new InvalidOperationException("Dynamics equipment label missing.");
     }
 
-    private static int Equipment(JsonElement rate, DynamicsCrudField field)
+    private static int Equipment(JsonElement rate, DynamicsCrudField field,
+        IConfiguration? configuration)
     {
         var mode = String(rate, "shipmentMode") ?? "";
         var types = new List<string>();
@@ -358,23 +360,86 @@ public static class DynamicsQuotePayloadBuilder
             "Air" or "AirConsol" => "AIR",
             _ => types.Count == 1 ? types[0] + " " + mode : string.Join(" - ", types) + " " + mode
         };
-        var normalized = Normalize(source);
-        var sourceShapes = Shapes(source);
+
+        // An operator-approved override is required when the source and Dynamics
+        // describe different physical capacities (e.g. 5 TON vs 7 TON). Never
+        // guess based on only a shared trailer length or an option list index.
+        var mappingKey = "DynamicsQuoteSync:EquipmentMappings:" + Normalize(source);
+        var approvedChoice = configuration?[mappingKey];
         var matches = (field.Options ?? []).Where(option =>
         {
-            var target = Normalize(option.Label);
-            if (target == normalized) return true;
-            if (mode is "Lcl" or "Ltl" or "Air" or "AirConsol")
-                return target == Normalize(mode is "AirConsol" ? "AIR" : mode);
-            if (sourceShapes.Count == 0) return false;
-            var targetShapes = Shapes(option.Label);
-            return sourceShapes.SequenceEqual(targetShapes, StringComparer.Ordinal) &&
-                (mode != "Fcl" || !target.Contains("FTL", StringComparison.Ordinal));
+            if (option.Value.ValueKind != JsonValueKind.Number ||
+                !option.Value.TryGetInt32(out _))
+                return false;
+            if (mode == "Fcl" && Normalize(option.Label).Contains("FTL", StringComparison.Ordinal) ||
+                mode == "Ftl" && Normalize(option.Label).Contains("FCL", StringComparison.Ordinal))
+                return false;
+            return !string.IsNullOrWhiteSpace(approvedChoice)
+                ? ApprovedChoiceMatches(option, approvedChoice)
+                : EquipmentMatches(mode, source, option.Label);
         }).ToArray();
-        if (matches.Length != 1 || matches[0].Value.ValueKind != JsonValueKind.Number ||
-            !matches[0].Value.TryGetInt32(out var chosen))
-            throw new InvalidOperationException("No unique Dynamics equipment choice for " + source);
-        return chosen;
+        if (matches.Length != 1)
+            throw new InvalidOperationException(
+                "No unique Dynamics equipment choice for " + source +
+                ". Add an exact new_equipo option in Dynamics or set " + mappingKey +
+                " to an explicitly approved existing option label or numeric value." +
+                (!string.IsNullOrWhiteSpace(approvedChoice)
+                    ? " Configured override is absent or ambiguous in the active Dynamics schema."
+                    : ""));
+        return matches[0].Value.GetInt32();
+    }
+
+    private static bool ApprovedChoiceMatches(DynamicsCrudOption option, string approvedChoice)
+    {
+        if (int.TryParse(approvedChoice, NumberStyles.Integer, CultureInfo.InvariantCulture,
+                out var numeric) && option.Value.TryGetInt32(out var code) && code == numeric)
+            return true;
+        return Normalize(option.Label) == Normalize(approvedChoice);
+    }
+
+    private static bool EquipmentMatches(string mode, string source, string choice)
+    {
+        var target = Normalize(choice);
+        if (mode is "Lcl" or "Ltl" or "Air" or "AirConsol")
+            return target == Normalize(mode is "Air" or "AirConsol" ? "AIR" : mode);
+        var normalized = Normalize(source);
+        if (mode == "Fcl" && target.Contains("FTL", StringComparison.Ordinal) ||
+            mode == "Ftl" && target.Contains("FCL", StringComparison.Ordinal))
+            return false;
+
+        // The Dataverse catalog inconsistently includes modality suffixes.
+        // Ignore those suffixes, but never ignore capacity or equipment type.
+        var suffix = mode == "Fcl" ? "FCL" : mode == "Ftl" ? "FTL" : "";
+        var left = string.IsNullOrEmpty(suffix)
+            ? normalized : normalized.Replace(suffix, "", StringComparison.Ordinal);
+        var right = string.IsNullOrEmpty(suffix)
+            ? target : target.Replace(suffix, "", StringComparison.Ordinal);
+        if (left == right) return true;
+
+        if (mode == "Fcl")
+        {
+            // Compare full combinations, not just any one constituent.
+            var requestedShapes = Shapes(left);
+            return requestedShapes.Count > 0 &&
+                requestedShapes.SequenceEqual(Shapes(right), StringComparer.Ordinal);
+        }
+        if (mode == "Ftl")
+            return SameFtlCapacityAndLength(left, right);
+        return false;
+    }
+
+    private static bool SameFtlCapacityAndLength(string source, string target)
+    {
+        // "24 pies / 7 TON" and "7 Ton / 24 pies" are the same dimensions.
+        // "24 pies / 5 TON" and "7 Ton / 24 pies" are NOT equivalent.
+        static string Ton(string value) =>
+            Regex.Match(value, @"(\d+)TON").Groups[1].Value;
+        static string Length(string value) =>
+            Regex.Match(value, @"(\d+)(?:PIES|FEET|FT)").Groups[1].Value;
+        var sourceTon = Ton(source);
+        var sourceLength = Length(source);
+        return sourceTon.Length > 0 && sourceLength.Length > 0 &&
+            sourceTon == Ton(target) && sourceLength == Length(target);
     }
 
     private static string Normalize(string input)
@@ -388,6 +453,9 @@ public static class DynamicsQuotePayloadBuilder
             .Replace("FLATRACK", "FLAT", StringComparison.Ordinal)
             .Replace("OPENTOP", "OPEN", StringComparison.Ordinal)
             .Replace("REEFER", "REEF", StringComparison.Ordinal)
+            .Replace("REFF", "REEF", StringComparison.Ordinal)
+            .Replace("20OT", "20OPEN", StringComparison.Ordinal)
+            .Replace("40OT", "40OPEN", StringComparison.Ordinal)
             .Replace("STANDARD", "STD", StringComparison.Ordinal)
             .Replace("DRYVAN", "STD", StringComparison.Ordinal)
             .Replace("DV", "STD", StringComparison.Ordinal)
@@ -397,9 +465,8 @@ public static class DynamicsQuotePayloadBuilder
     private static IReadOnlyList<string> Shapes(string input)
     {
         var normalized = Normalize(input);
-        // One match per distinct equipment: never equate a combined type with
-        // only one of its constituents.
-        var matches = Regex.Matches(normalized, @"(?:20|40|45|48|53)(?:STD|HC|NOR|REEF|FLAT|OPEN|OT)?");
+        // Whole FCL equipment sets must agree, including special types.
+        var matches = Regex.Matches(normalized, @"(?:20|40|45|48|53)(?:STD|HC|NOR|REEF|FLAT|OPEN)?");
         return matches.Select(m => m.Value).Distinct(StringComparer.Ordinal)
             .OrderBy(s => s, StringComparer.Ordinal).ToArray();
     }
