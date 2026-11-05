@@ -11,6 +11,7 @@ using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Dhole.Pricing.Api.Endpoints;
 
@@ -33,8 +34,6 @@ public static class RateIdtraEndpoints
         Guid rateId,
         AssignIdtraRequest request,
         ServiceDbContext db,
-        IRateHeaderRepository rateHeaders,
-        IPricingAuditService audit,
         IRateHeaderCacheService cache,
         HttpContext http,
         ILoggerFactory loggerFactory,
@@ -53,19 +52,51 @@ public static class RateIdtraEndpoints
                 message = "Ingrese los IDTRA separados por comas (máximo 2000 caracteres) y otras referencias de hasta 2000 caracteres."
             });
 
+        string normalizedRequested;
+        try
+        {
+            var identifiers = IdtraNumberNormalizer.Parse(idtra);
+            if (identifiers.Length is < 1 or > 30)
+                throw new InvalidOperationException("Indique entre 1 y 30 IDTRA.");
+            normalizedRequested = string.Join(", ", identifiers);
+            if (normalizedRequested.Length > 2000)
+                throw new InvalidOperationException("La lista IDTRA supera los 2000 caracteres.");
+        }
+        catch (InvalidOperationException exception)
+        {
+            return Results.BadRequest(new
+            {
+                code = "Pricing.InvalidIdtraNumber",
+                message = exception.Message
+            });
+        }
+
         // Npgsql/EF Core may enable retry-on-failure. The entire manually
         // opened transaction must execute INSIDE its execution strategy,
         // otherwise SaveChanges throws on a user-initiated transaction.
         var logger = loggerFactory.CreateLogger("Dhole.Pricing.RateIdtra");
         var strategy = db.Database.CreateExecutionStrategy();
-        var (response, persisted) = await strategy.ExecuteAsync(async () =>
+        var stage = "begin-transaction";
+        try
         {
-            await using var transaction = await db.Database.BeginTransactionAsync(
+            var (response, persisted) = await strategy.ExecuteAsync(async () =>
+            {
+                // Every execution-strategy attempt gets a fresh scope/DbContext.
+                // A rolled-back attempt must not retain tracked IDTRA or outbox events.
+                await using var attemptScope = http.RequestServices
+                    .GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
+                var attemptDb = attemptScope.ServiceProvider.GetRequiredService<ServiceDbContext>();
+                var attemptRateHeaders = attemptScope.ServiceProvider.GetRequiredService<IRateHeaderRepository>();
+                var attemptAudit = attemptScope.ServiceProvider.GetRequiredService<IPricingAuditService>();
+
+                stage = "begin-transaction";
+                await using var transaction = await attemptDb.Database.BeginTransactionAsync(
                 IsolationLevel.ReadCommitted, cancellationToken);
 
             // Lock the quote while checking acceptance and existing references.
             // Concurrent users must not enqueue two CRM jobs for the same QUO.
-            await using (var command = db.Database.GetDbConnection().CreateCommand())
+            stage = "lock-rate";
+            await using (var command = attemptDb.Database.GetDbConnection().CreateCommand())
             {
                 command.Transaction = transaction.GetDbTransaction();
                 command.CommandText = "SELECT id FROM pricing.\"RateHeaders\" WHERE id = @id FOR UPDATE";
@@ -81,7 +112,8 @@ public static class RateIdtraEndpoints
                     }), Persisted: false);
             }
 
-            var rate = await rateHeaders.GetByIdWithDetailsAsync(rateId, cancellationToken);
+            stage = "load-rate";
+            var rate = await attemptRateHeaders.GetByIdWithDetailsAsync(rateId, cancellationToken);
             if (rate is null || rate.IsDeleted)
                 return (Response: (IResult)Results.NotFound(new
                 {
@@ -99,8 +131,19 @@ public static class RateIdtraEndpoints
             {
                 // A retry after a successful commit must return 200, not 409,
                 // even when the caller uses a different CSV spacing.
-                var normalizedPrevious = NormalizeCsv(rate.IdtraNumber);
-                var normalizedRequested = NormalizeCsv(idtra!);
+                string normalizedPrevious;
+                try
+                {
+                    normalizedPrevious = NormalizeCsv(rate.IdtraNumber);
+                }
+                catch (InvalidOperationException)
+                {
+                    return (Response: (IResult)Results.Conflict(new
+                    {
+                        code = "Pricing.IdtraAlreadyAssigned",
+                        message = "Esta cotización ya tiene un IDTRA que debe revisarse antes de realizar cambios."
+                    }), Persisted: false);
+                }
                 if (string.Equals(normalizedPrevious, normalizedRequested, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(rate.OtherReferences?.Trim() ?? "",
                         request.OtherReferences?.Trim() ?? "", StringComparison.Ordinal))
@@ -119,10 +162,11 @@ public static class RateIdtraEndpoints
                 }), Persisted: false);
             }
 
+            stage = "set-idtra";
             var before = PricingAuditSnapshots.From(rate);
             try
             {
-                rate.SetIdtraNumber(idtra!, http.GetCurrentUserId());
+                rate.SetIdtraNumber(normalizedRequested, http.GetCurrentUserId());
                 rate.SetOtherReferences(request.OtherReferences, http.GetCurrentUserId());
             }
             catch (InvalidOperationException exception)
@@ -133,7 +177,8 @@ public static class RateIdtraEndpoints
                 }), Persisted: false);
             }
 
-            await audit.PublishAsync(new PricingAuditEvent(
+            stage = "audit-and-sync-job";
+            await attemptAudit.PublishAsync(new PricingAuditEvent(
                 EventType: PricingAuditEventTypes.RateHeaderUpdated,
                 Action: PricingAuditActions.Updated,
                 EntityType: PricingAuditEntityTypes.RateHeader,
@@ -148,7 +193,9 @@ public static class RateIdtraEndpoints
                     DynamicsSyncQueued = true
                 }), cancellationToken);
 
-            await db.SaveChangesAsync(cancellationToken);
+            stage = "save";
+            await attemptDb.SaveChangesAsync(cancellationToken);
+            stage = "commit";
             await transaction.CommitAsync(cancellationToken);
             return (Response: (IResult)Results.Ok(new
             {
@@ -157,25 +204,41 @@ public static class RateIdtraEndpoints
                 dynamicsSync = "Pending",
                 message = "IDTRA guardado. La creación de la Quote en Dynamics quedó en cola."
             }), Persisted: true);
-        });
+            });
 
-        if (persisted)
-        {
-            try
+            if (persisted)
             {
-                // Database COMMIT already succeeded. Redis must not turn an
-                // actually saved IDTRA into a misleading HTTP 500 on the UI.
-                await cache.RemoveRateHeaderCacheAsync(rateId, cancellationToken);
+                try
+                {
+                    // COMMIT succeeded. Redis problems cannot invalidate the IDTRA.
+                    await cache.RemoveRateHeaderCacheAsync(rateId, cancellationToken);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    logger.LogWarning(exception,
+                        "IDTRA already committed for rate {RateId}; cache invalidation failed. TraceId={TraceId}",
+                        rateId, http.TraceIdentifier);
+                }
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                logger.LogWarning(exception,
-                    "IDTRA for rate {RateId} was committed, but cache invalidation failed. TraceId={TraceId}",
-                    rateId, http.TraceIdentifier);
-            }
+
+            return response;
         }
-
-        return response;
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogError(exception,
+                "IDTRA assignment failed. RateId={RateId} Stage={Stage} TraceId={TraceId}",
+                rateId, stage, http.TraceIdentifier);
+            return Results.Problem(
+                title: "No se pudo guardar el IDTRA.",
+                detail: "No se confirmó el guardado del IDTRA. Verifique su estado antes de intentar nuevamente.",
+                statusCode: StatusCodes.Status500InternalServerError,
+                extensions: new Dictionary<string, object?>
+                {
+                    ["code"] = "Pricing.IdtraAssignmentFailed",
+                    ["stage"] = stage,
+                    ["traceId"] = http.TraceIdentifier
+                });
+        }
     }
 
     private static string NormalizeCsv(string input) =>
