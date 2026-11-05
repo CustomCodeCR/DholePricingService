@@ -176,3 +176,25 @@ Antes de reintentar `QUO-00000-000476`, validar mediante el endpoint de
 solo lectura `GET /api/pricing/rates/{rateId}/dynamics-sync/validate` y
 reconciliar cabecera y línea en Dynamics cuando la verificación sea incierta.
 El reintento debe reutilizar la revisión y la clave idempotente existentes.
+
+## Despliegue seguro y explícito a producción (v1.2.3)
+
+Los cambios en `master` **no despliegan a producción automáticamente**.
+No se genera una ejecución `skipped` de producción tras cada `push`.
+La ejecución manual se inicia desde GitHub Actions, workflow
+**Deploy Dhole Pricing - Production** → **Run workflow** → seleccionar
+`master` → marcar la confirmación explícita → **Run workflow**.
+
+El job valida al inicio que el evento esté autorizado y la referencia sea
+`refs/heads/master`. Tras crear las imágenes, verifica que
+`appsettings.Production.json` contenga el mapping autorizado
+`24PIES5TONFTL` a `7 Ton / 24 pies` y que Compose no lo sobreescriba
+con otro valor antes de reemplazar los contenedores. No cambia ni envía
+ninguna cotización por ejecutar estas verificaciones.
+
+**No usar «Re-run all jobs» sobre una ejecución antigua de tipo push**:
+el evento original seguirá siendo push y no se convertirá en una ejecución
+manual. Finalizado el deploy, comprobar health, revisar la misma QUO y usar
+el reintento idempotente para la revisión existente solo tras validar el
+schema vigente. El despliegue no equivale a la confirmación de la escritura
+de la cabecera y la línea en Dataverse.
