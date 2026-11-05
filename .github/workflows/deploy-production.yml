@@ -1,14 +1,9 @@
 name: Deploy Dhole Pricing - Production
 
 on:
-  # Production is never deployed by a push or by re-running a push run.
+  # A workflow_dispatch is itself an explicit production release action.
+  # Master pushes only run CI; they never replace production containers.
   workflow_dispatch:
-    inputs:
-      confirm_production_deploy:
-        description: 'Autorizo desplegar Dhole Pricing en producción desde master'
-        required: true
-        type: boolean
-        default: false
 permissions:
   contents: write
   packages: read
@@ -24,17 +19,15 @@ jobs:
   deploy:
     runs-on: [self-hosted, linux, x64, dhole]
     steps:
-      - name: Confirm explicit production authorization on master
+      - name: Verify master release branch
         shell: bash
-        env:
-          CONFIRM_PRODUCTION: ${{ inputs.confirm_production_deploy }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_REF" != "refs/heads/master" ] || [ "$CONFIRM_PRODUCTION" != "true" ]; then
-            echo '::error::Use Actions > Deploy Dhole Pricing - Production > Run workflow, select master and authorize production.'
+          if [ "$GITHUB_REF" != "refs/heads/master" ]; then
+            echo '::error::Production releases must be run from master.'
             exit 1
           fi
-          echo 'Manual production authorization confirmed for master.'
+          echo 'Explicit release action received for master.'
       - name: Normalize runner workspace permissions
         run: |
           set -euo pipefail
