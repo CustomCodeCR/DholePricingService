@@ -91,119 +91,119 @@ public static class RateIdtraEndpoints
 
                 stage = "begin-transaction";
                 await using var transaction = await attemptDb.Database.BeginTransactionAsync(
-                IsolationLevel.ReadCommitted, cancellationToken);
+                    IsolationLevel.ReadCommitted, cancellationToken);
 
-            // Lock the quote while checking acceptance and existing references.
-            // Concurrent users must not enqueue two CRM jobs for the same QUO.
-            stage = "lock-rate";
-            await using (var command = attemptDb.Database.GetDbConnection().CreateCommand())
-            {
-                command.Transaction = transaction.GetDbTransaction();
-                command.CommandText = "SELECT id FROM pricing.\"RateHeaders\" WHERE id = @id FOR UPDATE";
-                var parameter = command.CreateParameter();
-                parameter.ParameterName = "@id";
-                parameter.Value = rateId;
-                command.Parameters.Add(parameter);
-                var locked = await command.ExecuteScalarAsync(cancellationToken);
-                if (locked is null || locked == DBNull.Value)
+                // Lock the quote while checking acceptance and existing references.
+                // Concurrent users must not enqueue two CRM jobs for the same QUO.
+                stage = "lock-rate";
+                await using (var command = attemptDb.Database.GetDbConnection().CreateCommand())
+                {
+                    command.Transaction = transaction.GetDbTransaction();
+                    command.CommandText = "SELECT id FROM pricing.\"RateHeaders\" WHERE id = @id FOR UPDATE";
+                    var parameter = command.CreateParameter();
+                    parameter.ParameterName = "@id";
+                    parameter.Value = rateId;
+                    command.Parameters.Add(parameter);
+                    var locked = await command.ExecuteScalarAsync(cancellationToken);
+                    if (locked is null || locked == DBNull.Value)
+                        return (Response: (IResult)Results.NotFound(new
+                        {
+                            code = "Pricing.RateHeaderNotFound"
+                        }), Persisted: false);
+                }
+
+                stage = "load-rate";
+                var rate = await attemptRateHeaders.GetByIdWithDetailsAsync(rateId, cancellationToken);
+                if (rate is null || rate.IsDeleted)
                     return (Response: (IResult)Results.NotFound(new
                     {
                         code = "Pricing.RateHeaderNotFound"
                     }), Persisted: false);
-            }
 
-            stage = "load-rate";
-            var rate = await attemptRateHeaders.GetByIdWithDetailsAsync(rateId, cancellationToken);
-            if (rate is null || rate.IsDeleted)
-                return (Response: (IResult)Results.NotFound(new
-                {
-                    code = "Pricing.RateHeaderNotFound"
-                }), Persisted: false);
+                if (rate.Status != RateStatus.AcceptedByClient)
+                    return (Response: (IResult)Results.Conflict(new
+                    {
+                        code = "Pricing.IdtraRequiresClientAcceptance",
+                        message = "El IDTRA solo puede asignarse después de la aceptación del cliente."
+                    }), Persisted: false);
 
-            if (rate.Status != RateStatus.AcceptedByClient)
-                return (Response: (IResult)Results.Conflict(new
+                if (!string.IsNullOrWhiteSpace(rate.IdtraNumber))
                 {
-                    code = "Pricing.IdtraRequiresClientAcceptance",
-                    message = "El IDTRA solo puede asignarse después de la aceptación del cliente."
-                }), Persisted: false);
+                    // A retry after a successful commit must return 200, not 409,
+                    // even when the caller uses a different CSV spacing.
+                    string normalizedPrevious;
+                    try
+                    {
+                        normalizedPrevious = NormalizeCsv(rate.IdtraNumber);
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        return (Response: (IResult)Results.Conflict(new
+                        {
+                            code = "Pricing.IdtraAlreadyAssigned",
+                            message = "Esta cotización ya tiene un IDTRA que debe revisarse antes de realizar cambios."
+                        }), Persisted: false);
+                    }
+                    if (string.Equals(normalizedPrevious, normalizedRequested, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(rate.OtherReferences?.Trim() ?? "",
+                            request.OtherReferences?.Trim() ?? "", StringComparison.Ordinal))
+                        return (Response: (IResult)Results.Ok(new
+                        {
+                            rateId, idtraNumber = rate.IdtraNumber,
+                            otherReferences = rate.OtherReferences,
+                            status = "AcceptedByClient",
+                            message = "Los IDTRA ya estaban registrados."
+                        }), Persisted: false);
 
-            if (!string.IsNullOrWhiteSpace(rate.IdtraNumber))
-            {
-                // A retry after a successful commit must return 200, not 409,
-                // even when the caller uses a different CSV spacing.
-                string normalizedPrevious;
-                try
-                {
-                    normalizedPrevious = NormalizeCsv(rate.IdtraNumber);
-                }
-                catch (InvalidOperationException)
-                {
                     return (Response: (IResult)Results.Conflict(new
                     {
                         code = "Pricing.IdtraAlreadyAssigned",
-                        message = "Esta cotización ya tiene un IDTRA que debe revisarse antes de realizar cambios."
+                        message = "Esta cotización ya tiene IDTRA. No puede sobrescribirse desde esta acción."
                     }), Persisted: false);
                 }
-                if (string.Equals(normalizedPrevious, normalizedRequested, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(rate.OtherReferences?.Trim() ?? "",
-                        request.OtherReferences?.Trim() ?? "", StringComparison.Ordinal))
-                    return (Response: (IResult)Results.Ok(new
+
+                stage = "set-idtra";
+                var before = PricingAuditSnapshots.From(rate);
+                try
+                {
+                    rate.SetIdtraNumber(normalizedRequested, http.GetCurrentUserId());
+                    rate.SetOtherReferences(request.OtherReferences, http.GetCurrentUserId());
+                }
+                catch (InvalidOperationException exception)
+                {
+                    return (Response: (IResult)Results.BadRequest(new
                     {
-                        rateId, idtraNumber = rate.IdtraNumber,
-                        otherReferences = rate.OtherReferences,
-                        status = "AcceptedByClient",
-                        message = "Los IDTRA ya estaban registrados."
+                        code = "Pricing.InvalidIdtraNumber", message = exception.Message
                     }), Persisted: false);
+                }
 
-                return (Response: (IResult)Results.Conflict(new
+                stage = "audit-and-sync-job";
+                await attemptAudit.PublishAsync(new PricingAuditEvent(
+                    EventType: PricingAuditEventTypes.RateHeaderUpdated,
+                    Action: PricingAuditActions.Updated,
+                    EntityType: PricingAuditEntityTypes.RateHeader,
+                    EntityId: rate.Id,
+                    ActorUserId: http.GetCurrentUserId(),
+                    Before: before,
+                    After: PricingAuditSnapshots.From(rate),
+                    Payload: new
+                    {
+                        rate.Id, rate.IdtraNumber, rate.OtherReferences, rate.RevisionNumber,
+                        Source = "IdtraAssignedAfterClientAcceptance",
+                        DynamicsSyncQueued = true
+                    }), cancellationToken);
+
+                stage = "save";
+                await attemptDb.SaveChangesAsync(cancellationToken);
+                stage = "commit";
+                await transaction.CommitAsync(cancellationToken);
+                return (Response: (IResult)Results.Ok(new
                 {
-                    code = "Pricing.IdtraAlreadyAssigned",
-                    message = "Esta cotización ya tiene IDTRA. No puede sobrescribirse desde esta acción."
-                }), Persisted: false);
-            }
-
-            stage = "set-idtra";
-            var before = PricingAuditSnapshots.From(rate);
-            try
-            {
-                rate.SetIdtraNumber(normalizedRequested, http.GetCurrentUserId());
-                rate.SetOtherReferences(request.OtherReferences, http.GetCurrentUserId());
-            }
-            catch (InvalidOperationException exception)
-            {
-                return (Response: (IResult)Results.BadRequest(new
-                {
-                    code = "Pricing.InvalidIdtraNumber", message = exception.Message
-                }), Persisted: false);
-            }
-
-            stage = "audit-and-sync-job";
-            await attemptAudit.PublishAsync(new PricingAuditEvent(
-                EventType: PricingAuditEventTypes.RateHeaderUpdated,
-                Action: PricingAuditActions.Updated,
-                EntityType: PricingAuditEntityTypes.RateHeader,
-                EntityId: rate.Id,
-                ActorUserId: http.GetCurrentUserId(),
-                Before: before,
-                After: PricingAuditSnapshots.From(rate),
-                Payload: new
-                {
-                    rate.Id, rate.IdtraNumber, rate.OtherReferences, rate.RevisionNumber,
-                    Source = "IdtraAssignedAfterClientAcceptance",
-                    DynamicsSyncQueued = true
-                }), cancellationToken);
-
-            stage = "save";
-            await attemptDb.SaveChangesAsync(cancellationToken);
-            stage = "commit";
-            await transaction.CommitAsync(cancellationToken);
-            return (Response: (IResult)Results.Ok(new
-            {
-                rateId, idtraNumber = rate.IdtraNumber, otherReferences = rate.OtherReferences,
-                status = "AcceptedByClient",
-                dynamicsSync = "Pending",
-                message = "IDTRA guardado. La creación de la Quote en Dynamics quedó en cola."
-            }), Persisted: true);
+                    rateId, idtraNumber = rate.IdtraNumber, otherReferences = rate.OtherReferences,
+                    status = "AcceptedByClient",
+                    dynamicsSync = "Pending",
+                    message = "IDTRA guardado. La creación de la Quote en Dynamics quedó en cola."
+                }), Persisted: true);
             });
 
             if (persisted)
