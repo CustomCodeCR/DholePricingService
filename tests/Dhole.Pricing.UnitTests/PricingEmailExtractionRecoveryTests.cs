@@ -222,6 +222,7 @@ public sealed class PricingEmailExtractionRecoveryTests
                     null,
                     null,
                     null,
+                    null,
                     null
                 )
             ],
