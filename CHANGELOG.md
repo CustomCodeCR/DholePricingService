@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.4] - 2026-11-05
+
+- Allows creating client QUOs from management-approved master tariffs before their validity start date, preserving both master validity dates and the exact commercial snapshot.
+- Continues to reject expired tariffs, unapproved masters and non-master or spot rates.
+- Adds automated regression coverage for future-effective, currently valid, expired and unauthorized tariff application, with Pricing API build verification.
+
 ## [1.2.3] - 2026-11-05
 
 - Removes the automatic `push` trigger from Pricing's production deploy workflow; production jobs no longer appear as skipped after each merge.
