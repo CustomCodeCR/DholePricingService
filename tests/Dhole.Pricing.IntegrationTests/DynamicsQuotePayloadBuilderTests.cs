@@ -663,9 +663,9 @@ public sealed class DynamicsQuotePayloadBuilderTests
     }
 
     [TestMethod]
-    public void MoreThanNineIdtraCannotBeSilentlyTruncated()
+    public void MoreThanTenIdtraCannotBeSilentlyTruncated()
     {
-        var idtras = string.Join(",", Enumerable.Range(1, 10).Select(x => "IDTRA" + x));
+        var idtras = string.Join(",", Enumerable.Range(1, 11).Select(x => "IDTRA" + x));
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
         Assert.ThrowsExactly<InvalidOperationException>(() =>
             BuildForTest(
@@ -679,7 +679,6 @@ public sealed class DynamicsQuotePayloadBuilderTests
         const string extraFields = """
             {"name":"new_monto1","target":"new_monto1","type":"decimal","dataverseType":"Money","required":false,"options":[]},
             {"name":"new_monto2","target":"new_monto2","type":"decimal","dataverseType":"Money","required":false,"options":[]},
-            {"name":"new_monto9","target":"new_monto9","type":"decimal","dataverseType":"Money","required":false,"options":[]},
             {"name":"new_divisa","target":"new_divisa","type":"string","dataverseType":"String","required":false,"options":[]},
             """;
         var expanded = Schema.Replace(
