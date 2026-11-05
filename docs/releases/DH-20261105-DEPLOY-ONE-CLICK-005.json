@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "component": "DholePricingService",
+  "ecosystemVersion": "1.2.5",
+  "version": "1.2.5",
+  "previousVersion": "1.2.4",
+  "releaseId": "DH-20261105-DEPLOY-ONE-CLICK-005",
+  "date": "2026-11-05",
+  "changeType": "PATCH",
+  "productionDeploymentAuthorized": false,
+  "releaseAction": "workflow_dispatch on master; no duplicate confirmation checkbox"
+}
