@@ -166,6 +166,132 @@ public sealed class DynamicsQuotePayloadBuilderTests
             .GetProperty("new_equipo").GetInt32());
     }
 
+
+    private static DynamicsCrudSchema WithEquipmentOptions(params string[] labels)
+    {
+        var root = JsonNode.Parse(Schema)!.AsObject();
+        var equipment = root["fields"]!.AsArray()
+            .Select(field => field!.AsObject())
+            .Single(field => field["name"]!.ToString() == "new_equipo");
+        var options = new JsonArray();
+        for (var i = 0; i < labels.Length; i++)
+            options.Add(new JsonObject
+            {
+                ["label"] = labels[i],
+                ["value"] = 100000010 + i
+            });
+        equipment["options"] = options;
+        return DynamicsQuotePayloadBuilder.ReadSchema(root.ToJsonString());
+    }
+
+    private static string WithEquipment(string name, string mode)
+    {
+        var rate = JsonNode.Parse(Accepted)!.AsObject();
+        rate["shipmentMode"] = mode;
+        rate["containerTypeName"] = name;
+        rate["containerTypeCode"] = name;
+        var container = rate["containers"]!.AsArray()[0]!.AsObject();
+        container["containerTypeName"] = name;
+        container["containerTypeCode"] = name;
+        return rate.ToJsonString();
+    }
+
+    [TestMethod]
+    public void EveryKnownDynamicsEquipmentCatalogLabelResolvesItsExactPhysicalType()
+    {
+        // Complete catalog supplied by the active Dataverse new_equipo choice.
+        var equipment = new (string Source, string Mode, string Choice)[]
+        {
+            ("20 STD", "Fcl", "20 STD FCL"),
+            ("20 OT", "Fcl", "20' OT"),
+            ("20 STD - 40 STD - 40 HC", "Fcl", "20STD - 40STD - 40HC FCL"),
+            ("24 TON", "Ftl", "24 TON FTL"),
+            ("26", "Ftl", "26\" FTL"),
+            ("40 Flat Rack", "Fcl", "40 Flat Racks."),
+            ("40 HC", "Fcl", "40 HC FCL"),
+            ("40 NOR", "Fcl", "40 NOR FCL"),
+            ("40 Open Top", "Fcl", "40 Open Top"),
+            ("40 Reefer", "Fcl", "40 REFF"),
+            ("40 STD", "Fcl", "40 STD FCL"),
+            ("40 STD - 40 HC", "Fcl", "40 STD FCL - 40 HC FCL"),
+            ("45 HC", "Fcl", "45 HC FCL"),
+            ("48", "Ftl", "48\" FTL"),
+            ("53", "Ftl", "53\" FTL"),
+            ("24 pies / 7 TON", "Ftl", "7 Ton / 24 pies"),
+            ("8 TON", "Ftl", "8 TON FTL"),
+            ("CARRETA", "Ftl", "CARRETA"),
+            ("LCL", "Lcl", "LCL"),
+            ("LOW BOY", "Ftl", "LOW BOY"),
+            ("LTL", "Ltl", "LTL"),
+            ("PLATAFORMA", "Ftl", "PLATAFORMA")
+        };
+        foreach (var (source, mode, choice) in equipment)
+        {
+            var schema = WithEquipmentOptions(choice);
+            using var result = JsonDocument.Parse(JsonSerializer.Serialize(
+                BuildForTest(WithEquipment(source, mode), schema)));
+            Assert.AreEqual(100000010, result.RootElement.GetProperty("inputs")
+                .GetProperty("new_equipo").GetInt32(),
+                $"{source} ({mode}) must resolve to {choice}");
+        }
+    }
+
+    [TestMethod]
+    public void FclCombinationCannotSilentlyCollapseToOneEquipment()
+    {
+        var schema = WithEquipmentOptions("40 STD FCL", "40 STD FCL - 40 HC FCL");
+        using var result = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(WithEquipment("40 STD - 40 HC", "Fcl"), schema)));
+        Assert.AreEqual(100000011, result.RootElement.GetProperty("inputs")
+            .GetProperty("new_equipo").GetInt32());
+    }
+
+    [TestMethod]
+    public void DifferentTonnagesMustNotMapAutomaticallyEvenIfBothTrucksAre24Feet()
+    {
+        // QUO-00000-000476: Dynamics has a 7-ton/24-foot choice but no 5-ton/24-foot choice.
+        var schema = WithEquipmentOptions("7 Ton / 24 pies", "24 TON FTL");
+        var error = Assert.ThrowsExactly<InvalidOperationException>(() =>
+            BuildForTest(WithEquipment("24 pies / 5 TON", "Ftl"), schema));
+        StringAssert.Contains(error.Message,
+            "DynamicsQuoteSync:EquipmentMappings:24PIES5TONFTL");
+    }
+
+    [TestMethod]
+    public void ApprovedEquipmentAliasResolvesOnlyToAnExistingDynamicsOption()
+    {
+        // After business review, an operator can explicitly authorize a catalog alias.
+        var config = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?>
+            {
+                ["DynamicsQuoteSync:EquipmentMappings:24PIES5TONFTL"] =
+                    "7 Ton / 24 pies"
+            }).Build();
+        var schema = WithEquipmentOptions("7 Ton / 24 pies", "24 TON FTL");
+        using var result = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(WithEquipment("24 pies / 5 TON", "Ftl"), schema, config)));
+        Assert.AreEqual(100000010, result.RootElement.GetProperty("inputs")
+            .GetProperty("new_equipo").GetInt32());
+
+        var invalidConfig = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?>
+            {
+                ["DynamicsQuoteSync:EquipmentMappings:24PIES5TONFTL"] =
+                    "Nonexistent Dataverse option"
+            }).Build();
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            BuildForTest(WithEquipment("24 pies / 5 TON", "Ftl"),
+                schema, invalidConfig));
+    }
+
+    [TestMethod]
+    public void DuplicateDataverseEquipmentChoicesNeverSelectAnArbitraryValue()
+    {
+        var schema = WithEquipmentOptions("40 HC FCL", "40HC FCL");
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            BuildForTest(WithEquipment("40 HC", "Fcl"), schema));
+    }
+
     [TestMethod]
     public void UnapprovedOrIdtraMissingNeverProducesAPayload()
     {
@@ -212,10 +338,12 @@ public sealed class DynamicsQuotePayloadBuilderTests
             schemaText = schemaText.Replace(oldField, "", StringComparison.Ordinal);
         schemaText = schemaText.Replace(
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
-            """{"name":"customerid","target":"customerid_account@odata.bind","type":"string","dataverseType":"Customer","required":true,"options":[]},
+            """
+            {"name":"customerid","target":"customerid_account@odata.bind","type":"string","dataverseType":"Customer","required":true,"options":[]},
               {"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":true,"options":[]},
               {"name":"msdyn_account","target":"msdyn_account_account@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
-              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}
+            """,
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
@@ -233,10 +361,12 @@ public sealed class DynamicsQuotePayloadBuilderTests
     {
         var schemaText = Schema.Replace(
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
-            """{"name":"customerid","target":"customerid_account@odata.bind","type":"string","dataverseType":"Customer","required":true,"options":[]},
+            """
+            {"name":"customerid","target":"customerid_account@odata.bind","type":"string","dataverseType":"Customer","required":true,"options":[]},
               {"name":"msdyn_account","target":"msdyn_account_account@odata.bind","type":"string","dataverseType":"Lookup","required":true,"options":[]},
               {"name":"description","target":"description","type":"string","dataverseType":"Memo","required":true,"options":[]},
-              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}
+            """,
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(
@@ -474,8 +604,10 @@ public sealed class DynamicsQuotePayloadBuilderTests
     {
         var fields = Schema.Replace(
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
-            """{"name":"new_idtra1","target":"new_IDTRA1@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
-              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            """
+            {"name":"new_idtra1","target":"new_IDTRA1@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
+            {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}
+            """,
             StringComparison.Ordinal);
         var accepted = Accepted.Replace("IDTRA-2026-045", "IDTRA12589-QUO11098");
         using var result = JsonDocument.Parse(JsonSerializer.Serialize(
@@ -491,10 +623,12 @@ public sealed class DynamicsQuotePayloadBuilderTests
     {
         var schemaText = Schema.Replace(
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
-            """{"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
+            """
+            {"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
               {"name":"new_idtra2","target":"new_idtra2_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
               {"name":"new_idtra3","target":"new_idtra3_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
-              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}
+            """,
             StringComparison.Ordinal);
         var multiSnapshot = Accepted.Replace("IDTRA-2026-045",
             "IDTRA IDTRA999.12565, IDTRA999.12566 // QUO-00000-000316 // QUO-11229-Q4X8M7",
@@ -515,8 +649,10 @@ public sealed class DynamicsQuotePayloadBuilderTests
     {
         var schemaText = Schema.Replace(
             """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
-            """{"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
-              {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""",
+            """
+            {"name":"new_idtra1","target":"new_idtra1_incident@odata.bind","type":"string","dataverseType":"Lookup","required":false,"options":[]},
+            {"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}
+            """,
             StringComparison.Ordinal);
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(schemaText);
         Assert.ThrowsExactly<InvalidOperationException>(() =>
@@ -527,9 +663,9 @@ public sealed class DynamicsQuotePayloadBuilderTests
     }
 
     [TestMethod]
-    public void MoreThanNineIdtraCannotBeSilentlyTruncated()
+    public void MoreThanTenIdtraCannotBeSilentlyTruncated()
     {
-        var idtras = string.Join(",", Enumerable.Range(1, 10).Select(x => "IDTRA" + x));
+        var idtras = string.Join(",", Enumerable.Range(1, 11).Select(x => "IDTRA" + x));
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
         Assert.ThrowsExactly<InvalidOperationException>(() =>
             BuildForTest(
@@ -543,7 +679,6 @@ public sealed class DynamicsQuotePayloadBuilderTests
         const string extraFields = """
             {"name":"new_monto1","target":"new_monto1","type":"decimal","dataverseType":"Money","required":false,"options":[]},
             {"name":"new_monto2","target":"new_monto2","type":"decimal","dataverseType":"Money","required":false,"options":[]},
-            {"name":"new_monto9","target":"new_monto9","type":"decimal","dataverseType":"Money","required":false,"options":[]},
             {"name":"new_divisa","target":"new_divisa","type":"string","dataverseType":"String","required":false,"options":[]},
             """;
         var expanded = Schema.Replace(
