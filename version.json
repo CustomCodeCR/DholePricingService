@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.2.4",
-  "ecosystemVersion": "1.2.4",
-  "releaseId": "DH-20261105-TARIFF-APPLICATION-004"
+  "version": "1.2.5",
+  "ecosystemVersion": "1.3.1",
+  "releaseId": "DH-20261105-AUTO-DEPLOY-003"
 }

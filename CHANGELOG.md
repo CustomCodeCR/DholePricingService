@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.5] - 2026-11-05
+
+- Activa desplegar Pricing automáticamente por cada push a master sin confirmación manual.
+- Verifica preflight de Dynamics, EF, mapeos FTL, healthchecks y SemVer 1.2.5 bajo Dhole 1.3.1.
+
 ## [1.2.4] - 2026-11-05
 
 - Allows creating client QUOs from management-approved master tariffs before their validity start date, preserving both master validity dates and the exact commercial snapshot.
