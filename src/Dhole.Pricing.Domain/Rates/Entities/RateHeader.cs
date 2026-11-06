@@ -196,6 +196,7 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public decimal? PickupLatitude { get; private set; }
     public decimal? PickupLongitude { get; private set; }
     public string? PickupLocationsJson { get; private set; }
+    public string? InlandServiceLocationsJson { get; private set; }
 
     public Guid CurrencyId { get; private set; }
     public string CurrencyName { get; private set; } = string.Empty;
@@ -590,6 +591,14 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         }
 
         PickupLocationsJson = Normalize(pickupLocationsJson);
+    }
+
+    /// <summary>Persist the independent inland pickup/delivery addresses without requiring map coordinates.</summary>
+    public void ConfigureInlandServiceLocations(string? json)
+    {
+        // Legacy clients do not send this field: retain any existing locations.
+        if (json is null) return;
+        InlandServiceLocationsJson = Normalize(json);
     }
 
     public void ConfigureExchangeRateSnapshot(
