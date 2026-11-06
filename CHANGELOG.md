@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.6] - 2026-11-06
+
+- Impide el cierre automático de solicitudes de modificación por avances de revisión o por el estado comercial de la QUO.
+- Exige confirmación explícita para cancelar modificaciones y recupera únicamente cancelaciones huérfanas sin auditoría.
+- Conserva solicitudes abiertas durante preparación, SLA y trabajo del proveedor; agrega pruebas de regresión.
+
+
 ## [1.2.5] - 2026-11-05
 
 - Sustituye confirmación manual por despliegue automático al integrar master.

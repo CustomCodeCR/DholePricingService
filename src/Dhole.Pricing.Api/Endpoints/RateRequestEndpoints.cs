@@ -353,6 +353,12 @@ public static class RateRequestEndpoints
         var entity = await db.RateRequests.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (entity is null) return Results.NotFound();
         if (entity.Status == RateRequestStatus.Cancelled) return Results.NoContent();
+        if (RateModificationRequestPayload.IsModification(entity.PayloadJson)
+            && request.Confirmation != "CancelSellerModification")
+            return Results.Conflict(new {
+                code = "Pricing.RateModificationExplicitCancellationRequired",
+                message = "La modificación sólo puede cancelarse mediante una confirmación explícita con motivo."
+            });
         if (entity.Status != RateRequestStatus.Open)
             return Results.Conflict(new { message = "Sólo pueden cancelarse solicitudes pendientes." });
         if (!RateRequestLeaseEndpoints.HasActiveLease(context, entity))
@@ -742,7 +748,7 @@ public static class RateRequestEndpoints
 
     private sealed record PrepareRateModificationRequest(Guid RateId, int RevisionNumber);
     private sealed record UpdateWorkStatusRequest(string? WorkStatus);
-    private sealed record CancelRateRequestRequest(string? Reason, string? Details);
+    private sealed record CancelRateRequestRequest(string? Reason, string? Details, string? Confirmation = null);
 
     private sealed record CreateRateRequestRequest(
         string Priority,
