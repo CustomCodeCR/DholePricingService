@@ -60,6 +60,13 @@ builder.Services.AddHttpClient("DholeAI", client =>
 });
 
 var app = builder.Build();
+// Return the runtime assembly version with Pricing health checks.
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.Value?.StartsWith("/health", StringComparison.OrdinalIgnoreCase) == true)
+        context.Response.Headers["X-Dhole-Version"] = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "unknown";
+    await next();
+});
 app.UseCustomCodeApi();
 app.UseCors(CorsPolicyName);
 if (app.Environment.IsDevelopment()) app.UseCustomCodeSwagger();

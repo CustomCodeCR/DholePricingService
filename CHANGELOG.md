@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.5] - 2026-11-05
+
+- Informar versión de Pricing API ejecutándose mediante health-check HTTP.
+
 ## [1.2.4] - 2026-11-05
 
 - Allows creating client QUOs from management-approved master tariffs before their validity start date, preserving both master validity dates and the exact commercial snapshot.

@@ -22,5 +22,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Confirm manual-only production workflow and FTL image guard
+      - name: Validate automatic master production workflow and FTL image guard
         run: python3 scripts/tests/test-production-workflow-policy.py
