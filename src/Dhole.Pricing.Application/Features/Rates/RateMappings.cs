@@ -179,11 +179,31 @@ internal static class RateMappings
             LclGroupAgentCode = rate.LclGroupAgentCode,
             FinalBackupStorageIds = rate.FinalBackupStorageIds,
             PickupLocations = DeserializePickupLocations(rate.PickupLocationsJson),
+            InlandPickupLocation = DeserializeInlandServiceLocation(rate.InlandServiceLocationsJson, "pickup"),
+            InlandDeliveryLocation = DeserializeInlandServiceLocation(rate.InlandServiceLocationsJson, "delivery"),
             CreatedByUserId = rate.CreatedBy,
             LastModifiedByUserId = rate.UpdatedBy,
         };
 
         return dto.WithRecalculatedFinancials();
+    }
+
+    private static Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation? DeserializeInlandServiceLocation(string? json, string key)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            if (!document.RootElement.TryGetProperty(key, out var location)
+                || location.ValueKind != System.Text.Json.JsonValueKind.Object) return null;
+            return System.Text.Json.JsonSerializer.Deserialize<Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation>(
+                location.GetRawText(),
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 
     private static IReadOnlyCollection<RatePickupLocationDto> DeserializePickupLocations(string? json)
