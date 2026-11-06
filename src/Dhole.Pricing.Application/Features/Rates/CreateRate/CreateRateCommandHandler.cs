@@ -451,6 +451,7 @@ public sealed class CreateRateCommandHandler(
                 command.PickupLongitude
             );
             rate.ConfigurePickupLocations(command.PickupLocationsJson);
+            rate.ConfigureInlandServiceLocations(command.InlandServiceLocationsJson);
             rate.ConfigureLclGroupAgent(command.LclGroupAgentId, command.LclGroupAgentName, command.LclGroupAgentCode);
             rate.ConfigureExecutive(command.ExecutiveName);
             rate.ConfigureClientAccount(command.ClientAccountId);
