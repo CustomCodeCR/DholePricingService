@@ -236,6 +236,37 @@ public sealed class DynamicsQuotePayloadBuilderTests
         }
     }
 
+    [DataTestMethod]
+    [DataRow("26 pies", 100000012)]
+    [DataRow("48 pies", 100000011)]
+    [DataRow("48 ft", 100000011)]
+    [DataRow("48 feet", 100000011)]
+    [DataRow("53 pies", 100000010)]
+    public void LengthOnlyFtlFootAliasesResolveToThePublishedDynamicsCategory(
+        string source, int expectedChoice)
+    {
+        // Active new_equipo labels for length-only FTL equipment.
+        var schema = WithEquipmentOptions("53\" FTL", "48\" FTL", "26\" FTL");
+        using var result = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(WithEquipment(source, "Ftl"), schema)));
+        Assert.AreEqual(expectedChoice, result.RootElement.GetProperty("inputs")
+            .GetProperty("new_equipo").GetInt32(), source);
+    }
+
+    [TestMethod]
+    public void FootLengthAliasMustNotChangeTrailerSizeTonnageOrModality()
+    {
+        var schema = WithEquipmentOptions("53\" FTL", "24 TON FTL", "48\" FCL");
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            BuildForTest(WithEquipment("48 pies", "Ftl"), schema));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            BuildForTest(WithEquipment("48 pies / 5 TON", "Ftl"),
+                WithEquipmentOptions("48\" FTL")));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            BuildForTest(WithEquipment("48 pies", "Fcl"),
+                WithEquipmentOptions("48\" FTL")));
+    }
+
     [TestMethod]
     public void FclCombinationCannotSilentlyCollapseToOneEquipment()
     {

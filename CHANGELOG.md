@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.7] - 2026-11-06
+
+- Resolves Dynamics new_equipo aliases for 26/48/53-foot FTL equipment when Pricing writes pies, feet or ft and the Dataverse catalog uses quote marks.
+- Fixes QUO-00000-000546 equipment mapping without changing RateId, IDTRA, currency, commercial totals, quote revision or idempotency.
+- Rejects mismatched trailer lengths, tonnage and FCL/FTL choices; adds integration regression tests.
+
 ## [1.2.6] - 2026-11-06
 
 - Prevents the SLA worker from completing seller modifications merely because the linked QUO is already sent.

@@ -198,3 +198,17 @@ manual. Finalizado el deploy, comprobar health, revisar la misma QUO y usar
 el reintento idempotente para la revisión existente solo tras validar el
 schema vigente. El despliegue no equivale a la confirmación de la escritura
 de la cabecera y la línea en Dataverse.
+
+## FTL: equivalencias de longitud del catálogo (v1.2.7)
+
+Las opciones publicadas de Dataverse para FTL de **26, 48 y 53 pies** usan
+etiquetas como `48" FTL`. El snapshot de Pricing puede describir el mismo equipo
+como `48 pies`, `48 ft` o `48 feet`. La normalización compara **solo esas
+categorías de longitud**, sin asignar capacidades distintas en toneladas ni
+confundir FCL con FTL. No depende de la posición ni de un ID de Picklist fijo:
+usa exclusivamente las opciones del esquema publicado `new_equipo`.
+
+Para QUO-00000-000546, validar primero el estado de Dynamics (cabecera y línea)
+y reintentar la **misma** revisión y clave de idempotencia; no crear una cotización
+nueva si la existencia de la anterior es incierta. El arreglo no cambia montos,
+IDTRA ni datos comerciales de la QUO.
