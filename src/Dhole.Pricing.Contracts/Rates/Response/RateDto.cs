@@ -87,6 +87,8 @@ public sealed record RateDto(
 )
 {
     public string? OtherReferences { get; init; }
+    public Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation? InlandPickupLocation { get; init; }
+    public Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation? InlandDeliveryLocation { get; init; }
     public bool PendingReapproval { get; init; }
     public string? ReapprovalReason { get; init; }
     public DateTime? SellerReceivedAtUtc { get; init; }
