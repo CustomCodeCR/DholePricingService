@@ -437,6 +437,18 @@ public static class DynamicsQuotePayloadBuilder
 
     private static bool SameFtlCapacityAndLength(string source, string target)
     {
+        // Dataverse uses a quote mark for length-only trailer choices (26", 48",
+        // 53"), while Pricing may spell out pies/feet/ft. Match only those
+        // published length-only categories; never discard a TON capacity.
+        static string LengthOnlyFtl(string value)
+        {
+            var match = Regex.Match(value, @"^(26|48|53)(?:PIES|FEET|FT)?$");
+            return match.Success ? match.Groups[1].Value : "";
+        }
+        var sourceFeet = LengthOnlyFtl(source);
+        if (sourceFeet.Length > 0 && sourceFeet == LengthOnlyFtl(target))
+            return true;
+
         // "24 pies / 7 TON" and "7 Ton / 24 pies" are the same dimensions.
         // "24 pies / 5 TON" and "7 Ton / 24 pies" are NOT equivalent.
         static string Ton(string value) =>
