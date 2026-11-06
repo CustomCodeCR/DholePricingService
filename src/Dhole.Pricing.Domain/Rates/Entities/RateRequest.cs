@@ -249,6 +249,8 @@ public sealed class RateRequest : Entity<Guid>
         SlaReminderSentAtUtc = sentAtUtc;
     }
 
+    public bool IsSellerModificationRequest => IsSellerModification();
+
     private bool IsSellerModification()
     {
         try

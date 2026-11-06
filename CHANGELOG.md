@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.6] - 2026-11-06
+
+- Prevents the SLA worker from completing seller modifications merely because the linked QUO is already sent.
+- Removes the database trigger that prematurely completes seller modifications when the quote revision changes.
+- Requires explicit confirmation to cancel a modification; safely reopens only unaudited orphan cancellation records.
+- Keeps real audited cancellations and previous QUO revisions intact; regression tests cover migration safeguards.
+
+
 ## [1.2.5] - 2026-11-05
 
 - Activa desplegar Pricing automáticamente por cada push a master sin confirmación manual.

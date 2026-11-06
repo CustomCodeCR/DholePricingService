@@ -74,7 +74,8 @@ internal sealed class PricingRateRequestSlaWorker(
         foreach (var request in overdue)
         {
             // Puede haberse enviado entre la consulta inicial y este punto.
-            if (request.RateId.HasValue && await IsRateAlreadySentAsync(request.RateId.Value, cancellationToken))
+            if (!request.IsSellerModificationRequest && request.RateId.HasValue
+                && await IsRateAlreadySentAsync(request.RateId.Value, cancellationToken))
             {
                 request.MarkCompleted(now);
                 continue;
@@ -151,6 +152,9 @@ internal sealed class PricingRateRequestSlaWorker(
         var linked = await dbContext.RateRequests
             .Where(x => x.Status == RateRequestStatus.Open && x.RateId.HasValue)
             .ToListAsync(cancellationToken);
+        // An existing QUO can already be Sent/Accepted while a new seller amendment
+        // is still being priced. Only the explicit Send revision action closes it.
+        linked.RemoveAll(request => request.IsSellerModificationRequest);
         if (linked.Count == 0) return;
 
         var ids = linked.Select(x => x.RateId!.Value).Distinct().ToArray();
