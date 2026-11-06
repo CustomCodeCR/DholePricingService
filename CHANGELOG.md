@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.5] - 2026-11-05
+
+- Sustituye confirmación manual por despliegue automático al integrar master.
+- Mantiene verificaciones de Dynamics, EF, imágenes y healthchecks antes y después del deploy.
+- Incrementa SemVer de Pricing y metadatos del ecosistema.
+
 ## [1.2.4] - 2026-11-05
 
 - Allows creating client QUOs from management-approved master tariffs before their validity start date, preserving both master validity dates and the exact commercial snapshot.
