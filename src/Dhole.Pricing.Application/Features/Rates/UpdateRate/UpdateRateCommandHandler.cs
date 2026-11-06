@@ -684,6 +684,8 @@ public sealed class UpdateRateCommandHandler(
                 rate.ConfigurePickupLocations(command.PickupLocationsJson);
             }
 
+            rate.ConfigureInlandServiceLocations(command.InlandServiceLocationsJson);
+
             if (command.ExchangeRateApplied is > 0m || command.ExchangeRateSale is > 0m)
             {
                 var appliedRate = command.ExchangeRateApplied is > 0m

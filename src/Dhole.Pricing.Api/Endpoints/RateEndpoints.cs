@@ -861,6 +861,13 @@ public static class RateEndpoints
                 OtherReferences = request.OtherReferences,
                 LclGroupAgentId = request.LclGroupAgentId,
                 PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
+                InlandServiceLocationsJson = request.InlandPickupLocation is null && request.InlandDeliveryLocation is null
+                    ? null
+                    : System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        pickup = request.InlandPickupLocation,
+                        delivery = request.InlandDeliveryLocation
+                    }),
                 StorageDays = request.StorageDays,
                 CargoValue = request.CargoValue,
                 TransitDays = request.TransitDays,
@@ -1104,6 +1111,13 @@ public static class RateEndpoints
                 ExpectedRevisionNumber = request.ExpectedRevisionNumber,
                 ModificationRequestId = request.ModificationRequestId,
                 PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
+                InlandServiceLocationsJson = request.InlandPickupLocation is null && request.InlandDeliveryLocation is null
+                    ? null
+                    : System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        pickup = request.InlandPickupLocation,
+                        delivery = request.InlandDeliveryLocation
+                    }),
                 StorageDays = request.StorageDays,
                 CargoValue = request.CargoValue,
                 TransitDays = request.TransitDays,
