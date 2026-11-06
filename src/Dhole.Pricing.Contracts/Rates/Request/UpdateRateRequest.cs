@@ -66,6 +66,8 @@ public sealed record UpdateRateRequest(
 {
     // Referencias internas de Dhole; no se exportan como IDTRA a Dynamics.
     public string? OtherReferences { get; init; }
+    public Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation? InlandPickupLocation { get; init; }
+    public Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation? InlandDeliveryLocation { get; init; }
     public IReadOnlyCollection<RatePickupLocationRequest>? PickupLocations { get; init; }
     public int? StorageDays { get; init; }
     public decimal? CargoValue { get; init; }
