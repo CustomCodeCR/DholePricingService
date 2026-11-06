@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.2.8] - 2026-11-06
+
+- Persists independent pickup and delivery addresses for inland transportation services in the rate API, database and response.
+- Keeps geographic coordinates optional and preserves existing location information for legacy API callers.
+- Adds a compatible JSONB migration for the new structured service locations.
+
 ## [1.2.7] - 2026-11-06
 
 - Resolves Dynamics new_equipo aliases for 26/48/53-foot FTL equipment when Pricing writes pies, feet or ft and the Dataverse catalog uses quote marks.
