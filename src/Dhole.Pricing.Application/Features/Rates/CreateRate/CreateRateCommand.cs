@@ -101,6 +101,8 @@ public sealed record CreateRateCommand(
     public Guid? ClientAccountId { get; init; }
     public Guid? ClientLeadId { get; init; }
     public string? OtherReferences { get; init; }
+    public string? CarrierRoute { get; init; }
+    public string? CarrierComments { get; init; }
     public int? StorageDays { get; init; }
     public decimal? CargoValue { get; init; }
     public int? TransitDays { get; init; }

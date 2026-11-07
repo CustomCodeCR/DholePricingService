@@ -243,6 +243,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string? SubjectTo { get; private set; }
     public string? Excludes { get; private set; }
     public string? TransitTime { get; private set; }
+    public string? CarrierRoute { get; private set; }
+    public string? CarrierComments { get; private set; }
     public bool UseAllInPresentation { get; private set; }
     public RateType RateType { get; private set; } = RateType.Tariff;
 
@@ -599,6 +601,19 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         // Legacy clients do not send this field: retain any existing locations.
         if (json is null) return;
         InlandServiceLocationsJson = Normalize(json);
+    }
+
+    /// <summary>Optional carrier itinerary and notes; null retains saved values for older API clients.</summary>
+    public void ConfigureCarrierDetails(string? route, string? comments, Guid? updatedBy = null)
+    {
+        if (route is null && comments is null) return;
+        var nextRoute = route is null ? CarrierRoute : Normalize(route);
+        var nextComments = comments is null ? CarrierComments : Normalize(comments);
+        if (string.Equals(CarrierRoute, nextRoute, StringComparison.Ordinal)
+            && string.Equals(CarrierComments, nextComments, StringComparison.Ordinal)) return;
+        CarrierRoute = nextRoute;
+        CarrierComments = nextComments;
+        MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
     }
 
     public void ConfigureExchangeRateSnapshot(

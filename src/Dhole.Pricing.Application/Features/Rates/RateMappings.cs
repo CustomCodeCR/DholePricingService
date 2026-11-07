@@ -169,6 +169,8 @@ internal static class RateMappings
             ClientAccountId = rate.ClientAccountId,
             ClientLeadId = rate.ClientLeadId,
             OtherReferences = rate.OtherReferences,
+            CarrierRoute = rate.CarrierRoute,
+            CarrierComments = rate.CarrierComments,
             PendingReapproval = rate.PendingReapproval,
             ReapprovalReason = rate.ReapprovalReason,
             SellerReceivedAtUtc = rate.SellerReceivedAtUtc,
