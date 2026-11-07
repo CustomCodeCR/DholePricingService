@@ -1,3 +1,6 @@
+using Dhole.Pricing.Application.Abstractions.Reports;
+using System.Globalization;
+using System.Text.Json.Nodes;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using System.Data;
 using System.Security.Claims;
@@ -412,9 +415,99 @@ public static class RateEndpoints
         Guid rateId,
         GenerateRateDocumentRequest request,
         ICommandDispatcher dispatcher,
+        ServiceDbContext db,
+        IRateHeaderRepository rateHeaders,
+        IRateCommentStore rateComments,
+        IRateReportDataFactory dataFactory,
+        IPricingReportsClient reportsClient,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
+        // A document requested from ANY sub-QUO must contain the entire group.
+        // Look up siblings by the immutable group table, never the currently active POE.
+        if (string.IsNullOrWhiteSpace(request.Format) ||
+            string.Equals(request.Format, "pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            var groupedIds = new List<Guid>();
+            var parentQuote = string.Empty;
+            var connection = db.Database.GetDbConnection();
+            var shouldClose = connection.State != ConnectionState.Open;
+            if (shouldClose) await connection.OpenAsync(cancellationToken);
+            try
+            {
+                await using var lookup = connection.CreateCommand();
+                lookup.CommandText = """
+                    SELECT a.rate_id, a.base_quote FROM pricing.rate_quote_alternatives a
+                    WHERE a.parent_rate_id = (
+                        SELECT parent_rate_id FROM pricing.rate_quote_alternatives
+                        WHERE rate_id = @rate_id LIMIT 1
+                    ) ORDER BY length(a.suffix), a.suffix
+                    """;
+                var parameter = lookup.CreateParameter();
+                parameter.ParameterName = "@rate_id";
+                parameter.Value = rateId;
+                lookup.Parameters.Add(parameter);
+                await using var reader = await lookup.ExecuteReaderAsync(cancellationToken);
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    groupedIds.Add(reader.GetGuid(0));
+                    parentQuote = reader.GetString(1);
+                }
+            }
+            finally
+            {
+                if (shouldClose) await connection.CloseAsync();
+            }
+
+            if (groupedIds.Count > 1)
+            {
+                var options = new List<PricingQuoteGroupDocumentItem>(groupedIds.Count);
+                foreach (var childId in groupedIds)
+                {
+                    var rate = await rateHeaders.GetByIdWithDetailsAsync(childId, cancellationToken);
+                    if (rate is null || rate.IsDeleted)
+                        return Results.NotFound(new { code = "Pricing.QuoteAlternativeMissing" });
+                    if (rate.RequiredApproval || rate.Status is not (
+                        RateStatus.ApprovedByManagement or RateStatus.Open or RateStatus.Sent
+                        or RateStatus.AcceptedByClient or RateStatus.RejectedByClient
+                        or RateStatus.Closed or RateStatus.Expired))
+                        return Results.Conflict(new { code = "Pricing.QuoteGroupRequiresApproval" });
+
+                    var comments = await rateComments.GetAsync(childId, cancellationToken);
+                    var json = JsonNode.Parse(dataFactory.CreateDataJson(rate)) as JsonObject;
+                    if (json?["rate"] is JsonObject rateData)
+                        rateData["comments"] = comments?.Trim() ?? string.Empty;
+
+                    var freight = rate.RateDetails.Where(detail => detail.CostDetailType == CostDetailType.Freight).ToArray();
+                    var oceanFreight = freight.Sum(detail => detail.SaleAmount * detail.Quantity);
+                    var freightCurrency = freight.FirstOrDefault()?.CurrencyCode ?? rate.CurrencyCode;
+                    var route = rate.PolName + " → " + rate.PoeName
+                        + (string.IsNullOrWhiteSpace(rate.PodName) ? "" : " → " + rate.PodName);
+                    if (!string.IsNullOrWhiteSpace(rate.CarrierRoute))
+                        route += " · Ruta naviera: " + rate.CarrierRoute.Trim();
+                    options.Add(new PricingQuoteGroupDocumentItem(
+                        rate.QuoNumber ?? rate.RateCode,
+                        route,
+                        rate.CarrierName,
+                        oceanFreight.ToString("N2", CultureInfo.GetCultureInfo("en-US")),
+                        freightCurrency,
+                        json?.ToJsonString() ?? dataFactory.CreateDataJson(rate)));
+                }
+                try
+                {
+                    var document = await reportsClient.GenerateGroupedPricingQuoteAsync(
+                        parentQuote, options, cancellationToken);
+                    return Results.File(document.Content, document.ContentType, document.FileName);
+                }
+                catch (HttpRequestException)
+                {
+                    return Results.Problem(
+                        title: "No se pudo generar el PDF completo de multiQUO.",
+                        statusCode: StatusCodes.Status502BadGateway);
+                }
+            }
+        }
+
         var result = await dispatcher.DispatchAsync(
             new GenerateRateDocumentCommand(rateId, request.TemplateCode, request.Format),
             cancellationToken);
