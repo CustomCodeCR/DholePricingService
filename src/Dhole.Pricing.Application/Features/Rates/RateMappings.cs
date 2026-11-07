@@ -167,6 +167,8 @@ internal static class RateMappings
         )
         {
             OtherReferences = rate.OtherReferences,
+            CarrierRoute = rate.CarrierRoute,
+            CarrierComments = rate.CarrierComments,
             PendingReapproval = rate.PendingReapproval,
             ReapprovalReason = rate.ReapprovalReason,
             SellerReceivedAtUtc = rate.SellerReceivedAtUtc,
