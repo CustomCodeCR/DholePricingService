@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.1] - 2026-11-07 (pendiente de CI/staging)
+
+- Genera PDF desde cualquier subQUO con índice de todas las alternativas guardadas y datos independientes por ruta, naviera y Ocean Freight; conserva el flujo individual histórico.
+- Release DH-20261107-MULTIQUO-PERSISTED-PDF-026; sin autorización de despliegue a producción.
+
 ## [1.5.0] - 2026-11-07 (en validación)
 
 - API FCL multiQUO: creación atómica por POE/naviera, consulta de grupo, selección comercial exclusiva y guardas ante aceptación errónea.
