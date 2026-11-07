@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261107-MULTIQUO-PERSISTED-PDF-026",
+  "ecosystemVersion": "1.11.1",
+  "releaseType": "PATCH",
+  "createdAt": "2026-11-07",
+  "components": [
+    {
+      "component": "DholeWeb",
+      "from": "1.11.0",
+      "to": "1.11.1"
+    },
+    {
+      "component": "DholePricingService",
+      "from": "1.5.0",
+      "to": "1.5.1"
+    },
+    {
+      "component": "DholeReportsService",
+      "from": "1.4.0",
+      "to": "1.4.1"
+    },
+    {
+      "component": "DholeSystem",
+      "from": "1.10.1",
+      "to": "1.10.2"
+    }
+  ],
+  "fixes": [
+    "Restore all persisted POEs and carrier/merchant alternatives for saved FCL quote groups",
+    "Step 8 full-width client summary and step 9 per-subQUO accordions with persisted detail lines",
+    "One group PDF with index of subQUOs, naviera/route and Ocean Freight, followed by complete individual quotes",
+    "Remove leaked template directives and literal line break escapes from commercial documents"
+  ],
+  "stagingStatus": "pending",
+  "productionDeploymentAuthorized": false,
+  "validation": "Pending CI, integration tests and staging validation",
+  "repos": [
+    "CustomCodeCR/DholeWeb",
+    "CustomCodeCR/DholePricingService",
+    "CustomCodeCR/DholeReportsService",
+    "CustomCodeCR/DholeSystem"
+  ]
+}
