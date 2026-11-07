@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.2] - 2026-11-07
+
+- El índice PDF multiQUO utiliza el Value comercial de la moneda, no el identificador CUR interno; añade pruebas de regresión.
+- Release DH-20261107-MULTIQUO-VALUE-INDEX-027. Merge coordinado a develop y master sujeto a CI y staging.
+
 ## [1.5.1] - 2026-11-07 (pendiente de CI/staging)
 
 - Genera PDF desde cualquier subQUO con índice de todas las alternativas guardadas y datos independientes por ruta, naviera y Ocean Freight; conserva el flujo individual histórico.
