@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.4.0",
-  "ecosystemVersion": "1.5.0",
-  "releaseId": "DH-20261106-MULTI-QUO-018"
+  "version": "1.5.0",
+  "ecosystemVersion": "1.11.0",
+  "releaseId": "DH-20261107-PRICING-MULTIQUO-025"
 }

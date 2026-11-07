@@ -24,16 +24,20 @@ using Dhole.Pricing.Contracts.Rates.Request;
 using Dhole.Pricing.Contracts.Rates.Response;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Rates;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Dhole.Pricing.Api.Endpoints;
 
 public static class RateEndpoints
 {
+    private const string GroupDispatcherKey = "Dhole.Pricing.RateGroup.Dispatcher";
+    private const string GroupCreatedIdKey = "Dhole.Pricing.RateGroup.CreatedRateId";
     public static IEndpointRouteBuilder MapRateEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/pricing/rates").WithTags("Rates").RequireAuthorization();
@@ -70,6 +74,9 @@ public static class RateEndpoints
             .RequireScope(PricingConstants.Scopes.RateView);
 
         group.MapPost("/", CreateRateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateCreate);
+        group.MapPost("/groups", CreateRateGroupAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateCreate);
+        group.MapGet("/groups/{rateId:guid}", GetRateGroupAsync).RequireScope(PricingConstants.Scopes.RateView);
+        group.MapPost("/groups/{rateId:guid}/select", SelectRateGroupAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateUpdate);
 
         group
             .MapPut("/{rateId:guid}", UpdateRateAsync)
@@ -482,6 +489,12 @@ public static class RateEndpoints
         Func<ICommandDispatcher, Task<TResult>> dispatch
     )
     {
+        // The group endpoint owns one scoped dispatcher and one outer EF transaction.
+        // Creating a new scope for every child would commit partial QUOs.
+        if (httpContext.Items.TryGetValue(GroupDispatcherKey, out var shared)
+            && shared is ICommandDispatcher groupDispatcher)
+            return await dispatch(groupDispatcher);
+
         var strategy = db.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(async () =>
         {
@@ -725,7 +738,284 @@ public static class RateEndpoints
             retryDispatcher => retryDispatcher.DispatchAsync(creationCommand, cancellationToken)
         );
 
+        if (result.IsSuccess && httpContext.Items.ContainsKey(GroupDispatcherKey))
+            httpContext.Items[GroupCreatedIdKey] = result.Value;
         return EndpointResults.FromResult(result, httpContext);
+    }
+
+
+    /// <summary>
+    /// Creates all FCL routes in the same PostgreSQL transaction. Individual
+    /// CreateRate commands keep their existing validation and audit semantics;
+    /// no RateHeader, sequence reservation or outbox event is committed unless
+    /// every POE/carrier alternative succeeds.
+    /// </summary>
+    private static async Task<IResult> CreateRateGroupAsync(
+        CreateRateGroupRequest request,
+        ServiceDbContext db,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var alternatives = request.Alternatives?.ToArray() ?? [];
+        if (alternatives.Length < 2 || alternatives.Length > 52)
+            return EndpointResults.BadRequest("Pricing.InvalidQuoteGroup",
+                "Una multiQUO requiere de 2 a 52 alternativas FCL.", httpContext);
+
+        var candidates = new List<QuoteAlternativeCandidate>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var first = alternatives[0].Rate;
+        foreach (var alternative in alternatives)
+        {
+            var rate = alternative.Rate;
+            if (!string.Equals(rate.ShipmentMode, "Fcl", StringComparison.OrdinalIgnoreCase)
+                || rate.PoeId == Guid.Empty || !rate.CarrierId.HasValue || rate.CarrierId.Value == Guid.Empty)
+                return EndpointResults.BadRequest("Pricing.InvalidQuoteGroupRoute",
+                    "Las alternativas deben tener POE y naviera válidos y modalidad FCL.", httpContext);
+            if (rate.PolId != first.PolId || rate.PodId != first.PodId
+                || rate.ContainerTypeId != first.ContainerTypeId
+                || !string.Equals(rate.ClientName?.Trim(), first.ClientName?.Trim(), StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(rate.OperationType, first.OperationType, StringComparison.OrdinalIgnoreCase))
+                return EndpointResults.BadRequest("Pricing.InconsistentQuoteGroup",
+                    "Todas las alternativas deben compartir cliente, origen, POD, equipo y operación.", httpContext);
+            if (!Enum.TryParse<QuoteAlternativeHaulage>(alternative.HaulageMode, true, out var haulage)
+                || !Enum.IsDefined(haulage))
+                return EndpointResults.BadRequest("Pricing.InvalidHaulageMode",
+                    "La alternativa requiere Merchant o Carrier.", httpContext);
+            if (rate.Details is null || rate.Details.Count == 0)
+                return EndpointResults.BadRequest("Pricing.EmptyQuoteAlternative",
+                    "Cada alternativa debe incluir sus cargos y flete individuales.", httpContext);
+
+            var candidate = new QuoteAlternativeCandidate(rate.PoeId, rate.CarrierId!.Value, haulage,
+                alternative.RouteKey);
+            if (!seen.Add(QuoteAlternativeNumbering.Key(candidate)))
+                return EndpointResults.BadRequest("Pricing.DuplicateQuoteAlternative",
+                    "El mismo POE, naviera, transporte y ruta están duplicados.", httpContext);
+            candidates.Add(candidate);
+        }
+
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var scope = httpContext.RequestServices
+                .GetRequiredService<IServiceScopeFactory>().CreateAsyncScope();
+            var scopedDb = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
+            var scopedDispatcher = scope.ServiceProvider.GetRequiredService<ICommandDispatcher>();
+            await using var transaction = await scopedDb.Database.BeginTransactionAsync(cancellationToken);
+            var created = new List<Guid>(alternatives.Length);
+            httpContext.Items[GroupDispatcherKey] = scopedDispatcher;
+            try
+            {
+                foreach (var alternative in alternatives)
+                {
+                    httpContext.Items.Remove(GroupCreatedIdKey);
+                    // The final commercial number is assigned after the root QUO
+                    // has been reserved, never accepted from a browser payload.
+                    var childRequest = alternative.Rate with { QuoNumber = null };
+                    var outcome = await CreateRateAsync(childRequest, scopedDb, httpContext, cancellationToken);
+                    if (httpContext.Items[GroupCreatedIdKey] is not Guid createdId)
+                        return outcome; // transaction rolls back on dispose
+                    created.Add(createdId);
+                }
+
+                var parentId = created[0];
+                var baseQuote = await scopedDb.RateHeaders.AsNoTracking()
+                    .Where(rate => rate.Id == parentId)
+                    .Select(rate => rate.RateCode)
+                    .SingleAsync(cancellationToken);
+                var responseAlternatives = new List<object>(created.Count);
+                for (var index = 0; index < created.Count; index++)
+                {
+                    var id = created[index];
+                    var candidate = candidates[index];
+                    var suffix = QuoteAlternativeNumbering.SuffixAt(index);
+                    var quote = QuoteAlternativeNumbering.SubQuoteNumber(baseQuote, suffix);
+                    var routeKey = candidate.RouteKey?.Trim() ?? string.Empty;
+                    var haulage = candidate.HaulageMode.ToString();
+                    await scopedDb.Database.ExecuteSqlInterpolatedAsync(
+                        $@"UPDATE pricing.""RateHeaders"" SET quo_number = {quote} WHERE id = {id}",
+                        cancellationToken);
+                    await scopedDb.Database.ExecuteSqlInterpolatedAsync(
+                        $@"INSERT INTO pricing.rate_quote_alternatives
+                            (rate_id, parent_rate_id, base_quote, alternative_quote, suffix,
+                             poe_id, pod_id, carrier_id, haulage_mode, route_key, status)
+                           VALUES ({id}, {parentId}, {baseQuote}, {quote}, {suffix},
+                                   {candidate.PoeId}, {alternatives[index].Rate.PodId},
+                                   {candidate.CarrierId}, {haulage}, {routeKey}, 'Draft')",
+                        cancellationToken);
+                    responseAlternatives.Add(new
+                    {
+                        rateId = id, quoteNumber = quote, suffix,
+                        poeId = candidate.PoeId, podId = alternatives[index].Rate.PodId,
+                        carrierId = candidate.CarrierId, haulageMode = haulage
+                    });
+                }
+                await transaction.CommitAsync(cancellationToken);
+                return Results.Ok(new { parentRateId = parentId, parentQuoteNumber = baseQuote,
+                    alternatives = responseAlternatives });
+            }
+            finally
+            {
+                httpContext.Items.Remove(GroupDispatcherKey);
+                httpContext.Items.Remove(GroupCreatedIdKey);
+            }
+        });
+    }
+
+    private static async Task<IResult> GetRateGroupAsync(
+        Guid rateId,
+        ServiceDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose) await connection.OpenAsync(cancellationToken);
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT a.parent_rate_id, a.base_quote, a.rate_id, a.alternative_quote,
+                       a.suffix, a.poe_id, a.pod_id, a.carrier_id,
+                       a.haulage_mode, a.status, h.poe_name, h.pod_name, h.carrier_name
+                FROM pricing.rate_quote_alternatives a
+                INNER JOIN pricing."RateHeaders" h ON h.id = a.rate_id
+                WHERE a.parent_rate_id = (
+                    SELECT parent_rate_id FROM pricing.rate_quote_alternatives
+                    WHERE rate_id = @rate_id LIMIT 1
+                )
+                ORDER BY length(a.suffix), a.suffix;
+                """;
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "@rate_id";
+            parameter.Value = rateId;
+            command.Parameters.Add(parameter);
+            var items = new List<object>();
+            Guid parentId = Guid.Empty;
+            string parentQuote = string.Empty;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                parentId = reader.GetGuid(0);
+                parentQuote = reader.GetString(1);
+                items.Add(new
+                {
+                    rateId = reader.GetGuid(2),
+                    quoteNumber = reader.GetString(3),
+                    suffix = reader.GetString(4),
+                    poeId = reader.GetGuid(5),
+                    podId = reader.IsDBNull(6) ? (Guid?)null : reader.GetGuid(6),
+                    carrierId = reader.GetGuid(7),
+                    haulageMode = reader.GetString(8),
+                    status = reader.GetString(9),
+                    poeName = reader.GetString(10),
+                    podName = reader.IsDBNull(11) ? null : reader.GetString(11),
+                    carrierName = reader.GetString(12)
+                });
+            }
+            return items.Count > 0
+                ? Results.Ok(new { parentRateId = parentId, parentQuoteNumber = parentQuote,
+                    alternatives = items })
+                : Results.NotFound();
+        }
+        finally
+        {
+            if (shouldClose) await connection.CloseAsync();
+        }
+    }
+
+
+    /// <summary>
+    /// Selects exactly one commercial alternative. The parent row lock serializes
+    /// concurrent decisions; the unique partial index is the final DB safeguard.
+    /// </summary>
+    private static async Task<IResult> SelectRateGroupAsync(
+        Guid rateId,
+        ServiceDbContext db,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var candidate = await db.RateHeaders.AsNoTracking()
+            .FirstOrDefaultAsync(rate => rate.Id == rateId && !rate.IsDeleted, cancellationToken);
+        if (candidate is null)
+            return Results.NotFound();
+
+        // Resolve the parent using a parameterized query; no user-supplied
+        // quotation numbers are allowed to select an unrelated group.
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose) await connection.OpenAsync(cancellationToken);
+        Guid? parentId;
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT parent_rate_id FROM pricing.rate_quote_alternatives
+                WHERE rate_id = @rate_id LIMIT 1;
+                """;
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "@rate_id";
+            parameter.Value = rateId;
+            command.Parameters.Add(parameter);
+            var raw = await command.ExecuteScalarAsync(cancellationToken);
+            parentId = raw is null or DBNull ? null : (Guid)raw;
+        }
+        finally
+        {
+            if (shouldClose) await connection.CloseAsync();
+        }
+        if (!parentId.HasValue)
+            return Results.NotFound();
+
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                System.Data.IsolationLevel.Serializable, cancellationToken);
+            // Lock the common parent before checking other accepted alternatives.
+            await using (var lockCommand = db.Database.GetDbConnection().CreateCommand())
+            {
+                lockCommand.Transaction = transaction.GetDbTransaction();
+                lockCommand.CommandText = """
+                    SELECT id FROM pricing."RateHeaders" WHERE id = @parent FOR UPDATE;
+                    """;
+                var parameter = lockCommand.CreateParameter();
+                parameter.ParameterName = "@parent";
+                parameter.Value = parentId.Value;
+                lockCommand.Parameters.Add(parameter);
+                await lockCommand.ExecuteScalarAsync(cancellationToken);
+            }
+            // A selection cannot be changed once one of the alternatives has
+            // been accepted. Check all group members, not just the parent.
+            await using (var acceptanceQuery = db.Database.GetDbConnection().CreateCommand())
+            {
+                acceptanceQuery.Transaction = transaction.GetDbTransaction();
+                acceptanceQuery.CommandText = """
+                    SELECT EXISTS(
+                      SELECT 1
+                      FROM pricing.rate_quote_alternatives a
+                      JOIN pricing."RateHeaders" h ON h.id = a.rate_id
+                      WHERE a.parent_rate_id = @parent
+                        AND h.status = 'AcceptedByClient'
+                    );
+                    """;
+                var parameter = acceptanceQuery.CreateParameter();
+                parameter.ParameterName = "@parent";
+                parameter.Value = parentId.Value;
+                acceptanceQuery.Parameters.Add(parameter);
+                var hasAccepted = (bool)(await acceptanceQuery.ExecuteScalarAsync(cancellationToken) ?? false);
+                if (hasAccepted)
+                    return Results.Conflict(new { code = "Pricing.QuoteGroupAlreadyAccepted",
+                        message = "El grupo ya tiene una sub-QUO aceptada y no permite cambiar la seleccion." });
+            }
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE pricing.rate_quote_alternatives SET status = 'NotSelected'
+                   WHERE parent_rate_id = {parentId.Value};", cancellationToken);
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE pricing.rate_quote_alternatives SET status = 'Selected'
+                   WHERE rate_id = {rateId} AND parent_rate_id = {parentId.Value};",
+                cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Results.Ok(new { parentRateId = parentId.Value, selectedRateId = rateId });
+        });
     }
 
     private static async Task<IResult> UpdateRateAsync(
@@ -1164,6 +1454,37 @@ public static class RateEndpoints
         if (!canUpdateRateStatus && !(isClientDecision && canApproveLowMargin))
         {
             return Results.Forbid();
+        }
+
+
+        // A grouped alternative cannot reach Dynamics or commercial acceptance
+        // until the user has explicitly selected it in the quotation group.
+        if (status == RateStatus.AcceptedByClient)
+        {
+            var connection = db.Database.GetDbConnection();
+            var shouldClose = connection.State != ConnectionState.Open;
+            if (shouldClose) await connection.OpenAsync(cancellationToken);
+            try
+            {
+                await using var check = connection.CreateCommand();
+                check.CommandText = """
+                    SELECT status FROM pricing.rate_quote_alternatives
+                    WHERE rate_id = @rate_id LIMIT 1;
+                    """;
+                var parameter = check.CreateParameter();
+                parameter.ParameterName = "@rate_id";
+                parameter.Value = rateId;
+                check.Parameters.Add(parameter);
+                var selected = await check.ExecuteScalarAsync(cancellationToken);
+                if (selected is string groupStatus &&
+                    !string.Equals(groupStatus, "Selected", StringComparison.Ordinal))
+                    return Results.Conflict(new { code = "Pricing.QuoteAlternativeNotSelected",
+                        message = "Seleccione esta alternativa dentro del grupo antes de aceptarla." });
+            }
+            finally
+            {
+                if (shouldClose) await connection.CloseAsync();
+            }
         }
 
         if (status == RateStatus.AcceptedByClient && request.Observations?.Trim().Length > 2000)
