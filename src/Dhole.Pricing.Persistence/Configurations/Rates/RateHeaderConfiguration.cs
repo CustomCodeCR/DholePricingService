@@ -35,6 +35,8 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
         builder.Property(x => x.Excludes).HasColumnType("text").IsRequired(false);
 
         builder.Property(x => x.TransitTime).HasMaxLength(160).IsRequired(false);
+        builder.Property(x => x.CarrierRoute).HasColumnType("text").IsRequired(false);
+        builder.Property(x => x.CarrierComments).HasColumnType("text").IsRequired(false);
         builder.Property(x => x.RateType)
             .HasConversion<string>()
             .HasMaxLength(20)

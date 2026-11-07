@@ -672,6 +672,7 @@ public sealed class UpdateRateCommandHandler(
             );
             rate.ConfigureLclGroupAgent(command.LclGroupAgentId, command.LclGroupAgentName, command.LclGroupAgentCode);
             rate.ConfigureExecutive(command.ExecutiveName);
+            rate.ConfigureCarrierDetails(command.CarrierRoute, command.CarrierComments, command.UpdatedBy);
             // Null conserva referencias existentes de clientes que aún usan el contrato anterior.
             // Cadena vacía permite limpiarlas desde el wizard.
             if (command.OtherReferences is not null)

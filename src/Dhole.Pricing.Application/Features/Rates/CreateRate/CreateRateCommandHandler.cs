@@ -483,6 +483,7 @@ public sealed class CreateRateCommandHandler(
             rate.ConfigureInlandServiceLocations(command.InlandServiceLocationsJson);
             rate.ConfigureLclGroupAgent(command.LclGroupAgentId, command.LclGroupAgentName, command.LclGroupAgentCode);
             rate.ConfigureExecutive(command.ExecutiveName);
+            rate.ConfigureCarrierDetails(command.CarrierRoute, command.CarrierComments, command.CreatedBy);
             if (command.OtherReferences is not null)
                 rate.SetOtherReferences(command.OtherReferences, command.CreatedBy);
             rate.ConfigureCommercialPresentation(command.UseAllInPresentation, command.CreatedBy);

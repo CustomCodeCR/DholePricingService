@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.0] - 2026-11-06
+
+- Permite guardar la ruta y los comentarios de la naviera como campos independientes y opcionales por cotización.
+- Expone ambos campos en creación, edición, consulta y generación del PDF; agrega migración de columnas sin afectar cotizaciones previas.
+- Release DH-20261106-CARRIER-ROUTE-COMMENTS-017, ecosistema Dhole 1.4.0.
+
 ## [1.2.8] - 2026-11-06
 
 - Persists independent pickup and delivery addresses for inland transportation services in the rate API, database and response.
