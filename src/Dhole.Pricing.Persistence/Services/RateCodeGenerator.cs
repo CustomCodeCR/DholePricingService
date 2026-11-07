@@ -15,7 +15,11 @@ public sealed class RateCodeGenerator(ServiceDbContext dbContext) : IRateCodeGen
     {
         // No usar nextval(): las secuencias PostgreSQL no revierten incrementos
         // cuando la creación de la cotización falla o se cancela.
-        var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        // Grouped QUOs share the outer database transaction. Child reservations
+        // must not commit it before the last alternative passes validation.
+        var existingTransaction = dbContext.Database.CurrentTransaction;
+        var transaction = existingTransaction ?? await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var ownsTransaction = existingTransaction is null;
 
         try
         {
@@ -65,27 +69,29 @@ public sealed class RateCodeGenerator(ServiceDbContext dbContext) : IRateCodeGen
 
                 if (!alreadyExists)
                 {
-                    return new RateCodeReservation(transaction, candidate);
+                    return new RateCodeReservation(transaction, candidate, ownsTransaction);
                 }
             }
         }
         catch
         {
-            await transaction.DisposeAsync();
+            if (ownsTransaction) await transaction.DisposeAsync();
             throw;
         }
     }
 
     private sealed class RateCodeReservation(
         IDbContextTransaction transaction,
-        string code
+        string code,
+        bool ownsTransaction
     ) : IRateCodeReservation
     {
         public string Code { get; } = code;
 
         public Task CommitAsync(CancellationToken cancellationToken = default) =>
-            transaction.CommitAsync(cancellationToken);
+            ownsTransaction ? transaction.CommitAsync(cancellationToken) : Task.CompletedTask;
 
-        public ValueTask DisposeAsync() => transaction.DisposeAsync();
+        public ValueTask DisposeAsync() =>
+            ownsTransaction ? transaction.DisposeAsync() : ValueTask.CompletedTask;
     }
 }
