@@ -766,7 +766,7 @@ public static class RateEndpoints
         {
             var rate = alternative.Rate;
             if (!string.Equals(rate.ShipmentMode, "Fcl", StringComparison.OrdinalIgnoreCase)
-                || rate.PoeId == Guid.Empty || rate.CarrierId is null or { } carrierId && carrierId == Guid.Empty)
+                || rate.PoeId == Guid.Empty || !rate.CarrierId.HasValue || rate.CarrierId.Value == Guid.Empty)
                 return EndpointResults.BadRequest("Pricing.InvalidQuoteGroupRoute",
                     "Las alternativas deben tener POE y naviera válidos y modalidad FCL.", httpContext);
             if (rate.PolId != first.PolId || rate.PodId != first.PodId
