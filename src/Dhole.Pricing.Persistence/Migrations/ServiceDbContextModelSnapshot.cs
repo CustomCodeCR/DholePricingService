@@ -3047,6 +3047,14 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("character varying(160)")
                         .HasColumnName("transit_time");
 
+                    b.Property<string>("CarrierRoute")
+                        .HasColumnType("text")
+                        .HasColumnName("carrier_route");
+
+                    b.Property<string>("CarrierComments")
+                        .HasColumnType("text")
+                        .HasColumnName("carrier_comments");
+
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at_utc");
