@@ -21,6 +21,32 @@ public sealed class PricingReportsHttpClient(HttpClient httpClient) : IPricingRe
             sheetName,
             cancellationToken);
 
+    public async Task<GeneratedRateDocumentDto> GenerateGroupedPricingQuoteAsync(
+        string parentQuoteNumber,
+        IReadOnlyList<PricingQuoteGroupDocumentItem> alternatives,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await httpClient.PostAsJsonAsync(
+            "/api/internal/reports/quote-groups/generate",
+            new { parentQuoteNumber, alternatives },
+            cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var detail = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException(
+                $"Reports respondió HTTP {(int)response.StatusCode}: {detail}",
+                null, response.StatusCode);
+        }
+        var content = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        var name = response.Content.Headers.ContentDisposition?.FileNameStar
+            ?? response.Content.Headers.ContentDisposition?.FileName
+            ?? $"{parentQuoteNumber}.pdf";
+        return new GeneratedRateDocumentDto(
+            name.Trim('"'),
+            response.Content.Headers.ContentType?.ToString() ?? "application/pdf",
+            content);
+    }
+
     public Task<GeneratedRateDocumentDto> GenerateTabularAsync(
         string format,
         string dataJson,
