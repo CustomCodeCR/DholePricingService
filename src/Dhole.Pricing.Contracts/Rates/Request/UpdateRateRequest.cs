@@ -68,6 +68,8 @@ public sealed record UpdateRateRequest(
     public Guid? ClientAccountId { get; init; }
     public Guid? ClientLeadId { get; init; }
     public string? OtherReferences { get; init; }
+    public string? CarrierRoute { get; init; }
+    public string? CarrierComments { get; init; }
     public Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation? InlandPickupLocation { get; init; }
     public Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation? InlandDeliveryLocation { get; init; }
     public IReadOnlyCollection<RatePickupLocationRequest>? PickupLocations { get; init; }

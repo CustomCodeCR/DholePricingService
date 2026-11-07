@@ -642,6 +642,7 @@ public sealed class UpdateRateCommandHandler(
             );
             rate.ConfigureLclGroupAgent(command.LclGroupAgentId, command.LclGroupAgentName, command.LclGroupAgentCode);
             rate.ConfigureExecutive(command.ExecutiveName);
+            rate.ConfigureCarrierDetails(command.CarrierRoute, command.CarrierComments, command.UpdatedBy);
             rate.ConfigureClientAccount(command.ClientAccountId);
             rate.ConfigureClientLead(command.ClientLeadId);
             // Null conserva referencias existentes de clientes que aún usan el contrato anterior.
