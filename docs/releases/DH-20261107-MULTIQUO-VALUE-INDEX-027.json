@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261107-MULTIQUO-VALUE-INDEX-027",
+  "ecosystemVersion": "1.11.2",
+  "releaseType": "PATCH",
+  "createdAt": "2026-11-07",
+  "components": [
+    {
+      "component": "DholeWeb",
+      "from": "1.11.1",
+      "to": "1.11.2"
+    },
+    {
+      "component": "DholePricingService",
+      "from": "1.5.1",
+      "to": "1.5.2"
+    },
+    {
+      "component": "DholeReportsService",
+      "from": "1.4.1",
+      "to": "1.4.2"
+    },
+    {
+      "component": "DholeSystem",
+      "from": "1.11.1",
+      "to": "1.11.2"
+    }
+  ],
+  "fixes": [
+    "Selected Inland Carrier/Merchant pricing applies configured POE-specific cost and sale, never stale zero drafts",
+    "PDF and UI display catalog currency Value, not CUR-2026 internal catalog code",
+    "Full-width responsive commercial summary",
+    "Distinctive clickable PDF index with route, carrier and Ocean Freight"
+  ],
+  "stagingStatus": "pending",
+  "productionDeploymentAuthorized": false,
+  "validation": "Pending CI and staging validation",
+  "repos": [
+    "CustomCodeCR/DholeWeb",
+    "CustomCodeCR/DholePricingService",
+    "CustomCodeCR/DholeReportsService",
+    "CustomCodeCR/DholeSystem"
+  ]
+}
