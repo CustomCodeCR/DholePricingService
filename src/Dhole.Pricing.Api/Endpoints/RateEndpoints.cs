@@ -480,7 +480,7 @@ public static class RateEndpoints
 
                     var freight = rate.RateDetails.Where(detail => detail.CostDetailType == CostDetailType.Freight).ToArray();
                     var oceanFreight = freight.Sum(detail => detail.SaleAmount * detail.Quantity);
-                    var freightCurrency = freight.FirstOrDefault()?.CurrencyCode ?? rate.CurrencyCode;
+                    var freightCurrency = QuoteCurrencyValue.Resolve(freight.FirstOrDefault()?.CurrencyName, rate.CurrencyName);
                     var route = rate.PolName + " → " + rate.PoeName
                         + (string.IsNullOrWhiteSpace(rate.PodName) ? "" : " → " + rate.PodName);
                     if (!string.IsNullOrWhiteSpace(rate.CarrierRoute))
