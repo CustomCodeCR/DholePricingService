@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0] - 2026-11-07 (en validación)
+
+- API FCL multiQUO: creación atómica por POE/naviera, consulta de grupo, selección comercial exclusiva y guardas ante aceptación errónea.
+- Reutiliza la transacción de consecutivos/Outbox y conserva costos, rutas y tarifas por subQUO.
+- Release DH-20261107-PRICING-MULTIQUO-025: staging pendiente, sin autorización de producción.
+
+
 ## [1.4.0] - 2026-11-06 (en desarrollo)
 
 - Introduce las reglas de dominio para numeración estable de sub-QUO A..Z/AA, deduplicación por POE/naviera/haulage y prevalidación de selección exclusiva.

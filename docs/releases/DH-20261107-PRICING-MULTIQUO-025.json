@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261107-PRICING-MULTIQUO-025",
+  "ecosystemVersion": "1.11.0",
+  "releaseType": "MINOR",
+  "createdAt": "2026-11-07",
+  "components": [
+    {"component": "DholeWeb", "from": "1.10.1", "to": "1.11.0"},
+    {"component": "DholePricingService", "from": "1.4.0", "to": "1.5.0"}
+  ],
+  "features": [
+    "FCL POE/POD draft persistence and view/edit restoration",
+    "Independent POE-carrier alternatives with Merchant/Carrier optional charges",
+    "FCL international freight deduplication",
+    "Transactional grouped quotation creation, query and exclusive selection"
+  ],
+  "validation": "CI and staging required prior to merge",
+  "productionDeploymentAuthorized": false,
+  "stagingStatus": "pending",
+  "productionStatus": "blocked"
+}
