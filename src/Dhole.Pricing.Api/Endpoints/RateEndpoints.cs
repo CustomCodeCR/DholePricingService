@@ -75,6 +75,7 @@ public static class RateEndpoints
         group.MapPost("/", CreateRateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateCreate);
         group.MapPost("/groups", CreateRateGroupAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateCreate);
         group.MapGet("/groups/{rateId:guid}", GetRateGroupAsync).RequireScope(PricingConstants.Scopes.RateView);
+        group.MapPost("/groups/{rateId:guid}/select", SelectRateGroupAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.RateUpdate);
 
         group
             .MapPut("/{rateId:guid}", UpdateRateAsync)
@@ -920,6 +921,102 @@ public static class RateEndpoints
         }
     }
 
+
+    /// <summary>
+    /// Selects exactly one commercial alternative. The parent row lock serializes
+    /// concurrent decisions; the unique partial index is the final DB safeguard.
+    /// </summary>
+    private static async Task<IResult> SelectRateGroupAsync(
+        Guid rateId,
+        ServiceDbContext db,
+        HttpContext httpContext,
+        CancellationToken cancellationToken)
+    {
+        var candidate = await db.RateHeaders.AsNoTracking()
+            .FirstOrDefaultAsync(rate => rate.Id == rateId && !rate.IsDeleted, cancellationToken);
+        if (candidate is null)
+            return Results.NotFound();
+
+        // Resolve the parent using a parameterized query; no user-supplied
+        // quotation numbers are allowed to select an unrelated group.
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose) await connection.OpenAsync(cancellationToken);
+        Guid? parentId;
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT parent_rate_id FROM pricing.rate_quote_alternatives
+                WHERE rate_id = @rate_id LIMIT 1;
+                """;
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "@rate_id";
+            parameter.Value = rateId;
+            command.Parameters.Add(parameter);
+            var raw = await command.ExecuteScalarAsync(cancellationToken);
+            parentId = raw is null or DBNull ? null : (Guid)raw;
+        }
+        finally
+        {
+            if (shouldClose) await connection.CloseAsync();
+        }
+        if (!parentId.HasValue)
+            return Results.NotFound();
+
+        var strategy = db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(
+                System.Data.IsolationLevel.Serializable, cancellationToken);
+            // Lock the common parent before checking other accepted alternatives.
+            await using (var lockCommand = db.Database.GetDbConnection().CreateCommand())
+            {
+                lockCommand.Transaction = transaction.GetDbTransaction();
+                lockCommand.CommandText = """
+                    SELECT id FROM pricing."RateHeaders" WHERE id = @parent FOR UPDATE;
+                    """;
+                var parameter = lockCommand.CreateParameter();
+                parameter.ParameterName = "@parent";
+                parameter.Value = parentId.Value;
+                lockCommand.Parameters.Add(parameter);
+                await lockCommand.ExecuteScalarAsync(cancellationToken);
+            }
+            // A selection cannot be changed once one of the alternatives has
+            // been accepted. Check all group members, not just the parent.
+            await using (var acceptanceQuery = db.Database.GetDbConnection().CreateCommand())
+            {
+                acceptanceQuery.Transaction = transaction.GetDbTransaction();
+                acceptanceQuery.CommandText = """
+                    SELECT EXISTS(
+                      SELECT 1
+                      FROM pricing.rate_quote_alternatives a
+                      JOIN pricing."RateHeaders" h ON h.id = a.rate_id
+                      WHERE a.parent_rate_id = @parent
+                        AND h.status = 'AcceptedByClient'
+                    );
+                    """;
+                var parameter = acceptanceQuery.CreateParameter();
+                parameter.ParameterName = "@parent";
+                parameter.Value = parentId.Value;
+                acceptanceQuery.Parameters.Add(parameter);
+                var hasAccepted = (bool)(await acceptanceQuery.ExecuteScalarAsync(cancellationToken) ?? false);
+                if (hasAccepted)
+                    return Results.Conflict(new { code = "Pricing.QuoteGroupAlreadyAccepted",
+                        message = "El grupo ya tiene una sub-QUO aceptada y no permite cambiar la seleccion." });
+            }
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE pricing.rate_quote_alternatives SET status = 'NotSelected'
+                   WHERE parent_rate_id = {parentId.Value};", cancellationToken);
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE pricing.rate_quote_alternatives SET status = 'Selected'
+                   WHERE rate_id = {rateId} AND parent_rate_id = {parentId.Value};",
+                cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Results.Ok(new { parentRateId = parentId.Value, selectedRateId = rateId });
+        });
+    }
+
     private static async Task<IResult> UpdateRateAsync(
         Guid rateId,
         UpdateRateRequest request,
@@ -1356,6 +1453,37 @@ public static class RateEndpoints
         if (!canUpdateRateStatus && !(isClientDecision && canApproveLowMargin))
         {
             return Results.Forbid();
+        }
+
+
+        // A grouped alternative cannot reach Dynamics or commercial acceptance
+        // until the user has explicitly selected it in the quotation group.
+        if (status == RateStatus.AcceptedByClient)
+        {
+            var connection = db.Database.GetDbConnection();
+            var shouldClose = connection.State != ConnectionState.Open;
+            if (shouldClose) await connection.OpenAsync(cancellationToken);
+            try
+            {
+                await using var check = connection.CreateCommand();
+                check.CommandText = """
+                    SELECT status FROM pricing.rate_quote_alternatives
+                    WHERE rate_id = @rate_id LIMIT 1;
+                    """;
+                var parameter = check.CreateParameter();
+                parameter.ParameterName = "@rate_id";
+                parameter.Value = rateId;
+                check.Parameters.Add(parameter);
+                var selected = await check.ExecuteScalarAsync(cancellationToken);
+                if (selected is string groupStatus &&
+                    !string.Equals(groupStatus, "Selected", StringComparison.Ordinal))
+                    return Results.Conflict(new { code = "Pricing.QuoteAlternativeNotSelected",
+                        message = "Seleccione esta alternativa dentro del grupo antes de aceptarla." });
+            }
+            finally
+            {
+                if (shouldClose) await connection.CloseAsync();
+            }
         }
 
         if (status == RateStatus.AcceptedByClient && request.Observations?.Trim().Length > 2000)
