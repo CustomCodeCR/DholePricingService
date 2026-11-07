@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0] - 2026-11-06 (en desarrollo)
+
+- Introduce las reglas de dominio para numeración estable de sub-QUO A..Z/AA, deduplicación por POE/naviera/haulage y prevalidación de selección exclusiva.
+- Agrega pruebas unitarias del modelo. Pendientes: persistencia EF, API transaccional, integración con Dynamics, eventos realtime y documento consolidado.
+- Release coordinado DH-20261106-MULTI-QUO-018; todavía no desplegado.
+
+
 ## [1.3.0] - 2026-11-06
 
 - Permite guardar la ruta y los comentarios de la naviera como campos independientes y opcionales por cotización.
