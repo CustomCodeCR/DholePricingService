@@ -871,6 +871,8 @@ public static class RateEndpoints
                 StorageDays = request.StorageDays,
                 CargoValue = request.CargoValue,
                 TransitDays = request.TransitDays,
+                CarrierRoute = request.CarrierRoute,
+                CarrierComments = request.CarrierComments,
             };
 
         var result = await DispatchWithTransactionalRateCodeAsync(
@@ -1121,6 +1123,8 @@ public static class RateEndpoints
                 StorageDays = request.StorageDays,
                 CargoValue = request.CargoValue,
                 TransitDays = request.TransitDays,
+                CarrierRoute = request.CarrierRoute,
+                CarrierComments = request.CarrierComments,
             },
             cancellationToken
         );

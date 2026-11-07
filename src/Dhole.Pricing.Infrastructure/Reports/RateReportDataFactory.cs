@@ -401,6 +401,8 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 exchangeRateNote,
                 freeDays = rate.FreeDays,
                 transitTime = string.IsNullOrWhiteSpace(rate.TransitTime) ? "Por confirmar" : rate.TransitTime,
+                carrierRoute = Text(rate.CarrierRoute, string.Empty),
+                carrierComments = Text(rate.CarrierComments, string.Empty),
                 transitDays = rate.TransitTime,
                 validFrom = rate.ValidFrom.ToString("dd/MM/yyyy"),
                 validTo = rate.ValidTo.ToString("dd/MM/yyyy"),
