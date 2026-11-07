@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.5.1",
-  "ecosystemVersion": "1.11.1",
-  "releaseId": "DH-20261107-MULTIQUO-PERSISTED-PDF-026"
+  "version": "1.5.2",
+  "ecosystemVersion": "1.11.2",
+  "releaseId": "DH-20261107-MULTIQUO-VALUE-INDEX-027"
 }
