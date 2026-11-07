@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.5.0] - 2026-11-07 (en validación)
+
+- Introduce contrato multiQUO FCL que registra todas las alternativas POE/naviera en una transacción.
+- Reutiliza la transacción EF para la reserva de los consecutivos y revierte todos los cambios si una alternativa falla.
+- Persiste agrupación principal/subQUO y permite consultar POE, POD, naviera y Merchant/Carrier con sufijos A/AA.
+- Incluye índices que evitan duplicar rutas y seleccionar simultáneamente varias subQUO.
+- Release coordinado DH-20261107-PRICING-MULTIQUO-025; CI/staging y flujo de selección/aceptación pendientes. Sin autorización para producción.
+
+
 ## [1.4.0] - 2026-11-06 (en desarrollo)
 
 - Introduce las reglas de dominio para numeración estable de sub-QUO A..Z/AA, deduplicación por POE/naviera/haulage y prevalidación de selección exclusiva.
