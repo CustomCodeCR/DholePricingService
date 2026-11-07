@@ -29,3 +29,5 @@ jobs:
         run: dotnet nuget update source github --username github-actions --password "$GITHUB_TOKEN" --store-password-in-clear-text --configfile NuGet.Config
       - name: Build Pricing API
         run: dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configuration Release
+      - name: Regression tests for grouped quote identities and legacy PDF commercial terms
+        run: dotnet test tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj --configuration Release --filter "FullyQualifiedName~QuoteAlternativeNumberingTests|FullyQualifiedName~RateReportCommercialTermsLegacyNewlinesTests"
