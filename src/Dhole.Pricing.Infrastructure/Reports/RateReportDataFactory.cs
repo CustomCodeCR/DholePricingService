@@ -713,7 +713,10 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
     {
         static string[] Lines(string? value) => string.IsNullOrWhiteSpace(value)
             ? []
-            : value.Split(["\r\n", "\n", "\r"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            : value.Replace(@"\r\n", "\n", StringComparison.Ordinal)
+                   .Replace(@"\n", "\n", StringComparison.Ordinal)
+                   .Replace(@"\r", "\n", StringComparison.Ordinal)
+                   .Split(["\r\n", "\n", "\r"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         static string Key(string value)
         {
