@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261108-FCL-OFFER-COVERAGE-042",
+  "ecosystemVersion": "1.12.11",
+  "releaseType": "PATCH",
+  "createdAt": "2026-11-08",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "component": "DholeWeb",
+      "from": "1.12.10",
+      "to": "1.12.11"
+    },
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "from": "1.5.12",
+      "to": "1.5.13"
+    }
+  ],
+  "changes": [
+    "Coordinated component version with frontend commercial FCL unique-offer display and selection correction",
+    "No REST, database or persisted pricing data mutation"
+  ],
+  "validation": "CI and staging required before master",
+  "productionDeploymentAuthorized": true
+}
