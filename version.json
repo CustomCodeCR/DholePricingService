@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.5.8",
-  "ecosystemVersion": "1.12.5",
-  "releaseId": "DH-20261108-FCL-VISIBLE-DEDUP-036"
+  "version": "1.5.9",
+  "ecosystemVersion": "1.12.7",
+  "releaseId": "DH-20261108-FCL-VISUAL-GROUPS-038"
 }
