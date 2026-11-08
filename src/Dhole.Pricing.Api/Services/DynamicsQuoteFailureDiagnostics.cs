@@ -183,7 +183,7 @@ public static class DynamicsQuoteFailureDiagnostics
                 : "Corregir la plantilla, el mapeo o la configuración; después se puede reintentar.",
             recordedAtUtc = DateTime.UtcNow
         });
-        return (display, json);
+        return (display ?? string.Empty, json);
     }
 
     public static string? Safe(string? text, int maxLength)
