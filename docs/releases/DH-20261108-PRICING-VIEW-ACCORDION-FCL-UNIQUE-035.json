@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261108-PRICING-VIEW-ACCORDION-FCL-UNIQUE-035",
+  "ecosystemVersion": "1.12.4",
+  "releaseType": "PATCH",
+  "createdAt": "2026-11-08",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "component": "DholeWeb",
+      "from": "1.12.3",
+      "to": "1.12.4"
+    },
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "from": "1.5.6",
+      "to": "1.5.7"
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "component": "DholeSystem",
+      "version": "1.12.0",
+      "status": "unchanged"
+    }
+  ],
+  "changes": [
+    "Restore pointer events only for saved sub-QUO accordion header buttons in read-only wizard step 8",
+    "Suppress commercially equivalent FCL bundles on final visible Screen 5 cards, after carrier/date filtering",
+    "Preserve distinct routes, agents, equipment, monetary terms and disjoint date ranges",
+    "Retain source rate IDs and the irreversible chosen final commercial quote/PDF"
+  ],
+  "validation": "pending CI and staging",
+  "productionDeploymentAuthorized": false
+}
