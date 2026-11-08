@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.5.11",
-  "ecosystemVersion": "1.12.9",
-  "releaseId": "DH-20261108-FCL-BLANK-SCREEN-040"
+  "version": "1.5.12",
+  "ecosystemVersion": "1.12.10",
+  "releaseId": "DH-20261108-FCL-RESTORE-RENDER-041"
 }
