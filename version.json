@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.5.5",
-  "ecosystemVersion": "1.12.1",
-  "releaseId": "DH-20261108-MULTIQUO-FINAL-INDIVIDUAL-032"
+  "version": "1.5.6",
+  "ecosystemVersion": "1.12.2",
+  "releaseId": "DH-20261108-FCL-EQUIVALENT-RATES-033"
 }
