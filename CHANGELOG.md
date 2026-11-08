@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.8] - 2026-11-08
+
+- Release coordinado con DholeWeb v1.12.5 para consolidación FCL por identidades canónicas en la pantalla 5.
+- Conserva contratos REST, registros importados e identificadores de tarifas existentes; no requiere migraciones de datos.
+- Release `DH-20261108-FCL-VISIBLE-DEDUP-036`. CI y staging obligatorios antes de master y producción no autorizada.
+
 ## [1.5.7] - 2026-11-08
 
 - PATCH coordinado con DholeWeb 1.12.4 para la deduplicación final de tarjetas FCL y acordeones de MultiQUO en modo vista.
