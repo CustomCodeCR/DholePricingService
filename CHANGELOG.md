@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.6] - 2026-11-08
+
+- Release coordinado con DholeWeb v1.12.2 para presentar una sola tarjeta por oferta FCL equivalente con vigencias superpuestas y sin eliminar registros de Pricing.
+- Promueve a master la finalización irrevocable de multiQUO de 1.5.5: la alternativa seleccionada se renombra a la QUO comercial sin sufijo, se bloquean las demás y el PDF pasa a individual.
+- Conserva compatibilidad de APIs REST y validaciones de versión, estado e integridad de migraciones.
+- Release `DH-20261108-FCL-EQUIVALENT-RATES-033` sujeto a CI y staging.
+
 ## [1.5.5] - 2026-11-08
 
 - Finalización irrevocable de multiQUO FCL: la subcotización seleccionada adquiere la QUO base, conserva su RateId y deja de permitir seleccionar o modificar alternativas descartadas.
