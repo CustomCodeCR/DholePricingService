@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0] - 2026-11-08 (candidato F6.02, no publicado)
+
+- Añade invalidaciones mínimas para cambios de RateHeader al Outbox existente de Pricing y las envía a un stream separado dhole.pricing.realtime.v1; no sustituye cachés ni los eventos comerciales actuales.
+- Permite productor realtime únicamente con los cuatro flags del release rt-20261107-01, apagados por defecto; los cambios y eventos se confirman dentro del mismo SaveChanges de EF.
+- Mantiene REST autoritativo y registros de costos/cliente fuera del payload de invalidación; incorpora pruebas de contrato, seguridad, versionado y compilación de API y Worker.
+- F6.02 sigue candidata en rama intermedia hasta completar adaptador Gateway, pruebas de entrega y matriz completa de mutaciones; no integra develop/master ni despliega.
+- Versión del componente 1.5.7 -> 1.6.0; versión global propuesta 1.13.0.
+
 ## [1.5.7] - 2026-11-08
 
 - PATCH coordinado con DholeWeb 1.12.4 para corregir la presentación FCL de ofertas comercialmente repetidas y la expansión de sub-QUO guardadas en modo view.
