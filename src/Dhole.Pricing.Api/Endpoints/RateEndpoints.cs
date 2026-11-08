@@ -423,12 +423,13 @@ public static class RateEndpoints
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
-        // A document requested from ANY sub-QUO must contain the entire group.
+        // Before a decision the PDF shows the group; after selection only the individual quote is valid.
         // Look up siblings by the immutable group table, never the currently active POE.
         if (string.IsNullOrWhiteSpace(request.Format) ||
             string.Equals(request.Format, "pdf", StringComparison.OrdinalIgnoreCase))
         {
             var groupedIds = new List<Guid>();
+            Guid? finalizedRateId = null;
             var parentQuote = string.Empty;
             var connection = db.Database.GetDbConnection();
             var shouldClose = connection.State != ConnectionState.Open;
@@ -437,7 +438,7 @@ public static class RateEndpoints
             {
                 await using var lookup = connection.CreateCommand();
                 lookup.CommandText = """
-                    SELECT a.rate_id, a.base_quote FROM pricing.rate_quote_alternatives a
+                    SELECT a.rate_id, a.base_quote, a.status FROM pricing.rate_quote_alternatives a
                     WHERE a.parent_rate_id = (
                         SELECT parent_rate_id FROM pricing.rate_quote_alternatives
                         WHERE rate_id = @rate_id LIMIT 1
@@ -453,6 +454,7 @@ public static class RateEndpoints
                 {
                     groupedIds.Add(reader.GetGuid(0));
                     parentQuote = reader.GetString(1);
+                    if (reader.GetString(2) == "Selected") finalizedRateId = reader.GetGuid(0);
                 }
             }
             finally
@@ -460,7 +462,12 @@ public static class RateEndpoints
                 if (shouldClose) await connection.CloseAsync();
             }
 
-            if (groupedIds.Count > 1)
+            if (finalizedRateId.HasValue)
+            {
+                // Any historic sub-QUO URL generates the one definitive quote.
+                rateId = finalizedRateId.Value;
+            }
+            else if (groupedIds.Count > 1)
             {
                 var options = new List<PricingQuoteGroupDocumentItem>(groupedIds.Count);
                 foreach (var childId in groupedIds)
@@ -1233,38 +1240,67 @@ public static class RateEndpoints
                 lockCommand.Parameters.Add(parameter);
                 await lockCommand.ExecuteScalarAsync(cancellationToken);
             }
-            // A selection cannot be changed once one of the alternatives has
-            // been accepted. Check all group members, not just the parent.
-            await using (var acceptanceQuery = db.Database.GetDbConnection().CreateCommand())
+            Guid? existingSelectedId;
+            await using (var check = db.Database.GetDbConnection().CreateCommand())
             {
-                acceptanceQuery.Transaction = transaction.GetDbTransaction();
-                acceptanceQuery.CommandText = """
-                    SELECT EXISTS(
-                      SELECT 1
-                      FROM pricing.rate_quote_alternatives a
-                      JOIN pricing."RateHeaders" h ON h.id = a.rate_id
-                      WHERE a.parent_rate_id = @parent
-                        AND h.status = 'AcceptedByClient'
-                    );
+                check.Transaction = transaction.GetDbTransaction();
+                check.CommandText = """
+                    SELECT rate_id FROM pricing.rate_quote_alternatives
+                    WHERE parent_rate_id = @parent AND status = 'Selected' LIMIT 1;
                     """;
-                var parameter = acceptanceQuery.CreateParameter();
+                var parameter = check.CreateParameter();
                 parameter.ParameterName = "@parent";
                 parameter.Value = parentId.Value;
-                acceptanceQuery.Parameters.Add(parameter);
-                var hasAccepted = (bool)(await acceptanceQuery.ExecuteScalarAsync(cancellationToken) ?? false);
-                if (hasAccepted)
-                    return Results.Conflict(new { code = "Pricing.QuoteGroupAlreadyAccepted",
-                        message = "El grupo ya tiene una sub-QUO aceptada y no permite cambiar la seleccion." });
+                check.Parameters.Add(parameter);
+                var raw = await check.ExecuteScalarAsync(cancellationToken);
+                existingSelectedId = raw is null or DBNull ? null : (Guid)raw;
             }
+            if (existingSelectedId.HasValue && existingSelectedId.Value != rateId)
+                return Results.Conflict(new { code = "Pricing.QuoteGroupSelectionFinal",
+                    message = "La sub-QUO definitiva ya fue elegida; no puede cambiarse." });
+
+            // Never replace a prior customer acceptance, even for old groups.
+            await using (var acceptance = db.Database.GetDbConnection().CreateCommand())
+            {
+                acceptance.Transaction = transaction.GetDbTransaction();
+                acceptance.CommandText = """
+                    SELECT a.rate_id FROM pricing.rate_quote_alternatives a
+                    JOIN pricing."RateHeaders" h ON h.id = a.rate_id
+                    WHERE a.parent_rate_id = @parent AND h.status = 'AcceptedByClient'
+                    LIMIT 1;
+                    """;
+                var parameter = acceptance.CreateParameter();
+                parameter.ParameterName = "@parent";
+                parameter.Value = parentId.Value;
+                acceptance.Parameters.Add(parameter);
+                if (await acceptance.ExecuteScalarAsync(cancellationToken) is Guid acceptedId && acceptedId != rateId)
+                    return Results.Conflict(new { code = "Pricing.QuoteGroupAlreadyAccepted",
+                        message = "Otra alternativa del grupo ya fue aceptada." });
+            }
+            if (!existingSelectedId.HasValue)
+            {
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $@"UPDATE pricing.rate_quote_alternatives SET status = 'NotSelected'
+                       WHERE parent_rate_id = {parentId.Value};", cancellationToken);
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $@"UPDATE pricing.rate_quote_alternatives SET status = 'Selected'
+                       WHERE rate_id = {rateId} AND parent_rate_id = {parentId.Value};",
+                    cancellationToken);
+            }
+
+            // Keep the immutable parent_rate_id and internal RateCode intact.
+            // Only the chosen rate takes the unsuffixed commercial QUO number.
+            var baseQuote = await db.Database.SqlQueryRaw<string>(
+                    "SELECT base_quote AS \"Value\" FROM pricing.rate_quote_alternatives WHERE rate_id = {0}", rateId)
+                .SingleAsync(cancellationToken);
             await db.Database.ExecuteSqlInterpolatedAsync(
-                $@"UPDATE pricing.rate_quote_alternatives SET status = 'NotSelected'
-                   WHERE parent_rate_id = {parentId.Value};", cancellationToken);
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $@"UPDATE pricing.rate_quote_alternatives SET status = 'Selected'
-                   WHERE rate_id = {rateId} AND parent_rate_id = {parentId.Value};",
+                $@"UPDATE pricing.""RateHeaders"" SET quo_number = {baseQuote} WHERE id = {rateId};",
                 cancellationToken);
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE pricing.rate_quote_alternatives SET alternative_quote = {baseQuote}
+                   WHERE rate_id = {rateId} AND status = 'Selected';", cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return Results.Ok(new { parentRateId = parentId.Value, selectedRateId = rateId });
+            return Results.Ok(new { parentRateId = parentId.Value, selectedRateId = rateId, finalized = true });
         });
     }
 
@@ -1277,6 +1313,19 @@ public static class RateEndpoints
         CancellationToken cancellationToken
     )
     {
+        // Do not edit a discarded sub-QUO after final selection.
+        var selectedPrincipal = await db.Database.SqlQueryRaw<Guid>(
+                """
+                SELECT chosen.rate_id AS "Value"
+                FROM pricing.rate_quote_alternatives child
+                JOIN pricing.rate_quote_alternatives chosen
+                  ON chosen.parent_rate_id = child.parent_rate_id AND chosen.status = 'Selected'
+                WHERE child.rate_id = {0}
+                """, rateId).ToListAsync(cancellationToken);
+        if (selectedPrincipal.Count > 0 && selectedPrincipal[0] != rateId)
+            return Results.Conflict(new { code = "Pricing.QuoteAlternativeDiscarded",
+                message = "Esta sub-QUO se descartó; solo la principal puede editarse." });
+
         var termValidation = ValidateExclusiveRateTerms(request.Includes, request.SubjectTo, request.Excludes, httpContext);
         if (termValidation is not null) return termValidation;
 
@@ -1707,6 +1756,19 @@ public static class RateEndpoints
         {
             return Results.Forbid();
         }
+
+        // Discarded alternatives cannot be sent, accepted, rejected or reopened.
+        var groupedSelection = await db.Database.SqlQueryRaw<Guid>(
+                """
+                SELECT chosen.rate_id AS "Value"
+                FROM pricing.rate_quote_alternatives child
+                JOIN pricing.rate_quote_alternatives chosen
+                  ON chosen.parent_rate_id = child.parent_rate_id AND chosen.status = 'Selected'
+                WHERE child.rate_id = {0}
+                """, rateId).ToListAsync(cancellationToken);
+        if (groupedSelection.Count > 0 && groupedSelection[0] != rateId)
+            return Results.Conflict(new { code = "Pricing.QuoteAlternativeDiscarded",
+                message = "Esta sub-QUO se descartó; solo la principal puede utilizarse." });
 
         // A grouped alternative cannot reach Dynamics or commercial acceptance
         // until the user has explicitly selected it in the quotation group.
