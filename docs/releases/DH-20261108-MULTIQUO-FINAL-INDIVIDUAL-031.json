@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261108-MULTIQUO-FINAL-INDIVIDUAL-031",
+  "ecosystemVersion": "1.11.6",
+  "releaseType": "PATCH",
+  "createdAt": "2026-11-08",
+  "components": [
+    {
+      "component": "DholeWeb",
+      "from": "1.11.5",
+      "to": "1.11.6"
+    },
+    {
+      "component": "DholePricingService",
+      "from": "1.5.4",
+      "to": "1.5.5"
+    },
+    {
+      "component": "DholeSystem",
+      "from": "1.11.5",
+      "to": "1.11.5",
+      "status": "unchanged"
+    }
+  ],
+  "changes": [
+    "Selected sub-QUO becomes irrevocable unsuffixed commercial QUO; immutable parent group preserves audit trail",
+    "Unselected siblings are locked against reselection and commercial status edits",
+    "Download selected quote as one individual PDF; draft multiquo retains comparison PDF",
+    "Migrate already selected legacy groups to final commercial numbering",
+    "Replace native details with Vue-controlled accessible disclosure panels on screens 8 and 9"
+  ],
+  "validation": "pending CI and staging",
+  "productionDeploymentAuthorized": false
+}
