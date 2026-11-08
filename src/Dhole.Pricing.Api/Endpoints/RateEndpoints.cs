@@ -496,7 +496,7 @@ public static class RateEndpoints
                     options.Add(new PricingQuoteGroupDocumentItem(
                         rate.QuoNumber ?? rate.RateCode,
                         route,
-                        rate.CarrierName,
+                        rate.CarrierName ?? string.Empty,
                         oceanFreight.ToString("N2", CultureInfo.GetCultureInfo("en-US")),
                         freightCurrency,
                         json?.ToJsonString() ?? dataFactory.CreateDataJson(rate)));
@@ -669,7 +669,7 @@ public static class RateEndpoints
                 quoteDate,
                 validFrom,
                 validTo,
-                httpContext.Request.Query["executiveNames"].ToArray(),
+                httpContext.Request.Query["executiveNames"].Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value!).ToArray(),
                 new RateMultiSelectFilters(
                     ReadStatusOptions(httpContext),
                     ReadGuidOptions(httpContext, "agentIds"),
