@@ -47,9 +47,9 @@ public sealed class F6PricingRealtimeContractTests
         Assert.AreEqual($"pricing:rate:{rateId:D}", obj.GetProperty("audienceRef").GetString());
         CollectionAssert.AreEquivalent(new[] { "changedFields" },
             obj.GetProperty("payload").EnumerateObject().Select(p => p.Name).ToArray());
-        StringAssert.DoesNotContain(json, "clientName");
-        StringAssert.DoesNotContain(json, "accessToken");
-        StringAssert.DoesNotContain(json, "customer");
+        Assert.IsFalse(json.Contains("clientName", StringComparison.Ordinal));
+        Assert.IsFalse(json.Contains("accessToken", StringComparison.Ordinal));
+        Assert.IsFalse(json.Contains("customer", StringComparison.Ordinal));
     }
 
     [TestMethod]
