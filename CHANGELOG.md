@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.15] - 2026-11-08
+
+- Release coordinado `DH-20261108-PRICING-RENDER-GUARD-044` con DholeWeb 1.12.13 para recuperar el renderizado del asistente FCL y eliminar referencias de cobertura tempranas en el frontend.
+- Mantiene compatibilidad íntegra con los endpoints, importaciones, tarifas y RateId existentes. No modifica algoritmos, persistencia, ni datos de producción.
+- Aplicar tras validación CI y staging y registrar versionado global del release.
+
 ## [1.5.14] - 2026-11-08
 
 - Release coordinado `DH-20261108-PRICING-BLANK-043` con DholeWeb 1.12.12 para restaurar la pantalla «Crear tarifa» después del error de inicialización JavaScript de 1.12.11.
@@ -44,9 +50,9 @@
 
 ## [1.5.7] - 2026-11-08
 
-- PATCH coordinado con DholeWeb 1.12.4 para la deduplicación final de tarjetas FCL y acordeones de MultiQUO en modo vista.
-- No altera contratos API ni datos persistidos, y conserva la QUO individual definitiva.
-- Release `DH-20261108-PRICING-VIEW-ACCORDION-FCL-UNIQUE-035` con CI y staging obligatorios.
+- PATCH coordinado con DholeWeb 1.12.4 para corregir la presentación FCL de ofertas comercialmente repetidas y la expansión de sub-QUO guardadas en modo view.
+- No cambia el contrato REST ni la persistencia de Pricing; conserva el manejo idempotente de la sub-QUO final y PDF individual de releases anteriores.
+- Release `DH-20261108-PRICING-VIEW-ACCORDION-FCL-UNIQUE-035`, sujeto a CI y staging.
 
 ## [1.5.6] - 2026-11-08
 
@@ -64,9 +70,8 @@
 
 ## [1.5.4] - 2026-11-07
 
-- Incluye `selectedRateId` en el snapshot de alternativas guardadas para identificar la sub-QUO principal seleccionada sin alterar el identificador permanente del grupo.
-- Ordena primero la sub-QUO seleccionada en el índice PDF del grupo; mantiene los demás números y rutas intactos.
-- Release `DH-20261107-MULTIQUO-PRINCIPAL-DEDUP-ACCORDION-030` coordinado con DholeWeb v1.11.5. Requiere CI y staging; no autoriza despliegue a producción.
+- Publica selectedRateId en los grupos de QUO y prioriza la sub-QUO seleccionada en los PDF sin modificar la identidad del grupo.
+- Release `DH-20261107-MULTIQUO-PRINCIPAL-DEDUP-ACCORDION-030` coordinado con DholeWeb v1.11.5; requiere CI y staging, sin autorización de producción.
 
 ## [1.5.3] - 2026-11-07
 
@@ -85,11 +90,9 @@
 
 ## [1.5.0] - 2026-11-07 (en validación)
 
-- Introduce contrato multiQUO FCL que registra todas las alternativas POE/naviera en una transacción.
-- Reutiliza la transacción EF para la reserva de los consecutivos y revierte todos los cambios si una alternativa falla.
-- Persiste agrupación principal/subQUO y permite consultar POE, POD, naviera y Merchant/Carrier con sufijos A/AA.
-- Incluye índices que evitan duplicar rutas y seleccionar simultáneamente varias subQUO.
-- Release coordinado DH-20261107-PRICING-MULTIQUO-025; CI/staging y flujo de selección/aceptación pendientes. Sin autorización para producción.
+- API FCL multiQUO: creación atómica por POE/naviera, consulta de grupo, selección comercial exclusiva y guardas ante aceptación errónea.
+- Reutiliza la transacción de consecutivos/Outbox y conserva costos, rutas y tarifas por subQUO.
+- Release DH-20261107-PRICING-MULTIQUO-025: staging pendiente, sin autorización de producción.
 
 
 ## [1.4.0] - 2026-11-06 (en desarrollo)
@@ -119,16 +122,16 @@
 
 ## [1.2.6] - 2026-11-06
 
-- Prevents the SLA worker from completing seller modifications merely because the linked QUO is already sent.
-- Removes the database trigger that prematurely completes seller modifications when the quote revision changes.
-- Requires explicit confirmation to cancel a modification; safely reopens only unaudited orphan cancellation records.
-- Keeps real audited cancellations and previous QUO revisions intact; regression tests cover migration safeguards.
+- Impide el cierre automático de solicitudes de modificación por avances de revisión o por el estado comercial de la QUO.
+- Exige confirmación explícita para cancelar modificaciones y recupera únicamente cancelaciones huérfanas sin auditoría.
+- Conserva solicitudes abiertas durante preparación, SLA y trabajo del proveedor; agrega pruebas de regresión.
 
 
 ## [1.2.5] - 2026-11-05
 
-- Activa desplegar Pricing automáticamente por cada push a master sin confirmación manual.
-- Verifica preflight de Dynamics, EF, mapeos FTL, healthchecks y SemVer 1.2.5 bajo Dhole 1.3.1.
+- Sustituye confirmación manual por despliegue automático al integrar master.
+- Mantiene verificaciones de Dynamics, EF, imágenes y healthchecks antes y después del deploy.
+- Incrementa SemVer de Pricing y metadatos del ecosistema.
 
 ## [1.2.4] - 2026-11-05
 
