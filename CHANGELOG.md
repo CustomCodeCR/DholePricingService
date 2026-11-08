@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.11] - 2026-11-08
+
+- Release coordinado `DH-20261108-FCL-BLANK-SCREEN-040` para resolver la pantalla negra al cargar 110 tarifas FCL en DholeWeb 1.12.9.
+- Contrato de Pricing sin cambios; los registros de importación, correos y tarifas no se modifican.
+- CI y staging obligatorios antes de cualquier integración a master y producción.
+
 ## [1.5.10] - 2026-11-08
 
 - Release coordinado `DH-20261108-FCL-CARRIER-CARDS-SELECTION-039` con DholeWeb 1.12.8 para la agrupación real de tarifas FCL por naviera y POE y selección por RateId.
