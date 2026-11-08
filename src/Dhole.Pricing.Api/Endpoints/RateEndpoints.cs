@@ -441,7 +441,8 @@ public static class RateEndpoints
                     WHERE a.parent_rate_id = (
                         SELECT parent_rate_id FROM pricing.rate_quote_alternatives
                         WHERE rate_id = @rate_id LIMIT 1
-                    ) ORDER BY length(a.suffix), a.suffix
+                    ) ORDER BY CASE WHEN a.status = 'Selected' THEN 0 ELSE 1 END,
+                               length(a.suffix), a.suffix
                     """;
                 var parameter = lookup.CreateParameter();
                 parameter.ParameterName = "@rate_id";
@@ -1136,12 +1137,15 @@ public static class RateEndpoints
             command.Parameters.Add(parameter);
             var items = new List<object>();
             Guid parentId = Guid.Empty;
+            Guid? selectedRateId = null;
             string parentQuote = string.Empty;
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
                 parentId = reader.GetGuid(0);
                 parentQuote = reader.GetString(1);
+                if (reader.GetString(9) == "Selected")
+                    selectedRateId = reader.GetGuid(2);
                 items.Add(new
                 {
                     rateId = reader.GetGuid(2),
@@ -1159,7 +1163,7 @@ public static class RateEndpoints
             }
             return items.Count > 0
                 ? Results.Ok(new { parentRateId = parentId, parentQuoteNumber = parentQuote,
-                    alternatives = items })
+                    selectedRateId, alternatives = items })
                 : Results.NotFound();
         }
         finally
