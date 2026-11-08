@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.7] - 2026-11-08
+
+- PATCH coordinado con DholeWeb 1.12.4 para la deduplicación final de tarjetas FCL y acordeones de MultiQUO en modo vista.
+- No altera contratos API ni datos persistidos, y conserva la QUO individual definitiva.
+- Release `DH-20261108-PRICING-VIEW-ACCORDION-FCL-UNIQUE-035` con CI y staging obligatorios.
+
 ## [1.5.6] - 2026-11-08
 
 - Release coordinado con DholeWeb v1.12.2 para presentar una sola tarjeta por oferta FCL equivalente con vigencias superpuestas y sin eliminar registros de Pricing.
