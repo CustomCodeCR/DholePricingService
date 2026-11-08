@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.17] - 2026-11-08
+
+- Release coordinado `DH-20261108-PRICING-SETUP-TDZ-046` con DholeWeb 1.12.15: estabiliza «Crear tarifa» evitando la referencia anticipada a `form` en un watcher insertado por Vite.
+- Solo metadatos; conserva contratos REST, lógica, tarifas y datos. CI y staging obligatorios.
+
 ## [1.5.16] - 2026-11-08
 
 - Release coordinado `DH-20261108-PRICING-SETUP-TDZ-045` con DholeWeb 1.12.14 para corregir el error de inicialización Vue en «Crear tarifa».
