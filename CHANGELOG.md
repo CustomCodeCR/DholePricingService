@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.18] - 2026-11-08
+
+- Release coordinado `DH-20261108-PRICING-RATE-SELECTION-047` con DholeWeb 1.12.16: el asistente FCL vuelve a conservar el RateId elegido por POE/naviera y se bloquea por CI cualquier binding de estado eliminado durante las transformaciones Vite.
+- Servicio de Pricing: solo versionamiento y metadatos de compatibilidad; los endpoints REST, el estado de importaciones, las tarifas, los precios y la persistencia permanecen intactos.
+- Validar CI, smoke del wizard minificado y staging antes de producción.
+
 ## [1.5.17] - 2026-11-08
 
 - Release coordinado `DH-20261108-PRICING-SETUP-TDZ-046` con DholeWeb 1.12.15: estabiliza «Crear tarifa» evitando la referencia anticipada a `form` en un watcher insertado por Vite.
