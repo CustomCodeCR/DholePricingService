@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261107-FCL-HAULAGE-HANDOFF-028",
+  "ecosystemVersion": "1.11.3",
+  "releaseType": "PATCH",
+  "createdAt": "2026-11-07",
+  "components": [
+    {
+      "component": "DholeWeb",
+      "from": "1.11.2",
+      "to": "1.11.3"
+    },
+    {
+      "component": "DholePricingService",
+      "from": "1.5.2",
+      "to": "1.5.3"
+    },
+    {
+      "component": "DholeSystem",
+      "from": "1.11.2",
+      "to": "1.11.3"
+    }
+  ],
+  "changes": [
+    "Persist Carrier/Merchant user decision per POE and naviera on screen 6, with no race clearing restored flags",
+    "Automatically populate screen 7 with the same selected Inland cost IDs and configured cost/sale values",
+    "Remove redundant haulage selection buttons from screen 7; show selected read-only mode"
+  ],
+  "validation": "pending-ci-staging",
+  "productionDeploymentAuthorized": false
+}
