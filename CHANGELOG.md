@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.14] - 2026-11-08
+
+- Release coordinado `DH-20261108-PRICING-BLANK-043` con DholeWeb 1.12.12 para restaurar la pantalla «Crear tarifa» después del error de inicialización JavaScript de 1.12.11.
+- Compatibilidad de las mismas consultas, importaciones y selecciones FCL con el frontend corregido, sin modificar datos, entidades, contratos REST ni algoritmos del servicio.
+- Validación y despliegue de staging antes de integración definitiva a master.
+
 ## [1.5.13] - 2026-11-08
 
 - Release coordinado `DH-20261108-FCL-OFFER-COVERAGE-042` con DholeWeb 1.12.11, corrigiendo la distinción entre ofertas FCL únicas y registros fuente.
