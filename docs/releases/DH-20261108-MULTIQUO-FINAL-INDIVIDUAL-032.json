@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261108-MULTIQUO-FINAL-INDIVIDUAL-032",
+  "ecosystemVersion": "1.12.1",
+  "releaseType": "PATCH",
+  "createdAt": "2026-11-08",
+  "components": [
+    {
+      "component": "DholeWeb",
+      "from": "1.12.0",
+      "to": "1.12.1"
+    },
+    {
+      "component": "DholePricingService",
+      "from": "1.5.4",
+      "to": "1.5.5"
+    },
+    {
+      "component": "DholeSystem",
+      "from": "1.12.0",
+      "to": "1.12.0",
+      "status": "unchanged"
+    }
+  ],
+  "changes": [
+    "Atomic final selection prevents reswitching",
+    "Selected B is promoted to bare base QUO number; legacy selections migrated",
+    "Individual PDF after selection, historical option locking",
+    "DholeWeb controlled disclosure panels"
+  ],
+  "validation": "pending CI and staging",
+  "productionDeploymentAuthorized": false
+}
