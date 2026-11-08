@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.5.13",
-  "ecosystemVersion": "1.12.11",
-  "releaseId": "DH-20261108-FCL-OFFER-COVERAGE-042"
+  "version": "1.5.14",
+  "ecosystemVersion": "1.12.12",
+  "releaseId": "DH-20261108-PRICING-BLANK-043"
 }
