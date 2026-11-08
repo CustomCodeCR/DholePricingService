@@ -2,7 +2,8 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.5.7",
-  "ecosystemVersion": "1.12.4",
-  "releaseId": "DH-20261108-PRICING-VIEW-ACCORDION-FCL-UNIQUE-035"
+  "version": "1.6.0",
+  "ecosystemVersion": "1.13.0",
+  "releaseId": "rt-20261107-01",
+  "releaseStatus": "candidate-isolated-no-deployment"
 }
