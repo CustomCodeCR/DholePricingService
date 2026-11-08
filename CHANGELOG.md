@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.9] - 2026-11-08
+
+- Release coordinado con DholeWeb 1.12.7 para agrupación visual de tarifas FCL equivalentes.
+- Conserva contratos REST, tarifas persistidas y los ID originales de origen, sin migraciones ni eliminación de datos.
+- Release `DH-20261108-FCL-VISUAL-GROUPS-038`, CI/staging obligatorios antes de producción.
+
 ## [1.5.8] - 2026-11-08
 
 - Release coordinado con DholeWeb v1.12.5 para consolidación FCL por identidades canónicas en la pantalla 5.
