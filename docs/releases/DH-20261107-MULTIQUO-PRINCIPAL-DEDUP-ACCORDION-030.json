@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261107-MULTIQUO-PRINCIPAL-DEDUP-ACCORDION-030",
+  "ecosystemVersion": "1.11.5",
+  "releaseType": "PATCH",
+  "createdAt": "2026-11-07",
+  "components": [
+    {
+      "component": "DholeWeb",
+      "from": "1.11.4",
+      "to": "1.11.5"
+    },
+    {
+      "component": "DholePricingService",
+      "from": "1.5.3",
+      "to": "1.5.4"
+    },
+    {
+      "component": "DholeSystem",
+      "from": "1.11.4",
+      "to": "1.11.4",
+      "status": "unchanged"
+    }
+  ],
+  "changes": [
+    "Expose selectedRateId in grouped rate snapshot",
+    "Prioritize selected sub-QUO in grouped PDF ordering",
+    "Keep parentRateId as immutable group anchor"
+  ],
+  "validation": "pending CI/staging",
+  "productionDeploymentAuthorized": false
+}

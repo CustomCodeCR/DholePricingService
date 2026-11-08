@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.4] - 2026-11-07
+
+- Incluye `selectedRateId` en el snapshot de alternativas guardadas para identificar la sub-QUO principal seleccionada sin alterar el identificador permanente del grupo.
+- Ordena primero la sub-QUO seleccionada en el índice PDF del grupo; mantiene los demás números y rutas intactos.
+- Release `DH-20261107-MULTIQUO-PRINCIPAL-DEDUP-ACCORDION-030` coordinado con DholeWeb v1.11.5. Requiere CI y staging; no autoriza despliegue a producción.
+
 ## [1.5.3] - 2026-11-07
 
 - Versionado coordinado de compatibilidad del contrato MultiQUO para el traspaso del Inland seleccionado por cada POE y naviera, sin cambios incompatibles de API.
