@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.5.17] - 2026-11-08
+
+- Release coordinado `DH-20261108-PRICING-SETUP-TDZ-046` con DholeWeb 1.12.15: estabiliza «Crear tarifa» evitando la referencia anticipada a `form` en un watcher insertado por Vite.
+- Solo metadatos; conserva contratos REST, lógica, tarifas y datos. CI y staging obligatorios.
+
+## [1.5.16] - 2026-11-08
+
+- Release coordinado `DH-20261108-PRICING-SETUP-TDZ-045` con DholeWeb 1.12.14 para corregir el error de inicialización Vue en «Crear tarifa».
+- Sin cambios en endpoints de Pricing, persistencia, tarifas ni reglas de cálculo; mantiene compatibilidad con el frontend corregido.
+- Requiere pruebas de montaje real en navegador y validación CI/staging antes de promover a master.
+
 ## [1.5.15] - 2026-11-08
 
 - Release coordinado `DH-20261108-PRICING-RENDER-GUARD-044` con DholeWeb 1.12.13 para recuperar el renderizado del asistente FCL y eliminar referencias de cobertura tempranas en el frontend.
