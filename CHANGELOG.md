@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.5] - 2026-11-08
+
+- Finalización irrevocable de multiQUO: la sub-QUO seleccionada adquiere el número comercial base y bloquea cambios en opciones descartadas.
+- PDF individual de la QUO definitiva desde cualquier enlace del grupo, sin PDF múltiple tras selección.
+- Migración de grupos existentes ya seleccionados respetando parent_rate_id y auditoría.
+- Release DH-20261108-MULTIQUO-FINAL-INDIVIDUAL-031 compatible con DholeWeb v1.11.6, sujeto a CI y staging.
+
 ## [1.5.4] - 2026-11-07
 
 - Incluye `selectedRateId` en el snapshot de alternativas guardadas para identificar la sub-QUO principal seleccionada sin alterar el identificador permanente del grupo.
