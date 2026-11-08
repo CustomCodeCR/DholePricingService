@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.12] - 2026-11-08
+
+- Release coordinado con DholeWeb 1.12.10 para recuperar el renderizado estable de Pantalla 5 FCL (hotfix `DH-20261108-FCL-RESTORE-RENDER-041`).
+- Sin cambios en contratos REST, persistencia ni valores de tarifas importadas. Mantiene compatibilidad API.
+- Integración mediante ramas intermedias y validación CI/staging obligatoria antes de producción.
+
 ## [1.5.11] - 2026-11-08
 
 - Release coordinado `DH-20261108-FCL-BLANK-SCREEN-040` para resolver la pantalla negra al cargar 110 tarifas FCL en DholeWeb 1.12.9.
