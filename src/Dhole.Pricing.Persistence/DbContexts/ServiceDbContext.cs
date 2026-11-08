@@ -89,13 +89,7 @@ public sealed class ServiceDbContext(
     // publish only committed Outbox entries, never raw entity data.
     private void AddRealtimeRateInvalidations()
     {
-        var flags = realtimeConfiguration;
-        if (flags is null ||
-            !flags.GetValue<bool>("Features:UniversalRealtimeEnabled") ||
-            !flags.GetValue<bool>("Realtime:Outbox:Enabled") ||
-            !flags.GetValue<bool>("Realtime:BatchApproved") ||
-            !string.Equals(flags["Realtime:ReleaseId"], "rt-20261107-01",
-                StringComparison.Ordinal))
+        if (!PricingRealtimeInvalidation.IsEnabled(realtimeConfiguration))
             return;
 
         ChangeTracker.DetectChanges();
@@ -110,25 +104,12 @@ public sealed class ServiceDbContext(
             if (rate.Id == Guid.Empty) continue;
             var kind = tracked.State == EntityState.Added ? "created" :
                 tracked.State == EntityState.Deleted || rate.IsDeleted ? "deleted" : "updated";
-            var eventType = "pricing.rate." + kind + ".v1";
+            var eventType = PricingRealtimeInvalidation.EventType(kind);
             var id = Guid.NewGuid();
             var at = DateTimeOffset.UtcNow;
-            // Never include rate lines, customer names, monetary data, or tokens.
-            var envelope = JsonSerializer.Serialize(new
-            {
-                eventId = id,
-                eventType,
-                schemaVersion = 1,
-                aggregateType = "rate",
-                aggregateId = rate.Id.ToString("D"),
-                aggregateVersion = Math.Max(1, rate.RevisionNumber),
-                occurredAtUtc = at,
-                producer = SourceService,
-                correlationId = (AuditExecutionContextAccessor.Current?.CorrelationId ??
-                    id).ToString("D"),
-                audienceRef = $"pricing:rate:{rate.Id:D}",
-                payload = new { changedFields = new[] { "rate" } }
-            });
+            var envelope = PricingRealtimeInvalidation.Envelope(
+                id, rate.Id, Math.Max(1, rate.RevisionNumber), kind, at,
+                (AuditExecutionContextAccessor.Current?.CorrelationId ?? id).ToString("D"));
             OutboxMessages.Add(new OutboxMessage
             {
                 EventId = id,
