@@ -891,8 +891,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         RateName = CreateRateName(
             RateCode,
             BuildShipmentDescription(),
-            PolName,
-            PoeName,
+            PolName ?? string.Empty,
+            PoeName ?? string.Empty,
             PodName,
             IncotermName ?? IncotermCode,
             ClientName
