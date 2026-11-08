@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.15] - 2026-11-08
+
+- Release coordinado `DH-20261108-PRICING-RENDER-GUARD-044` con DholeWeb 1.12.13 para recuperar el renderizado del asistente FCL y eliminar referencias de cobertura tempranas en el frontend.
+- Mantiene compatibilidad íntegra con los endpoints, importaciones, tarifas y RateId existentes. No modifica algoritmos, persistencia, ni datos de producción.
+- Aplicar tras validación CI y staging y registrar versionado global del release.
+
 ## [1.5.14] - 2026-11-08
 
 - Release coordinado `DH-20261108-PRICING-BLANK-043` con DholeWeb 1.12.12 para restaurar la pantalla «Crear tarifa» después del error de inicialización JavaScript de 1.12.11.
