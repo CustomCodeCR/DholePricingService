@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.6.2] - 2026-11-08 (candidato F9, sin publicación)
+
+- Sincroniza metadatos de versión global del batch Dhole Realtime `rt-20261107-01` a `1.13.10`; actualización PATCH independiente de DholePricingService `1.6.1` → `1.6.2`. No cambia contratos REST, datos, lógica de negocio ni flags; requiere gates F0–F8 y CI de SHA final antes de merge.
+
+
 ## [1.6.1] - 2026-11-08 (candidato F9, sin publicación)
 
 - Merge seguro de `develop` (650bfe0a203c) en la intermedia realtime: se conservan las 11 correcciones documentales 1.5.8–1.5.18 de Pricing y los 8 artefactos históricos de releases de FCL que faltaban; el código funcional REST no tenía cambios concurrentes.
