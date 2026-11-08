@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.6.4] - 2026-11-08 (F6/F9 staging-audit candidate)
+
+- Sincroniza Dhole Realtime `rt-20261107-01` a versión global `1.13.12` tras incorporar auditoría real de persistencia en staging. PATCH 1.6.3 → 1.6.4; no modifica rutas, eventos, datos, contratos REST ni flags. No se fusiona hasta completar gates formales.
+
+
 ## [1.6.3] - 2026-11-08 (candidato F9, sin publicar)
 
 - Sincroniza release global `rt-20261107-01` a `1.13.11` tras resolver los hallazgos de CI de Config, Reports y Gateway. Bump PATCH de DholePricingService `1.6.2` a `1.6.3`, sin modificar REST, eventos, precios ni datos; flags realtime OFF y PR F9 aún DRAFT.
