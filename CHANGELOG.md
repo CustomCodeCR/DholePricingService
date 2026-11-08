@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.6.1] - 2026-11-08 (candidato F9, sin publicación)
+
+- Merge seguro de `develop` (650bfe0a203c) en la intermedia realtime: se conservan las 11 correcciones documentales 1.5.8–1.5.18 de Pricing y los 8 artefactos históricos de releases de FCL que faltaban; el código funcional REST no tenía cambios concurrentes.
+- Se mantiene la implementación realtime F6.02 y su feature flag OFF. Versión PATCH 1.6.0 → 1.6.1; versión global candidata 1.13.9, sin modificar develop/master ni publicar.
+
 ## [1.6.0] - 2026-11-08 (candidato F6.02, no publicado)
 
 - Añade invalidaciones mínimas para cambios de RateHeader al Outbox existente de Pricing y las envía a un stream separado dhole.pricing.realtime.v1; no sustituye cachés ni los eventos comerciales actuales.
@@ -7,6 +12,71 @@
 - Mantiene REST autoritativo y registros de costos/cliente fuera del payload de invalidación; incorpora pruebas de contrato, seguridad, versionado y compilación de API y Worker.
 - F6.02 sigue candidata en rama intermedia hasta completar adaptador Gateway, pruebas de entrega y matriz completa de mutaciones; no integra develop/master ni despliega.
 - Versión del componente 1.5.7 -> 1.6.0; versión global propuesta 1.13.0.
+
+## [1.5.18] - 2026-11-08
+
+- Release coordinado `DH-20261108-PRICING-RATE-SELECTION-047` con DholeWeb 1.12.16: el asistente FCL vuelve a conservar el RateId elegido por POE/naviera y se bloquea por CI cualquier binding de estado eliminado durante las transformaciones Vite.
+- Servicio de Pricing: solo versionamiento y metadatos de compatibilidad; los endpoints REST, el estado de importaciones, las tarifas, los precios y la persistencia permanecen intactos.
+- Validar CI, smoke del wizard minificado y staging antes de producción.
+
+## [1.5.17] - 2026-11-08
+
+- Release coordinado `DH-20261108-PRICING-SETUP-TDZ-046` con DholeWeb 1.12.15: estabiliza «Crear tarifa» evitando la referencia anticipada a `form` en un watcher insertado por Vite.
+- Solo metadatos; conserva contratos REST, lógica, tarifas y datos. CI y staging obligatorios.
+
+## [1.5.16] - 2026-11-08
+
+- Release coordinado `DH-20261108-PRICING-SETUP-TDZ-045` con DholeWeb 1.12.14 para corregir el error de inicialización Vue en «Crear tarifa».
+- Sin cambios en endpoints de Pricing, persistencia, tarifas ni reglas de cálculo; mantiene compatibilidad con el frontend corregido.
+- Requiere pruebas de montaje real en navegador y validación CI/staging antes de promover a master.
+
+## [1.5.15] - 2026-11-08
+
+- Release coordinado `DH-20261108-PRICING-RENDER-GUARD-044` con DholeWeb 1.12.13 para recuperar el renderizado del asistente FCL y eliminar referencias de cobertura tempranas en el frontend.
+- Mantiene compatibilidad íntegra con los endpoints, importaciones, tarifas y RateId existentes. No modifica algoritmos, persistencia, ni datos de producción.
+- Aplicar tras validación CI y staging y registrar versionado global del release.
+
+## [1.5.14] - 2026-11-08
+
+- Release coordinado `DH-20261108-PRICING-BLANK-043` con DholeWeb 1.12.12 para restaurar la pantalla «Crear tarifa» después del error de inicialización JavaScript de 1.12.11.
+- Compatibilidad de las mismas consultas, importaciones y selecciones FCL con el frontend corregido, sin modificar datos, entidades, contratos REST ni algoritmos del servicio.
+- Validación y despliegue de staging antes de integración definitiva a master.
+
+## [1.5.13] - 2026-11-08
+
+- Release coordinado `DH-20261108-FCL-OFFER-COVERAGE-042` con DholeWeb 1.12.11, corrigiendo la distinción entre ofertas FCL únicas y registros fuente.
+- Los IDs de tarifa, precios y vigencias importadas continúan íntegros. Sin cambios de contratos REST ni esquema de datos.
+- CI y despliegue staging requeridos antes de integración final a master.
+
+## [1.5.12] - 2026-11-08
+
+- Release coordinado con DholeWeb 1.12.10 para recuperar el renderizado estable de Pantalla 5 FCL (hotfix `DH-20261108-FCL-RESTORE-RENDER-041`).
+- Sin cambios en contratos REST, persistencia ni valores de tarifas importadas. Mantiene compatibilidad API.
+- Integración mediante ramas intermedias y validación CI/staging obligatoria antes de producción.
+
+## [1.5.11] - 2026-11-08
+
+- Release coordinado `DH-20261108-FCL-BLANK-SCREEN-040` para resolver la pantalla negra al cargar 110 tarifas FCL en DholeWeb 1.12.9.
+- Contrato de Pricing sin cambios; los registros de importación, correos y tarifas no se modifican.
+- CI y staging obligatorios antes de cualquier integración a master y producción.
+
+## [1.5.10] - 2026-11-08
+
+- Release coordinado `DH-20261108-FCL-CARRIER-CARDS-SELECTION-039` con DholeWeb 1.12.8 para la agrupación real de tarifas FCL por naviera y POE y selección por RateId.
+- No altera el contrato REST ni las tarifas persistidas, reaprovisiona la versión de Pricing y conserva todos los registros de origen.
+- CI y staging requeridos antes de integración a master y producción.
+
+## [1.5.9] - 2026-11-08
+
+- Release coordinado con DholeWeb 1.12.7 para agrupación visual de tarifas FCL equivalentes.
+- Conserva contratos REST, tarifas persistidas y los ID originales de origen, sin migraciones ni eliminación de datos.
+- Release `DH-20261108-FCL-VISUAL-GROUPS-038`, CI/staging obligatorios antes de producción.
+
+## [1.5.8] - 2026-11-08
+
+- Release coordinado con DholeWeb v1.12.5 para consolidación FCL por identidades canónicas en la pantalla 5.
+- Conserva contratos REST, registros importados e identificadores de tarifas existentes; no requiere migraciones de datos.
+- Release `DH-20261108-FCL-VISIBLE-DEDUP-036`. CI y staging obligatorios antes de master y producción no autorizada.
 
 ## [1.5.7] - 2026-11-08
 

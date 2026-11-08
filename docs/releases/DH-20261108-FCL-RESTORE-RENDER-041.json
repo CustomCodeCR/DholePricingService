@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261108-FCL-RESTORE-RENDER-041",
+  "ecosystemVersion": "1.12.10",
+  "releaseType": "PATCH",
+  "createdAt": "2026-11-08",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "component": "DholeWeb",
+      "from": "1.12.9",
+      "to": "1.12.10"
+    },
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "from": "1.5.11",
+      "to": "1.5.12"
+    }
+  ],
+  "changes": [
+    "Coordinated metadata for restoring known working Screen 5 frontend",
+    "REST API and database unchanged"
+  ],
+  "validation": "CI and staging required",
+  "productionDeploymentAuthorized": true
+}
