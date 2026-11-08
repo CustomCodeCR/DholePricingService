@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.10] - 2026-11-08
+
+- Release coordinado `DH-20261108-FCL-CARRIER-CARDS-SELECTION-039` con DholeWeb 1.12.8 para la agrupación real de tarifas FCL por naviera y POE y selección por RateId.
+- No altera el contrato REST ni las tarifas persistidas, reaprovisiona la versión de Pricing y conserva todos los registros de origen.
+- CI y staging requeridos antes de integración a master y producción.
+
 ## [1.5.9] - 2026-11-08
 
 - Release coordinado con DholeWeb 1.12.7 para agrupación visual de tarifas FCL equivalentes.
