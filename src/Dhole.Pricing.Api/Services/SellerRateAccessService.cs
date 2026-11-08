@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
-using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 
