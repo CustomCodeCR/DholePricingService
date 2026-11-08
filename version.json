@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.5.10",
-  "ecosystemVersion": "1.12.8",
-  "releaseId": "DH-20261108-FCL-CARRIER-CARDS-SELECTION-039"
+  "version": "1.5.11",
+  "ecosystemVersion": "1.12.9",
+  "releaseId": "DH-20261108-FCL-BLANK-SCREEN-040"
 }
