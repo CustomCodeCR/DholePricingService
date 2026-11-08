@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.13] - 2026-11-08
+
+- Release coordinado `DH-20261108-FCL-OFFER-COVERAGE-042` con DholeWeb 1.12.11, corrigiendo la distinción entre ofertas FCL únicas y registros fuente.
+- Los IDs de tarifa, precios y vigencias importadas continúan íntegros. Sin cambios de contratos REST ni esquema de datos.
+- CI y despliegue staging requeridos antes de integración final a master.
+
 ## [1.5.12] - 2026-11-08
 
 - Release coordinado con DholeWeb 1.12.10 para recuperar el renderizado estable de Pantalla 5 FCL (hotfix `DH-20261108-FCL-RESTORE-RENDER-041`).
