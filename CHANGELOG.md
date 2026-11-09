@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.20] - 2026-11-09
+
+- MultiQUO establece UseAllInPresentation por alternativa FCL Panamá → Costa Rica en el servidor; no hereda el estado ALL IN de otro POE.
+- Mantiene líneas financieras internas para detalle y PDF, sin alterar cálculos ni los contratos REST.
+- Release coordinado DH-20261109-PRICING-FCL-PANAMA-ALLIN-049 con DholeWeb 1.12.18. Requiere CI y staging antes de master.
+
 ## [1.5.19] - 2026-11-09
 
 - Endpoint opt-in `groupQuotes=true` para Gestión de tarifas: la MultiQUO entrega una única fila representativa (la seleccionada, o el ancla inicial), con conteo, paginación y número principal correctos.
