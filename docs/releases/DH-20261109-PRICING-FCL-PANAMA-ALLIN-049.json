@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261109-PRICING-FCL-PANAMA-ALLIN-049",
+  "releaseType": "PATCH",
+  "ecosystemVersion": "1.12.18",
+  "createdAt": "2026-11-09",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "component": "DholeWeb",
+      "from": "1.12.17",
+      "to": "1.12.18"
+    },
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "from": "1.5.19",
+      "to": "1.5.20"
+    }
+  ],
+  "changes": [
+    "Restrict ALL IN to each FCL Panama -> Costa Rica alternative individually",
+    "Render individual ALL IN badge for saved and draft MultiQUO, keep detailed charges",
+    "Normalize UseAllInPresentation server-side for atomic group creation"
+  ],
+  "validation": "CI, unit tests, staging before master",
+  "productionDeploymentAuthorized": false
+}
