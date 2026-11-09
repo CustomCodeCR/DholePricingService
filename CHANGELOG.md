@@ -1,3 +1,8 @@
+## [1.8.1] - 2026-11-09
+
+- PATCH: aceptar/rechazar cotizaciones Open del vendedor con una revisión publicada, sin solicitud de modificación activa ni aprobación de margen pendiente. Conservar importes de la última revisión enviada y no emitir PDF de un borrador.
+- Registro idempotente y diferimiento explícito de la notificación de apertura cuando la revisión nueva sigue sin publicar. Release DH-20261109-SELLER-OPEN-DECISION-054, ecosistema 1.15.1.
+
 ## [1.8.0] - 2026-11-09
 
 - Identificador de cuenta/prospecto CRM en cotizaciones nuevas y revisiones; conciliación manual de QUO legacy.
