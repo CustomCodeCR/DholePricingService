@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.3] - 2026-11-09
+
+- PATCH: aceptar o rechazar una cotización Open en la API del vendedor solo cuando existe una revisión realmente enviada, sin una modificación abierta y sin autorización de margen pendiente. Se habilita la transición validada de Open a AcceptedByClient/RejectedByClient sin afectar el flujo convencional de Sent.
+- Mantener la proyección de datos comerciales publicados tras la decisión; bloquear PDFs generados desde borradores no enviados y diferir el correo de Apertura con PDF cuando el encabezado contiene una revisión más nueva. Los reintentos son idempotentes y seguros.
+- Release DH-20261109-SELLER-OPEN-DECISION-054 (develop); DholeWeb 1.14.5, ecosistema 1.14.5.
+
 ## [1.7.2] - 2026-11-09
 
 - PATCH QUO-00000-000269: el endpoint comercial expone currentRateStatus desde la cabecera vigente, además del status histórico de la revisión publicada. Las solicitudes realmente abiertas siguen marcándose de forma independiente mediante pricingModificationActive.
