@@ -33,6 +33,14 @@ public sealed class UpdateRateCommandHandler(
     private static readonly Guid LclInternalCarrierId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c44");
     private const string LclInternalCarrierName = "No aplica (LCL)";
     private const string LclInternalCarrierCode = "LCL";
+    private static readonly Guid LandInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c42");
+    private const string LandInternalAgentName = "Grupo Castro Fallas";
+    private const string LandInternalAgentCode = "GCF";
+    private static readonly Guid LandInternalCarrierId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c43");
+    private const string LandInternalCarrierName = "No aplica (terrestre)";
+    private const string LandInternalCarrierCode = "LAND";
+    private const string FtlInternalCarrierName = "TIGSA";
+    private const string FtlInternalCarrierCode = "TIGSA";
 
     public async Task<Result> HandleAsync(
         UpdateRateCommand command,
@@ -84,8 +92,9 @@ public sealed class UpdateRateCommandHandler(
                 )
             )
         );
-        // La fuente coloader descarta cualquier naviera heredada al editar,
-        // incluso si el cliente envía todavía un CarrierId de LCL propio.
+        // La fuente coloader prevalece frente a la naviera histórica de una
+        // cotización que comenzó como LCL propio. El detalle es la evidencia
+        // persistida del proveedor actual, aun cuando Web envíe un CarrierId viejo.
         var isLclColoader = command.ShipmentMode == ShipmentMode.Lcl
             && (command.ExtraDetails ?? Array.Empty<UpsertRateExtraDetailCommandItem>())
                 .Any(detail => (detail.Notes ?? string.Empty).Contains(
@@ -95,13 +104,15 @@ public sealed class UpdateRateCommandHandler(
         var lclWithoutCarrier =
             command.ShipmentMode == ShipmentMode.Lcl
             && (command.CarrierId == Guid.Empty || isLclColoader);
+        var landWithoutProvider = command.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
 
         // Rehidratamos todos los selectores desde Config. De esta manera cambiar naviera,
         // agente, ruta, contenedor, moneda o Incoterm nunca persiste Name/Code enviados por Web.
         try
         {
             PricingConfigCatalogItem? agent = null;
-            var requestedCatalogAgent = command.AgentId != Guid.Empty
+            var requestedCatalogAgent = !landWithoutProvider
+                && command.AgentId != Guid.Empty
                 && command.AgentId != OwnLclInternalAgentId;
             if (requestedCatalogAgent)
             {
@@ -111,14 +122,14 @@ public sealed class UpdateRateCommandHandler(
                     return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
                         "El agente", PricingConstants.CatalogSlugs.Agents));
             }
-            else if (!ownLclWithoutAgent)
+            else if (!ownLclWithoutAgent && !landWithoutProvider)
             {
                 return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
                     "El agente", PricingConstants.CatalogSlugs.Agents));
             }
 
             PricingConfigCatalogItem? carrier = null;
-            if (!lclWithoutCarrier && command.CarrierId != Guid.Empty)
+            if (!landWithoutProvider && !lclWithoutCarrier && command.CarrierId != Guid.Empty)
             {
                 carrier = await configCatalog.GetActiveInGroupAsync(
                     command.CarrierId, PricingConstants.CatalogSlugs.Carriers, cancellationToken);
@@ -126,7 +137,7 @@ public sealed class UpdateRateCommandHandler(
                     return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
                         "La naviera", PricingConstants.CatalogSlugs.Carriers));
             }
-            else if (!lclWithoutCarrier)
+            else if (!landWithoutProvider && !lclWithoutCarrier)
             {
                 return Result.Failure(PricingErrors.InvalidConfigCatalogReference(
                     "La naviera", PricingConstants.CatalogSlugs.Carriers));
@@ -251,12 +262,28 @@ public sealed class UpdateRateCommandHandler(
                 LclGroupAgentId = command.ShipmentMode == ShipmentMode.Lcl ? lclGroupAgent?.Id ?? rate.LclGroupAgentId : null,
                 LclGroupAgentName = command.ShipmentMode == ShipmentMode.Lcl ? lclGroupAgent?.SnapshotName() ?? rate.LclGroupAgentName : null,
                 LclGroupAgentCode = command.ShipmentMode == ShipmentMode.Lcl ? lclGroupAgent?.Code ?? rate.LclGroupAgentCode : null,
-                AgentId = agent?.Id ?? OwnLclInternalAgentId,
-                AgentName = agent?.SnapshotName() ?? OwnLclInternalAgentName,
-                AgentCode = agent?.Code ?? OwnLclInternalAgentCode,
-                CarrierId = lclWithoutCarrier ? LclInternalCarrierId : carrier!.Id,
-                CarrierName = lclWithoutCarrier ? LclInternalCarrierName : carrier!.SnapshotName(),
-                CarrierCode = lclWithoutCarrier ? LclInternalCarrierCode : carrier!.Code,
+                AgentId = landWithoutProvider
+                    ? LandInternalAgentId
+                    : agent?.Id ?? OwnLclInternalAgentId,
+                AgentName = landWithoutProvider
+                    ? LandInternalAgentName
+                    : agent?.SnapshotName() ?? OwnLclInternalAgentName,
+                AgentCode = landWithoutProvider
+                    ? LandInternalAgentCode
+                    : agent?.Code ?? OwnLclInternalAgentCode,
+                CarrierId = landWithoutProvider
+                    ? LandInternalCarrierId
+                    : lclWithoutCarrier ? LclInternalCarrierId : carrier!.Id,
+                CarrierName = landWithoutProvider
+                    ? command.ShipmentMode == ShipmentMode.Ftl
+                        ? FtlInternalCarrierName
+                        : LandInternalCarrierName
+                    : lclWithoutCarrier ? LclInternalCarrierName : carrier!.SnapshotName(),
+                CarrierCode = landWithoutProvider
+                    ? command.ShipmentMode == ShipmentMode.Ftl
+                        ? FtlInternalCarrierCode
+                        : LandInternalCarrierCode
+                    : lclWithoutCarrier ? LclInternalCarrierCode : carrier!.Code,
                 PolId = pol.Id,
                 PolName = pol.SnapshotName(),
                 PolCode = pol.Code,
@@ -293,15 +320,18 @@ public sealed class UpdateRateCommandHandler(
             .Select(detail => detail.Id)
             .ToHashSet();
 
-        // Stale CIF snapshots can still send a Freight row that must be deleted.
-        // Preserve all destination/agent charges, resetting an accidental
-        // reference to the removed Freight detail so it can be inserted.
+        // A historical CIF edit can still send its old Freight detail ID. First
+        // remove Freight rows from the update payload; then schedule the old
+        // persisted Freight rows for deletion. Non-freight charges stay intact.
         IReadOnlyCollection<UpsertRateExtraDetailCommandItem> requestedDetails =
             command.ExtraDetails ?? Array.Empty<UpsertRateExtraDetailCommandItem>();
         if (excludesQuotedFreight)
             requestedDetails = RateDetailUpdateInputNormalizer.WithoutQuotedFreight(
                 requestedDetails, previousFreightDetailIds);
 
+        // El wizard puede reusar el mismo Id persistido para dos cargos de catálogos
+        // distintos (por ejemplo dos HBL). Cada detalle persistido se actualiza una
+        // sola vez; las otras líneas diferentes se crean sin Id para no perder cargos.
         var extraDetails = RateDetailUpdateInputNormalizer.Normalize(
             requestedDetails,
             existingDetails.ToDictionary(pair => pair.Key, pair => pair.Value.CostId)
@@ -643,8 +673,6 @@ public sealed class UpdateRateCommandHandler(
             rate.ConfigureLclGroupAgent(command.LclGroupAgentId, command.LclGroupAgentName, command.LclGroupAgentCode);
             rate.ConfigureExecutive(command.ExecutiveName);
             rate.ConfigureCarrierDetails(command.CarrierRoute, command.CarrierComments, command.UpdatedBy);
-            rate.ConfigureClientAccount(command.ClientAccountId);
-            rate.ConfigureClientLead(command.ClientLeadId);
             // Null conserva referencias existentes de clientes que aún usan el contrato anterior.
             // Cadena vacía permite limpiarlas desde el wizard.
             if (command.OtherReferences is not null)
@@ -744,7 +772,8 @@ public sealed class UpdateRateCommandHandler(
                 cargoProfile.TotalVolumeCbm,
                 cargoProfile.KgPerCbm,
                 cargoProfile.CargoLinesJson,
-                command.UpdatedBy
+                command.UpdatedBy,
+                cargoProfile.ChargeableVolumeCbm
             );
 
             foreach (var id in removedIds)
@@ -899,6 +928,10 @@ public sealed class UpdateRateCommandHandler(
                 );
                 automaticallyApprovedLowMargin = true;
             }
+
+            // Guardar una nueva revisión invalida el envío comercial anterior.
+            // SetAmounts deja la revisión en Open o PendingApproval; Pricing deberá
+            // reenviarla explícitamente tras revisar los cambios y, si aplica, aprobar el margen.
 
             // Permite renovar una tarifa Expired. Si la nueva vigencia sigue vencida,
             // conserva Expired en vez de reabrirla accidentalmente por SetAmounts().

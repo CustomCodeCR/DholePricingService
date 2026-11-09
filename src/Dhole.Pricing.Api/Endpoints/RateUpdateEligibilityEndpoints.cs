@@ -14,16 +14,23 @@ public static class RateUpdateEligibilityEndpoints
             .WithTags("Rates")
             .RequireAuthorization()
             .RequireScope(PricingConstants.Scopes.RateView);
+
         return app;
     }
 
-    private static async Task<IResult> GetAsync(Guid rateId, ServiceDbContext db, CancellationToken cancellationToken)
+    private static async Task<IResult> GetAsync(
+        Guid rateId,
+        ServiceDbContext db,
+        CancellationToken cancellationToken)
     {
-        var rateStatus = await db.RateHeaders.AsNoTracking()
+        var rateStatus = await db.RateHeaders
+            .AsNoTracking()
             .Where(x => x.Id == rateId && !x.IsDeleted)
             .Select(x => (RateStatus?)x.Status)
             .FirstOrDefaultAsync(cancellationToken);
-        if (!rateStatus.HasValue) return Results.NotFound();
+
+        if (!rateStatus.HasValue)
+            return Results.NotFound();
 
         // Keep the eligibility advertised to the wizard consistent with PUT
         // /api/pricing/rates/{id}. Closed quotes are immutable; other states

@@ -234,6 +234,18 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
     public Guid? ClientAccountId { get; private set; }
     public Guid? ClientLeadId { get; private set; }
+    /// <summary>Associate a human-verified legacy quote with its CRM account without changing financial terms.</summary>
+    public void ConfigureClientAccount(Guid accountId)
+    {
+        if (accountId == Guid.Empty) throw new ArgumentException("Valid CRM account required.", nameof(accountId));
+        if (ClientLeadId.HasValue || (ClientAccountId.HasValue && ClientAccountId != accountId))
+            throw new InvalidOperationException("The quotation already belongs to a different CRM identity.");
+        if (ClientAccountId == accountId) return;
+        ClientAccountId = accountId;
+        MarkAsUpdated(DateTime.UtcNow, null);
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, null));
+    }
+
     public string? ClientName { get; private set; }
     public string? ExecutiveName { get; private set; }
     public string? IdtraNumber { get; private set; }
@@ -273,26 +285,6 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public IReadOnlyCollection<RateDetail> RateDetails => _rateDetails.AsReadOnly();
     public IReadOnlyCollection<RateService> RateServices => _rateServices.AsReadOnly();
     public IReadOnlyCollection<RateContainerAllocation> RateContainers => _rateContainers.AsReadOnly();
-
-    // The CRM account identifier is stable across name and seller changes.
-    // Older update clients omit the identifier; preserve the existing link.
-    public void ConfigureClientAccount(Guid? accountId)
-    {
-        if (accountId is { } value && value != Guid.Empty)
-        {
-            ClientAccountId = value;
-            ClientLeadId = null;
-        }
-    }
-
-    public void ConfigureClientLead(Guid? leadId)
-    {
-        if (leadId is { } value && value != Guid.Empty)
-        {
-            ClientLeadId = value;
-            ClientAccountId = null;
-        }
-    }
 
     public void ConfigureLclGroupAgent(Guid? agentId, string? agentName, string? agentCode)
     {
@@ -891,8 +883,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         RateName = CreateRateName(
             RateCode,
             BuildShipmentDescription(),
-            PolName,
-            PoeName,
+            PolName ?? string.Empty,
+            PoeName ?? string.Empty,
             PodName,
             IncotermName ?? IncotermCode,
             ClientName

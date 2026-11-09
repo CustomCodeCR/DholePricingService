@@ -33,6 +33,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var originOfficeQrDataUri = CreateQrDataUri(originOfficePublicUrl);
         var isLand = rate.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
         var hasSelectedServices = rate.RateServices.Count > 0;
+        // Use the persisted service snapshot. Storage days do not imply that a
+        // warehouse service was contracted, and a FCL equipment does not imply
+        // international transportation on customs/warehouse-only quotations.
         var selectedServiceNames = rate.RateServices
             .Select(service => service.ServiceName.Trim())
             .Where(name => name.Length > 0)
@@ -47,7 +50,9 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var documentTitle = hasStorageService || !hasTransportService
             ? "Cotización de servicios logísticos"
             : "Cotización de transporte internacional";
-        var showAgent = !isLand;
+        var showAgent = true;
+        var reportAgentName = UsesRsOriginAgent(rate) ? "RS"
+            : isLand ? "Grupo Castro Fallas" : Text(rate.AgentName, "No asignado");
         var showCarrier = rate.ShipmentMode == ShipmentMode.Fcl && hasTransportService;
         var route = !string.IsNullOrWhiteSpace(rate.PodName)
             ? $"{rate.PolName} → {rate.PodName} vía {rate.PoeName}"
@@ -55,9 +60,18 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         var cargoDetails = CreateCargoDetails(rate.CargoLinesJson);
         var pickupLocations = CreatePickupLocations(
             rate.PickupLocationsJson, rate.PickupAddress, rate.IncotermCode, rate.IncotermName);
+
+        // Air LCL shares ShipmentMode.Lcl with maritime LCL. Detect it using the
+        // persisted KG freight basis, cargo flight context or airport IATA route.
+        // Do not convert legacy CBM quantities in a PDF: doing so would silently
+        // change the customer's payable total without a new commercial quotation.
         var commercial = RateCommercialQuoteSnapshot.Create(rate);
         var isAirLcl = commercial.IsAirLcl;
         var miamiBillableCft = commercial.MiamiBillableCft;
+        string ReportDetailName(RateDetail detail) =>
+            isAirLcl && detail.CostDetailType == CostDetailType.Freight
+                ? "Flete Internacional"
+                : detail.Name;
 
         // These values are calculated once in the canonical Pricing snapshot.
         // The document mapper only formats/prints them; it never resolves a charge basis.
@@ -88,16 +102,16 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 detail.ChargeBasis == ChargeBasis.PerChargeableCft)
             : null;
         // The quote header and its freight line must use the same commercial unit.
-        var airWeightFreight = isAirLcl
+        var airKgFreight = isAirLcl
             ? rate.RateDetails.FirstOrDefault(detail =>
                 detail.CostDetailType == CostDetailType.Freight
                 && detail.ChargeBasis is ChargeBasis.PerKg or ChargeBasis.PerLb)
             : null;
-        var lclChargeableLabel = airWeightFreight is not null
-            ? $"LCL aéreo · {ReportQuantity(airWeightFreight).ToString("N3", MoneyCulture)} KG cobrables"
+        var lclChargeableLabel = airKgFreight is not null
+            ? $"LCL aéreo · {ReportQuantity(airKgFreight).ToString("N3", MoneyCulture)} KG cobrables"
             : cftFreight is not null
                 ? $"LCL · {ReportQuantity(cftFreight).ToString("N3", MoneyCulture)} CFT cobrable"
-            : $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable";
+                : $"LCL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable";
 
         // LCL must never leak the legacy container placeholder (for example 20 DV)
         // into the commercial document. For consolidated cargo the shipment itself is
@@ -122,22 +136,34 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                         .Select(x => new
                         {
                             containerTypeId = x.ContainerTypeId,
-                            containerType = x.ContainerTypeName,
-                            containerTypeName = x.ContainerTypeName,
+                            containerType = rate.ShipmentMode == ShipmentMode.Ftl
+                                ? CompactLandEquipmentLabel(x.ContainerTypeName, x.ContainerTypeCode)
+                                : x.ContainerTypeName,
+                            containerTypeName = rate.ShipmentMode == ShipmentMode.Ftl
+                                ? CompactLandEquipmentLabel(x.ContainerTypeName, x.ContainerTypeCode)
+                                : x.ContainerTypeName,
                             containerTypeCode = x.ContainerTypeCode,
                             quantity = x.Quantity,
-                            label = $"{x.Quantity} x {x.ContainerTypeName}"
+                            label = rate.ShipmentMode == ShipmentMode.Ftl
+                                ? $"{x.Quantity}x{CompactLandEquipmentLabel(x.ContainerTypeName, x.ContainerTypeCode)}"
+                                : $"{x.Quantity} x {x.ContainerTypeName}"
                         })
                     : new[]
                     {
                         new
                         {
                             containerTypeId = rate.ContainerTypeId,
-                            containerType = rate.ContainerTypeName,
-                            containerTypeName = rate.ContainerTypeName,
+                            containerType = rate.ShipmentMode == ShipmentMode.Ftl
+                                ? CompactLandEquipmentLabel(rate.ContainerTypeName, rate.ContainerTypeCode)
+                                : rate.ContainerTypeName,
+                            containerTypeName = rate.ShipmentMode == ShipmentMode.Ftl
+                                ? CompactLandEquipmentLabel(rate.ContainerTypeName, rate.ContainerTypeCode)
+                                : rate.ContainerTypeName,
                             containerTypeCode = rate.ContainerTypeCode,
                             quantity = rate.ContainerQuantity,
-                            label = $"{rate.ContainerQuantity} x {rate.ContainerTypeName}"
+                            label = rate.ShipmentMode == ShipmentMode.Ftl
+                                ? $"{rate.ContainerQuantity}x{CompactLandEquipmentLabel(rate.ContainerTypeName, rate.ContainerTypeCode)}"
+                                : $"{rate.ContainerQuantity} x {rate.ContainerTypeName}"
                         }
                     })
                 .ToArray();
@@ -146,7 +172,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         {
             ShipmentMode.Lcl => lclChargeableLabel,
             ShipmentMode.Ltl => $"LTL · {rate.ChargeableQuantity.ToString("N3", MoneyCulture)} CBM cobrable",
-            ShipmentMode.Ftl => $"FTL · {rate.ContainerQuantity} camión{(rate.ContainerQuantity == 1 ? string.Empty : "es")}",
+            ShipmentMode.Ftl => equipmentSummary,
             _ => equipmentSummary,
         };
 
@@ -252,7 +278,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             : reportDetails
                 .Select(detail => new
                 {
-                    description = DetailNameWithCarrier(detail, detail.Name),
+                    description = DetailNameWithCarrier(detail, ReportDetailName(detail)),
                     quantity = ReportQuantity(detail),
                     currency = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
                     currencyCode = detail.CurrencyCode,
@@ -312,7 +338,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             : persistedDetails
                 .Select(detail => new Dictionary<string, object?>
                 {
-                    ["Concepto"] = DetailNameWithCarrier(detail, detail.Name),
+                    ["Concepto"] = DetailNameWithCarrier(detail, ReportDetailName(detail)),
                     ["Cantidad"] = ReportQuantity(detail),
                     ["Moneda"] = CurrencyValue(detail.CurrencyName, detail.CurrencyCode),
                     ["Precio unitario"] = ReportUnitSale(detail),
@@ -355,7 +381,7 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
                 revisionNumber = Math.Max(1, rate.RevisionNumber),
                 idtraNumber = Text(rate.IdtraNumber, string.Empty),
                 clientName = Text(rate.ClientName),
-                agent = showAgent ? (UsesRsOriginAgent(rate) ? "RS" : Text(rate.AgentName, "No asignado")) : string.Empty,
+                agent = showAgent ? reportAgentName : string.Empty,
                 showAgent,
                 carrier = showCarrier ? reportCarrierName : string.Empty,
                 showCarrier,
@@ -443,11 +469,12 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             || normalized.Contains("FLETE", StringComparison.Ordinal);
     }
 
-    private static string NormalizeServiceLabel(string? value)
+    private static string NormalizeServiceLabel(string? text)
     {
-        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-        var text = value.Normalize(System.Text.NormalizationForm.FormD);
-        return new string(text.Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        var decomposed = text.Normalize(System.Text.NormalizationForm.FormD);
+        return new string(decomposed
+            .Where(character => CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
             .ToArray()).ToUpperInvariant();
     }
 
@@ -594,6 +621,24 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
         }
     }
 
+    private static string CompactLandEquipmentLabel(string? name, string? code)
+    {
+        var source = $"{code} {name}";
+        var match = Regex.Match(source, @"(?<!\d)(24|26|48|53)(?!\d)", RegexOptions.CultureInvariant);
+        if (match.Success)
+            return match.Groups[1].Value;
+
+        if (!string.IsNullOrWhiteSpace(name))
+            return name.Trim();
+
+        if (!string.IsNullOrWhiteSpace(code))
+            return code.Trim();
+
+        return "FTL";
+    }
+
+    // ShipmentMode.Lcl is also used for air cargo. RS is the origin agent only
+    // for maritime own-consolidation LCL; the commercial source remains GCF.
     private static bool IsAirLcl(RateHeader rate) =>
         rate.ShipmentMode == ShipmentMode.Lcl &&
         (rate.RateDetails.Any(detail =>
@@ -639,8 +684,11 @@ public sealed class RateReportDataFactory(IConfiguration configuration) : IRateR
             + $"&shipmentMode={Uri.EscapeDataString(rate.ShipmentMode.ToString())}"
             + $"&route={Uri.EscapeDataString(routeKey)}";
 
-        var agentCode = UsesRsOriginAgent(rate) ? "RS" : rate.AgentCode;
-        var agentName = UsesRsOriginAgent(rate) ? "RS" : rate.AgentName;
+        var isLand = rate.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
+        var usesRs = UsesRsOriginAgent(rate);
+        var agentCode = usesRs ? "RS" : isLand ? "GCF" : rate.AgentCode;
+        var agentName = usesRs ? "RS" : isLand ? "Grupo Castro Fallas" : rate.AgentName;
+
         if (!string.IsNullOrWhiteSpace(agentCode))
             publicUrl += $"&agentCode={Uri.EscapeDataString(agentCode.Trim())}";
         if (!string.IsNullOrWhiteSpace(agentName))

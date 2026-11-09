@@ -144,7 +144,10 @@ public static class DynamicsQuotePayloadBuilder
                 "effectiveto" => Date(rate, "validTo"),
                 "msdyn_invoicesetuptotals" => sale,
                 "new_flete" => sale,
-                // Consolidated supplier cost goes in monto1; monto2..9 = 0.
+                // new_monto1 carries the consolidated supplier cost. Every
+                // other amount field starts at numeric zero, not null. The
+                // trusted Dynamics connector fills any fields omitted from
+                // the user-managed active template before creating the QUO.
                 var target when montoIndex is >= 1 and <= 9 =>
                     montoIndex == 1 ? cost : 0m,
                 "new_equipo" => EquipmentForSchema(rate, field, configuration),
@@ -201,6 +204,8 @@ public static class DynamicsQuotePayloadBuilder
     public static string[] ParseIdtraNumbers(string? raw) =>
         IdtraNumberNormalizer.Parse(raw);
 
+    // The active tenant's USD/CRC GUID is resolved read-only through Dataverse
+    // isocurrencycode. Never reuse its default currency or a hardcoded GUID.
     private static string CurrencyLookupValue(Guid? resolvedCurrencyId) =>
         resolvedCurrencyId is Guid id && id != Guid.Empty
             ? id.ToString("D")
@@ -308,6 +313,8 @@ public static class DynamicsQuotePayloadBuilder
 
     private static string Quantity(JsonElement rate)
     {
+        // LCL/LTL is not billed in full containers. A containerQuantity=0
+        // must never result in a misleading "0 x LCL" on the Dynamics quote.
         if (String(rate, "shipmentMode") is "Lcl" or "Ltl" &&
             rate.TryGetProperty("chargeableQuantity", out var billable) &&
             billable.ValueKind == JsonValueKind.Number &&

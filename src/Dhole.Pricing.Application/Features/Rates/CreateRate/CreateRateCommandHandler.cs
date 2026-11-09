@@ -39,6 +39,18 @@ public sealed class CreateRateCommandHandler(
     private const string LclInternalCarrierName = "No aplica (LCL)";
     private const string LclInternalCarrierCode = "LCL";
 
+    // FTL/LTL no requieren agente ni naviera elegidos por el usuario. RateHeader mantiene
+    // históricamente ambos snapshots obligatorios, por lo que usamos marcadores internos
+    // que nunca se consultan contra Config ni se exponen como selectores del flujo terrestre.
+    private static readonly Guid LandInternalAgentId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c42");
+    private const string LandInternalAgentName = "Grupo Castro Fallas";
+    private const string LandInternalAgentCode = "GCF";
+    private static readonly Guid LandInternalCarrierId = new("7f4ed7d4-60a3-4f69-90e0-e2e2b24b4c43");
+    private const string LandInternalCarrierName = "No aplica (terrestre)";
+    private const string LandInternalCarrierCode = "LAND";
+    private const string FtlInternalCarrierName = "TIGSA";
+    private const string FtlInternalCarrierCode = "TIGSA";
+
     public async Task<Result<Guid>> HandleAsync(
         CreateRateCommand command,
         CancellationToken cancellationToken = default
@@ -54,13 +66,14 @@ public sealed class CreateRateCommandHandler(
         var lclWithoutCarrier =
             command.ShipmentMode == ShipmentMode.Lcl
             && (!command.CarrierId.HasValue || command.CarrierId.Value == Guid.Empty);
+        var landWithoutProvider = command.ShipmentMode is ShipmentMode.Ftl or ShipmentMode.Ltl;
 
         // Los Id de catálogo son la única entrada confiable. Todos los snapshots usados por
         // Pricing se reconstruyen desde Dhole.Config antes de crear la tarifa.
         try
         {
             PricingConfigCatalogItem? agent = null;
-            if (!ownLclWithoutAgent)
+            if (!ownLclWithoutAgent && !landWithoutProvider)
             {
                 if (!command.AgentId.HasValue || command.AgentId.Value == Guid.Empty)
                     return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
@@ -74,7 +87,7 @@ public sealed class CreateRateCommandHandler(
             }
 
             PricingConfigCatalogItem? carrier = null;
-            if (command.CarrierId.HasValue && command.CarrierId.Value != Guid.Empty)
+            if (!landWithoutProvider && command.CarrierId.HasValue && command.CarrierId.Value != Guid.Empty)
             {
                 carrier = await configCatalog.GetActiveInGroupAsync(
                     command.CarrierId,
@@ -85,7 +98,7 @@ public sealed class CreateRateCommandHandler(
                     return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
                         "La naviera", PricingConstants.CatalogSlugs.Carriers));
             }
-            else if (!lclWithoutCarrier)
+            else if (!landWithoutProvider && !lclWithoutCarrier)
             {
                 return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
                     "La naviera", PricingConstants.CatalogSlugs.Carriers));
@@ -210,12 +223,28 @@ public sealed class CreateRateCommandHandler(
                 LclGroupAgentId = lclGroupAgent?.Id,
                 LclGroupAgentName = lclGroupAgent?.SnapshotName(),
                 LclGroupAgentCode = lclGroupAgent?.Code,
-                AgentId = ownLclWithoutAgent ? OwnLclInternalAgentId : agent?.Id,
-                AgentName = ownLclWithoutAgent ? OwnLclInternalAgentName : agent?.SnapshotName(),
-                AgentCode = ownLclWithoutAgent ? OwnLclInternalAgentCode : agent?.Code,
-                CarrierId = lclWithoutCarrier ? LclInternalCarrierId : carrier?.Id,
-                CarrierName = lclWithoutCarrier ? LclInternalCarrierName : carrier?.SnapshotName(),
-                CarrierCode = lclWithoutCarrier ? LclInternalCarrierCode : carrier?.Code,
+                AgentId = landWithoutProvider
+                    ? LandInternalAgentId
+                    : ownLclWithoutAgent ? OwnLclInternalAgentId : agent?.Id,
+                AgentName = landWithoutProvider
+                    ? LandInternalAgentName
+                    : ownLclWithoutAgent ? OwnLclInternalAgentName : agent?.SnapshotName(),
+                AgentCode = landWithoutProvider
+                    ? LandInternalAgentCode
+                    : ownLclWithoutAgent ? OwnLclInternalAgentCode : agent?.Code,
+                CarrierId = landWithoutProvider
+                    ? LandInternalCarrierId
+                    : lclWithoutCarrier ? LclInternalCarrierId : carrier?.Id,
+                CarrierName = landWithoutProvider
+                    ? command.ShipmentMode == ShipmentMode.Ftl
+                        ? FtlInternalCarrierName
+                        : LandInternalCarrierName
+                    : lclWithoutCarrier ? LclInternalCarrierName : carrier?.SnapshotName(),
+                CarrierCode = landWithoutProvider
+                    ? command.ShipmentMode == ShipmentMode.Ftl
+                        ? FtlInternalCarrierCode
+                        : LandInternalCarrierCode
+                    : lclWithoutCarrier ? LclInternalCarrierCode : carrier?.Code,
                 PolId = pol.Id,
                 PolName = pol.SnapshotName(),
                 PolCode = pol.Code,
@@ -455,8 +484,6 @@ public sealed class CreateRateCommandHandler(
             rate.ConfigureLclGroupAgent(command.LclGroupAgentId, command.LclGroupAgentName, command.LclGroupAgentCode);
             rate.ConfigureExecutive(command.ExecutiveName);
             rate.ConfigureCarrierDetails(command.CarrierRoute, command.CarrierComments, command.CreatedBy);
-            rate.ConfigureClientAccount(command.ClientAccountId);
-            rate.ConfigureClientLead(command.ClientLeadId);
             if (command.OtherReferences is not null)
                 rate.SetOtherReferences(command.OtherReferences, command.CreatedBy);
             rate.ConfigureCommercialPresentation(command.UseAllInPresentation, command.CreatedBy);
@@ -494,7 +521,8 @@ public sealed class CreateRateCommandHandler(
                 cargoProfile.TotalVolumeCbm,
                 cargoProfile.KgPerCbm,
                 cargoProfile.CargoLinesJson,
-                command.CreatedBy
+                command.CreatedBy,
+                cargoProfile.ChargeableVolumeCbm
             );
 
             if (importedRate is not null)

@@ -1,10 +1,14 @@
+using Dhole.Pricing.Persistence.DbContexts;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Dhole.Pricing.Persistence.Migrations;
 
-public partial class AddSellerVisibilityRules : Migration
+[DbContext(typeof(ServiceDbContext))]
+[Migration("20260909114000_AddSellerVisibilityRules")]
+public sealed class AddSellerVisibilityRules : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {

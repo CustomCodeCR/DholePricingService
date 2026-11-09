@@ -12,10 +12,13 @@ using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Persistence.Auditing;
 using Dhole.Pricing.Persistence.Messaging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace Dhole.Pricing.Persistence.DbContexts;
 
-public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
+public sealed class ServiceDbContext(
+    DbContextOptions<ServiceDbContext> options,
+    IConfiguration? realtimeConfiguration = null)
     : AppDbContextBase(options)
 {
     private const string SourceService = "DholePricingService";
@@ -69,16 +72,57 @@ public sealed class ServiceDbContext(DbContextOptions<ServiceDbContext> options)
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        AddRealtimeRateInvalidations();
         AddDomainEventsToOutbox();
-
         return base.SaveChangesAsync(cancellationToken);
     }
 
     public override int SaveChanges()
     {
+        AddRealtimeRateInvalidations();
         AddDomainEventsToOutbox();
-
         return base.SaveChanges();
+    }
+
+    // F6.02: reuse Pricing's durable EF Outbox. A business update and the
+    // notification row share the SAME EF SaveChanges/transaction; workers
+    // publish only committed Outbox entries, never raw entity data.
+    private void AddRealtimeRateInvalidations()
+    {
+        if (!PricingRealtimeInvalidation.IsEnabled(realtimeConfiguration))
+            return;
+
+        ChangeTracker.DetectChanges();
+        var modified = ChangeTracker.Entries<RateHeader>()
+            .Where(e => e.State is EntityState.Added or EntityState.Modified ||
+                        (e.State == EntityState.Deleted))
+            .ToList();
+
+        foreach (var tracked in modified)
+        {
+            var rate = tracked.Entity;
+            if (rate.Id == Guid.Empty) continue;
+            var kind = tracked.State == EntityState.Added ? "created" :
+                tracked.State == EntityState.Deleted || rate.IsDeleted ? "deleted" : "updated";
+            var eventType = PricingRealtimeInvalidation.EventType(kind);
+            var id = Guid.NewGuid();
+            var at = DateTimeOffset.UtcNow;
+            var envelope = PricingRealtimeInvalidation.Envelope(
+                id, rate.Id, Math.Max(1, rate.RevisionNumber), kind, at,
+                (AuditExecutionContextAccessor.Current?.CorrelationId ?? id).ToString("D"));
+            OutboxMessages.Add(new OutboxMessage
+            {
+                EventId = id,
+                EventType = eventType,
+                EventName = eventType,
+                SourceService = SourceService,
+                PayloadJson = envelope,
+                CorrelationId = id.ToString("D"),
+                Status = OutboxMessageStatus.Pending,
+                RetryCount = 0,
+                CreatedAtUtc = at.UtcDateTime,
+            });
+        }
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

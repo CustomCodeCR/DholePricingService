@@ -3,6 +3,8 @@ using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Application.Imports;
 using Dhole.Pricing.Contracts.Imports.Request;
 using Dhole.Pricing.Domain.Imports.Enums;
+using Dhole.Pricing.Persistence.DbContexts;
+using Microsoft.EntityFrameworkCore;
 
 namespace Dhole.Pricing.Api.Endpoints;
 
@@ -12,78 +14,63 @@ public static class DataExtractionImportEndpoints
     {
         app.MapPost("/api/pricing/rate-import-batches/from-extraction", ImportFromExtractionAsync)
             .RequireIdempotency()
-            .WithTags("Imported FCL Rates").AllowAnonymous();
-        app.MapGet("/api/pricing/rate-import-batches/learning-context", GetLearningContextAsync)
-            .WithTags("Imported FCL Rates").AllowAnonymous();
+            .WithTags("Imported FCL Rates")
+            .AllowAnonymous();
+
+        // Retrieval feedback for DataExtraction. Approved rows are positive examples;
+        // rejected rows are negative examples. The AI still treats the current source
+        // document as the only authority for facts and rates.
+        app.MapGet(
+                "/api/pricing/rate-import-batches/learning-context",
+                GetLearningContextAsync
+            )
+            .WithTags("Imported FCL Rates")
+            .AllowAnonymous();
+
         return app;
     }
 
     private static async Task<IResult> GetLearningContextAsync(
         int? limit,
-        IImportRateAiFeedbackStore feedbackStore,
-        CancellationToken cancellationToken)
+        ServiceDbContext dbContext,
+        CancellationToken cancellationToken
+    )
     {
-        var examples = await feedbackStore.GetLearningContextAsync(Math.Clamp(limit ?? 12, 1, 50), cancellationToken);
-
-        return Results.Ok(new
-        {
-            examples = examples.Select(example => new
+        var take = Math.Clamp(limit ?? 12, 1, 50);
+        var examples = await dbContext.ImportFclRates
+            .AsNoTracking()
+            .Where(rate =>
+                rate.Status == ImportStatus.Approved
+                || rate.Status == ImportStatus.Rejected
+            )
+            .OrderByDescending(rate => rate.ValidTo)
+            .ThenByDescending(rate => rate.ValidFrom)
+            .Take(take)
+            .Select(rate => new
             {
-                // Maintain backward compatibility with the extraction prompt: human verified/corrected
-                // examples are positive, explicit rejections are negative.
-                outcome = example.Outcome.Equals("rejected", StringComparison.OrdinalIgnoreCase)
-                    ? "rejected"
-                    : "approved",
-                feedbackOutcome = example.Outcome,
-                feedbackReasonCodes = example.ReasonCodes,
-                feedbackComment = example.Comment,
-                correctValue = example.CorrectValue,
-                originalSnapshotJson = example.OriginalSnapshotJson,
-                reviewedSnapshotJson = example.ReviewedSnapshotJson,
-                pol = example.Pol,
-                poe = example.Poe,
-                pod = example.Pod,
-                containerType = example.ContainerType,
-                carrier = example.Carrier,
-                currency = example.Currency,
-                oceanFreight = example.OceanFreight,
-                originCharges = example.OriginCharges,
-                destinationCharges = example.DestinationCharges,
-                surcharges = example.Surcharges,
-                totalCost = example.TotalCost,
-                freeDays = example.FreeDays,
-                transitDays = example.TransitDays,
-                validFrom = example.ValidFrom,
-                validTo = example.ValidTo,
-                commodity = example.Commodity,
-                // AdaptivePricingAiExtractionClient already forwards SpaceComment to Qwen. Embed the
-                // supervised feedback here too, so older extraction deployments also learn immediately.
-                spaceComment = BuildLearningComment(example),
+                outcome = rate.Status == ImportStatus.Approved ? "approved" : "rejected",
+                pol = rate.PolName,
+                poe = rate.PoeName,
+                pod = rate.PodName,
+                containerType = rate.ContainerTypeName,
+                carrier = rate.CarrierName,
+                currency = rate.CurrencyCode,
+                oceanFreight = rate.OceanFreight,
+                originCharges = rate.OriginCharges,
+                destinationCharges = rate.DestinationCharges,
+                surcharges = rate.Surcharges,
+                totalCost = rate.TotalCost,
+                freeDays = rate.FreeDays,
+                transitDays = rate.TransitDays,
+                validFrom = rate.ValidFrom,
+                validTo = rate.ValidTo,
+                commodity = rate.Commodity,
+                spaceComment = rate.SpaceComment,
             })
-        });
-    }
+            .ToArrayAsync(cancellationToken);
 
-    private static string? BuildLearningComment(PricingLearningFeedback example)
-    {
-        var parts = new List<string>();
-        if (!string.IsNullOrWhiteSpace(example.SpaceComment)) parts.Add(example.SpaceComment.Trim());
-        parts.Add($"HUMAN_FEEDBACK_OUTCOME={example.Outcome}");
-        if (example.ReasonCodes.Count > 0)
-            parts.Add($"HUMAN_FEEDBACK_REASONS={string.Join(',', example.ReasonCodes)}");
-        if (!string.IsNullOrWhiteSpace(example.Comment))
-            parts.Add($"HUMAN_FEEDBACK_COMMENT={example.Comment.Trim()}");
-        if (!string.IsNullOrWhiteSpace(example.CorrectValue))
-            parts.Add($"HUMAN_CORRECT_VALUE={example.CorrectValue.Trim()}");
-        if (example.Outcome.Equals("corrected", StringComparison.OrdinalIgnoreCase))
-        {
-            parts.Add($"AI_ORIGINAL={Limit(example.OriginalSnapshotJson, 1800)}");
-            parts.Add($"HUMAN_REVIEWED={Limit(example.ReviewedSnapshotJson, 1800)}");
-        }
-        return string.Join(" | ", parts);
+        return Results.Ok(new { examples });
     }
-
-    private static string Limit(string value, int max) =>
-        value.Length <= max ? value : value[..max];
 
     private static async Task<IResult> ImportFromExtractionAsync(
         ImportRatesFromExtractionRequest request,
@@ -113,12 +100,14 @@ public static class DataExtractionImportEndpoints
             var extraction = DataExtractionPricingImportMapper.ToApplicationResult(
                 enrichedResponse,
                 request.ExtractionExecutionId,
-                request.PricingImportId);
+                request.PricingImportId
+            );
             extraction = PricingEmailExtractionRecovery.Recover(
                 extraction,
                 sourceType,
                 request.Subject,
-                request.OriginalFileName);
+                request.OriginalFileName
+            );
 
             var result = await importService.PersistExtractionAsync(
                 request.PricingImportId,

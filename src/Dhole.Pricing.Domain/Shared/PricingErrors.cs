@@ -206,8 +206,6 @@ public static class PricingErrors
         "Para marcar la tarifa como Aceptada debe registrar el IDTRA."
     );
 
-
-
     public static readonly Error RateImportedStructureLocked = new(
         "Pricing.RateImportedStructureLocked",
         "Una tarifa creada desde una importación FCL debe conservar la modalidad y el tipo de contenedor de la tarifa importada."

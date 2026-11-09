@@ -98,7 +98,7 @@ public sealed class RateReportAirLclParityTests
     private static RateHeader CreateAirRate()
     {
         var rate = RateHeader.Create(
-            rateCode: "QUO-AIR-TEST", sourceImportFclRateId: null,
+            rateCode: "QUO-AIR01-000001", sourceImportFclRateId: null,
             agentId: Guid.NewGuid(), agentName: "Grupo Castro Fallas", agentCode: "GCF",
             carrierId: Guid.NewGuid(), carrierName: "Air carrier", carrierCode: "AIR",
             polId: Guid.NewGuid(), polName: "Miami, Estados Unidos (MIA)", polCode: "MIA",

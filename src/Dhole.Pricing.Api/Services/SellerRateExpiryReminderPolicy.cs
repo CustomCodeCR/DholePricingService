@@ -39,7 +39,14 @@ public static class SellerRateExpiryReminderPolicy
                 DateTime.SpecifyKind(localAt, DateTimeKind.Unspecified),
                 CostaRicaZone), TimeSpan.Zero);
 
-            // Day reminders run from 09:00 until midnight local time. The\n            // final 6-hour reminder runs until the actual expiry. This lets\n            // deployments/restarts later in the day catch their milestone\n            // without accidentally sending missed earlier-day reminders.\n            var windowEndUtc = key == "6h"\n                ? expirationUtc\n                : dueUtc.AddHours(15);\n            if (now.ToUniversalTime() >= dueUtc && now.ToUniversalTime() < windowEndUtc)
+            // Day reminders run from 09:00 until midnight local time. The
+            // final 6-hour reminder runs until the actual expiry. This lets
+            // deployments/restarts later in the day catch their milestone
+            // without accidentally sending missed earlier-day reminders.
+            var windowEndUtc = key == "6h"
+                ? expirationUtc
+                : dueUtc.AddHours(15);
+            if (now.ToUniversalTime() >= dueUtc && now.ToUniversalTime() < windowEndUtc)
                 return new Reminder(key, label, expirationUtc);
         }
 

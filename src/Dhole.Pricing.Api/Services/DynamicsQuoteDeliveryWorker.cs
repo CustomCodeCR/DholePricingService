@@ -288,12 +288,8 @@ public sealed class DynamicsQuoteDeliveryWorker(
             // The tenant default currency can be CRC even when the Pricing
             // quote is USD. Resolve ISO -> actual Dataverse GUID on every
             // attempt, with the same active integration key (read-only).
-            var currencyField = schema.Fields.SingleOrDefault(field =>
-                field.Name.Equals("transactioncurrencyid", StringComparison.OrdinalIgnoreCase) &&
-                field.Target.EndsWith("@odata.bind", StringComparison.Ordinal));
-            if (currencyField is null)
-                throw new InvalidOperationException(
-                    "The active crear_oferta template must map transactioncurrencyid@odata.bind; no QUO was created.");
+            // Currency is a required field of the trusted Pricing integration,
+            // independent of the editable crear_oferta mapping list.
             stage = "currency";
             // Pricing keeps catalog codes (CUR-...), whereas Dataverse
             // requires ISO 4217. Use the approved human-readable currency
@@ -342,6 +338,8 @@ public sealed class DynamicsQuoteDeliveryWorker(
                 dholeRateId = job.RateId,
                 totalSaleAmount,
                 totalCostAmount,
+                currencyCode = iso,
+                currencyId,
                 inputs = inputJson,
                 adoptSingleUnmanagedLine
             };
