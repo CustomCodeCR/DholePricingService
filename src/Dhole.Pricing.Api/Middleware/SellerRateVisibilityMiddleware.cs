@@ -1,14 +1,14 @@
 using System.Security.Claims;
-using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Domain.Shared;
-using Dhole.Pricing.Persistence.DbContexts;
-using Microsoft.EntityFrameworkCore;
 
 namespace Dhole.Pricing.Api.Middleware;
 
 public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
 {
-    public async Task InvokeAsync(HttpContext context, ServiceDbContext db)
+    public async Task InvokeAsync(
+        HttpContext context,
+        SellerVisibilityService visibilityService)
     {
         if (!context.User.Identity?.IsAuthenticated ?? true)
         {
@@ -16,7 +16,7 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
             return;
         }
 
-        if (!IsRestrictedSeller(context.User))
+        if (!IsRestrictedSeller(context.User, visibilityService))
         {
             await next(context);
             return;
@@ -42,28 +42,20 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
         }
 
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var ratesIndex = Array.FindIndex(segments, value => string.Equals(value, "rates", StringComparison.OrdinalIgnoreCase));
-        if (ratesIndex < 0 || ratesIndex + 1 >= segments.Length || !Guid.TryParse(segments[ratesIndex + 1], out var rateId))
+        var ratesIndex = Array.FindIndex(
+            segments,
+            value => string.Equals(value, "rates", StringComparison.OrdinalIgnoreCase)
+        );
+
+        if (ratesIndex < 0
+            || ratesIndex + 1 >= segments.Length
+            || !Guid.TryParse(segments[ratesIndex + 1], out var rateId))
         {
             await next(context);
             return;
         }
 
-        var currentUserId = context.GetCurrentUserId();
-        if (!currentUserId.HasValue || currentUserId.Value == Guid.Empty)
-        {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            return;
-        }
-
-        var ownsRate = await db.RateRequests
-            .AsNoTracking()
-            .AnyAsync(
-                request => request.SellerUserId == currentUserId.Value && request.RateId == rateId,
-                context.RequestAborted
-            );
-
-        if (!ownsRate)
+        if (!await visibilityService.CanViewRateAsync(context, rateId, context.RequestAborted))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;
@@ -72,10 +64,15 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
         await next(context);
     }
 
-    private static bool IsRestrictedSeller(ClaimsPrincipal user)
+    private static bool IsRestrictedSeller(
+        ClaimsPrincipal user,
+        SellerVisibilityService visibilityService)
     {
         var roleValues = user.Claims
-            .Where(claim => claim.Type == ClaimTypes.Role || claim.Type.Equals("role", StringComparison.OrdinalIgnoreCase) || claim.Type.Equals("roles", StringComparison.OrdinalIgnoreCase))
+            .Where(claim =>
+                claim.Type == ClaimTypes.Role
+                || claim.Type.Equals("role", StringComparison.OrdinalIgnoreCase)
+                || claim.Type.Equals("roles", StringComparison.OrdinalIgnoreCase))
             .SelectMany(claim => Split(claim.Value))
             .Select(value => value.Trim().ToLowerInvariant())
             .ToArray();
@@ -120,5 +117,8 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
     }
 
     private static IEnumerable<string> Split(string value)
-        => value.Split(new[] { ' ', ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        => value.Split(
+            new[] { ' ', ',', ';' },
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+        );
 }

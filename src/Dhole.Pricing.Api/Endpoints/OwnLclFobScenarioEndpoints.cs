@@ -131,7 +131,6 @@ public static class OwnLclFobScenarioEndpoints
             "PA_DESTINATION_CHARGE",
             destinationPerCbm);
         var crTransferPerCbm = (panamaToCr + bunker) / crBase;
-        var warehousePerCbm = CostaRicaWarehouseOperation / CentralAmericaOperationBaseCbm;
 
         var scopedOrigins = OwnLclOriginScope.ScenarioOrigins(polCode, polName, OwnLclOriginScope.ShanghaiOriginSurcharges);
         var countries = Destinations.Select(destination =>

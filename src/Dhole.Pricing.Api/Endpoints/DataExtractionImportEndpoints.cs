@@ -10,9 +10,7 @@ namespace Dhole.Pricing.Api.Endpoints;
 
 public static class DataExtractionImportEndpoints
 {
-    public static IEndpointRouteBuilder MapDataExtractionImportEndpoints(
-        this IEndpointRouteBuilder app
-    )
+    public static IEndpointRouteBuilder MapDataExtractionImportEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/pricing/rate-import-batches/from-extraction", ImportFromExtractionAsync)
             .RequireIdempotency()
@@ -78,56 +76,25 @@ public static class DataExtractionImportEndpoints
         ImportRatesFromExtractionRequest request,
         ExtractAndPersistFclPricingImportService importService,
         HttpContext httpContext,
-        CancellationToken cancellationToken
-    )
+        CancellationToken cancellationToken)
     {
         if (request.PricingImportId == Guid.Empty || request.ExtractionExecutionId == Guid.Empty)
-        {
-            return EndpointResults.BadRequest(
-                "Pricing.InvalidExtractionImport",
-                "La extracción y el lote de Pricing son requeridos.",
-                httpContext
-            );
-        }
+            return EndpointResults.BadRequest("Pricing.InvalidExtractionImport", "La extracción y el lote de Pricing son requeridos.", httpContext);
 
-        if (
-            !Enum.TryParse<ImportSourceType>(
-                request.SourceType,
-                ignoreCase: true,
-                out var sourceType
-            ) || !Enum.IsDefined(sourceType)
-        )
-        {
-            return EndpointResults.BadRequest(
-                "Pricing.InvalidImportSourceType",
-                "El origen de la importación no es válido.",
-                httpContext
-            );
-        }
+        if (!Enum.TryParse<ImportSourceType>(request.SourceType, true, out var sourceType) || !Enum.IsDefined(sourceType))
+            return EndpointResults.BadRequest("Pricing.InvalidImportSourceType", "El origen de la importación no es válido.", httpContext);
 
-        if (
-            request.Response is null
-            || request.Response.Rows is null
-            || request.Response.Issues is null
-        )
-        {
-            return EndpointResults.BadRequest(
-                "Pricing.InvalidExtractionPayload",
-                "Data Extraction no envió un resultado completo.",
-                httpContext
-            );
-        }
+        if (request.Response is null || request.Response.Rows is null || request.Response.Issues is null)
+            return EndpointResults.BadRequest("Pricing.InvalidExtractionPayload", "Data Extraction no envió un resultado completo.", httpContext);
 
         try
         {
             var enrichedResponse = request.Response with
             {
-                Rows = request.Response.Rows
-                    .Select(row => row with
-                    {
-                        RawJson = EnrichRawJson(row.RawJson, request),
-                    })
-                    .ToArray(),
+                Rows = request.Response.Rows.Select(row => row with
+                {
+                    RawJson = EnrichRawJson(row.RawJson, request),
+                }).ToArray(),
             };
 
             var extraction = DataExtractionPricingImportMapper.ToApplicationResult(
@@ -147,58 +114,34 @@ public static class DataExtractionImportEndpoints
                 sourceType,
                 extraction,
                 requestedBy: null,
-                cancellationToken: cancellationToken
-            );
+                cancellationToken: cancellationToken);
 
             if (!result.Success)
-            {
                 return EndpointResults.BadRequest(
                     result.ErrorCode ?? "Pricing.ExtractionImportFailed",
                     result.ErrorMessage ?? "Data Extraction no pudo completar la importación.",
-                    httpContext
-                );
-            }
+                    httpContext);
 
-            return EndpointResults.Ok(
-                new ImportRatesFromExtractionResponse(
-                    request.PricingImportId,
-                    result.ExtractionExecutionId,
-                    result.PersistedRows,
-                    result.SkippedRows,
-                    result
-                        .Issues.Select(x => x.Code)
-                        .Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(x => x)
-                        .ToArray()
-                )
-            );
+            return EndpointResults.Ok(new ImportRatesFromExtractionResponse(
+                request.PricingImportId,
+                result.ExtractionExecutionId,
+                result.PersistedRows,
+                result.SkippedRows,
+                result.Issues.Select(x => x.Code).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToArray()));
         }
         catch (InvalidOperationException exception)
         {
-            return EndpointResults.BadRequest(
-                "Pricing.InvalidExtractionImport",
-                exception.Message,
-                httpContext
-            );
+            return EndpointResults.BadRequest("Pricing.InvalidExtractionImport", exception.Message, httpContext);
         }
     }
 
-    private static string EnrichRawJson(
-        string? rawJson,
-        ImportRatesFromExtractionRequest request
-    )
+    private static string EnrichRawJson(string? rawJson, ImportRatesFromExtractionRequest request)
     {
         object? extracted = null;
         if (!string.IsNullOrWhiteSpace(rawJson))
         {
-            try
-            {
-                extracted = JsonSerializer.Deserialize<JsonElement>(rawJson);
-            }
-            catch (JsonException)
-            {
-                extracted = rawJson;
-            }
+            try { extracted = JsonSerializer.Deserialize<JsonElement>(rawJson); }
+            catch (JsonException) { extracted = rawJson; }
         }
 
         return JsonSerializer.Serialize(new

@@ -48,9 +48,9 @@ static async Task EnsureDatabaseSchemaAsync(
 )
 {
     var timeoutSeconds = Math.Clamp(
-        configuration.GetValue("Pricing:WorkerStartup:DatabaseReadyTimeoutSeconds", 90),
+        configuration.GetValue("Pricing:WorkerStartup:DatabaseReadyTimeoutSeconds", 360),
         5,
-        300
+        600
     );
     var retryDelaySeconds = Math.Clamp(
         configuration.GetValue("Pricing:WorkerStartup:DatabaseRetryDelaySeconds", 2),

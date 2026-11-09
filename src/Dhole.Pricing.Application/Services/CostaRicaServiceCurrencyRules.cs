@@ -58,11 +58,13 @@ internal static class CostaRicaServiceCurrencyRules
         decimal amount,
         string sourceCurrencyCode,
         string targetCurrencyCode,
-        decimal exchangeRateSale
+        decimal exchangeRateSale,
+        string? sourceCurrencyName = null,
+        string? targetCurrencyName = null
     )
     {
-        var source = CanonicalCurrencyCode(sourceCurrencyCode);
-        var target = CanonicalCurrencyCode(targetCurrencyCode);
+        var source = CanonicalCurrencyCode(sourceCurrencyCode, sourceCurrencyName);
+        var target = CanonicalCurrencyCode(targetCurrencyCode, targetCurrencyName);
 
         if (source == target)
             return amount;
@@ -75,14 +77,27 @@ internal static class CostaRicaServiceCurrencyRules
             ("USD", "CRC") => decimal.Round(amount * exchangeRateSale, 2, MidpointRounding.AwayFromZero),
             ("CRC", "USD") => decimal.Round(amount / exchangeRateSale, 2, MidpointRounding.AwayFromZero),
             _ => throw new InvalidOperationException(
-                $"No se puede convertir automáticamente la moneda {sourceCurrencyCode} a {targetCurrencyCode}."
+                $"No se puede convertir automáticamente la moneda {sourceCurrencyCode} ({sourceCurrencyName ?? "sin nombre"}) a {targetCurrencyCode} ({targetCurrencyName ?? "sin nombre"})."
             ),
         };
     }
 
-    public static string CanonicalCurrencyCode(string? code)
+    public static string CanonicalCurrencyCode(string? code, string? currencyName = null)
     {
-        var raw = (code ?? string.Empty).Trim().ToUpperInvariant();
+        var canonicalCode = CanonicalCurrencyValue(code);
+        if (canonicalCode is "USD" or "CRC")
+            return canonicalCode;
+
+        var canonicalName = CanonicalCurrencyValue(currencyName);
+        if (canonicalName is "USD" or "CRC")
+            return canonicalName;
+
+        return canonicalCode;
+    }
+
+    private static string CanonicalCurrencyValue(string? value)
+    {
+        var raw = (value ?? string.Empty).Trim().ToUpperInvariant();
         if (raw is "USD" or "CRC")
             return raw;
 

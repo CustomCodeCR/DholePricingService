@@ -47,6 +47,15 @@ public static class RateEndpoints
 
         group.MapGet("/", GetRatesAsync).RequireScope(PricingConstants.Scopes.RateView);
 
+        group.MapGet("/crm-account/{accountId:guid}", GetAccountQuotesAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapGet("/crm-lead/{leadId:guid}", GetLeadQuotesAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapGet("/crm-legacy-candidates", GetLegacyCandidatesAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapPost("/crm-legacy-reconcile", ReconcileLegacyQuotesAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
+
         group
             .MapGet("/dashboard", GetRateDashboardAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
@@ -113,6 +122,151 @@ public static class RateEndpoints
         return app;
     }
 
+
+    public sealed record ReconcileLegacyQuotesRequest(
+        Guid AccountId, string ClientName, Guid[] RateIds);
+
+    // Normalize only presentation differences (vowel accents/whitespace).
+    // Keep Ñ, punctuation, words and business suffixes: broader fuzzy matches
+    // could silently associate quotations belonging to different companies.
+    private static string LegacyClientKey(string? clientName)
+    {
+        var key = (clientName ?? string.Empty).Trim().ToUpperInvariant()
+            .Replace('Á', 'A').Replace('É', 'E').Replace('Í', 'I')
+            .Replace('Ó', 'O').Replace('Ú', 'U').Replace('Ü', 'U')
+            .Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
+        while (key.Contains("  ", StringComparison.Ordinal))
+            key = key.Replace("  ", " ", StringComparison.Ordinal);
+        return key;
+    }
+
+    // Show candidates, never silently attach historical quotes by matching names.
+    // CRM first checks that the caller can see the requested account and supplies
+    // its stored legal name; Pricing requires its own rate viewing permission.
+    private static async Task<IResult> GetLegacyCandidatesAsync(
+        string? clientName, int? page, int? pageSize,
+        ServiceDbContext db, CancellationToken ct)
+    {
+        var expected = LegacyClientKey(clientName);
+        if (expected.Length is < 3 or > 220) return Results.BadRequest();
+        var number = Math.Clamp(page ?? 1, 1, 100000);
+        var size = Math.Clamp(pageSize ?? 30, 1, 100);
+        var query = db.RateHeaders.AsNoTracking().Where(x => !x.IsDeleted &&
+            x.ClientAccountId == null && x.ClientLeadId == null &&
+            x.ClientName != null &&
+            x.ClientName.Trim().ToUpper()
+                .Replace("Á", "A").Replace("É", "E").Replace("Í", "I")
+                .Replace("Ó", "O").Replace("Ú", "U").Replace("Ü", "U")
+                .Replace("\t", " ").Replace("\r", " ").Replace("\n", " ")
+                .Replace("  ", " ").Replace("  ", " ").Replace("  ", " ") == expected &&
+            (x.QuoNumber != null || x.RateCode.StartsWith("QUO-")));
+        var total = await query.CountAsync(ct);
+        var rows = await query.OrderByDescending(x => x.CreatedAtUtc)
+            .ThenBy(x => x.Id).Skip((number - 1) * size).Take(size)
+            .Select(x => new {
+                x.Id, x.QuoNumber, x.RateCode, x.ClientName,
+                x.ShipmentMode, x.Status, x.PolName, x.PoeName,
+                x.PodName, x.RevisionNumber, x.CreatedAtUtc
+            }).ToArrayAsync(ct);
+        return Results.Ok(new {
+            items = rows.Select(x => new {
+                pricingQuoteId = x.Id,
+                quoteNumberSnapshot = string.IsNullOrWhiteSpace(x.QuoNumber) ? x.RateCode : x.QuoNumber,
+                clientName = x.ClientName,
+                shipmentModeSnapshot = x.ShipmentMode.ToString(),
+                commercialStatusSnapshot = x.Status.ToString(),
+                linkedAt = x.CreatedAtUtc,
+                polName = x.PolName, poeName = x.PoeName, podName = x.PodName,
+                revisionNumber = x.RevisionNumber,
+                available = !string.IsNullOrWhiteSpace(x.PolName) &&
+                    (!string.IsNullOrWhiteSpace(x.PodName) ||
+                     !string.IsNullOrWhiteSpace(x.PoeName))
+            }).ToArray(), total, page = number, pageSize = size
+        });
+    }
+
+    // A human-confirmed reconciliation is atomic, conservative, and idempotent:
+    // never steal an existing lead/account link or change commercial amounts.
+    private static async Task<IResult> ReconcileLegacyQuotesAsync(
+        ReconcileLegacyQuotesRequest request, ServiceDbContext db, CancellationToken ct)
+    {
+        var expected = LegacyClientKey(request.ClientName);
+        var ids = request.RateIds?.Distinct().ToArray() ?? [];
+        if (request.AccountId == Guid.Empty || expected.Length is < 3 or > 220 ||
+            ids.Length is < 1 or > 100 || ids.Any(x => x == Guid.Empty))
+            return Results.BadRequest(new { message = "Cuenta, razón social y cotizaciones requeridas." });
+        var rates = await db.RateHeaders
+            .Where(x => ids.Contains(x.Id) && !x.IsDeleted).ToListAsync(ct);
+        if (rates.Count != ids.Length || rates.Any(x =>
+            x.ClientLeadId != null ||
+            (x.ClientAccountId != null && x.ClientAccountId != request.AccountId) ||
+            string.IsNullOrWhiteSpace(x.ClientName) ||
+            !string.Equals(LegacyClientKey(x.ClientName), expected,
+                StringComparison.Ordinal) ||
+            (x.QuoNumber == null && !x.RateCode.StartsWith("QUO-", StringComparison.OrdinalIgnoreCase))))
+            return Results.Conflict(new {
+                message = "Una o más cotizaciones no coinciden con la razón social o ya pertenecen a otra cuenta."
+            });
+        var modified = 0;
+        foreach (var rate in rates)
+        {
+            if (rate.ClientAccountId == request.AccountId) continue;
+            rate.ConfigureClientAccount(request.AccountId);
+            modified++;
+        }
+        if (modified > 0) await db.SaveChangesAsync(ct);
+        return Results.Ok(new { linked = modified, total = rates.Count });
+    }
+
+    // Quotes retain the CRM lead that originated them. CRM supplies only conversion
+    // mappings confirmed in its own database; never infer identity from a name.
+    private static Task<IResult> GetLeadQuotesAsync(Guid leadId, ServiceDbContext db,
+        int? page, int? pageSize, CancellationToken ct) =>
+        ListCustomerQuotes(db, Guid.Empty, [leadId], page, pageSize, ct);
+
+    private static Task<IResult> GetAccountQuotesAsync(Guid accountId, ServiceDbContext db,
+        string? convertedLeadIds, int? page, int? pageSize, CancellationToken ct)
+    {
+        if (accountId == Guid.Empty) return Task.FromResult<IResult>(Results.BadRequest());
+        Guid[] leads = [];
+        if (!string.IsNullOrWhiteSpace(convertedLeadIds))
+        {
+            var values = convertedLeadIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (values.Length > 100 || values.Any(x => !Guid.TryParse(x, out var id) || id == Guid.Empty))
+                return Task.FromResult<IResult>(Results.BadRequest());
+            leads = values.Select(Guid.Parse).Distinct().ToArray();
+        }
+        return ListCustomerQuotes(db, accountId, leads, page, pageSize, ct);
+    }
+
+    private static async Task<IResult> ListCustomerQuotes(ServiceDbContext db,
+        Guid accountId, Guid[] leadIds, int? page, int? pageSize, CancellationToken ct)
+    {
+        if (accountId == Guid.Empty && leadIds.Length == 0) return Results.BadRequest();
+        var number = Math.Clamp(page ?? 1, 1, 100000);
+        var size = Math.Clamp(pageSize ?? 30, 1, 100);
+        var query = db.RateHeaders.AsNoTracking()
+            .Where(x => !x.IsDeleted && (x.ClientAccountId == accountId ||
+                (x.ClientLeadId.HasValue && leadIds.Contains(x.ClientLeadId.Value))));
+        var total = await query.CountAsync(ct);
+        var snapshots = await query.OrderByDescending(x => x.CreatedAtUtc)
+            .ThenBy(x => x.Id).Skip((number - 1) * size).Take(size)
+            .Select(x => new { x.Id, x.QuoNumber, x.RateCode, x.ShipmentMode,
+                x.Status, x.PolName, x.PoeName, x.PodName, x.RevisionNumber,
+                x.CreatedAtUtc, x.ClientLeadId }).ToListAsync(ct);
+        var items = snapshots.Select(x => new {
+            pricingQuoteId = x.Id,
+            quoteNumberSnapshot = string.IsNullOrWhiteSpace(x.QuoNumber) ? x.RateCode : x.QuoNumber,
+            shipmentModeSnapshot = x.ShipmentMode.ToString(),
+            commercialStatusSnapshot = x.Status.ToString(),
+            linkedAt = x.CreatedAtUtc, polName = x.PolName,
+            poeName = x.PoeName, podName = x.PodName,
+            revisionNumber = x.RevisionNumber, clientLeadId = x.ClientLeadId,
+            available = !string.IsNullOrWhiteSpace(x.PolName) &&
+                (!string.IsNullOrWhiteSpace(x.PodName) || !string.IsNullOrWhiteSpace(x.PoeName))
+        }).ToArray();
+        return Results.Ok(new { items, total, page = number, pageSize = size });
+    }
 
     private static async Task<IResult> GetUsdCrcExchangeRateAsync(
         IPricingExchangeRateProvider exchangeRateProvider,

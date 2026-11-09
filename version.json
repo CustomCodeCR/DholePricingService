@@ -2,7 +2,8 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.5.20",
-  "ecosystemVersion": "1.12.18",
-  "releaseId": "DH-20261109-PRICING-FCL-PANAMA-ALLIN-049"
+  "version": "1.7.1",
+  "ecosystemVersion": "1.14.3",
+  "releaseId": "DH-20261109-SELLER-PRICING-STATUS-052",
+  "releaseStatus": "candidate-seller-pricing-status-staging-validation"
 }

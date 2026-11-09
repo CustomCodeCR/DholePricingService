@@ -20,6 +20,15 @@ jobs:
   deploy:
     runs-on: [self-hosted, linux, x64, dhole]
     steps:
+      - name: Normalize runner workspace permissions
+        run: |
+          set -euo pipefail
+          if [ -d "$GITHUB_WORKSPACE" ]; then
+            RUNNER_UID="$(id -u)"
+            RUNNER_GID="$(id -g)"
+            docker run --rm -v "$GITHUB_WORKSPACE:/workspace" alpine:3.22 \
+              sh -c "chown -R ${RUNNER_UID}:${RUNNER_GID} /workspace"
+          fi
       - uses: actions/checkout@v4
       - name: Load Dhole deployment infrastructure
         run: |
@@ -46,6 +55,50 @@ jobs:
           echo "DHOLE_ENV_FILE=$RUNNER_TEMP/dhole-env/.env.staging" >> "$GITHUB_ENV"
       - name: Verify staging server
         run: docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -f "$COMPOSE_OVERRIDE" -p "$COMPOSE_PROJECT" config -q
+      - name: Test Dynamics credential preflight without network
+        shell: bash
+        run: bash scripts/tests/test-check-dynamics-pricing-credential.sh
+      - name: Verify EF migrations are synchronized
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/src" \
+            -w /src \
+            -e HOME=/tmp \
+            -e DOTNET_CLI_HOME=/tmp \
+            -e GITHUB_ACTOR="$GITHUB_ACTOR" \
+            -e GITHUB_TOKEN="$GITHUB_TOKEN" \
+            mcr.microsoft.com/dotnet/sdk:10.0 \
+            bash -lc '
+              set -euo pipefail
+              export NuGetPackageSourceCredentials_github="Username=$GITHUB_ACTOR;Password=$GITHUB_TOKEN;ValidAuthenticationTypes=Basic"
+              dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile /src/NuGet.Config
+              # Compilar explícitamente para que Actions muestre los errores reales de C#
+              # en vez del mensaje opaco de dotnet-ef "Build failed".
+              dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
+                --no-restore \
+                --configuration Release \
+                --verbosity minimal
+              dotnet tool install --tool-path /tmp/ef dotnet-ef --version 10.0.9
+              /tmp/ef/dotnet-ef migrations has-pending-model-changes \
+                --no-build \
+                --configuration Release \
+                --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
+                --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj
+            '
+      - name: Reclaim Docker build space
+        run: |
+          set -euo pipefail
+          echo "Disk before cleanup:"
+          df -h /
+          docker builder prune -af || true
+          docker container prune -f || true
+          docker image prune -af || true
+          echo "Disk after cleanup:"
+          df -h /
       - name: Build images
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -67,7 +120,7 @@ jobs:
           # Docker health metadata can remain in "starting" for a while after the
           # API is already serving traffic. Validate the real endpoint as the
           # source of truth and keep Docker state only for hard failures.
-          for attempt in $(seq 1 24); do
+          for attempt in $(seq 1 72); do
             STATUS="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$CONTAINER_ID")"
 
             if [ "$STATUS" = "healthy" ]; then
