@@ -118,7 +118,7 @@ public sealed class RateCommercialQuoteSnapshotTests
     }
 
     private static RateHeader CreateRate() => RateHeader.Create(
-        rateCode: "QUOTE-PARITY", sourceImportFclRateId: null,
+        rateCode: "QUO-TEST1-PARITY", sourceImportFclRateId: null,
         agentId: Guid.NewGuid(), agentName: "Agente", agentCode: "AG",
         carrierId: Guid.NewGuid(), carrierName: "Proveedor", carrierCode: "PR",
         polId: Guid.NewGuid(), polName: "Origen", polCode: "ORG",
