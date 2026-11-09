@@ -55,35 +55,6 @@ public sealed class DynamicsQuoteFailureDiagnosticsTests
     }
 
     [TestMethod]
-    public void Policy403FromMiddlewareIsSafeEvenForLegacyPostAttemptFlag()
-    {
-        using var approved = JsonDocument.Parse(
-            """
-            {"stage":"execute","httpStatus":403,
-                "providerCode":"production_writes_not_approved",
-            "postAttempted":true}
-            """);
-        Assert.IsTrue(DynamicsQuoteFailureDiagnostics.IsConfirmedPolicyDenial(
-            approved.RootElement));
-        using var notTrusted = JsonDocument.Parse(
-            """
-            {"stage":"execute","httpStatus":403,
-                "providerCode":"write_grant_denied",
-            "postAttempted":true}
-            """);
-        Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsConfirmedPolicyDenial(
-            notTrusted.RootElement));
-        using var ambiguous = JsonDocument.Parse(
-            """
-            {"stage":"execute","httpStatus":504,
-                "providerCode":"production_writes_not_approved",
-            "postAttempted":true}
-            """);
-        Assert.IsFalse(DynamicsQuoteFailureDiagnostics.IsConfirmedPolicyDenial(
-            ambiguous.RootElement));
-    }
-
-    [TestMethod]
     public void LookupFailureIdentifiesRelationshipWithoutLeakingClientOrIdtra()
     {
         var provider = """

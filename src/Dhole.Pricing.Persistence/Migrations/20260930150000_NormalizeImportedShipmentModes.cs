@@ -36,7 +36,7 @@ public sealed class NormalizeImportedShipmentModes : Migration
                 FROM pricing."ImportFclRates"
             )
             UPDATE pricing."ImportFclRates" rates
-            SET shipment_mode = 'Air',
+            SET shipment_mode = 'AirLclColoader',
                 container_type_id = '321ae516-76a1-10ed-6d98-2117496f8ff4'::uuid,
                 container_type = 'AIR',
                 container_type_name = 'AIR',
@@ -85,7 +85,7 @@ public sealed class NormalizeImportedShipmentModes : Migration
                 FROM pricing."ImportFclRates"
             )
             UPDATE pricing."ImportFclRates" rates
-            SET shipment_mode = 'Lcl',
+            SET shipment_mode = 'LclColoader',
                 container_type_id = 'f4d19764-7556-2a0d-9222-42d7b48d00d8'::uuid,
                 container_type = 'LCL',
                 container_type_name = 'LCL',
@@ -135,7 +135,7 @@ public sealed class NormalizeImportedShipmentModes : Migration
 
             ALTER TABLE pricing."ImportFclRates"
                 ADD CONSTRAINT "CK_ImportFclRates_ShipmentMode"
-                CHECK (shipment_mode IN ('Unknown', 'Fcl', 'Lcl', 'Air'));
+                CHECK (shipment_mode IN ('Unknown', 'Fcl', 'LclColoader', 'AirLclColoader'));
 
             CREATE INDEX IF NOT EXISTS "IX_ImportFclRates_ShipmentMode"
                 ON pricing."ImportFclRates" (shipment_mode);

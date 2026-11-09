@@ -30,7 +30,6 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<ICompetitorRateObservationRepository, CompetitorRateObservationRepository>();
         services.AddScoped<IPricingMarketDecisionRepository, PricingMarketDecisionRepository>();
         services.AddScoped<IAutoPricingConfigurationRepository, AutoPricingConfigurationRepository>();
-        services.AddScoped<IImportRateAiFeedbackStore, ImportRateAiFeedbackStore>();
         services.AddScoped<IRateHeaderRepository, RateHeaderRepository>();
         services.AddScoped<IRateCommentStore, RateCommentStore>();
         services.AddScoped<IRateRevisionRepository, RateRevisionRepository>();

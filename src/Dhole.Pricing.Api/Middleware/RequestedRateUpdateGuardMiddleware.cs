@@ -9,34 +9,49 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Dhole.Pricing.Api.Middleware;
 
+/// <summary>
+/// Protege toda modificación de tarifas. Solo se permite actualizar la misma solicitud
+/// antes de que Pricing la envíe, o una tarifa ya enviada mientras el vendedor aún no
+/// la haya aceptado/rechazado. Toda actualización exige un motivo y queda auditada.
+/// </summary>
 public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
 {
-    public async Task InvokeAsync(HttpContext context, ServiceDbContext db, IPricingAuditService audit)
+    public async Task InvokeAsync(
+        HttpContext context,
+        ServiceDbContext db,
+        IPricingAuditService audit)
     {
-        if (!HttpMethods.IsPut(context.Request.Method) || !TryGetRateId(context.Request.Path, out var rateId))
+        if (!HttpMethods.IsPut(context.Request.Method)
+            || !TryGetRateId(context.Request.Path, out var rateId))
         {
             await next(context);
             return;
         }
 
-        var rateStatus = await db.RateHeaders.AsNoTracking()
+        var rateStatus = await db.RateHeaders
+            .AsNoTracking()
             .Where(x => x.Id == rateId && !x.IsDeleted)
             .Select(x => (RateStatus?)x.Status)
             .FirstOrDefaultAsync(context.RequestAborted);
+
         if (!rateStatus.HasValue)
         {
             await next(context);
             return;
         }
 
-        var linkedRequests = await db.RateRequests.AsNoTracking()
+        var linkedRequests = await db.RateRequests
+            .AsNoTracking()
             .Where(x => x.RateId == rateId)
             .Select(x => new { x.Id, x.Status })
             .ToListAsync(context.RequestAborted);
+
+        var requestStillOpen = linkedRequests.Any(x => x.Status == RateRequestStatus.Open);
         var decision = RateUpdateWindowPolicy.Evaluate(
             rateStatus.Value,
             linkedRequests.Count > 0,
-            linkedRequests.Any(x => x.Status == RateRequestStatus.Open));
+            requestStillOpen
+        );
 
         if (!decision.CanUpdate)
         {
@@ -54,12 +69,21 @@ public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
         string? updateReason = null;
         try
         {
-            using var document = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
+            using var document = await JsonDocument.ParseAsync(
+                context.Request.Body,
+                cancellationToken: context.RequestAborted
+            );
             updateReason = GetStringIgnoreCase(document.RootElement, "updateReason")
                 ?? GetStringIgnoreCase(document.RootElement, "reason");
         }
-        catch (JsonException) { }
-        finally { context.Request.Body.Position = 0; }
+        catch (JsonException)
+        {
+            // El endpoint normal devolverá el error de payload correspondiente.
+        }
+        finally
+        {
+            context.Request.Body.Position = 0;
+        }
 
         if (string.IsNullOrWhiteSpace(updateReason) || updateReason.Trim().Length < 5)
         {
@@ -73,22 +97,27 @@ public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
         }
 
         await next(context);
-        if (context.Response.StatusCode >= 400) return;
 
-        await audit.PublishAsync(new PricingAuditEvent(
-            EventType: "pricing.rate.update-reason",
-            Action: PricingAuditActions.Updated,
-            EntityType: PricingAuditEntityTypes.RateHeader,
-            EntityId: rateId,
-            ActorUserId: context.GetCurrentUserId(),
-            Payload: new
-            {
-                UpdateReason = updateReason.Trim(),
-                RequestIds = linkedRequests.Select(x => x.Id).ToArray(),
-                PreviousStatus = rateStatus.Value.ToString(),
-                UpdateWindow = decision.UpdateWindow,
-                Source = "RateUpdateGuard",
-            }), context.RequestAborted);
+        if (context.Response.StatusCode >= 400)
+            return;
+
+        await audit.PublishAsync(
+            new PricingAuditEvent(
+                EventType: "pricing.rate.update-reason",
+                Action: PricingAuditActions.Updated,
+                EntityType: PricingAuditEntityTypes.RateHeader,
+                EntityId: rateId,
+                ActorUserId: context.GetCurrentUserId(),
+                Payload: new
+                {
+                    UpdateReason = updateReason.Trim(),
+                    RequestIds = linkedRequests.Select(x => x.Id).ToArray(),
+                    PreviousStatus = rateStatus.Value.ToString(),
+                    UpdateWindow = decision.UpdateWindow,
+                    Source = "RateUpdateGuard",
+                }
+            ),
+            context.RequestAborted);
     }
 
     private static bool TryGetRateId(PathString path, out Guid rateId)
@@ -98,7 +127,11 @@ public sealed class RequestedRateUpdateGuardMiddleware(RequestDelegate next)
         if (segments.Length != 4
             || !segments[0].Equals("api", StringComparison.OrdinalIgnoreCase)
             || !segments[1].Equals("pricing", StringComparison.OrdinalIgnoreCase)
-            || !segments[2].Equals("rates", StringComparison.OrdinalIgnoreCase)) return false;
+            || !segments[2].Equals("rates", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
         return Guid.TryParse(segments[3], out rateId);
     }
 

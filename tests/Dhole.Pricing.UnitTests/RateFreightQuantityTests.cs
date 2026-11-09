@@ -216,6 +216,34 @@ public sealed class RateFreightQuantityTests
     }
 
     [TestMethod]
+    [DataRow("24 pies", "24FT", "24")]
+    [DataRow("26 pies / 7 TON", "26FT", "26")]
+    [DataRow("48 pies", "48FT", "48")]
+    [DataRow("53 pies", "53FT", "53")]
+    public void Ftl_RateName_UsesQuantityAndEquipmentSize(string equipmentName, string equipmentCode, string expectedSize)
+    {
+        var rate = CreateRate(containerQuantity: 1);
+        var equipmentId = Guid.NewGuid();
+
+        rate.ReplaceContainerAllocations(
+            [new RateContainerAllocationSpec(equipmentId, equipmentName, equipmentCode, 1)],
+            updatedBy: null
+        );
+        rate.ConfigureShipment(
+            ShipmentMode.Ftl,
+            totalPackages: 0,
+            totalPallets: 0,
+            totalWeightKg: 0m,
+            totalVolumeCbm: 0m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+
+        StringAssert.Contains(rate.RateName, $"Tarifa 1x{expectedSize} -");
+    }
+
+    [TestMethod]
     [DataRow(CostDetailType.Freight)]
     [DataRow(CostDetailType.InlandTransport)]
     public void CreateCost_FreightTypes_AreAlwaysMarkedPerContainer(CostDetailType detailType)
@@ -312,9 +340,62 @@ public sealed class RateFreightQuantityTests
     }
 
     [TestMethod]
-    public void MiamiLcl_CftBillingDoesNotUseTheOneCbmMinimum()
+    public void MiamiLcl_PerChargeableCft_PreservesActualFreightQuantityWithoutOneCbmFloor()
+    {
+        var rate = CreateRate(containerQuantity: 1);
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 171m,
+            totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+
+        // Miami determines its CFT by the 14.16 kg/CFT rule and uses a monetary
+        // freight minimum. Do not turn the explicit 12.076... CFT into 35.315 CFT.
+        var miamiChargeableCft = 171m / 14.16m;
+        var detail = rate.AddRateDetail(
+            rate.Id, null, "Flete Miami → Costa Rica",
+            CostDetailType.Freight, CostType.Variable, ChargeBasis.PerChargeableCft,
+            rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
+            3m, 24.84m, "LCL PROPIO · Plan Miami: D", miamiChargeableCft, null
+        );
+        rate.SetAmounts(null);
+
+        Assert.AreEqual(1m, rate.ChargeableQuantity); // Legacy header minimum for CBM products.
+        Assert.AreEqual(miamiChargeableCft, detail.Quantity);
+        Assert.AreEqual(decimal.Round(miamiChargeableCft * 24.84m, 2, MidpointRounding.AwayFromZero), rate.TotalSaleAmount);
+        Assert.IsTrue(detail.Quantity < 35.3146667m);
+    }
+
+    [TestMethod]
+    public void MiamiLcl_PerChargeableCft_FallbackUsesActualVolumeNotOneCbm()
+    {
+        var rate = CreateRate(containerQuantity: 1);
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 171m,
+            totalVolumeCbm: 0.16m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
+        );
+
+        var quantity = rate.ResolveChargeQuantity(ChargeBasis.PerChargeableCft);
+        Assert.AreEqual(171m / 500m * 35.31466672148859m, quantity);
+        Assert.AreEqual(1m, rate.ResolveChargeQuantity(ChargeBasis.PerChargeableCbm));
+    }
+
+    [TestMethod]
+    public void ConfigureShipment_MiamiLcl_UsesActualFractionalCbmNotOneCbmMinimum()
     {
         var rate = CreateRate(1, "Miami, Estados Unidos", "USMIA");
+
         rate.ConfigureShipment(
             ShipmentMode.Lcl,
             totalPackages: 1,
@@ -325,17 +406,31 @@ public sealed class RateFreightQuantityTests
             cargoLinesJson: null,
             updatedBy: null
         );
-        Assert.AreEqual(0.342m, rate.ChargeableQuantity);
-        Assert.AreEqual(0.342m * 35.31466672148859m,
-            rate.ResolveChargeQuantity(ChargeBasis.PerChargeableCft));
 
-        var detail = rate.AddRateDetail(
-            rate.Id, null, "Flete Miami → Costa Rica",
-            CostDetailType.Freight, CostType.Variable, ChargeBasis.PerChargeableCft,
-            rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
-            3m, 24.84m, null, 12.076m, null
+        Assert.AreEqual(0.342m, rate.ChargeableQuantity);
+        var cft = rate.ResolveChargeQuantity(ChargeBasis.PerChargeableCft);
+        Assert.AreEqual(0.342m * 35.31466672148859m, cft);
+        Assert.IsTrue(cft < 35.315m);
+    }
+
+    [TestMethod]
+    public void ConfigureShipment_NonMiamiLcl_RetainsOneCbmMinimum()
+    {
+        var rate = CreateRate(1);
+
+        rate.ConfigureShipment(
+            ShipmentMode.Lcl,
+            totalPackages: 1,
+            totalPallets: 1,
+            totalWeightKg: 0m,
+            totalVolumeCbm: 0.342m,
+            kgPerCbm: 500m,
+            cargoLinesJson: null,
+            updatedBy: null
         );
-        Assert.AreEqual(12.076m, detail.Quantity);
+
+        Assert.AreEqual(1m, rate.ChargeableQuantity);
+        Assert.AreEqual(1m, rate.ResolveChargeQuantity(ChargeBasis.PerChargeableCbm));
     }
 
     [TestMethod]

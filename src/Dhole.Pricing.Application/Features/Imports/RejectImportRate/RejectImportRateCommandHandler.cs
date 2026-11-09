@@ -54,13 +54,15 @@ public sealed class RejectImportRateCommandHandler(
                 return Result.Failure(PricingErrors.ImportFclRateNotFound);
             }
 
-            importRate.ExpireIfNeeded(DateTime.UtcNow.Date, command.RejectedBy);
+            // El rechazo es una decisión administrativa explícita y no depende de que
+            // la vigencia comercial siga activa. Expirar la importación antes de validar
+            // el rechazo convertía una PreAuthorized vencida en Expired y provocaba un
+            // ImportFclRateInvalidStatus aunque la bandeja permitiera seleccionarla.
+            // La expiración se evalúa en los flujos de uso/consulta de tarifas, no aquí.
 
-            if (importRate.Status == ImportStatus.Expired)
-            {
-                return Result.Failure(PricingErrors.ImportFclRateInvalidStatus);
-            }
-
+            // Rejected se conserva para que el endpoint sea idempotente. Además de
+            // Pending y PreAuthorized, una tarifa Approved que todavía no haya sido
+            // utilizada como tarifa oficial puede revertirse a Rejected.
             if (importRate.Status == ImportStatus.Rejected)
             {
                 entities.Add(importRate);

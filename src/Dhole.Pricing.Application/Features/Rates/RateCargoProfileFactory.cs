@@ -9,12 +9,15 @@ internal sealed record RateCargoProfile(
     int TotalPallets,
     decimal TotalWeightKg,
     decimal TotalVolumeCbm,
+    decimal ChargeableVolumeCbm,
     decimal KgPerCbm,
     string? CargoLinesJson
 );
 
 internal static class RateCargoProfileFactory
 {
+    internal const decimal ForcedNonStackableHeightCm = 177.8m;
+    internal const decimal NonStackableBillableHeightCm = 266m;
     internal const decimal LandConsolidatedMaxHeightCm = 270m;
     internal const decimal MaritimeConsolidatedMaxHeightCm = 269m;
 
@@ -35,11 +38,13 @@ internal static class RateCargoProfileFactory
 
         if (lines.Count == 0)
         {
+            var fallbackVolume = Math.Max(fallbackVolumeCbm, 0m);
             return new RateCargoProfile(
                 Math.Max(fallbackPackages, 0),
                 Math.Max(fallbackPallets, 0),
                 Math.Max(fallbackWeightKg, 0m),
-                Math.Max(fallbackVolumeCbm, 0m),
+                fallbackVolume,
+                fallbackVolume,
                 effectiveFactor,
                 null
             );
@@ -51,7 +56,8 @@ internal static class RateCargoProfileFactory
         var packages = 0;
         var pallets = 0;
         var weight = 0m;
-        var volume = 0m;
+        var physicalVolume = 0m;
+        var chargeableVolume = 0m;
 
         foreach (var line in lines)
         {
@@ -79,16 +85,27 @@ internal static class RateCargoProfileFactory
                 );
             }
 
-            var lineVolume = line.LengthCm * line.WidthCm * line.HeightCm / 1_000_000m;
-            // Antes se ignoraba la cantidad de tarimas al calcular los CBM.
-            lineVolume *= Math.Max(Math.Max(line.Packages, line.Pallets), 1);
+            // Las tarimas también son unidades físicas que multiplican el volumen; los bultos declarados no.
+            var units = Math.Max(Math.Max(line.Packages, line.Pallets), 1);
+            var forcedNonStackable = line.HeightCm >= ForcedNonStackableHeightCm;
+            var isStackable = !forcedNonStackable && line.IsStackable;
+            var billableHeightCm = isStackable
+                ? line.HeightCm
+                : Math.Max(NonStackableBillableHeightCm, line.HeightCm);
+
+            var linePhysicalVolume =
+                line.LengthCm * line.WidthCm * line.HeightCm * units / 1_000_000m;
+            var lineBillableVolume =
+                line.LengthCm * line.WidthCm * billableHeightCm * units / 1_000_000m;
+            var deadSpaceCbm = Math.Max(0m, lineBillableVolume - linePhysicalVolume);
 
             var unitType = line.UnitType is "Pallet" or "Loose" or "Box" or "Other"
                 ? line.UnitType : line.Pallets > 0 ? "Pallet" : "Loose";
             packages += line.Packages;
             pallets += line.Pallets;
             weight += line.WeightKg;
-            volume += lineVolume;
+            physicalVolume += linePhysicalVolume;
+            chargeableVolume += lineBillableVolume;
 
             snapshots.Add(
                 new RateCargoLineDto(
@@ -99,8 +116,11 @@ internal static class RateCargoProfileFactory
                     line.LengthCm,
                     line.WidthCm,
                     line.HeightCm,
-                    Math.Round(lineVolume, 6, MidpointRounding.AwayFromZero),
-                    UnitType: unitType
+                    Math.Round(linePhysicalVolume, 6, MidpointRounding.AwayFromZero),
+                    isStackable,
+                    Math.Round(lineBillableVolume, 6, MidpointRounding.AwayFromZero),
+                    Math.Round(deadSpaceCbm, 6, MidpointRounding.AwayFromZero),
+                    unitType
                 )
             );
         }
@@ -116,7 +136,8 @@ internal static class RateCargoProfileFactory
                     ? fallbackWeightKg
                     : weight,
                 4, MidpointRounding.AwayFromZero),
-            Math.Round(volume, 6, MidpointRounding.AwayFromZero),
+            Math.Round(physicalVolume, 6, MidpointRounding.AwayFromZero),
+            Math.Round(chargeableVolume, 6, MidpointRounding.AwayFromZero),
             effectiveFactor,
             JsonSerializer.Serialize(snapshots)
         );
@@ -137,6 +158,8 @@ internal static class RateCargoProfileFactory
             .Replace("_", string.Empty, StringComparison.Ordinal)
             .Replace(" ", string.Empty, StringComparison.Ordinal);
 
+        // Aéreo se persiste históricamente como LCL en algunos flujos. No se le aplica
+        // el límite físico del consolidado marítimo.
         if (
             normalizedEquipment.Contains("AIR", StringComparison.Ordinal)
             || normalizedEquipment.Contains("ULD", StringComparison.Ordinal)

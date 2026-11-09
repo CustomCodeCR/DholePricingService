@@ -10,6 +10,8 @@ namespace Dhole.Pricing.Api.Endpoints;
 
 public static class OwnLclConsolidationEndpoints
 {
+    private const decimal ForcedNonStackableHeightCm = 177.8m;
+    private const decimal NonStackableBillableHeightCm = 266m;
     private const decimal DefaultMaximumCbm = 50m;
     private const decimal DefaultFreightProfitPerCbm = 5.69m;
     private const decimal CentralAmericaOperationBaseCbm = 70m;
@@ -382,9 +384,30 @@ public static class OwnLclConsolidationEndpoints
     private static CargoCalculationLine CalculateCargoLine(OwnLclCargoLineRequest line)
     {
         var units = Math.Max(0, line.Units);
-        var dim = Math.Max(0m, line.LengthCm) * Math.Max(0m, line.WidthCm) * Math.Max(0m, line.HeightCm) * units / 1_000_000m;
+        var lengthCm = Math.Max(0m, line.LengthCm);
+        var widthCm = Math.Max(0m, line.WidthCm);
+        var heightCm = Math.Max(0m, line.HeightCm);
+        var forcedNonStackable = heightCm >= ForcedNonStackableHeightCm;
+        var isStackable = !forcedNonStackable && (line.IsStackable ?? true);
+        var billableHeightCm = isStackable
+            ? heightCm
+            : Math.Max(NonStackableBillableHeightCm, heightCm);
+
+        var physical = lengthCm * widthCm * heightCm * units / 1_000_000m;
+        var dimensional = lengthCm * widthCm * billableHeightCm * units / 1_000_000m;
+        var deadSpace = Math.Max(0m, dimensional - physical);
         var weight = Math.Max(0m, line.TotalWeightKg) / 500m;
-        return new CargoCalculationLine(line.Description?.Trim() ?? string.Empty, units, line.TotalWeightKg, dim, weight, Math.Max(dim, weight));
+
+        return new CargoCalculationLine(
+            line.Description?.Trim() ?? string.Empty,
+            units,
+            line.TotalWeightKg,
+            dimensional,
+            weight,
+            Math.Max(dimensional, weight),
+            physical,
+            deadSpace,
+            isStackable);
     }
 
     private static void AddDestinationLines(

@@ -29,9 +29,8 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
             return;
         }
 
-        // El browse y dashboard operativos de Pricing no se exponen a vendedores porque
-        // no están filtrados por alcance comercial. Supervisores y jefes consultan el
-        // reporte de solicitudes visible para ellos y desde ahí pueden abrir cada tarifa.
+        // El vendedor consume sus tarifas por /api/pricing/seller-rates. Bloquear el browse
+        // y el dashboard general evita que pueda enumerar o inferir tarifas de otros vendedores.
         // Importante: esta restricción aplica únicamente a lecturas. Las escrituras deben
         // continuar hacia la autorización del endpoint para respetar pricing.rate.create/update.
         if (HttpMethods.IsGet(context.Request.Method)
@@ -78,36 +77,43 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
             .Select(value => value.Trim().ToLowerInvariant())
             .ToArray();
 
-        var sellerRole = roleValues.Any(role =>
-            role is "vendedor" or "seller" or "ventas"
-            || role.Contains("vendedor")
-            || role.Contains("seller"));
+        var sellerRole = roleValues.Any(role => role is "vendedor" or "seller" or "ventas" || role.Contains("vendedor") || role.Contains("seller"));
 
-        var hasRequestCreate = visibilityService.HasScope(
-            user,
-            PricingConstants.Scopes.RateRequestCreate
-        );
+        var scopes = user.Claims
+            .Where(claim => claim.Type.Equals("scp", StringComparison.OrdinalIgnoreCase) || claim.Type.Equals("scope", StringComparison.OrdinalIgnoreCase) || claim.Type.Equals("scopes", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(claim => Split(claim.Value))
+            .Select(value => value.Trim().ToLowerInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        var hasRequestCreate = HasScope(scopes, PricingConstants.Scopes.RateRequestCreate);
         var hasPricingOperatorAccess =
-            visibilityService.HasScope(user, PricingConstants.Scopes.RateCreate)
-            || visibilityService.HasScope(user, PricingConstants.Scopes.RateUpdate)
-            || visibilityService.HasScope(user, PricingConstants.Scopes.RateDelete)
-            || visibilityService.HasScope(user, PricingConstants.Scopes.RateApproveLowMargin)
-            || visibilityService.HasScope(user, PricingConstants.Scopes.RateApproveFreight)
-            || visibilityService.HasScope(user, PricingConstants.Scopes.ImportFclRateReview)
-            || visibilityService.HasScope(user, PricingConstants.Scopes.ImportFclRateApprove)
-            || visibilityService.HasScope(user, PricingConstants.Scopes.ImportFclRateReject)
-            || visibilityService.HasScope(user, PricingConstants.Scopes.ImportFclRateCreateAsRate);
+            HasScope(scopes, PricingConstants.Scopes.RateCreate)
+            || HasScope(scopes, PricingConstants.Scopes.RateUpdate)
+            || HasScope(scopes, PricingConstants.Scopes.RateDelete)
+            || HasScope(scopes, PricingConstants.Scopes.RateApproveLowMargin)
+            || HasScope(scopes, PricingConstants.Scopes.RateApproveFreight)
+            || HasScope(scopes, PricingConstants.Scopes.ImportFclRateReview)
+            || HasScope(scopes, PricingConstants.Scopes.ImportFclRateApprove)
+            || HasScope(scopes, PricingConstants.Scopes.ImportFclRateReject)
+            || HasScope(scopes, PricingConstants.Scopes.ImportFclRateCreateAsRate);
 
         // A commercial supervisor may retain the Vendedor role. A view-all scope
         // together with rate.view grants read-only system-wide quotation visibility;
         // do not classify that user as restricted to their personal rates.
         var hasGlobalReadAccess =
-            visibilityService.HasScope(user, PricingConstants.Scopes.RateRequestViewAll)
-            && visibilityService.HasScope(user, PricingConstants.Scopes.RateView);
+            HasScope(scopes, PricingConstants.Scopes.RateRequestViewAll)
+            && HasScope(scopes, PricingConstants.Scopes.RateView);
 
         var sellerCapability = sellerRole || hasRequestCreate;
         return sellerCapability && !hasPricingOperatorAccess && !hasGlobalReadAccess;
+    }
+
+    private static bool HasScope(HashSet<string> scopes, string required)
+    {
+        var normalized = required.Trim().ToLowerInvariant();
+        if (scopes.Contains("*") || scopes.Contains(normalized)) return true;
+        return scopes.Any(scope => scope.EndsWith(".*", StringComparison.Ordinal)
+            && normalized.StartsWith(scope[..^1], StringComparison.Ordinal));
     }
 
     private static IEnumerable<string> Split(string value)

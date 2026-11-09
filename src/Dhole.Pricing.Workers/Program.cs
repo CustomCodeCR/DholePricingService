@@ -34,9 +34,10 @@ builder.Services.AddPricingWorker(builder.Configuration);
 
 var host = builder.Build();
 
-// El API es el único dueño de las migraciones. El Worker espera a que el esquema
-// quede listo antes de consumir la cola, evitando competir con el API por
-// __EFMigrationsHistory durante un deploy.
+// El Worker persiste importaciones directamente en PostgreSQL. No puede asumir
+// que el API terminó de migrar antes de comenzar a consumir la cola. Aplique las
+// migraciones pendientes aquí también; EF/Npgsql serializa la migración y el Worker
+// no comenzará a procesar trabajos hasta que su propio modelo y la base estén alineados.
 await EnsureDatabaseSchemaAsync(host.Services, builder.Configuration);
 
 await host.RunAsync();
@@ -68,6 +69,8 @@ static async Task EnsureDatabaseSchemaAsync(
 
             if (await dbContext.Database.CanConnectAsync())
             {
+                await DatabaseMigrationCoordinator.MigrateAsync(dbContext);
+
                 var pending = await dbContext.Database.GetPendingMigrationsAsync();
                 if (!pending.Any())
                 {
@@ -118,7 +121,7 @@ static async Task EnsureDatabaseSchemaAsync(
 
     throw new InvalidOperationException(
         "Pricing Worker no pudo iniciar porque la base de datos no alcanzó el esquema esperado. "
-            + "El API debe completar las migraciones antes de que el Worker consuma trabajos.",
+            + "Se intentaron aplicar las migraciones automáticamente antes de consumir trabajos.",
         lastError
     );
 }

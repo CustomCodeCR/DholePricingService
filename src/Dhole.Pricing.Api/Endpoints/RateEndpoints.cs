@@ -496,7 +496,7 @@ public static class RateEndpoints
                     options.Add(new PricingQuoteGroupDocumentItem(
                         rate.QuoNumber ?? rate.RateCode,
                         route,
-                        rate.CarrierName ?? string.Empty,
+                        rate.CarrierName,
                         oceanFreight.ToString("N2", CultureInfo.GetCultureInfo("en-US")),
                         freightCurrency,
                         json?.ToJsonString() ?? dataFactory.CreateDataJson(rate)));
@@ -669,7 +669,7 @@ public static class RateEndpoints
                 quoteDate,
                 validFrom,
                 validTo,
-                httpContext.Request.Query["executiveNames"].Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value!).ToArray(),
+                httpContext.Request.Query["executiveNames"].ToArray(),
                 new RateMultiSelectFilters(
                     ReadStatusOptions(httpContext),
                     ReadGuidOptions(httpContext, "agentIds"),
@@ -744,6 +744,8 @@ public static class RateEndpoints
         Func<ICommandDispatcher, Task<TResult>> dispatch
     )
     {
+        // The group endpoint owns one scoped dispatcher and one outer EF transaction.
+        // Creating a new scope for every child would commit partial QUOs.
         if (httpContext.Items.TryGetValue(GroupDispatcherKey, out var shared)
             && shared is ICommandDispatcher groupDispatcher)
             return await dispatch(groupDispatcher);
@@ -968,8 +970,6 @@ public static class RateEndpoints
             )
             {
                 FinalBackupStorageIds = request.FinalBackupStorageIds ?? [],
-                ClientAccountId = request.ClientAccountId,
-                ClientLeadId = request.ClientLeadId,
                 OtherReferences = request.OtherReferences,
                 LclGroupAgentId = request.LclGroupAgentId,
                 PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
@@ -997,6 +997,7 @@ public static class RateEndpoints
             httpContext.Items[GroupCreatedIdKey] = result.Value;
         return EndpointResults.FromResult(result, httpContext);
     }
+
 
     /// <summary>
     /// Creates all FCL routes in the same PostgreSQL transaction. Individual
@@ -1536,8 +1537,6 @@ public static class RateEndpoints
             )
             {
                 FinalBackupStorageIds = request.FinalBackupStorageIds,
-                ClientAccountId = request.ClientAccountId,
-                ClientLeadId = request.ClientLeadId,
                 OtherReferences = request.OtherReferences,
                 LclGroupAgentId = request.LclGroupAgentId,
                 SourceImportFclRateId = request.SourceImportFclRateId,
@@ -1756,6 +1755,7 @@ public static class RateEndpoints
         {
             return Results.Forbid();
         }
+
 
         // Discarded alternatives cannot be sent, accepted, rejected or reopened.
         var groupedSelection = await db.Database.SqlQueryRaw<Guid>(

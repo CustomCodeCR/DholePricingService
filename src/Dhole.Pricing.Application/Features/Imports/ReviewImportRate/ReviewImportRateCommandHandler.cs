@@ -118,7 +118,6 @@ public sealed class ReviewImportRateCommandHandler(
         };
 
         var before = PricingAuditSnapshots.From(importRate);
-        var beforeJson = JsonSerializer.Serialize(before);
         var podSnapshot = pod is null
             ? new CatalogSnapshot(importRate.PodId, importRate.PodName, importRate.PodCode, importRate.PodSlug)
             : Snapshot(pod);

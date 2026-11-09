@@ -71,7 +71,6 @@ app.UseMiddleware<SellerRateVisibilityMiddleware>();
 app.UseMiddleware<AuditExecutionContextMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<RateCommercialIdentityGuardMiddleware>();
-app.UseMiddleware<RateRequestSubmissionGuardMiddleware>();
 app.UseMiddleware<RateEditCreateParityMiddleware>();
 app.UseMiddleware<IdempotencyMiddleware>();
 app.UseMiddleware<AuditEndpointMiddleware>();
@@ -121,6 +120,7 @@ app.MapLclRateSourceEndpoints();
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
+
     await DatabaseMigrationCoordinator.MigrateAsync(dbContext);
     await TigsaFtlTariffSeeder.SeedAsync(scope.ServiceProvider);
 }

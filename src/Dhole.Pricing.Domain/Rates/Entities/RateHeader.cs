@@ -274,26 +274,6 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public IReadOnlyCollection<RateService> RateServices => _rateServices.AsReadOnly();
     public IReadOnlyCollection<RateContainerAllocation> RateContainers => _rateContainers.AsReadOnly();
 
-    // The CRM account identifier is stable across name and seller changes.
-    // Older update clients omit the identifier; preserve the existing link.
-    public void ConfigureClientAccount(Guid? accountId)
-    {
-        if (accountId is { } value && value != Guid.Empty)
-        {
-            ClientAccountId = value;
-            ClientLeadId = null;
-        }
-    }
-
-    public void ConfigureClientLead(Guid? leadId)
-    {
-        if (leadId is { } value && value != Guid.Empty)
-        {
-            ClientLeadId = value;
-            ClientAccountId = null;
-        }
-    }
-
     public void ConfigureLclGroupAgent(Guid? agentId, string? agentName, string? agentCode)
     {
         LclGroupAgentId = agentId is { } value && value != Guid.Empty ? value : null;
