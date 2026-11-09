@@ -65,6 +65,8 @@ public sealed record UpdateRateRequest(
 )
 {
     // Referencias internas de Dhole; no se exportan como IDTRA a Dynamics.
+    public Guid? ClientAccountId { get; init; }
+    public Guid? ClientLeadId { get; init; }
     public string? OtherReferences { get; init; }
     public string? CarrierRoute { get; init; }
     public string? CarrierComments { get; init; }
