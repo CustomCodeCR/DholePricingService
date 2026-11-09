@@ -163,7 +163,7 @@ public static class SellerRateEndpoints
 
         // Generating the PDF for a revision still being priced would expose an
         // unpublished offer. The prior issued PDF remains in the seller's email.
-        var hasUnpublishedRevision = rate.Status is RateStatus.AcceptedByClient or RateStatus.RejectedByClient
+        var hasUnpublishedRevision = (rate.Status is RateStatus.AcceptedByClient or RateStatus.RejectedByClient)
             && await db.Set<RateRevision>().AsNoTracking()
                 .AnyAsync(x => x.RateHeaderId == rateId && x.RevisionNumber < rate.RevisionNumber
                     && (x.Status == "Sent" || x.Status == "RequestedByClient"), cancellationToken);
