@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.19] - 2026-11-09
+
+- Endpoint opt-in `groupQuotes=true` para Gestión de tarifas: la MultiQUO entrega una única fila representativa (la seleccionada, o el ancla inicial), con conteo, paginación y número principal correctos.
+- Conserva cada subcotización y su ID original, el acceso a los detalles y la compatibilidad de los demás consumidores REST.
+- Release coordinado DH-20261109-PRICING-QUO-PORT-ISOLATION-048 con DholeWeb 1.12.17, que aísla el POE y los campos marítimos manuales por alternativa.
+- Requiere compilación, pruebas y validación de staging antes de promover a master.
+
 ## [1.5.18] - 2026-11-08
 
 - Release coordinado `DH-20261108-PRICING-RATE-SELECTION-047` con DholeWeb 1.12.16: el asistente FCL vuelve a conservar el RateId elegido por POE/naviera y se bloquea por CI cualquier binding de estado eliminado durante las transformaciones Vite.
