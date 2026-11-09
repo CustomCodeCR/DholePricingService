@@ -1,3 +1,7 @@
+## [1.6.0] - 2026-11-09
+
+- Asociación y migración manual de cotizaciones antiguas a cuentas CRM con UUID sin alterar valores.
+
 # Changelog
 
 ## [1.5.22] - 2026-11-09
