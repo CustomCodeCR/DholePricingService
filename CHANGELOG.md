@@ -1,4 +1,4 @@
-## 1.6.0 — 2026-11-09
+## [1.6.0] - 2026-11-09
 - Vinculación estable de cotizaciones a cuentas/prospectos del CRM; conciliación manual de historial y migraciones de UUID.
 
 # Changelog
