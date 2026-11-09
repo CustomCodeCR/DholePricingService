@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.21] - 2026-11-09
+
+- PATCH: endpoint de tarifas del vendedor distingue la revisión comercial sin publicar (`revisionPending`) de una solicitud de modificación que permanece abierta (`pricingModificationActive`).
+- No cambia los estados de envío, el PDF ni la autorización; preserva la última cotización enviada y oculta la revisión nueva hasta su publicación.
+- Release DH-20261109-SELLER-PRICING-STATUS-052 (master candidate); DholeWeb 1.12.21 / ecosistema 1.12.21.
+
 ## [1.5.20] - 2026-11-09
 
 - MultiQUO establece UseAllInPresentation por alternativa FCL Panamá → Costa Rica en el servidor; no hereda el estado ALL IN de otro POE.

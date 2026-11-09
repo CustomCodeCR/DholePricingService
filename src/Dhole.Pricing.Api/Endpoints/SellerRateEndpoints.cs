@@ -264,14 +264,25 @@ public static class SellerRateEndpoints
             .FirstOrDefaultAsync(cancellationToken);
 
         if (published is null) return null; // Never reveal a quote never issued.
-        return ToHistoricalSellerView(rate, published);
+        // An unpublished draft is not synonymous with an open Pricing request.
+        // Keep the issued revision private from draft changes, but expose the
+        // actual work-queue state separately for accurate seller dashboards.
+        var openModificationPayloads = await db.RateRequests.AsNoTracking()
+            .Where(request => request.RateId == rate.Id
+                && request.Status == RateRequestStatus.Open)
+            .Select(request => request.PayloadJson)
+            .ToListAsync(cancellationToken);
+        var pricingModificationActive = openModificationPayloads
+            .Any(RateModificationRequestPayload.IsModification);
+
+        return ToHistoricalSellerView(rate, published, pricingModificationActive);
     }
 
     private sealed record SellerPublishedRateDetail(
         Guid Id, string Name, decimal Quantity, string? CurrencyCode,
         decimal SaleAmount, bool BillToClient);
 
-    private static object ToHistoricalSellerView(RateDto current, RateRevision published)
+    private static object ToHistoricalSellerView(RateDto current, RateRevision published, bool pricingModificationActive)
     {
         using var document = JsonDocument.Parse(published.SnapshotJson);
         var previous = document.RootElement;
@@ -355,6 +366,7 @@ public static class SellerRateEndpoints
             TransitTime = Text(previous, "TransitTime"),
             RateDetails = details,
             RevisionPending = true,
+            PricingModificationActive = pricingModificationActive,
         };
     }
 
@@ -391,6 +403,7 @@ public static class SellerRateEndpoints
         rate.Excludes,
         rate.TransitTime,
         RevisionPending = false,
+        PricingModificationActive = false,
         RateDetails = rate.RateDetails
             .Where(detail => detail.SaleAmount > 0m)
             .Select(detail => new
