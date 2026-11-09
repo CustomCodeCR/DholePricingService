@@ -345,6 +345,10 @@ public static class SellerRateEndpoints
             ClientName = Text(previous, "ClientName"),
             ExecutiveName = Text(previous, "ExecutiveName"),
             Status = published.Status,
+            // The saved quotation is still protected, but its live workflow status
+            // is safe to show independently. An Open header is not necessarily
+            // an Open seller modification request.
+            CurrentRateStatus = current.Status,
             PendingReapproval = current.PendingReapproval,
             ReapprovalReason = current.ReapprovalReason,
             SellerReceivedAtUtc = (DateTime?)null,
@@ -383,6 +387,7 @@ public static class SellerRateEndpoints
         rate.ClientName,
         rate.ExecutiveName,
         rate.Status,
+        CurrentRateStatus = rate.Status,
         rate.PendingReapproval,
         rate.ReapprovalReason,
         rate.SellerReceivedAtUtc,
