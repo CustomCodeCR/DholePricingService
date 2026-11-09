@@ -628,6 +628,7 @@ public static class RateEndpoints
         RateType? rateType,
         bool? tariffMasterOnly,
         bool? excludeTariffMasters,
+        bool? groupQuotes,
         Guid? agentId,
         Guid? carrierId,
         Guid? polId,
@@ -681,7 +682,8 @@ public static class RateEndpoints
                     ReadGuidOptions(httpContext, "currencyIds"),
                     httpContext.Request.Query["statuses"].Any(value =>
                         string.Equals(value, "PendingReapproval", StringComparison.OrdinalIgnoreCase))
-                )
+                ),
+                groupQuotes == true
             ),
             cancellationToken
         );
@@ -1065,7 +1067,18 @@ public static class RateEndpoints
                     httpContext.Items.Remove(GroupCreatedIdKey);
                     // The final commercial number is assigned after the root QUO
                     // has been reserved, never accepted from a browser payload.
-                    var childRequest = alternative.Rate with { QuoNumber = null };
+                    var childRequest = alternative.Rate with
+                    {
+                        QuoNumber = null,
+                        // The active UI option must not propagate its presentation
+                        // to a different POE. Always enforce this per child route.
+                        UseAllInPresentation = PanamaCostaRicaAllInPolicy.Applies(
+                            alternative.Rate.ShipmentMode,
+                            alternative.Rate.PoeCode,
+                            alternative.Rate.PoeName,
+                            alternative.Rate.PodCode,
+                            alternative.Rate.PodName)
+                    };
                     var outcome = await CreateRateAsync(childRequest, scopedDb, httpContext, cancellationToken);
                     if (httpContext.Items[GroupCreatedIdKey] is not Guid createdId)
                         return outcome; // transaction rolls back on dispose

@@ -30,5 +30,6 @@ public sealed record GetRatesQuery(
     DateTime? ValidFrom = null,
     DateTime? ValidTo = null,
     IReadOnlyCollection<string>? ExecutiveNames = null,
-    RateMultiSelectFilters? MultiFilters = null
+    RateMultiSelectFilters? MultiFilters = null,
+    bool GroupQuotes = false
 ) : IQuery<Result<PagedResult<RateDto>>>;
