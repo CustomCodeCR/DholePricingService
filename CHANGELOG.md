@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.2] - 2026-11-09
+
+- PATCH QUO-00000-000269: el endpoint comercial expone currentRateStatus desde la cabecera vigente, además del status histórico de la revisión publicada. Las solicitudes realmente abiertas siguen marcándose de forma independiente mediante pricingModificationActive.
+- Conservar la última revisión comercial publicada y ocultar importes/costos/borradores no enviados; la nueva propiedad solo contiene el estado del workflow. Release DH-20261109-QUO269-SELLER-STATUS-053 con DholeWeb 1.14.4, ecosistema 1.14.4 (develop).
+
 ## [1.7.1] - 2026-11-09
 
 - PATCH: la API comercial mantiene `revisionPending` para proteger revisiones no publicadas y expone `pricingModificationActive` solo cuando existe una solicitud de modificación realmente abierta en Pricing.
