@@ -88,6 +88,8 @@ public sealed record RateDto(
 {
     public Guid? ClientAccountId { get; init; }
     public Guid? ClientLeadId { get; init; }
+    public string? GroupQuoteNumber { get; init; }
+    public int? GroupAlternativeCount { get; init; }
     public string? OtherReferences { get; init; }
     public string? CarrierRoute { get; init; }
     public string? CarrierComments { get; init; }
