@@ -99,6 +99,8 @@ public sealed record UpdateRateCommand(
     public IReadOnlyCollection<Guid>? FinalBackupStorageIds { get; init; }
     public string? PickupLocationsJson { get; init; }
     public string? InlandServiceLocationsJson { get; init; }
+    public Guid? ClientAccountId { get; init; }
+    public Guid? ClientLeadId { get; init; }
     public string? OtherReferences { get; init; }
     public string? CarrierRoute { get; init; }
     public string? CarrierComments { get; init; }
