@@ -1,7 +1,9 @@
-## [1.6.0] - 2026-11-09
-- Vinculación estable de cotizaciones a cuentas/prospectos del CRM; conciliación manual de historial y migraciones de UUID.
-
 # Changelog
+
+## [1.5.22] - 2026-11-09
+
+- PATCH QUO-00000-000269: el endpoint comercial expone currentRateStatus desde la cabecera vigente, además del status histórico de la revisión publicada. Las solicitudes realmente abiertas siguen marcándose de forma independiente mediante pricingModificationActive.
+- Conservar la última revisión comercial publicada y ocultar importes/costos/borradores no enviados; la nueva propiedad solo contiene el estado del workflow. Release DH-20261109-QUO269-SELLER-STATUS-053 con DholeWeb 1.12.22, ecosistema 1.12.22 (master).
 
 ## [1.5.21] - 2026-11-09
 

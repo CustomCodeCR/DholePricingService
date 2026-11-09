@@ -482,8 +482,6 @@ public sealed class CreateRateCommandHandler(
             rate.ConfigurePickupLocations(command.PickupLocationsJson);
             rate.ConfigureInlandServiceLocations(command.InlandServiceLocationsJson);
             rate.ConfigureLclGroupAgent(command.LclGroupAgentId, command.LclGroupAgentName, command.LclGroupAgentCode);
-            if (command.ClientAccountId.HasValue) rate.ConfigureClientAccount(command.ClientAccountId.Value);
-            if (command.ClientLeadId.HasValue) rate.ConfigureClientLead(command.ClientLeadId.Value);
             rate.ConfigureExecutive(command.ExecutiveName);
             rate.ConfigureCarrierDetails(command.CarrierRoute, command.CarrierComments, command.CreatedBy);
             if (command.OtherReferences is not null)

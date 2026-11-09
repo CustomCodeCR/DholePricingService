@@ -166,8 +166,6 @@ internal static class RateMappings
                 .ToList()
         )
         {
-            ClientAccountId = rate.ClientAccountId,
-            ClientLeadId = rate.ClientLeadId,
             OtherReferences = rate.OtherReferences,
             CarrierRoute = rate.CarrierRoute,
             CarrierComments = rate.CarrierComments,
