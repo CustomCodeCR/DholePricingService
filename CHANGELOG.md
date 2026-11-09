@@ -8,10 +8,12 @@
 
 
 
+
 ## [1.6.7] - 2026-11-08 (Dhole realtime coordinated hardening)
 
 - PATCH alignment to ecosystem 1.13.15 / rt-20261107-01; F2/F6 read-only AOF attestation and F10 branch retention hardening in DholeSystem.
 - Candidate unchanged in functionality; all realtime flags remain OFF; F6/F7/F8 formal gates and F9/F10 promotion pending.
+
 
 
 
@@ -24,15 +26,18 @@
 
 
 
+
 ## [1.6.5] - 2026-11-08 (realtime F3, release candidato)
 
 - Se sincroniza SemVer PATCH y la versión global Dhole 1.13.13 por el nuevo ensayo automático TLS/WSS con Traefik en DholeApiGateway. Sin cambios funcionales adicionales en este componente, sin merge ni despliegue.
 
 
 
+
 ## [1.6.4] - 2026-11-08 (F6/F9 staging-audit candidate)
 
 - Sincroniza Dhole Realtime `rt-20261107-01` a versión global `1.13.12` tras incorporar auditoría real de persistencia en staging. PATCH 1.6.3 → 1.6.4; no modifica rutas, eventos, datos, contratos REST ni flags. No se fusiona hasta completar gates formales.
+
 
 
 
@@ -44,9 +49,11 @@
 
 
 
+
 ## [1.6.2] - 2026-11-08 (candidato F9, sin publicación)
 
 - Sincroniza metadatos de versión global del batch Dhole Realtime `rt-20261107-01` a `1.13.10`; actualización PATCH independiente de DholePricingService `1.6.1` → `1.6.2`. No cambia contratos REST, datos, lógica de negocio ni flags; requiere gates F0–F8 y CI de SHA final antes de merge.
+
 
 
 
@@ -55,6 +62,7 @@
 
 - Merge seguro de `develop` (650bfe0a203c) en la intermedia realtime: se conservan las 11 correcciones documentales 1.5.8–1.5.18 de Pricing y los 8 artefactos históricos de releases de FCL que faltaban; el código funcional REST no tenía cambios concurrentes.
 - Se mantiene la implementación realtime F6.02 y su feature flag OFF. Versión PATCH 1.6.0 → 1.6.1; versión global candidata 1.13.9, sin modificar develop/master ni publicar.
+
 
 
 
@@ -68,6 +76,7 @@
 
 
 
+
 ## [1.5.18] - 2026-11-08
 
 - Release coordinado `DH-20261108-PRICING-RATE-SELECTION-047` con DholeWeb 1.12.16: el asistente FCL vuelve a conservar el RateId elegido por POE/naviera y se bloquea por CI cualquier binding de estado eliminado durante las transformaciones Vite.
@@ -76,10 +85,12 @@
 
 
 
+
 ## [1.5.17] - 2026-11-08
 
 - Release coordinado `DH-20261108-PRICING-SETUP-TDZ-046` con DholeWeb 1.12.15: estabiliza «Crear tarifa» evitando la referencia anticipada a `form` en un watcher insertado por Vite.
 - Solo metadatos; conserva contratos REST, lógica, tarifas y datos. CI y staging obligatorios.
+
 
 
 
@@ -91,11 +102,13 @@
 
 
 
+
 ## [1.5.15] - 2026-11-08
 
 - Release coordinado `DH-20261108-PRICING-RENDER-GUARD-044` con DholeWeb 1.12.13 para recuperar el renderizado del asistente FCL y eliminar referencias de cobertura tempranas en el frontend.
 - Mantiene compatibilidad íntegra con los endpoints, importaciones, tarifas y RateId existentes. No modifica algoritmos, persistencia, ni datos de producción.
 - Aplicar tras validación CI y staging y registrar versionado global del release.
+
 
 
 
@@ -107,11 +120,13 @@
 
 
 
+
 ## [1.5.13] - 2026-11-08
 
 - Release coordinado `DH-20261108-FCL-OFFER-COVERAGE-042` con DholeWeb 1.12.11, corrigiendo la distinción entre ofertas FCL únicas y registros fuente.
 - Los IDs de tarifa, precios y vigencias importadas continúan íntegros. Sin cambios de contratos REST ni esquema de datos.
 - CI y despliegue staging requeridos antes de integración final a master.
+
 
 
 
@@ -123,11 +138,13 @@
 
 
 
+
 ## [1.5.11] - 2026-11-08
 
 - Release coordinado `DH-20261108-FCL-BLANK-SCREEN-040` para resolver la pantalla negra al cargar 110 tarifas FCL en DholeWeb 1.12.9.
 - Contrato de Pricing sin cambios; los registros de importación, correos y tarifas no se modifican.
 - CI y staging obligatorios antes de cualquier integración a master y producción.
+
 
 
 
@@ -139,11 +156,13 @@
 
 
 
+
 ## [1.5.9] - 2026-11-08
 
 - Release coordinado con DholeWeb 1.12.7 para agrupación visual de tarifas FCL equivalentes.
 - Conserva contratos REST, tarifas persistidas y los ID originales de origen, sin migraciones ni eliminación de datos.
 - Release `DH-20261108-FCL-VISUAL-GROUPS-038`, CI/staging obligatorios antes de producción.
+
 
 
 
@@ -155,11 +174,13 @@
 
 
 
+
 ## [1.5.7] - 2026-11-08
 
 - PATCH coordinado con DholeWeb 1.12.4 para corregir la presentación FCL de ofertas comercialmente repetidas y la expansión de sub-QUO guardadas en modo view.
 - No cambia el contrato REST ni la persistencia de Pricing; conserva el manejo idempotente de la sub-QUO final y PDF individual de releases anteriores.
 - Release `DH-20261108-PRICING-VIEW-ACCORDION-FCL-UNIQUE-035`, sujeto a CI y staging.
+
 
 
 
@@ -172,12 +193,14 @@
 
 
 
+
 ## [1.5.5] - 2026-11-08
 
 - Finalización irrevocable de multiQUO FCL: la subcotización seleccionada adquiere la QUO base, conserva su RateId y deja de permitir seleccionar o modificar alternativas descartadas.
 - PDF individual del registro definitivo desde cualquier enlace del grupo; el PDF múltiple solo aplica antes de la elección.
 - Migración de grupos previamente seleccionados sin alterar el parent_rate_id ni los historiales; controles de estado comercial para las alternativas descartadas.
 - Release DH-20261108-MULTIQUO-FINAL-INDIVIDUAL-032, compatible con DholeWeb v1.11.6, sujeto a CI y staging.
+
 
 
 
@@ -188,10 +211,12 @@
 
 
 
+
 ## [1.5.3] - 2026-11-07
 
 - Versionado coordinado de compatibilidad del contrato MultiQUO para el traspaso del Inland seleccionado por cada POE y naviera, sin cambios incompatibles de API.
 - Release `DH-20261107-FCL-HAULAGE-HANDOFF-028`. Integración primero en `develop`, validación staging y promoción del mismo lote a `master`.
+
 
 
 
@@ -202,10 +227,12 @@
 
 
 
+
 ## [1.5.1] - 2026-11-07 (pendiente de CI/staging)
 
 - Genera PDF desde cualquier subQUO con índice de todas las alternativas guardadas y datos independientes por ruta, naviera y Ocean Freight; conserva el flujo individual histórico.
 - Release DH-20261107-MULTIQUO-PERSISTED-PDF-026; sin autorización de despliegue a producción.
+
 
 
 
@@ -214,6 +241,7 @@
 - API FCL multiQUO: creación atómica por POE/naviera, consulta de grupo, selección comercial exclusiva y guardas ante aceptación errónea.
 - Reutiliza la transacción de consecutivos/Outbox y conserva costos, rutas y tarifas por subQUO.
 - Release DH-20261107-PRICING-MULTIQUO-025: staging pendiente, sin autorización de producción.
+
 
 
 
@@ -227,11 +255,13 @@
 
 
 
+
 ## [1.3.0] - 2026-11-06
 
 - Permite guardar la ruta y los comentarios de la naviera como campos independientes y opcionales por cotización.
 - Expone ambos campos en creación, edición, consulta y generación del PDF; agrega migración de columnas sin afectar cotizaciones previas.
 - Release DH-20261106-CARRIER-ROUTE-COMMENTS-017, ecosistema Dhole 1.4.0.
+
 
 
 
@@ -243,11 +273,13 @@
 
 
 
+
 ## [1.2.7] - 2026-11-06
 
 - Resolves Dynamics new_equipo aliases for 26/48/53-foot FTL equipment when Pricing writes pies, feet or ft and the Dataverse catalog uses quote marks.
 - Fixes QUO-00000-000546 equipment mapping without changing RateId, IDTRA, currency, commercial totals, quote revision or idempotency.
 - Rejects mismatched trailer lengths, tonnage and FCL/FTL choices; adds integration regression tests.
+
 
 
 
@@ -260,6 +292,7 @@
 
 
 
+
 ## [1.2.5] - 2026-11-05
 
 - Sustituye confirmación manual por despliegue automático al integrar master.
@@ -268,11 +301,13 @@
 
 
 
+
 ## [1.2.4] - 2026-11-05
 
 - Allows creating client QUOs from management-approved master tariffs before their validity start date, preserving both master validity dates and the exact commercial snapshot.
 - Continues to reject expired tariffs, unapproved masters and non-master or spot rates.
 - Adds automated regression coverage for future-effective, currently valid, expired and unauthorized tariff application, with Pricing API build verification.
+
 
 
 
@@ -287,12 +322,14 @@
 
 
 
+
 ## [1.2.2] - 2026-11-05
 
 - Enables an explicit, existing Dataverse 24-foot / 7-ton capacity category for Pricing 24-foot / 5-ton FTL requests, without inventing a Dynamics option.
 - Preserves the original 5-ton equipment text in `new_cantidadequipos` and never modifies rates, totals, IDTRA or RateId.
 - Adds environment-specific mapping configuration and integration regression tests for Development, Staging and Production.
 - Keeps all other unrecognized or ambiguous equipment choices blocked instead of guessing.
+
 
 
 
@@ -308,17 +345,20 @@
 
 
 
+
 ## [1.2.0] - 2026-11-05
 
 - Incorporates universal Dhole SemVer policy with GitHub Actions checks.
 - Synchronizes service assembly metadata with the ecosystem version.
 - Adds permanent Codex instructions and coordinated release requirements.
 
+
 ## [1.5.20] - 2026-11-09
 
 - MultiQUO establece UseAllInPresentation por alternativa FCL Panamá → Costa Rica en el servidor; no hereda el estado ALL IN de otro POE.
 - Mantiene líneas financieras internas para detalle y PDF, sin alterar cálculos ni los contratos REST.
 - Release coordinado DH-20261109-PRICING-FCL-PANAMA-ALLIN-049 con DholeWeb 1.12.18. Requiere CI y staging antes de master.
+
 
 
 ## [1.5.19] - 2026-11-09
