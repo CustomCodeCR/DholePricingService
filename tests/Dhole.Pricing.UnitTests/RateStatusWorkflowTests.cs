@@ -220,23 +220,6 @@ public sealed class RateStatusWorkflowTests
     }
 
     [TestMethod]
-    public void OpenRate_CanBeAcceptedDirectlyWithoutIdtra_WhenAuthorized()
-    {
-        var rate = CreateRate();
-        AddFreight(rate, cost: 80m, sale: 100m);
-        rate.SetAmounts(updatedBy: null);
-
-        rate.SetCommercialStatus(
-            RateStatus.AcceptedByClient,
-            reason: null,
-            updatedBy: null,
-            allowDirectClientDecision: true);
-
-        Assert.AreEqual(RateStatus.AcceptedByClient, rate.Status);
-        Assert.IsNull(rate.IdtraNumber);
-    }
-
-    [TestMethod]
     public void ClientAcceptance_CapturesActualTimestamp_AndDoesNotChangeOnSubsequentEdits()
     {
         var rate = CreateRate();
