@@ -127,7 +127,22 @@ public static class SellerRateStatusEndpoints
         if (currentRate.Status == status)
         {
             if (status == RateStatus.AcceptedByClient)
+            {
+                // A duplicate PATCH must not send the unpublished newer revision
+                // to Apertura after a prior successful direct Open decision.
+                var unpublishedNewer = await db.Set<RateRevision>().AsNoTracking()
+                    .AnyAsync(x => x.RateHeaderId == rateId
+                        && x.RevisionNumber < currentRate.RevisionNumber
+                        && (x.Status == "Sent" || x.Status == "RequestedByClient"),
+                        cancellationToken);
+                if (unpublishedNewer)
+                    return Results.Ok(new {
+                        status = status.ToString(),
+                        openingNotificationDeferred = true,
+                    });
+
                 await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Seller, cancellationToken);
+            }
             return Results.NoContent();
         }
 
