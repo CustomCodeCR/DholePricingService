@@ -5,6 +5,8 @@ on:
     branches: [master, develop]
     paths:
       - 'src/Dhole.Pricing.Api/Endpoints/RateEndpoints.cs'
+      - 'src/Dhole.Pricing.Domain/Rates/PanamaCostaRicaAllInPolicy.cs'
+      - 'tests/Dhole.Pricing.UnitTests/PanamaCostaRicaAllInPolicyTests.cs'
       - 'src/Dhole.Pricing.Application/Features/Rates/GetRates/**'
       - 'src/Dhole.Pricing.Application/Abstractions/Repositories/IRateHeaderRepository.cs'
       - 'src/Dhole.Pricing.Application/Abstractions/Repositories/RateMultiSelectFilters.cs'
@@ -30,4 +32,4 @@ jobs:
       - name: Build Pricing API
         run: dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configuration Release
       - name: Regression tests for grouped quote identities and legacy PDF commercial terms
-        run: dotnet test tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj --configuration Release --filter "FullyQualifiedName~QuoteAlternativeNumberingTests|FullyQualifiedName~RateReportCommercialTermsLegacyNewlinesTests"
+        run: dotnet test tests/Dhole.Pricing.UnitTests/Dhole.Pricing.UnitTests.csproj --configuration Release --filter "FullyQualifiedName~QuoteAlternativeNumberingTests|FullyQualifiedName~RateReportCommercialTermsLegacyNewlinesTests|FullyQualifiedName~PanamaCostaRicaAllInPolicyTests"
