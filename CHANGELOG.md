@@ -1,3 +1,6 @@
+## 1.8.0 — 2026-11-09
+- Asociar nuevas cotizaciones y revisiones con UUID de cuenta o prospecto CRM sin atribución automática por nombre; continuidad de lectura y conciliación de cotizaciones históricas.
+
 # Changelog
 
 ## [1.7.1] - 2026-11-09
