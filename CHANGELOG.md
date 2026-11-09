@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.1] - 2026-11-09
+
+- PATCH: la API comercial mantiene `revisionPending` para proteger revisiones no publicadas y expone `pricingModificationActive` solo cuando existe una solicitud de modificación realmente abierta en Pricing.
+- Al completar la solicitud, el vendedor deja de ver trabajo activo de Pricing aunque siga pendiente la publicación; no se revelan borradores, costos internos ni información no enviada.
+- Release coordinado DH-20261109-SELLER-PRICING-STATUS-052 con DholeWeb 1.14.3 y ecosistema 1.14.3.
+
 ## [1.7.0] - 2026-11-09 (NotificationsHub universal realtime pilot; candidate)
 
 - Coordinación 2026-11-09: integrados los commits recientes de `develop` y `master` en la rama candidata, conservando los cambios del release 1.14.0; validación post-sincronización mediante CI.
