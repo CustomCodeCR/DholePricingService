@@ -246,6 +246,18 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, null));
     }
 
+    /// <summary>Persist the CRM prospect identity, never infer it from a company name.</summary>
+    public void ConfigureClientLead(Guid leadId)
+    {
+        if (leadId == Guid.Empty) throw new ArgumentException("Valid CRM lead required.", nameof(leadId));
+        if (ClientAccountId.HasValue || (ClientLeadId.HasValue && ClientLeadId != leadId))
+            throw new InvalidOperationException("The quotation already belongs to a different CRM identity.");
+        if (ClientLeadId == leadId) return;
+        ClientLeadId = leadId;
+        MarkAsUpdated(DateTime.UtcNow, null);
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, null));
+    }
+
     public string? ClientName { get; private set; }
     public string? ExecutiveName { get; private set; }
     public string? IdtraNumber { get; private set; }

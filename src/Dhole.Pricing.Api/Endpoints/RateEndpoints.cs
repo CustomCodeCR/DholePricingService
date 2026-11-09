@@ -770,6 +770,8 @@ public static class RateEndpoints
         CancellationToken cancellationToken
     )
     {
+        if (request.ClientAccountId.HasValue && request.ClientLeadId.HasValue)
+            return Results.BadRequest(new { message = "Seleccione una cuenta o un prospecto, no ambos." });
         var termValidation = ValidateExclusiveRateTerms(request.Includes, request.SubjectTo, request.Excludes, httpContext);
         if (termValidation is not null) return termValidation;
 
@@ -972,6 +974,8 @@ public static class RateEndpoints
             )
             {
                 FinalBackupStorageIds = request.FinalBackupStorageIds ?? [],
+                ClientAccountId = request.ClientAccountId,
+                ClientLeadId = request.ClientLeadId,
                 OtherReferences = request.OtherReferences,
                 LclGroupAgentId = request.LclGroupAgentId,
                 PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
@@ -1030,6 +1034,7 @@ public static class RateEndpoints
                     "Las alternativas deben tener POE y naviera válidos y modalidad FCL.", httpContext);
             if (rate.PolId != first.PolId || rate.PodId != first.PodId
                 || rate.ContainerTypeId != first.ContainerTypeId
+                || rate.ClientAccountId != first.ClientAccountId || rate.ClientLeadId != first.ClientLeadId
                 || !string.Equals(rate.ClientName?.Trim(), first.ClientName?.Trim(), StringComparison.OrdinalIgnoreCase)
                 || !string.Equals(rate.OperationType, first.OperationType, StringComparison.OrdinalIgnoreCase))
                 return EndpointResults.BadRequest("Pricing.InconsistentQuoteGroup",
@@ -1340,6 +1345,8 @@ public static class RateEndpoints
             return Results.Conflict(new { code = "Pricing.QuoteAlternativeDiscarded",
                 message = "Esta sub-QUO se descartó; solo la principal puede editarse." });
 
+        if (request.ClientAccountId.HasValue && request.ClientLeadId.HasValue)
+            return Results.BadRequest(new { message = "Seleccione una cuenta o un prospecto, no ambos." });
         var termValidation = ValidateExclusiveRateTerms(request.Includes, request.SubjectTo, request.Excludes, httpContext);
         if (termValidation is not null) return termValidation;
 
@@ -1550,6 +1557,8 @@ public static class RateEndpoints
             )
             {
                 FinalBackupStorageIds = request.FinalBackupStorageIds,
+                ClientAccountId = request.ClientAccountId,
+                ClientLeadId = request.ClientLeadId,
                 OtherReferences = request.OtherReferences,
                 LclGroupAgentId = request.LclGroupAgentId,
                 SourceImportFclRateId = request.SourceImportFclRateId,

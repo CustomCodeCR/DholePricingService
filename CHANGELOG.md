@@ -1,3 +1,7 @@
+## [1.8.0] - 2026-11-09
+
+- Identificador de cuenta/prospecto CRM en cotizaciones nuevas y revisiones; conciliación manual de QUO legacy.
+
 # Changelog
 
 ## [1.7.2] - 2026-11-09
