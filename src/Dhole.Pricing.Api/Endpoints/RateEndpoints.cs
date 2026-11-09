@@ -474,6 +474,7 @@ public static class RateEndpoints
         RateType? rateType,
         bool? tariffMasterOnly,
         bool? excludeTariffMasters,
+        bool? groupQuotes,
         Guid? agentId,
         Guid? carrierId,
         Guid? polId,
@@ -527,7 +528,8 @@ public static class RateEndpoints
                     ReadGuidOptions(httpContext, "currencyIds"),
                     httpContext.Request.Query["statuses"].Any(value =>
                         string.Equals(value, "PendingReapproval", StringComparison.OrdinalIgnoreCase))
-                )
+                ),
+                groupQuotes == true
             ),
             cancellationToken
         );
