@@ -98,3 +98,4 @@ jobs:
           grep -q "dhole.pricing.realtime.v1" src/Dhole.Pricing.Workers/Outbox/OutboxProcessor.cs
           git diff HEAD^..HEAD --check
           git push origin HEAD:feature/rt-notificationshub-20261109-01
+# 2026-11-09: re-sync latest develop and master into release candidate.
