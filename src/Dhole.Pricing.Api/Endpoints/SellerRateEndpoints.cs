@@ -163,9 +163,13 @@ public static class SellerRateEndpoints
 
         // Generating the PDF for a revision still being priced would expose an
         // unpublished offer. The prior issued PDF remains in the seller's email.
-        if (IsPricingDraft(rate.Status.ToString()))
+        var hasUnpublishedRevision = rate.Status is RateStatus.AcceptedByClient or RateStatus.RejectedByClient
+            && await db.Set<RateRevision>().AsNoTracking()
+                .AnyAsync(x => x.RateHeaderId == rateId && x.RevisionNumber < rate.RevisionNumber
+                    && (x.Status == "Sent" || x.Status == "RequestedByClient"), cancellationToken);
+        if (IsPricingDraft(rate.Status.ToString()) || hasUnpublishedRevision)
             return Results.Conflict(new {
-                message = "Pricing está preparando una nueva revisión. La última cotización enviada sigue disponible en su correo."
+                message = "La nueva revisión todavía no ha sido enviada. El PDF de la última cotización publicada sigue disponible en el correo original."
             });
 
         var result = await dispatcher.DispatchAsync(
@@ -247,7 +251,8 @@ public static class SellerRateEndpoints
     private static async Task<object?> ToSellerViewAsync(
         RateDto rate, ServiceDbContext db, CancellationToken cancellationToken)
     {
-        if (!IsPricingDraft(rate.Status))
+        var decisionAfterReopen = rate.Status is "AcceptedByClient" or "RejectedByClient";
+        if (!IsPricingDraft(rate.Status) && !decisionAfterReopen)
             return ToSellerView(rate);
 
         // A new draft replaces the live header while its previous published
@@ -262,6 +267,17 @@ public static class SellerRateEndpoints
                     || revision.Status == "Expired"))
             .OrderByDescending(revision => revision.RevisionNumber)
             .FirstOrDefaultAsync(cancellationToken);
+
+        if (decisionAfterReopen)
+        {
+            // A seller may accept/reject the previous published revision while
+            // the current header is Open. Never return its unpublished amounts
+            // simply because the workflow transitioned to Accepted/Rejected.
+            return published is not null && published.RevisionNumber < rate.RevisionNumber
+                ? ToHistoricalSellerView(rate, published, false,
+                    decisionStatus: rate.Status, revisionPending: false)
+                : ToSellerView(rate);
+        }
 
         if (published is null) return null; // Never reveal a quote never issued.
         // An unpublished draft is not synonymous with an open Pricing request.
@@ -282,7 +298,9 @@ public static class SellerRateEndpoints
         Guid Id, string Name, decimal Quantity, string? CurrencyCode,
         decimal SaleAmount, bool BillToClient);
 
-    private static object ToHistoricalSellerView(RateDto current, RateRevision published, bool pricingModificationActive)
+    private static object ToHistoricalSellerView(
+        RateDto current, RateRevision published, bool pricingModificationActive,
+        string? decisionStatus = null, bool revisionPending = true)
     {
         using var document = JsonDocument.Parse(published.SnapshotJson);
         var previous = document.RootElement;
@@ -344,7 +362,7 @@ public static class SellerRateEndpoints
             IdtraNumber = published.IdtraNumber,
             ClientName = Text(previous, "ClientName"),
             ExecutiveName = Text(previous, "ExecutiveName"),
-            Status = published.Status,
+            Status = decisionStatus ?? published.Status,
             // The saved quotation is still protected, but its live workflow status
             // is safe to show independently. An Open header is not necessarily
             // an Open seller modification request.
@@ -369,7 +387,7 @@ public static class SellerRateEndpoints
             Excludes = Text(previous, "Excludes"),
             TransitTime = Text(previous, "TransitTime"),
             RateDetails = details,
-            RevisionPending = true,
+            RevisionPending = revisionPending,
             PricingModificationActive = pricingModificationActive,
         };
     }
