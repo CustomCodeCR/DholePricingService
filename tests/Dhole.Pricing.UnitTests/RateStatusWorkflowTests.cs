@@ -211,12 +211,12 @@ public sealed class RateStatusWorkflowTests
         rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
 
         Assert.AreEqual(RateStatus.AcceptedByClient, rate.Status);
-        Assert.IsNull(rate.IdtraNumber);
+        Assert.AreEqual("IDTRA999.2026-00125", rate.IdtraNumber);
 
         rate.SetIdtraNumber("IDTRA-2026-00127", updatedBy: null);
 
         Assert.AreEqual(RateStatus.AcceptedByClient, rate.Status);
-        Assert.AreEqual("IDTRA-2026-00127", rate.IdtraNumber);
+        Assert.AreEqual("IDTRA999.2026-00127", rate.IdtraNumber);
     }
 
     [TestMethod]
@@ -263,7 +263,7 @@ public sealed class RateStatusWorkflowTests
         rate.SetIdtraNumber("IDTRA-2026-00127", updatedBy: null);
 
         Assert.AreEqual(RateStatus.AcceptedByClient, rate.Status);
-        Assert.AreEqual("IDTRA-2026-00127", rate.IdtraNumber);
+        Assert.AreEqual("IDTRA999.2026-00127", rate.IdtraNumber);
     }
 
     [TestMethod]
@@ -367,7 +367,7 @@ public sealed class RateStatusWorkflowTests
         );
 
         Assert.AreEqual(RateStatus.Cancelled, rate.Status);
-        Assert.AreEqual("IDTRA-2026-00125", rate.IdtraNumber);
+        Assert.AreEqual("IDTRA999.2026-00125", rate.IdtraNumber);
         Assert.AreEqual("El cliente canceló la operación después de aceptarla.", rate.ClosedReason);
         Assert.AreEqual(actor, rate.ClosedBy);
         Assert.IsNotNull(rate.ClosedAtUtc);
@@ -398,7 +398,7 @@ public sealed class RateStatusWorkflowTests
         Assert.AreEqual(RateStatus.RejectedByClient, rate.Status);
         Assert.AreEqual("El cliente retiró su aceptación.", rate.ClosedReason);
         Assert.AreEqual(actor, rate.ClosedBy);
-        Assert.AreEqual("IDTRA-2026-00126", rate.IdtraNumber);
+        Assert.AreEqual("IDTRA999.2026-00126", rate.IdtraNumber);
     }
 
     [TestMethod]
