@@ -232,6 +232,32 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public string? CargoLinesJson { get; private set; }
     public Guid[] FinalBackupStorageIds { get; private set; } = [];
 
+    public Guid? ClientAccountId { get; private set; }
+    public Guid? ClientLeadId { get; private set; }
+    /// <summary>Associate a human-verified legacy quote with its CRM account without changing financial terms.</summary>
+    public void ConfigureClientAccount(Guid accountId)
+    {
+        if (accountId == Guid.Empty) throw new ArgumentException("Valid CRM account required.", nameof(accountId));
+        if (ClientLeadId.HasValue || (ClientAccountId.HasValue && ClientAccountId != accountId))
+            throw new InvalidOperationException("The quotation already belongs to a different CRM identity.");
+        if (ClientAccountId == accountId) return;
+        ClientAccountId = accountId;
+        MarkAsUpdated(DateTime.UtcNow, null);
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, null));
+    }
+
+    /// <summary>Persist the CRM prospect identity, never infer it from a company name.</summary>
+    public void ConfigureClientLead(Guid leadId)
+    {
+        if (leadId == Guid.Empty) throw new ArgumentException("Valid CRM lead required.", nameof(leadId));
+        if (ClientAccountId.HasValue || (ClientLeadId.HasValue && ClientLeadId != leadId))
+            throw new InvalidOperationException("The quotation already belongs to a different CRM identity.");
+        if (ClientLeadId == leadId) return;
+        ClientLeadId = leadId;
+        MarkAsUpdated(DateTime.UtcNow, null);
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, null));
+    }
+
     public string? ClientName { get; private set; }
     public string? ExecutiveName { get; private set; }
     public string? IdtraNumber { get; private set; }
