@@ -61,7 +61,8 @@ public interface IRateHeaderRepository : IRepository<RateHeader, Guid>
         DateTime? validTo = null,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<string>? executiveNames = null,
-        RateMultiSelectFilters? multiFilters = null
+        RateMultiSelectFilters? multiFilters = null,
+        bool groupQuotes = false
     );
 
     Task<PricingRateDashboardDto> GetDashboardAsync(
