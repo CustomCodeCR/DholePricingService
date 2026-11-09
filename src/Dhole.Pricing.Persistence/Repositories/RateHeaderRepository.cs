@@ -263,7 +263,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         DateTime? validTo = null,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<string>? executiveNames = null,
-        RateMultiSelectFilters? multiFilters = null
+        RateMultiSelectFilters? multiFilters = null,
+        bool groupQuotes = false
     )
     {
         var query = ApplyFilters(
@@ -328,6 +329,24 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
 
             var currencyIds = multiFilters.CurrencyIds.ToArray();
             if (currencyIds.Length > 0) query = query.Where(rate => currencyIds.Contains(rate.CurrencyId));
+        }
+
+        if (groupQuotes)
+        {
+            // Choose the selected commercial option when present, otherwise the
+            // original group anchor. Suppress other sub-QUOs before COUNT/SKIP/TAKE.
+            var nonRepresentativeIds = dbContext.Database.SqlQuery<Guid>($"""
+                SELECT a.rate_id AS "Value"
+                FROM pricing.rate_quote_alternatives a
+                WHERE a.rate_id <> COALESCE(
+                    (SELECT selected.rate_id
+                     FROM pricing.rate_quote_alternatives selected
+                     WHERE selected.parent_rate_id = a.parent_rate_id
+                       AND selected.status = 'Selected'
+                     LIMIT 1),
+                    a.parent_rate_id)
+                """);
+            query = query.Where(rate => !nonRepresentativeIds.Contains(rate.Id));
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -513,6 +532,36 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
         // RateDetails are the source of truth. Recalculate the read snapshot so historical
         // rates created before aggregate USD/CRC fields were populated never render as 0.00.
         items = items.Select(item => item.WithRecalculatedFinancials()).ToList();
+
+        if (groupQuotes && items.Count > 0)
+        {
+            var visibleRateIds = items.Select(rate => rate.Id).ToArray();
+            // A selected sub-QUO can replace the original anchor. Resolve the
+            // commercial group number and alternative count for either identity.
+            var groupRows = await dbContext.Database.SqlQuery<string>($"""
+                SELECT COALESCE(
+                    MAX(CASE WHEN a.status = 'Selected' THEN a.rate_id::text END),
+                    a.parent_rate_id::text
+                ) || '|' || MIN(a.base_quote) || '|' || COUNT(*)::text AS "Value"
+                FROM pricing.rate_quote_alternatives a
+                WHERE a.parent_rate_id = ANY({visibleRateIds})
+                   OR a.rate_id = ANY({visibleRateIds})
+                GROUP BY a.parent_rate_id
+                """).ToListAsync(cancellationToken);
+
+            var groupByRepresentative = new Dictionary<Guid, (string Number, int Count)>();
+            foreach (var groupRow in groupRows)
+            {
+                var fields = groupRow.Split('|', 3);
+                if (fields.Length == 3 && Guid.TryParse(fields[0], out var id)
+                    && int.TryParse(fields[2], out var count))
+                    groupByRepresentative[id] = (fields[1], count);
+            }
+            items = items.Select(rate =>
+                groupByRepresentative.TryGetValue(rate.Id, out var group)
+                    ? rate with { GroupQuoteNumber = group.Number, GroupAlternativeCount = group.Count }
+                    : rate).ToList();
+        }
 
         return PagedResult<RateDto>.Create(items, page.PageNumber, page.PageSize, total);
     }
