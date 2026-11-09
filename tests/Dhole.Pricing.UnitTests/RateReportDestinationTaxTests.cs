@@ -267,7 +267,7 @@ public sealed class RateReportDestinationTaxTests
         JsonDocument.Parse(new RateReportDataFactory(new ConfigurationBuilder().Build()).CreateDataJson(rate));
 
     private static RateHeader CreateRate() => RateHeader.Create(
-        rateCode: "QUO-VAT-TEST", sourceImportFclRateId: null,
+        rateCode: "QUO-VAT01-000001", sourceImportFclRateId: null,
         agentId: Guid.NewGuid(), agentName: "Grupo Castro Fallas", agentCode: "GCF",
         carrierId: Guid.NewGuid(), carrierName: "Naviera", carrierCode: "CAR",
         polId: Guid.NewGuid(), polName: "Ningbo, China", polCode: "CNNGB",
