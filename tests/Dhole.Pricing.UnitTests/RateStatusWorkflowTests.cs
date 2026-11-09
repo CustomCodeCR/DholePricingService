@@ -278,6 +278,52 @@ public sealed class RateStatusWorkflowTests
     }
 
     [TestMethod]
+    public void OpenPreviouslyIssuedQuote_CanBeRejectedDirectlyWithMandatoryReason()
+    {
+        var rate = CreateRate();
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+        rate.SetAmounts(updatedBy: null);
+        rate.AdvanceRevision(updatedBy: null, updateReason: "Cotización en ajuste");
+
+        Assert.AreEqual(RateStatus.Open, rate.Status);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            rate.SetCommercialStatus(RateStatus.RejectedByClient,
+                reason: "No aceptada", updatedBy: null));
+
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            rate.SetCommercialStatus(RateStatus.RejectedByClient,
+                reason: "", updatedBy: null, allowDirectClientDecision: true));
+
+        rate.SetCommercialStatus(RateStatus.RejectedByClient, reason: "Cliente no acepta",
+            updatedBy: null, allowDirectClientDecision: true);
+        Assert.AreEqual(RateStatus.RejectedByClient, rate.Status);
+        Assert.AreEqual("Cliente no acepta", rate.ClosedReason);
+    }
+
+    [TestMethod]
+    public void OpenPreviouslyIssuedQuote_CanBeAcceptedDirectlyAndRetainDecisionOnRetry()
+    {
+        var rate = CreateRate();
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+        rate.SetAmounts(updatedBy: null);
+        rate.AdvanceRevision(updatedBy: null, updateReason: "Ajuste");
+
+        rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null,
+            updatedBy: null, allowDirectClientDecision: true);
+        var acceptedAt = rate.AcceptedAtUtc;
+
+        Assert.AreEqual(RateStatus.AcceptedByClient, rate.Status);
+        Assert.IsNotNull(acceptedAt);
+        rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null,
+            updatedBy: null, allowDirectClientDecision: true);
+        Assert.AreEqual(acceptedAt, rate.AcceptedAtUtc);
+    }
+
+    [TestMethod]
     public void SentRate_CanBeMarkedRequestedByClient_WithoutClientDecision()
     {
         var rate = CreateRate();
