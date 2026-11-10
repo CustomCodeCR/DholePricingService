@@ -36,7 +36,7 @@ jobs:
           clone_ok=0
           for attempt in 1 2 3 4 5; do
             rm -rf .dhole-system
-            if git clone --depth 1 --branch master https://github.com/CustomCodeCR/DholeSystem.git .dhole-system; then
+            if git clone --depth 1 --branch develop https://github.com/CustomCodeCR/DholeSystem.git .dhole-system; then
               clone_ok=1
               break
             fi

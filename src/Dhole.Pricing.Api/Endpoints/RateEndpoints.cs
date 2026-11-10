@@ -46,6 +46,8 @@ public static class RateEndpoints
         var group = app.MapGroup("/api/pricing/rates").WithTags("Rates").RequireAuthorization();
 
         group.MapGet("/", GetRatesAsync).RequireScope(PricingConstants.Scopes.RateView);
+        group.MapGet("/realtime-access", () => Results.Ok())
+            .RequireScope(PricingConstants.Scopes.RateView);
 
         group.MapGet("/crm-account/{accountId:guid}", GetAccountQuotesAsync)
             .RequireScope(PricingConstants.Scopes.RateView);

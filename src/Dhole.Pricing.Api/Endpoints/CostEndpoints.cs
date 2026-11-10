@@ -27,6 +27,9 @@ public static class CostEndpoints
         var group = app.MapGroup("/api/pricing/costs").WithTags("Costs").RequireAuthorization();
 
         group.MapGet("/", GetCostsAsync).RequireScope(PricingConstants.Scopes.CostView);
+        // Same read scope as /select, no business payload in owner ACL probe.
+        group.MapGet("/realtime-access", () => Results.Ok())
+            .RequireScope(PricingConstants.Scopes.WorkspaceAccess);
 
         // Seleccionar costos forma parte del flujo normal de crear/cotizar una tarifa.
         // Mantener la administración del catálogo de costos protegida por sus scopes

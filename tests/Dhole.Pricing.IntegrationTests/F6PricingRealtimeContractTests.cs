@@ -53,6 +53,27 @@ public sealed class F6PricingRealtimeContractTests
     }
 
     [TestMethod]
+    public void Cost_and_rate_list_events_have_only_safe_fixed_guid_and_no_customer_details()
+    {
+        foreach (var collection in new[] { "cost-list", "rate-list" })
+        {
+            var eventId = Guid.NewGuid();
+            var json = PricingRealtimeInvalidation.CollectionEnvelope(eventId, collection,
+                PricingRealtimeInvalidation.NextVersionHint(), DateTimeOffset.UtcNow, "pricing-ci");
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            Assert.AreEqual($"pricing.{collection}.changed.v1", root.GetProperty("eventType").GetString());
+            Assert.AreEqual(collection, root.GetProperty("aggregateType").GetString());
+            Assert.AreEqual(collection == "cost-list" ? PricingRealtimeInvalidation.CostListId
+                : PricingRealtimeInvalidation.RateListId, root.GetProperty("aggregateId").GetGuid());
+            Assert.IsFalse(json.Contains("clientName", StringComparison.OrdinalIgnoreCase));
+            Assert.IsFalse(json.Contains("costAmount", StringComparison.OrdinalIgnoreCase));
+        }
+        Assert.ThrowsExactly<ArgumentException>(() => PricingRealtimeInvalidation.CollectionEnvelope(
+            Guid.NewGuid(), "unapproved", 1, DateTimeOffset.UtcNow, "ci"));
+    }
+
+    [TestMethod]
     public void Only_known_lifecycle_actions_allowed_and_invalid_events_are_rejected()
     {
         var id = Guid.NewGuid();
