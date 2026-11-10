@@ -137,6 +137,10 @@ public static class RateRequestEndpoints
                 message = "Las modificaciones de tarifas existentes deben enviarse desde la opción Solicitar modificación."
             });
 
+        var poeSelectionError = RateRequestPoeSelection.Validate(request.Payload, request.ShipmentMode, request.PoeId);
+        if (poeSelectionError is not null)
+            return Results.BadRequest(new { code = "Pricing.RateRequestInvalidPoeSelection", message = poeSelectionError });
+
         var entity = RateRequest.Create(
             priority,
             sellerUserId,
@@ -390,6 +394,9 @@ public static class RateRequestEndpoints
 
         var equipmentType = ExtractEquipmentType(request.PayloadJson, request.ShipmentMode);
         var route = BuildRoute(request);
+        using var selectionDocument = JsonDocument.Parse(request.PayloadJson);
+        var selectedPoeIds = RateRequestPoeSelection.Ids(selectionDocument.RootElement, request.PoeId);
+        var selectedPoeNames = RateRequestPoeSelection.Names(selectionDocument.RootElement, request.PoeName);
         var seller = request.SellerName ?? request.ExecutiveName ?? "Ventas";
         var client = request.ClientName ?? "Cliente sin definir";
         var equipmentText = equipmentType ?? request.ShipmentMode ?? "Equipo sin definir";
@@ -414,6 +421,8 @@ public static class RateRequestEndpoints
             request.DestinationName,
             request.PoeId,
             request.PoeName,
+            selectedPoeIds,
+            selectedPoeNames,
             request.PodId,
             request.PodName,
             request.RequestedAtUtc,
@@ -491,10 +500,12 @@ public static class RateRequestEndpoints
 
     private static string BuildRoute(RateRequest request)
     {
+        using var document = JsonDocument.Parse(request.PayloadJson);
+        var poes = RateRequestPoeSelection.Names(document.RootElement, request.PoeName);
         var parts = new[]
         {
             request.OriginName,
-            request.PoeName,
+            poes.Length > 0 ? string.Join(" / ", poes) : request.PoeName,
             request.PodName,
         }
         .Where(value => !string.IsNullOrWhiteSpace(value))
@@ -737,6 +748,8 @@ public static class RateRequestEndpoints
             request.DestinationName,
             request.PoeId,
             request.PoeName,
+            selectedPoeIds = RateRequestPoeSelection.Ids(document.RootElement, request.PoeId),
+            selectedPoeNames = RateRequestPoeSelection.Names(document.RootElement, request.PoeName),
             request.PodId,
             request.PodName,
             lockedByUserId = request.LockExpiresAtUtc > DateTime.UtcNow ? request.LockedByUserId : null,

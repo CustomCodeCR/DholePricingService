@@ -1,3 +1,7 @@
+## [1.9.6] - 2026-11-10
+
+- PATCH DH-20261110-PRICING-SELLER-MULTI-POE-063: el API de Pricing devuelve selectedPoeIds y selectedPoeNames en solicitudes de Ventas, en la bandeja de Pricing y en las vistas del vendedor. Valida que POE múltiples sean únicamente FCL, pertenezcan a la selección y no estén repetidos. La lista completa se incluye en las notificaciones de nuevas solicitudes y en la ruta mostrada a Pricing; los campos principales PoeId/PoeName y los formatos históricos siguen siendo compatibles. No se requiere migración de base de datos.
+
 ## [1.9.5] - 2026-11-10
 
 - PATCH DH-20261110-PRICING-CRM-EXECUTIVE-059: compatibilidad validada del guard de identidad comercial existente: los payloads desde DholeWeb 1.17.3 incluyen executiveUserId del ejecutivo asignado en CRM. El middleware ya exige un vendedor Auth activo y conserva el caso especial Castro Fallas; no se debilitan permisos ni cambian contratos REST.

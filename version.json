@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.9.5",
-  "ecosystemVersion": "1.17.3",
-  "releaseId": "DH-20261110-PRICING-CRM-EXECUTIVE-059",
+  "version": "1.9.6",
+  "ecosystemVersion": "1.17.7",
+  "releaseId": "DH-20261110-PRICING-SELLER-MULTI-POE-063",
   "releaseStatus": "candidate-develop-staging-pending"
 }
