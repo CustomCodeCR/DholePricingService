@@ -1,3 +1,7 @@
+## [1.9.8] - 2026-11-10
+
+- PATCH DH-20261110-CRM-QUO-MODIFICATION-REQUEST-SYNC-065: al vincular o resincronizar una QUO con una cuenta CRM, actualizar en la misma transacción el cliente y ejecutivo de todas sus solicitudes asociadas, incluidas las modificaciones abiertas e históricas; respetar diferencias solicitadas, payload original, estados, revisiones y SLA. Sin modificaciones al framework ni al esquema de datos.
+
 ## [1.9.7] - 2026-11-10
 
 - FIX DH-20261110-PRICING-SELLER-MULTI-POE-064: completar la importación explícita de MSTest en las pruebas de regresión de POE múltiples FCL, manteniendo el contrato de la versión 1.9.6 sin cambios de esquema ni de comportamiento de API.
