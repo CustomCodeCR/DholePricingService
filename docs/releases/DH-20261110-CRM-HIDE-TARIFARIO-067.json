@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261110-CRM-HIDE-TARIFARIO-067",
+  "releaseType": "PATCH",
+  "ecosystemVersion": "1.17.13",
+  "createdAt": "2026-11-10",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "from": "1.9.10",
+      "to": "1.9.11"
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "component": "DholeSystem",
+      "from": "1.17.12",
+      "to": "1.17.13"
+    }
+  ],
+  "changes": [
+    "Ocultar registros sin vincular cuyos nombres de cliente histórico contengan TARIFARIO, sin importar mayúsculas y minúsculas",
+    "Filtrar antes de contar y paginar para que el total y la selección masiva reflejen únicamente resultados visibles",
+    "No alterar datos ni cotizaciones ya vinculadas; conservar compatibilidad REST"
+  ],
+  "validation": "Build, test, version gate, staging review before production",
+  "productionDeploymentAuthorized": false
+}
