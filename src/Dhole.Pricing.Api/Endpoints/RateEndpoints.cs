@@ -51,6 +51,8 @@ public static class RateEndpoints
             .RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/crm-lead/{leadId:guid}", GetLeadQuotesAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapGet("/crm-legacy-catalog", GetLegacyCatalogAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/crm-legacy-candidates", GetLegacyCandidatesAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
         group.MapPost("/crm-legacy-reconcile", ReconcileLegacyQuotesAsync)
@@ -124,7 +126,7 @@ public static class RateEndpoints
 
 
     public sealed record ReconcileLegacyQuotesRequest(
-        Guid AccountId, string ClientName, Guid[] RateIds);
+        Guid AccountId, string ClientName, Guid[] RateIds, bool ConfirmedForAccount = false);
 
     // Normalize only presentation differences (vowel accents/whitespace).
     // Keep Ñ, punctuation, words and business suffixes: broader fuzzy matches
@@ -138,6 +140,64 @@ public static class RateEndpoints
         while (key.Contains("  ", StringComparison.Ordinal))
             key = key.Replace("  ", " ", StringComparison.Ordinal);
         return key;
+    }
+
+    // All historic QUO records, including already-linked and nameless records, are
+    // discoverable through server-side pagination. Existing links are read-only.
+    // Nothing is assigned by matching a name.
+    private static async Task<IResult> GetLegacyCatalogAsync(
+        string? q, string? linkStatus, int? page, int? pageSize,
+        ServiceDbContext db, CancellationToken ct)
+    {
+        var search = (q ?? string.Empty).Trim();
+        if (search.Length > 200) return Results.BadRequest(new { message = "Búsqueda demasiado larga." });
+        var state = (linkStatus ?? "all").Trim().ToLowerInvariant();
+        if (state is not ("all" or "unlinked" or "linked"))
+            return Results.BadRequest(new { message = "Filtro de vinculación inválido." });
+
+        var number = Math.Clamp(page ?? 1, 1, 100000);
+        var size = Math.Clamp(pageSize ?? 10, 1, 100);
+        var query = db.RateHeaders.AsNoTracking().Where(x => !x.IsDeleted &&
+            (x.QuoNumber != null || x.RateCode.StartsWith("QUO-")));
+        if (state == "unlinked")
+            query = query.Where(x => x.ClientAccountId == null && x.ClientLeadId == null);
+        else if (state == "linked")
+            query = query.Where(x => x.ClientAccountId != null || x.ClientLeadId != null);
+        if (search.Length > 0)
+        {
+            var term = search.ToUpperInvariant();
+            query = query.Where(x =>
+                x.RateCode.ToUpper().Contains(term) ||
+                (x.QuoNumber != null && x.QuoNumber.ToUpper().Contains(term)) ||
+                (x.ClientName != null && x.ClientName.ToUpper().Contains(term)) ||
+                (x.PolName != null && x.PolName.ToUpper().Contains(term)) ||
+                (x.PoeName != null && x.PoeName.ToUpper().Contains(term)) ||
+                (x.PodName != null && x.PodName.ToUpper().Contains(term)));
+        }
+
+        var total = await query.CountAsync(ct);
+        var rows = await query.OrderByDescending(x => x.CreatedAtUtc)
+            .ThenByDescending(x => x.Id).Skip((number - 1) * size).Take(size)
+            .Select(x => new {
+                x.Id, x.QuoNumber, x.RateCode, x.ClientName, x.ClientAccountId,
+                x.ClientLeadId, x.ShipmentMode, x.Status, x.PolName, x.PoeName,
+                x.PodName, x.RevisionNumber, x.CreatedAtUtc
+            }).ToArrayAsync(ct);
+        return Results.Ok(new {
+            items = rows.Select(x => new {
+                pricingQuoteId = x.Id,
+                quoteNumberSnapshot = string.IsNullOrWhiteSpace(x.QuoNumber) ? x.RateCode : x.QuoNumber,
+                clientName = x.ClientName,
+                clientAccountId = x.ClientAccountId,
+                clientLeadId = x.ClientLeadId,
+                shipmentModeSnapshot = x.ShipmentMode.ToString(),
+                commercialStatusSnapshot = x.Status.ToString(),
+                createdAtUtc = x.CreatedAtUtc,
+                polName = x.PolName, poeName = x.PoeName, podName = x.PodName,
+                revisionNumber = x.RevisionNumber
+            }).ToArray(),
+            total, page = number, pageSize = size
+        });
     }
 
     // Show candidates, never silently attach historical quotes by matching names.
@@ -188,11 +248,13 @@ public static class RateEndpoints
     // A human-confirmed reconciliation is atomic, conservative, and idempotent:
     // never steal an existing lead/account link or change commercial amounts.
     private static async Task<IResult> ReconcileLegacyQuotesAsync(
-        ReconcileLegacyQuotesRequest request, ServiceDbContext db, CancellationToken ct)
+        ReconcileLegacyQuotesRequest request, ServiceDbContext db,
+        ILoggerFactory loggerFactory, CancellationToken ct)
     {
         var expected = LegacyClientKey(request.ClientName);
         var ids = request.RateIds?.Distinct().ToArray() ?? [];
-        if (request.AccountId == Guid.Empty || expected.Length is < 3 or > 220 ||
+        if (request.AccountId == Guid.Empty || request.ClientName?.Length > 220 ||
+            (!request.ConfirmedForAccount && (expected.Length < 3 || expected.Length > 220)) ||
             ids.Length is < 1 or > 100 || ids.Any(x => x == Guid.Empty))
             return Results.BadRequest(new { message = "Cuenta, razón social y cotizaciones requeridas." });
         var rates = await db.RateHeaders
@@ -200,9 +262,9 @@ public static class RateEndpoints
         if (rates.Count != ids.Length || rates.Any(x =>
             x.ClientLeadId != null ||
             (x.ClientAccountId != null && x.ClientAccountId != request.AccountId) ||
-            string.IsNullOrWhiteSpace(x.ClientName) ||
-            !string.Equals(LegacyClientKey(x.ClientName), expected,
-                StringComparison.Ordinal) ||
+            (!request.ConfirmedForAccount && (string.IsNullOrWhiteSpace(x.ClientName) ||
+                !string.Equals(LegacyClientKey(x.ClientName), expected,
+                    StringComparison.Ordinal))) ||
             (x.QuoNumber == null && !x.RateCode.StartsWith("QUO-", StringComparison.OrdinalIgnoreCase))))
             return Results.Conflict(new {
                 message = "Una o más cotizaciones no coinciden con la razón social o ya pertenecen a otra cuenta."
@@ -214,7 +276,13 @@ public static class RateEndpoints
             rate.ConfigureClientAccount(request.AccountId);
             modified++;
         }
-        if (modified > 0) await db.SaveChangesAsync(ct);
+        if (modified > 0)
+        {
+            await db.SaveChangesAsync(ct);
+            loggerFactory.CreateLogger("Dhole.Pricing.CrmLegacyQuotes").LogInformation(
+                "Manually reconciled {Linked} historical QUO to CRM account {AccountId}; rate ids: {RateIds}",
+                modified, request.AccountId, string.Join(",", ids));
+        }
         return Results.Ok(new { linked = modified, total = rates.Count });
     }
 
