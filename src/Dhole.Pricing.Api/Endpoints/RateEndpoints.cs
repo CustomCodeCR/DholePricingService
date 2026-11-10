@@ -143,9 +143,17 @@ public static class RateEndpoints
         EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {
         var user = context.HttpContext.User;
-        if (!user.Identity?.IsAuthenticated ?? true)
+        if (user.Identity?.IsAuthenticated != true)
             return ValueTask.FromResult<object?>(Results.Unauthorized());
 
+        return HasLegacyQuoteSuperAdminRole(user)
+            ? next(context)
+            : ValueTask.FromResult<object?>(Results.Forbid());
+    }
+
+    // The same authorization rule is used by the endpoint filter and regression tests.
+    private static bool HasLegacyQuoteSuperAdminRole(ClaimsPrincipal user)
+    {
         static bool IsAllowedRole(string role) =>
             role.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
             role.Equals("SuperAdministrador", StringComparison.OrdinalIgnoreCase) ||
@@ -166,9 +174,7 @@ public static class RateEndpoints
                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 .Any(IsAllowedRole);
         }
-        return authorized
-            ? next(context)
-            : ValueTask.FromResult<object?>(Results.Forbid());
+        return authorized;
     }
 
     public sealed record ReconcileLegacyQuotesRequest(
