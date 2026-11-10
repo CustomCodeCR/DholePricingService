@@ -1,3 +1,8 @@
+## [1.9.11] - 2026-11-10
+
+- PATCH DH-20261110-CRM-HIDE-TARIFARIO-067: CRM > Cuentas > Cotizaciones > pendientes excluye antes de contar y paginar las QUO cuyo cliente histórico contenga «TARIFARIO», sin distinguir mayúsculas. La búsqueda, el total y la selección masiva reciben resultados filtrados desde Pricing.
+- No se eliminan ni modifican tarifas, cotizaciones vinculadas, importes o estados. Permisos y contratos REST conservados.
+
 ## [1.9.10] - 2026-11-10
 
 - PATCH DH-20261110-PRICING-CRM-REQUEST-IDENTITY-067: la fuente de modificación devuelve el identificador CRM, nombre del cliente y ejecutivo actuales de la cotización sin reintroducir datos antiguos de la solicitud original. Cotizaciones históricas editables; sin cambios de esquema ni framework. Release global Dhole 1.17.12, CI y staging pendientes.
