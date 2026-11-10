@@ -1,3 +1,8 @@
+## [1.9.6] - 2026-11-10
+
+- PATCH DH-20261110-CRM-LEGACY-REQUEST-SYNC-063: vincular QUO históricas o sincronizar una cuenta CRM actualiza también el nombre de cliente y ejecutivo en todas las solicitudes de vendedor relacionadas, incluidas modificaciones y solicitudes completadas.
+- Se conserva el formulario histórico original, estado, SLA, reservas, responsable, ruta, importes y revisiones; reconciliación idempotente y transaccional sin migración de esquema. Coordinado con DholeWeb 1.17.7.
+
 ## [1.9.5] - 2026-11-10
 
 - PATCH DH-20261110-PRICING-CRM-EXECUTIVE-059: compatibilidad validada del guard de identidad comercial existente: los payloads desde DholeWeb 1.17.3 incluyen executiveUserId del ejecutivo asignado en CRM. El middleware ya exige un vendedor Auth activo y conserva el caso especial Castro Fallas; no se debilitan permisos ni cambian contratos REST.
