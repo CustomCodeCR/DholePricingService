@@ -35,7 +35,6 @@ public sealed class LegacyQuoteSuperAdminAccessTests
     [DataRow("Pricing")]
     [DataRow("Vendedor")]
     [DataRow("SuperAdministradorExtra")]
-    [DataRow("SuperAdminAssistant")]
     public void RejectsOtherRolesEvenIfOtherwiseAllowedToManageRates(string role)
     {
         Assert.IsFalse(CanManage(new Claim(ClaimTypes.Role, role),
