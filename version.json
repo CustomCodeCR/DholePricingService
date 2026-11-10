@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.9.4",
-  "ecosystemVersion": "1.17.2",
-  "releaseId": "DH-20261110-CRM-QUO-SUPERADMIN-058",
+  "version": "1.9.5",
+  "ecosystemVersion": "1.17.3",
+  "releaseId": "DH-20261110-PRICING-CRM-EXECUTIVE-059",
   "releaseStatus": "candidate-master-staging-pending"
 }
