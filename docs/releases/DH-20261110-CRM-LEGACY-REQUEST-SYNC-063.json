@@ -1,0 +1,26 @@
+{
+  "releaseId": "DH-20261110-CRM-LEGACY-REQUEST-SYNC-063",
+  "date": "2026-11-10",
+  "ecosystemVersion": "1.17.7",
+  "components": {
+    "DholePricingService": {
+      "from": "1.9.5",
+      "to": "1.9.6"
+    },
+    "DholeWeb": {
+      "from": "1.17.6",
+      "to": "1.17.7"
+    }
+  },
+  "scope": [
+    "CRM historical QUO reconciliation and account synchronization also update linked seller request client/executive display snapshots.",
+    "Legacy seller requests remain editable/completable until a verified CRM identity is attached.",
+    "No changes to original request form, financial terms, state, SLA or attachments."
+  ],
+  "validation": {
+    "ci": "Pending CI",
+    "staging": "Required after develop merge",
+    "production": "Requires express authorization after successful staging"
+  },
+  "rollback": "Revert coordinated release on develop; original request payload and accounting data remain unchanged."
+}
