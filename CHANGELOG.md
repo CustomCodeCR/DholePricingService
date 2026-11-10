@@ -1,3 +1,8 @@
+## [1.9.4] - 2026-11-10
+
+- PATCH DH-20261110-CRM-QUO-SUPERADMIN-058: solo los roles de superadministración pueden consultar candidatas, buscar el catálogo de QUO históricas, vincular cotizaciones y resincronizar sus datos CRM. Se exige el rol además de los scopes existentes; los demás usuarios reciben 403.
+- Las consultas regulares por cuenta, las rutas, los KPI y el historial permanecen disponibles mediante los scopes previos. Pruebas de roles autorizados y denegados. Coordinado con DholeWeb 1.17.2.
+
 ## [1.9.3] - 2026-11-10
 
 - PATCH DH-20261110-CRM-QUO-LIVE-057: GET /api/pricing/rates/crm-account/{accountId}/dashboard agrupa el estado oficial de todas las QUO vinculadas a esa cuenta, sin depender de oportunidades CRM ni límites de paginación.
