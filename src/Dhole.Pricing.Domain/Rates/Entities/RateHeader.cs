@@ -246,6 +246,47 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, null));
     }
 
+    /// <summary>
+    /// Reconcile a human-confirmed historical QUO with its current CRM identity.
+    /// This updates the visible rate header, not prices, commercial status, or past revisions.
+    /// The original client label remains in previously published revision snapshots.
+    /// </summary>
+    public bool ReconcileLegacyClientAccount(Guid accountId, string clientName, string? executiveName)
+    {
+        if (accountId == Guid.Empty)
+            throw new ArgumentException("Valid CRM account required.", nameof(accountId));
+        var normalizedClient = Normalize(clientName);
+        if (normalizedClient is null || normalizedClient.Length > 220)
+            throw new ArgumentException("El nombre del cliente CRM es obligatorio (máximo 220 caracteres).", nameof(clientName));
+        var normalizedExecutive = Normalize(executiveName);
+        if (normalizedExecutive?.Length > 220)
+            throw new ArgumentException("El ejecutivo CRM excede 220 caracteres.", nameof(executiveName));
+        if (ClientLeadId.HasValue || (ClientAccountId.HasValue && ClientAccountId != accountId))
+            throw new InvalidOperationException("La QUO ya pertenece a otra identidad CRM.");
+
+        var changed = ClientAccountId != accountId ||
+            !string.Equals(ClientName, normalizedClient, StringComparison.Ordinal) ||
+            (normalizedExecutive is not null &&
+             !string.Equals(ExecutiveName, normalizedExecutive, StringComparison.Ordinal));
+        if (!changed) return false;
+
+        ClientAccountId = accountId;
+        ClientName = normalizedClient;
+        if (normalizedExecutive is not null) ExecutiveName = normalizedExecutive;
+        RateName = CreateRateName(
+            RateCode,
+            BuildShipmentDescription(),
+            PolName,
+            PoeName,
+            PodName,
+            IncotermName ?? IncotermCode,
+            ClientName
+        );
+        MarkAsUpdated(DateTime.UtcNow, null);
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, null));
+        return true;
+    }
+
     /// <summary>Persist the CRM prospect identity, never infer it from a company name.</summary>
     public void ConfigureClientLead(Guid leadId)
     {
