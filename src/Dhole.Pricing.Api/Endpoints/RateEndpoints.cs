@@ -198,6 +198,10 @@ public static class RateEndpoints
     // All historic QUO records, including already-linked and nameless records, are
     // discoverable through server-side pagination. Existing links are read-only.
     // Nothing is assigned by matching a name.
+    // Filter before Count/Skip/Take: totals and mass selection reflect visible results.
+    private static IQueryable<RateHeader> ExcludeLegacyTariffClients(IQueryable<RateHeader> query) =>
+        query.Where(x => x.ClientName == null || !x.ClientName.ToUpper().Contains("TARIFARIO"));
+
     private static async Task<IResult> GetLegacyCatalogAsync(
         string? q, string? linkStatus, int? page, int? pageSize,
         ServiceDbContext db, CancellationToken ct)
@@ -213,7 +217,8 @@ public static class RateEndpoints
         var query = db.RateHeaders.AsNoTracking().Where(x => !x.IsDeleted &&
             (x.QuoNumber != null || x.RateCode.StartsWith("QUO-")));
         if (state == "unlinked")
-            query = query.Where(x => x.ClientAccountId == null && x.ClientLeadId == null);
+            query = ExcludeLegacyTariffClients(query.Where(x =>
+                x.ClientAccountId == null && x.ClientLeadId == null));
         else if (state == "linked")
             query = query.Where(x => x.ClientAccountId != null || x.ClientLeadId != null);
         if (search.Length > 0)
