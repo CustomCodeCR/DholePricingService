@@ -343,6 +343,10 @@ public static class SellerRateRequestEndpoints
             || string.IsNullOrWhiteSpace(request.DestinationName))
             return Results.BadRequest(new { message = "Complete cliente, ejecutivo, modalidad y ruta." });
 
+        var poeSelectionError = RateRequestPoeSelection.Validate(request.Payload, request.ShipmentMode, request.PoeId);
+        if (poeSelectionError is not null)
+            return Results.BadRequest(new { code = "Pricing.RateRequestInvalidPoeSelection", message = poeSelectionError });
+
         entity.UpdateSubmission(
             priority,
             request.ClientName,
@@ -470,6 +474,8 @@ public static class SellerRateRequestEndpoints
             request.ShipmentMode,
             request.OriginName,
             request.DestinationName,
+            selectedPoeIds = RateRequestPoeSelection.Ids(root, request.PoeId),
+            selectedPoeNames = RateRequestPoeSelection.Names(root, request.PoeName),
             equipmentType = FirstString(context, "equipmentType") ?? FirstString(form, "equipmentType") ?? FirstString(form, "equipmentSize"),
             equipmentQuantity = FirstInt(context, "equipmentQuantity") ?? FirstInt(form, "equipmentQuantity") ?? 1,
             modality = FirstString(context, "modality") ?? FirstString(form, "modality") ?? request.ShipmentMode,
