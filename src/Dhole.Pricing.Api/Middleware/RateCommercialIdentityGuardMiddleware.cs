@@ -1,5 +1,8 @@
 using System.Text.Json;
 using Dhole.Pricing.Api.Services;
+using Dhole.Pricing.Domain.Rates.Enums;
+using Dhole.Pricing.Persistence.DbContexts;
+using Microsoft.EntityFrameworkCore;
 
 namespace Dhole.Pricing.Api.Middleware;
 
@@ -10,7 +13,8 @@ public sealed class RateCommercialIdentityGuardMiddleware(RequestDelegate next)
 
     public async Task InvokeAsync(
         HttpContext context,
-        AuthSellerDirectoryService sellerDirectory)
+        AuthSellerDirectoryService sellerDirectory,
+        ServiceDbContext db)
     {
         if (!IsRateWriteRequest(context.Request))
         {
@@ -67,6 +71,16 @@ public sealed class RateCommercialIdentityGuardMiddleware(RequestDelegate next)
                 if (!Guid.TryParse(executiveUserIdText, out var executiveUserId)
                     || executiveUserId == Guid.Empty)
                 {
+                    // Pre-CRM records can continue only with their exact, server-verified
+                    // persisted customer/executive. A new quote without a CRM identity
+                    // cannot bypass Auth unless tied to an existing open legacy request.
+                    if (await IsVerifiedHistoricalWriteAsync(
+                        context.Request, root, db, clientName, executiveName, context.RequestAborted))
+                    {
+                        await next(context);
+                        return;
+                    }
+
                     await WriteBadRequestAsync(
                         context,
                         "Pricing.RateExecutiveRequired",
@@ -130,6 +144,55 @@ public sealed class RateCommercialIdentityGuardMiddleware(RequestDelegate next)
         }
 
         await next(context);
+    }
+
+    private static async Task<bool> IsVerifiedHistoricalWriteAsync(
+        HttpRequest httpRequest, JsonElement body, ServiceDbContext db,
+        string clientName, string executiveName, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(GetString(body, "clientAccountId"))
+            || !string.IsNullOrWhiteSpace(GetString(body, "clientLeadId")))
+            return false;
+
+        var path = httpRequest.Path.Value?.TrimEnd('/') ?? string.Empty;
+        if (HttpMethods.IsPut(httpRequest.Method)
+            && path.StartsWith(RatesPath + "/", StringComparison.OrdinalIgnoreCase)
+            && Guid.TryParse(path[(RatesPath.Length + 1)..], out var rateId))
+        {
+            var rate = await db.RateHeaders.AsNoTracking().FirstOrDefaultAsync(
+                x => x.Id == rateId && !x.IsDeleted, ct);
+            return rate != null && !rate.ClientAccountId.HasValue && !rate.ClientLeadId.HasValue
+                && string.Equals(rate.ClientName?.Trim(), clientName.Trim(), StringComparison.Ordinal)
+                && string.Equals(rate.ExecutiveName?.Trim(), executiveName.Trim(), StringComparison.Ordinal);
+        }
+
+        if (!HttpMethods.IsPost(httpRequest.Method)
+            || !path.Equals(RatesPath, StringComparison.OrdinalIgnoreCase)
+            || !Guid.TryParse(GetString(body, "legacyRateRequestId"), out var requestId))
+            return false;
+
+        var historical = await db.RateRequests.AsNoTracking().FirstOrDefaultAsync(
+            x => x.Id == requestId && x.Status == RateRequestStatus.Open && x.RateId == null, ct);
+        if (historical == null
+            || !string.Equals(historical.ClientName?.Trim(), clientName.Trim(), StringComparison.Ordinal)
+            || !string.Equals(historical.ExecutiveName?.Trim(), executiveName.Trim(), StringComparison.Ordinal))
+            return false;
+
+        try
+        {
+            using var document = JsonDocument.Parse(historical.PayloadJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("form", out var form)
+                || form.ValueKind != JsonValueKind.Object)
+                return false;
+            // An ordinary post-CRM seller request is not a historical exception.
+            return string.IsNullOrWhiteSpace(GetString(form, "clientId"))
+                && string.IsNullOrWhiteSpace(GetString(form, "crmClientKind"));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static bool IsRateWriteRequest(HttpRequest request)
