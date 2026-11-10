@@ -1,3 +1,9 @@
+## [1.9.2] - 2026-11-09
+
+- PATCH DH-20261109-CRM-QUO-LINK-SYNC-056: al vincular una QUO histórica, sincroniza la identidad CRM en RateHeader.ClientName, ExecutiveName y RateName, sin tocar importes, revisiones ni estado; conserva las identidades históricas de las revisiones publicadas.
+- Endpoint idempotente para actualizar los datos de cliente de las QUO vinculadas previamente a la misma cuenta, sin reasignación a otra cuenta ni prospecto. Mismo evento de dominio e invalidación realtime.
+- DholeWeb 1.16.1, ecosistema 1.16.2; requiere CI y validación en staging antes de master.
+
 ## [1.9.1] - 2026-11-09
 - PATCH: add authenticated GET /api/pricing/rates/realtime-access and /api/pricing/costs/realtime-access with existing RateView/WorkspaceAccess scopes. No records or price data returned.
 - Emit transactional metadata-only rate-list and cost-list invalidations for all rate header and cost mutations through Pricing Outbox. NotificationsHub delivers to authorized list observers and frontend re-queries REST. Staging infra now clones DholeSystem/develop.

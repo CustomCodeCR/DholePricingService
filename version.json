@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.9.1",
-  "ecosystemVersion": "1.16.1",
-  "releaseId": "rt-20261107-01",
-  "releaseStatus": "staging-realtime-acl-collection-invalidation"
+  "version": "1.9.2",
+  "ecosystemVersion": "1.16.2",
+  "releaseId": "DH-20261109-CRM-QUO-LINK-SYNC-056",
+  "releaseStatus": "candidate-develop-staging-pending"
 }
