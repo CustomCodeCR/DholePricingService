@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.6.0",
-  "ecosystemVersion": "1.15.0",
-  "releaseId": "DH-20261109-CRM-CLIENT-QUOTES-053",
+  "version": "1.9.0",
+  "ecosystemVersion": "1.16.0",
+  "releaseId": "DH-20261109-CRM-LEGACY-QUO-CATALOG-055",
   "releaseStatus": "candidate-master-staging-pending"
 }
