@@ -140,6 +140,27 @@ public sealed class RateRequest : Entity<Guid>
         PayloadJson = string.IsNullOrWhiteSpace(payloadJson) ? "{}" : payloadJson;
     }
 
+    // A CRM reconciliation changes the current display identity, not the seller's
+    // original form, SLA, commercial terms, status, lease or ownership.
+    // This is safe for open, completed and historical modification requests.
+    public bool SynchronizeLinkedQuoteClient(string? clientName, string? executiveName)
+    {
+        var name = Normalize(clientName);
+        var executive = Normalize(executiveName);
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 220
+            || executive?.Length > 220)
+            throw new ArgumentException("Datos comerciales CRM inválidos para la solicitud.");
+
+        var changed = !string.Equals(ClientName, name, StringComparison.Ordinal)
+            || (executive is not null
+                && !string.Equals(ExecutiveName, executive, StringComparison.Ordinal));
+        if (!changed) return false;
+
+        ClientName = name;
+        if (executive is not null) ExecutiveName = executive;
+        return true;
+    }
+
     public void SetRoute(Guid? poeId, string? poeName, Guid? podId, string? podName)
     {
         PoeId = poeId;
