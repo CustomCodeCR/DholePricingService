@@ -186,8 +186,9 @@ public sealed class RateCommercialIdentityGuardMiddleware(RequestDelegate next)
                 || form.ValueKind != JsonValueKind.Object)
                 return false;
             // An ordinary post-CRM seller request is not a historical exception.
-            return string.IsNullOrWhiteSpace(GetString(form, "clientId"))
-                && string.IsNullOrWhiteSpace(GetString(form, "crmClientKind"));
+            // Historic Config IDs may be present in clientId. Only crmClientKind
+            // indicates a verified CRM account/lead identity in this form.
+            return string.IsNullOrWhiteSpace(GetString(form, "crmClientKind"));
         }
         catch (JsonException)
         {
