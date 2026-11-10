@@ -44,6 +44,46 @@ public sealed class SellerRateRequestEditingTests
     }
 
     [TestMethod]
+    public void SynchronizeLinkedQuoteClient_PreservesHistoricalRequestAndIsIdempotent()
+    {
+        var request = NewRequest();
+        var rateId = Guid.NewGuid();
+        request.AttachRate(rateId);
+        request.SetRoute(Guid.NewGuid(), "Caldera", null, null);
+        var originalPayload = request.PayloadJson;
+        var originalSeller = request.SellerUserId;
+        var originalDeadline = request.DueAtUtc;
+        var originalStatus = request.Status;
+        var originalRoute = request.PoeId;
+
+        Assert.IsTrue(request.SynchronizeLinkedQuoteClient("  CLIENTE CRM  ", "Vendedor nuevo"));
+        Assert.AreEqual("CLIENTE CRM", request.ClientName);
+        Assert.AreEqual("Vendedor nuevo", request.ExecutiveName);
+        Assert.AreEqual(rateId, request.RateId);
+        Assert.AreEqual(originalPayload, request.PayloadJson);
+        Assert.AreEqual(originalStatus, request.Status);
+        Assert.AreEqual(originalSeller, request.SellerUserId);
+        Assert.AreEqual(originalDeadline, request.DueAtUtc);
+        Assert.AreEqual(originalRoute, request.PoeId);
+        Assert.IsFalse(request.SynchronizeLinkedQuoteClient("CLIENTE CRM", "Vendedor nuevo"));
+
+        // Requests already completed must also reflect a later CRM migration.
+        var completed = NewRequest();
+        completed.MarkCompleted(DateTime.UtcNow);
+        Assert.IsTrue(completed.SynchronizeLinkedQuoteClient("CUENTA MIGRADA", null));
+        Assert.AreEqual(RateRequestStatus.Completed, completed.Status);
+        Assert.AreEqual("CUENTA MIGRADA", completed.ClientName);
+    }
+
+    [TestMethod]
+    public void SynchronizeLinkedQuoteClient_RejectsBlankCustomer()
+    {
+        var request = NewRequest();
+        Assert.ThrowsExactly<ArgumentException>(() => request.SynchronizeLinkedQuoteClient(" ", null));
+        Assert.AreEqual("Cliente original", request.ClientName);
+    }
+
+    [TestMethod]
     public void AirLclRequest_AcceptsMissingPodAndKeepsPoe()
     {
         // Air LCL uses POE as its destination; a final maritime POD is optional.
