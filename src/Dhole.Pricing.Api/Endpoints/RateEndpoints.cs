@@ -51,15 +51,19 @@ public static class RateEndpoints
         group.MapGet("/crm-account/{accountId:guid}/dashboard", GetAccountQuoteDashboardAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
         group.MapPost("/crm-account/{accountId:guid}/sync-client", SyncCrmAccountQuotesAsync)
-            .RequireScope(PricingConstants.Scopes.RateUpdate);
+            .RequireScope(PricingConstants.Scopes.RateUpdate)
+            .AddEndpointFilter(LegacyQuoteSuperAdminFilter);
         group.MapGet("/crm-lead/{leadId:guid}", GetLeadQuotesAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/crm-legacy-catalog", GetLegacyCatalogAsync)
-            .RequireScope(PricingConstants.Scopes.RateView);
+            .RequireScope(PricingConstants.Scopes.RateView)
+            .AddEndpointFilter(LegacyQuoteSuperAdminFilter);
         group.MapGet("/crm-legacy-candidates", GetLegacyCandidatesAsync)
-            .RequireScope(PricingConstants.Scopes.RateView);
+            .RequireScope(PricingConstants.Scopes.RateView)
+            .AddEndpointFilter(LegacyQuoteSuperAdminFilter);
         group.MapPost("/crm-legacy-reconcile", ReconcileLegacyQuotesAsync)
-            .RequireScope(PricingConstants.Scopes.RateUpdate);
+            .RequireScope(PricingConstants.Scopes.RateUpdate)
+            .AddEndpointFilter(LegacyQuoteSuperAdminFilter);
 
         group
             .MapGet("/dashboard", GetRateDashboardAsync)
@@ -127,6 +131,48 @@ public static class RateEndpoints
         return app;
     }
 
+
+    // Historic CRM ownership changes are a privileged administrative action,
+    // independent of the ordinary Pricing view/update scopes. This filter runs
+    // server-side and applies to legacy search, binding and repair endpoints.
+    // Do not grant access to ordinary Admin/Administrador roles.
+    private static ValueTask<object?> LegacyQuoteSuperAdminFilter(
+        EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    {
+        var user = context.HttpContext.User;
+        if (user.Identity?.IsAuthenticated != true)
+            return ValueTask.FromResult<object?>(Results.Unauthorized());
+
+        return HasLegacyQuoteSuperAdminRole(user)
+            ? next(context)
+            : ValueTask.FromResult<object?>(Results.Forbid());
+    }
+
+    // The same authorization rule is used by the endpoint filter and regression tests.
+    private static bool HasLegacyQuoteSuperAdminRole(ClaimsPrincipal user)
+    {
+        static bool IsAllowedRole(string role) =>
+            role.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase) ||
+            role.Equals("SuperAdministrador", StringComparison.OrdinalIgnoreCase) ||
+            role.Equals("SuperUsuario", StringComparison.OrdinalIgnoreCase) ||
+            role.Equals("SuperUser", StringComparison.OrdinalIgnoreCase);
+
+        var authorized = new[] { "SuperAdmin", "SuperAdministrador", "SuperUsuario", "SuperUser" }
+            .Any(user.IsInRole);
+        if (!authorized)
+        {
+            authorized = user.Claims
+                .Where(claim =>
+                    claim.Type == ClaimTypes.Role ||
+                    claim.Type.Equals("role", StringComparison.OrdinalIgnoreCase) ||
+                    claim.Type.Equals("roles", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(claim => claim.Value.Split(
+                    new[] { ',', ';', ' ' },
+                    StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                .Any(IsAllowedRole);
+        }
+        return authorized;
+    }
 
     public sealed record ReconcileLegacyQuotesRequest(
         Guid AccountId, string ClientName, Guid[] RateIds, bool ConfirmedForAccount = false,
