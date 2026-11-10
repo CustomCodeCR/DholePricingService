@@ -72,7 +72,7 @@ public sealed class RateCrmLegacyClientSyncTests
     {
         var today = DateTime.UtcNow.Date;
         return RateHeader.Create(
-            rateCode: "QUO-2026-TEST-001",
+            rateCode: "QUO-A7K2P-9X4M8Q",
             sourceImportFclRateId: null,
             agentId: Guid.NewGuid(), agentName: "Agente", agentCode: "AGT",
             carrierId: Guid.NewGuid(), carrierName: "Naviera", carrierCode: "CAR",
