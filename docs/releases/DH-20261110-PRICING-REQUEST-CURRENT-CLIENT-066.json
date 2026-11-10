@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261110-PRICING-REQUEST-CURRENT-CLIENT-066",
+  "releaseType": "PATCH",
+  "ecosystemVersion": "1.17.10",
+  "createdAt": "2026-11-10",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "from": "1.9.8",
+      "to": "1.9.9"
+    }
+  ],
+  "changes": [
+    "Vista actual del cliente en solicitudes de modificación vinculadas a QUO",
+    "Sincronización transaccional de cliente y ejecutivo al editar tarifas desde el wizard",
+    "Compatibilidad retroactiva sin modificación de snapshots históricos"
+  ],
+  "validation": "CI and staging required before master release",
+  "productionDeploymentAuthorized": false
+}
