@@ -343,14 +343,27 @@ public static class RateEndpoints
                 modified++;
             }
         }
-        if (modified > 0)
+        // Synchronize every request already associated with each QUO, including
+        // original and modification requests. Never rewrite its original JSON form.
+        var rateById = rates.ToDictionary(x => x.Id);
+        var linkedRequests = await db.RateRequests
+            .Where(x => x.RateId.HasValue && ids.Contains(x.RateId.Value))
+            .ToListAsync(ct);
+        var requestsUpdated = 0;
+        foreach (var linkedRequest in linkedRequests)
+        {
+            var rate = rateById[linkedRequest.RateId!.Value];
+            if (linkedRequest.SynchronizeLinkedQuoteClient(rate.ClientName, rate.ExecutiveName))
+                requestsUpdated++;
+        }
+        if (modified > 0 || requestsUpdated > 0)
         {
             await db.SaveChangesAsync(ct);
             loggerFactory.CreateLogger("Dhole.Pricing.CrmLegacyQuotes").LogInformation(
-                "Manually reconciled {Linked} historical QUO to CRM account {AccountId}; rate ids: {RateIds}",
-                modified, request.AccountId, string.Join(",", ids));
+                "Manually reconciled {Linked} historical QUO and {RequestsUpdated} requests to CRM account {AccountId}; rate ids: {RateIds}",
+                modified, requestsUpdated, request.AccountId, string.Join(",", ids));
         }
-        return Results.Ok(new { linked = modified, total = rates.Count });
+        return Results.Ok(new { linked = modified, total = rates.Count, requestsUpdated });
     }
 
     // Reconcile quotes linked before the CRM display-name synchronization was introduced.
@@ -373,14 +386,25 @@ public static class RateEndpoints
             if (rate.ReconcileLegacyClientAccount(accountId, name, request.ExecutiveName))
                 updated++;
 
-        if (updated > 0)
+        var rateIds = rates.Select(x => x.Id).ToArray();
+        var linkedRequests = await db.RateRequests
+            .Where(x => x.RateId.HasValue && rateIds.Contains(x.RateId.Value))
+            .ToListAsync(ct);
+        var requestsUpdated = 0;
+        foreach (var linkedRequest in linkedRequests)
+        {
+            if (linkedRequest.SynchronizeLinkedQuoteClient(name, request.ExecutiveName))
+                requestsUpdated++;
+        }
+
+        if (updated > 0 || requestsUpdated > 0)
         {
             await db.SaveChangesAsync(ct);
             loggerFactory.CreateLogger("Dhole.Pricing.CrmLegacyQuotes").LogInformation(
-                "Synchronized CRM client display on {Updated} of {Total} linked QUO for account {AccountId}",
-                updated, rates.Count, accountId);
+                "Synchronized CRM client display on {Updated} of {Total} linked QUO and {RequestsUpdated} requests for account {AccountId}",
+                updated, rates.Count, requestsUpdated, accountId);
         }
-        return Results.Ok(new { updated, total = rates.Count });
+        return Results.Ok(new { updated, total = rates.Count, requestsUpdated });
     }
 
     // Quotes retain the CRM lead that originated them. CRM supplies only conversion
