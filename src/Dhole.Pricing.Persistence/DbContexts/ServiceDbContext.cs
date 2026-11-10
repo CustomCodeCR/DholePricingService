@@ -70,18 +70,62 @@ public sealed class ServiceDbContext(
 
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
 
-    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        // Keep linked request labels consistent in the SAME SaveChanges transaction
+        // as changes to the quotation. Historical payloads are never rewritten.
+        await SynchronizeLinkedRequestIdentitiesAsync(cancellationToken);
         AddRealtimeRateInvalidations();
         AddDomainEventsToOutbox();
-        return base.SaveChangesAsync(cancellationToken);
+        return await base.SaveChangesAsync(cancellationToken);
     }
 
     public override int SaveChanges()
     {
+        SynchronizeLinkedRequestIdentities();
         AddRealtimeRateInvalidations();
         AddDomainEventsToOutbox();
         return base.SaveChanges();
+    }
+
+    private Dictionary<Guid, RateHeader> ChangedClientRateHeaders()
+    {
+        ChangeTracker.DetectChanges();
+        return ChangeTracker.Entries<RateHeader>()
+            .Where(entry => entry.State == EntityState.Modified &&
+                (entry.Property(x => x.ClientName).IsModified ||
+                 entry.Property(x => x.ExecutiveName).IsModified ||
+                 entry.Property(x => x.ClientAccountId).IsModified ||
+                 entry.Property(x => x.ClientLeadId).IsModified))
+            .Select(entry => entry.Entity)
+            .Where(rate => !rate.IsDeleted)
+            .ToDictionary(rate => rate.Id);
+    }
+
+    private async Task SynchronizeLinkedRequestIdentitiesAsync(CancellationToken ct)
+    {
+        var rates = ChangedClientRateHeaders();
+        if (rates.Count == 0) return;
+        var ids = rates.Keys.ToArray();
+        var requests = await RateRequests
+            .Where(request => request.RateId.HasValue && ids.Contains(request.RateId.Value))
+            .ToListAsync(ct);
+        foreach (var request in requests)
+            if (request.RateId is Guid rateId)
+                request.SyncCrmClientIdentity(rates[rateId].ClientName, rates[rateId].ExecutiveName);
+    }
+
+    private void SynchronizeLinkedRequestIdentities()
+    {
+        var rates = ChangedClientRateHeaders();
+        if (rates.Count == 0) return;
+        var ids = rates.Keys.ToArray();
+        var requests = RateRequests
+            .Where(request => request.RateId.HasValue && ids.Contains(request.RateId.Value))
+            .ToList();
+        foreach (var request in requests)
+            if (request.RateId is Guid rateId)
+                request.SyncCrmClientIdentity(rates[rateId].ClientName, rates[rateId].ExecutiveName);
     }
 
     // F6.02: reuse Pricing's durable EF Outbox. A business update and the

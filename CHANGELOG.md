@@ -1,3 +1,7 @@
+## [1.9.9] - 2026-11-10
+
+- PATCH DH-20261110-PRICING-REQUEST-CURRENT-CLIENT-066: las solicitudes asociadas muestran el cliente y ejecutivo vigentes de su tarifa en bandejas, dashboard y detalle, incluso si se crearon antes de la migración CRM. Los cambios de cliente realizados desde el wizard se guardan junto con las solicitudes vinculadas en el mismo SaveChanges. Se preserva el historial original de modificaciones, estados, SLA, revisiones e importes.
+
 ## [1.9.8] - 2026-11-10
 
 - PATCH DH-20261110-CRM-QUO-MODIFICATION-REQUEST-SYNC-065: al vincular o resincronizar una QUO con una cuenta CRM, actualizar en la misma transacción el cliente y ejecutivo de todas sus solicitudes asociadas, incluidas las modificaciones abiertas e históricas; respetar diferencias solicitadas, payload original, estados, revisiones y SLA. Sin modificaciones al framework ni al esquema de datos.
