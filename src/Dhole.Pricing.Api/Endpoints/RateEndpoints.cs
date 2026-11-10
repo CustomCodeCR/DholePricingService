@@ -46,9 +46,10 @@ public static class RateEndpoints
         var group = app.MapGroup("/api/pricing/rates").WithTags("Rates").RequireAuthorization();
 
         group.MapGet("/", GetRatesAsync).RequireScope(PricingConstants.Scopes.RateView);
-
         group.MapGet("/crm-account/{accountId:guid}", GetAccountQuotesAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapPost("/crm-account/{accountId:guid}/sync-client", SyncCrmAccountQuotesAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapGet("/crm-lead/{leadId:guid}", GetLeadQuotesAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/crm-legacy-catalog", GetLegacyCatalogAsync)
@@ -126,7 +127,11 @@ public static class RateEndpoints
 
 
     public sealed record ReconcileLegacyQuotesRequest(
-        Guid AccountId, string ClientName, Guid[] RateIds, bool ConfirmedForAccount = false);
+        Guid AccountId, string ClientName, Guid[] RateIds, bool ConfirmedForAccount = false,
+        string? ExecutiveName = null);
+
+    public sealed record SyncCrmAccountQuotesRequest(
+        string ClientName, string? ExecutiveName, bool ConfirmedForAccount);
 
     // Normalize only presentation differences (vowel accents/whitespace).
     // Keep Ñ, punctuation, words and business suffixes: broader fuzzy matches
@@ -253,8 +258,9 @@ public static class RateEndpoints
     {
         var expected = LegacyClientKey(request.ClientName);
         var ids = request.RateIds?.Distinct().ToArray() ?? [];
-        if (request.AccountId == Guid.Empty || request.ClientName?.Length > 220 ||
-            (!request.ConfirmedForAccount && (expected.Length < 3 || expected.Length > 220)) ||
+        if (request.AccountId == Guid.Empty || expected.Length is < 1 or > 220 ||
+            (!request.ConfirmedForAccount && expected.Length < 3) ||
+            request.ExecutiveName?.Length > 220 ||
             ids.Length is < 1 or > 100 || ids.Any(x => x == Guid.Empty))
             return Results.BadRequest(new { message = "Cuenta, razón social y cotizaciones requeridas." });
         var rates = await db.RateHeaders
@@ -272,9 +278,19 @@ public static class RateEndpoints
         var modified = 0;
         foreach (var rate in rates)
         {
-            if (rate.ClientAccountId == request.AccountId) continue;
-            rate.ConfigureClientAccount(request.AccountId);
-            modified++;
+            if (request.ConfirmedForAccount)
+            {
+                // The CRM name and executive replace the current header display while
+                // historical publication snapshots and all commercial amounts stay unchanged.
+                if (rate.ReconcileLegacyClientAccount(
+                    request.AccountId, request.ClientName, request.ExecutiveName))
+                    modified++;
+            }
+            else if (rate.ClientAccountId != request.AccountId)
+            {
+                rate.ConfigureClientAccount(request.AccountId);
+                modified++;
+            }
         }
         if (modified > 0)
         {
@@ -284,6 +300,36 @@ public static class RateEndpoints
                 modified, request.AccountId, string.Join(",", ids));
         }
         return Results.Ok(new { linked = modified, total = rates.Count });
+    }
+
+    // Reconcile quotes linked before the CRM display-name synchronization was introduced.
+    // Deliberately POST-only: GETs never write business data.
+    private static async Task<IResult> SyncCrmAccountQuotesAsync(
+        Guid accountId, SyncCrmAccountQuotesRequest request,
+        ServiceDbContext db, ILoggerFactory loggerFactory, CancellationToken ct)
+    {
+        var name = request.ClientName?.Trim();
+        if (accountId == Guid.Empty || !request.ConfirmedForAccount ||
+            string.IsNullOrWhiteSpace(name) || name.Length > 220 ||
+            request.ExecutiveName?.Length > 220)
+            return Results.BadRequest(new { message = "Confirme la cuenta y su nombre CRM válido." });
+
+        var rates = await db.RateHeaders
+            .Where(x => !x.IsDeleted && x.ClientAccountId == accountId && x.ClientLeadId == null)
+            .ToListAsync(ct);
+        var updated = 0;
+        foreach (var rate in rates)
+            if (rate.ReconcileLegacyClientAccount(accountId, name, request.ExecutiveName))
+                updated++;
+
+        if (updated > 0)
+        {
+            await db.SaveChangesAsync(ct);
+            loggerFactory.CreateLogger("Dhole.Pricing.CrmLegacyQuotes").LogInformation(
+                "Synchronized CRM client display on {Updated} of {Total} linked QUO for account {AccountId}",
+                updated, rates.Count, accountId);
+        }
+        return Results.Ok(new { updated, total = rates.Count });
     }
 
     // Quotes retain the CRM lead that originated them. CRM supplies only conversion
@@ -321,7 +367,7 @@ public static class RateEndpoints
             .ThenBy(x => x.Id).Skip((number - 1) * size).Take(size)
             .Select(x => new { x.Id, x.QuoNumber, x.RateCode, x.ShipmentMode,
                 x.Status, x.PolName, x.PoeName, x.PodName, x.RevisionNumber,
-                x.CreatedAtUtc, x.ClientLeadId }).ToListAsync(ct);
+                x.CreatedAtUtc, x.ClientLeadId, x.ClientAccountId, x.ClientName, x.ExecutiveName }).ToListAsync(ct);
         var items = snapshots.Select(x => new {
             pricingQuoteId = x.Id,
             quoteNumberSnapshot = string.IsNullOrWhiteSpace(x.QuoNumber) ? x.RateCode : x.QuoNumber,
@@ -330,6 +376,8 @@ public static class RateEndpoints
             linkedAt = x.CreatedAtUtc, polName = x.PolName,
             poeName = x.PoeName, podName = x.PodName,
             revisionNumber = x.RevisionNumber, clientLeadId = x.ClientLeadId,
+            clientAccountId = x.ClientAccountId, clientName = x.ClientName,
+            executiveName = x.ExecutiveName,
             available = !string.IsNullOrWhiteSpace(x.PolName) &&
                 (!string.IsNullOrWhiteSpace(x.PodName) || !string.IsNullOrWhiteSpace(x.PoeName))
         }).ToArray();
