@@ -51,6 +51,8 @@ public static class RateEndpoints
 
         group.MapGet("/crm-account/{accountId:guid}", GetAccountQuotesAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapGet("/crm-account/{accountId:guid}/dashboard", GetAccountQuoteDashboardAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
         group.MapPost("/crm-account/{accountId:guid}/sync-client", SyncCrmAccountQuotesAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapGet("/crm-lead/{leadId:guid}", GetLeadQuotesAsync)
@@ -264,7 +266,7 @@ public static class RateEndpoints
         if (request.AccountId == Guid.Empty || expected.Length is < 1 or > 220 ||
             (!request.ConfirmedForAccount && expected.Length < 3) ||
             request.ExecutiveName?.Length > 220 ||
-            ids.Length is < 1 or > 100 || ids.Any(x => x == Guid.Empty))
+            ids.Length is < 1 or > 1000 || ids.Any(x => x == Guid.Empty))
             return Results.BadRequest(new { message = "Cuenta, razón social y cotizaciones requeridas." });
         var rates = await db.RateHeaders
             .Where(x => ids.Contains(x.Id) && !x.IsDeleted).ToListAsync(ct);
@@ -356,6 +358,35 @@ public static class RateEndpoints
         return ListCustomerQuotes(db, accountId, leads, page, pageSize, ct);
     }
 
+    // Official Pricing statuses drive CRM indicators, including QUO linked directly
+    // to an account without a CRM opportunity. A single aggregation has no 100-row cap.
+    private static async Task<IResult> GetAccountQuoteDashboardAsync(
+        Guid accountId, ServiceDbContext db, CancellationToken ct)
+    {
+        if (accountId == Guid.Empty) return Results.BadRequest();
+        var breakdown = await db.RateHeaders.AsNoTracking()
+            .Where(x => !x.IsDeleted && x.ClientAccountId == accountId &&
+                (x.QuoNumber != null || x.RateCode.StartsWith("QUO-")))
+            .GroupBy(x => x.Status)
+            .Select(x => new { Status = x.Key, Count = x.Count() })
+            .ToListAsync(ct);
+        int Count(params string[] statuses) => breakdown
+            .Where(x => statuses.Contains(x.Status.ToString(), StringComparer.OrdinalIgnoreCase))
+            .Sum(x => x.Count);
+        var total = breakdown.Sum(x => x.Count);
+        var sent = Count("Sent", "RequestedByClient", "Expired");
+        var approved = Count("AcceptedByClient");
+        var rejected = Count("RejectedByClient");
+        var cancelled = Count("Cancelled");
+        return Results.Ok(new {
+            total, sent, approved, rejected, cancelled,
+            other = total - sent - approved - rejected - cancelled,
+            pendingSync = 0, lastSyncAt = (DateTime?)null,
+            linkedOnly = false, truncated = false,
+            source = "Pricing"
+        });
+    }
+
     private static async Task<IResult> ListCustomerQuotes(ServiceDbContext db,
         Guid accountId, Guid[] leadIds, int? page, int? pageSize, CancellationToken ct)
     {
@@ -363,8 +394,10 @@ public static class RateEndpoints
         var number = Math.Clamp(page ?? 1, 1, 100000);
         var size = Math.Clamp(pageSize ?? 30, 1, 100);
         var query = db.RateHeaders.AsNoTracking()
-            .Where(x => !x.IsDeleted && (x.ClientAccountId == accountId ||
-                (x.ClientLeadId.HasValue && leadIds.Contains(x.ClientLeadId.Value))));
+            .Where(x => !x.IsDeleted &&
+                (x.QuoNumber != null || x.RateCode.StartsWith("QUO-")) &&
+                (x.ClientAccountId == accountId ||
+                 (x.ClientLeadId.HasValue && leadIds.Contains(x.ClientLeadId.Value))));
         var total = await query.CountAsync(ct);
         var snapshots = await query.OrderByDescending(x => x.CreatedAtUtc)
             .ThenBy(x => x.Id).Skip((number - 1) * size).Take(size)
