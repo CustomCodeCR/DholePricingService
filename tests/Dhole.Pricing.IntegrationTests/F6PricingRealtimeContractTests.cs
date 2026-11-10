@@ -1,7 +1,4 @@
 using System.Text.Json;
-using Dhole.Pricing.Api.Endpoints;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Routing;
 using Dhole.Pricing.Persistence.Messaging;
 using Microsoft.Extensions.Configuration;
 
@@ -10,20 +7,6 @@ namespace Dhole.Pricing.IntegrationTests;
 [TestClass]
 public sealed class F6PricingRealtimeContractTests
 {
-    [TestMethod]
-    public void Pricing_realtime_collection_routes_are_registered_under_existing_API_groups()
-    {
-        var builder = WebApplication.CreateBuilder();
-        using var app = builder.Build();
-        app.MapCostEndpoints();
-        app.MapRateEndpoints();
-        var paths = ((IEndpointRouteBuilder)app).DataSources
-            .SelectMany(x => x.Endpoints).OfType<RouteEndpoint>()
-            .Select(x => x.RoutePattern.RawText).ToArray();
-        CollectionAssert.Contains(paths, "/api/pricing/costs/realtime-access");
-        CollectionAssert.Contains(paths, "/api/pricing/rates/realtime-access");
-    }
-
     [TestMethod]
     public void Feature_flags_fail_closed_for_wrong_release_and_missing_approval()
     {

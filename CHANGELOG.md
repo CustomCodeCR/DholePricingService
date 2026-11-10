@@ -1,7 +1,7 @@
-## [1.8.2] - 2026-11-09
+## [1.9.1] - 2026-11-09
 - PATCH: add authenticated GET /api/pricing/rates/realtime-access and /api/pricing/costs/realtime-access with existing RateView/WorkspaceAccess scopes. No records or price data returned.
 - Emit transactional metadata-only rate-list and cost-list invalidations for all rate header and cost mutations through Pricing Outbox. NotificationsHub delivers to authorized list observers and frontend re-queries REST. Staging infra now clones DholeSystem/develop.
-- Ecosystem 1.15.5, master/production unchanged.
+- Ecosystem 1.16.1, master/production unchanged.
 
 ## [1.9.0] - 2026-11-09
 
