@@ -1,3 +1,9 @@
+## [1.9.0] - 2026-11-09
+
+- MINOR: Catálogo completo server-side de QUO históricas vía GET /api/pricing/rates/crm-legacy-catalog y reconciliación manual confirmada con cuenta CRM.
+- Solo se pueden asociar QUO sin cuenta/prospecto; preserva el histórico comercial, datos financieros y las APIs REST existentes. Registro de auditoría.
+- Release DH-20261109-CRM-LEGACY-QUO-CATALOG-055 con DholeWeb 1.16.0 y ecosistema 1.16.0.
+
 ## [1.6.0] - 2026-11-09
 
 - Asociación y migración manual de cotizaciones antiguas a cuentas CRM con UUID sin alterar valores.
