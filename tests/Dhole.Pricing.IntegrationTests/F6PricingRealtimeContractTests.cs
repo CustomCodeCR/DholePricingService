@@ -53,6 +53,28 @@ public sealed class F6PricingRealtimeContractTests
     }
 
     [TestMethod]
+    public void Rate_and_cost_collection_envelopes_are_fixed_and_metadata_only()
+    {
+        foreach (var kind in new[] { "rate-list", "cost-list" })
+        {
+            var eventId = Guid.NewGuid();
+            var envelope = PricingRealtimeInvalidation.CollectionEnvelope(eventId,
+                kind, DateTimeOffset.UtcNow, eventId.ToString("D"));
+            using var json = JsonDocument.Parse(envelope);
+            var root = json.RootElement;
+            Assert.AreEqual("pricing." + kind + ".changed.v1",
+                root.GetProperty("eventType").GetString());
+            Assert.AreEqual(kind, root.GetProperty("aggregateType").GetString());
+            Assert.IsTrue(root.GetProperty("aggregateVersion").GetInt64() > 0);
+            Assert.IsFalse(envelope.Contains("clientName", StringComparison.Ordinal));
+            Assert.IsFalse(envelope.Contains("costValue", StringComparison.Ordinal));
+        }
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            PricingRealtimeInvalidation.CollectionEnvelope(Guid.NewGuid(), "unknown",
+                DateTimeOffset.UtcNow, "test"));
+    }
+
+    [TestMethod]
     public void Only_known_lifecycle_actions_allowed_and_invalid_events_are_rejected()
     {
         var id = Guid.NewGuid();
