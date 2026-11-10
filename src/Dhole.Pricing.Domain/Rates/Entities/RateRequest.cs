@@ -148,6 +148,31 @@ public sealed class RateRequest : Entity<Guid>
         PodName = Normalize(podName);
     }
 
+    /// <summary>
+    /// Align the current CRM display identity of a linked request with its rate.
+    /// Historical seller payloads, requested modification differences and workflow
+    /// state must never be rewritten by administrative QUO reconciliation.
+    /// </summary>
+    public bool SyncCrmClientIdentity(string? clientName, string? executiveName)
+    {
+        var normalizedClient = Normalize(clientName);
+        var normalizedExecutive = Normalize(executiveName);
+        var changed = false;
+        if (normalizedClient is not null &&
+            !string.Equals(ClientName, normalizedClient, StringComparison.Ordinal))
+        {
+            ClientName = normalizedClient;
+            changed = true;
+        }
+        if (normalizedExecutive is not null &&
+            !string.Equals(ExecutiveName, normalizedExecutive, StringComparison.Ordinal))
+        {
+            ExecutiveName = normalizedExecutive;
+            changed = true;
+        }
+        return changed;
+    }
+
     public void AttachRate(Guid rateId)
     {
         if (rateId == Guid.Empty)

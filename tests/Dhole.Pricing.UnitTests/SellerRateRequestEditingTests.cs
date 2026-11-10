@@ -19,6 +19,41 @@ public sealed class SellerRateRequestEditingTests
         payloadJson: "{\"form\":{\"clientName\":\"Cliente original\"}}");
 
     [TestMethod]
+    public void SyncCrmClientIdentity_UpdatesModificationWithoutOverwritingSellerChanges()
+    {
+        const string payload = "{\"kind\":\"Modification\",\"form\":{\"clientName\":\"Cliente anterior\"},\"modification\":{\"changes\":[{\"field\":\"cargo\",\"requested\":\"nuevo\"}]}}";
+        var request = RateRequest.Create(
+            RateRequestPriority.Red, Guid.NewGuid(), "Vendedor", "sales@example.com",
+            "Cliente anterior", "Ejecutivo anterior", "Fcl", "Shanghái", "Caldera", payload);
+        var rateId = Guid.NewGuid();
+        request.AttachRate(rateId);
+        request.SetWorkStatus("Working", DateTime.UtcNow);
+        var due = request.DueAtUtc;
+
+        Assert.IsTrue(request.IsSellerModificationRequest);
+        Assert.IsTrue(request.SyncCrmClientIdentity(" Cliente CRM ", " Ejecutivo CRM "));
+        Assert.AreEqual("Cliente CRM", request.ClientName);
+        Assert.AreEqual("Ejecutivo CRM", request.ExecutiveName);
+        Assert.AreEqual(payload, request.PayloadJson);
+        Assert.AreEqual(rateId, request.RateId);
+        Assert.AreEqual(due, request.DueAtUtc);
+        Assert.AreEqual("Working", request.WorkStatus);
+        Assert.AreEqual(RateRequestStatus.Open, request.Status);
+        Assert.IsFalse(request.SyncCrmClientIdentity("Cliente CRM", "Ejecutivo CRM"));
+    }
+
+    [TestMethod]
+    public void SyncCrmClientIdentity_KeepsOriginalExecutiveWhenCrmValueMissing()
+    {
+        var request = NewRequest();
+        request.MarkCompleted(DateTime.UtcNow);
+        Assert.IsTrue(request.SyncCrmClientIdentity("Cuenta vinculada", null));
+        Assert.AreEqual("Cuenta vinculada", request.ClientName);
+        Assert.AreEqual("Vendedor", request.ExecutiveName);
+        Assert.AreEqual(RateRequestStatus.Completed, request.Status);
+    }
+
+    [TestMethod]
     public void UpdateSubmission_PreservesOwnershipAndOriginalSlaClock()
     {
         var request = NewRequest();

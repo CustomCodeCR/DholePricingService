@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261110-CRM-QUO-MODIFICATION-REQUEST-SYNC-065",
+  "releaseType": "PATCH",
+  "ecosystemVersion": "1.17.8",
+  "createdAt": "2026-11-10",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "from": "1.9.7",
+      "to": "1.9.8"
+    }
+  ],
+  "changes": [
+    "Sincronización transaccional de clientes y ejecutivos CRM en solicitudes vinculadas a QUO, incluidas modificaciones e historial",
+    "Idempotencia y conservación de cambios solicitados, historial y estados de trabajo"
+  ],
+  "validation": "CI and staging required before master release",
+  "productionDeploymentAuthorized": false
+}
