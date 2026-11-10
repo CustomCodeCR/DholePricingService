@@ -1,3 +1,9 @@
+## [1.9.3] - 2026-11-10
+
+- PATCH DH-20261110-CRM-QUO-LIVE-057: GET /api/pricing/rates/crm-account/{accountId}/dashboard agrupa el estado oficial de todas las QUO vinculadas a esa cuenta, sin depender de oportunidades CRM ni límites de paginación.
+- La reconciliación manual confirmada acepta hasta 1000 QUO por operación atómica; mantiene la protección contra cotizaciones de otra cuenta y preserva datos comerciales. Los listados por cuenta excluyen tarifarios que no son QUO.
+- Coordinado con DholeWeb 1.17.1 / DholeSystem 1.17.1.
+
 ## [1.9.2] - 2026-11-09
 
 - PATCH DH-20261109-CRM-QUO-LINK-SYNC-056: asociación histórica QUO ahora actualiza RateHeader.ClientName, ExecutiveName y RateName desde CRM, conserva importes, revisiones y estados y emite evento de dominio.
