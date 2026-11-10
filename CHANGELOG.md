@@ -1,3 +1,8 @@
+## [1.9.5] - 2026-11-10
+
+- PATCH DH-20261110-PRICING-CRM-EXECUTIVE-059: compatibilidad validada del guard de identidad comercial existente: los payloads desde DholeWeb 1.17.3 incluyen executiveUserId del ejecutivo asignado en CRM. El middleware ya exige un vendedor Auth activo y conserva el caso especial Castro Fallas; no se debilitan permisos ni cambian contratos REST.
+- Corrección funcional exclusiva de DholeWeb; versión de Pricing coordinada para el release global 1.17.3. Sin cambios en precios, persistencia o esquema.
+
 ## [1.9.4] - 2026-11-10
 
 - PATCH DH-20261110-CRM-QUO-SUPERADMIN-058: solo los roles de superadministración pueden consultar candidatas, buscar el catálogo de QUO históricas, vincular cotizaciones y resincronizar sus datos CRM. Se exige el rol además de los scopes existentes; los demás usuarios reciben 403.
