@@ -1,3 +1,8 @@
+## [1.9.4] - 2026-11-10
+
+- PATCH DH-20261110-CRM-QUO-SUPERADMIN-058: rol de superadministración obligatorio en el catálogo de QUO históricas, búsqueda de candidatas, conciliación de vínculos y sincronización de cliente; se preservan los scopes anteriores.
+- Acceso de usuarios ordinarios a cotizaciones por cuenta, KPI e historial continúa sin cambios. Pruebas de autorización por roles y rechazo a administradores estándar. Coordinado con DholeWeb 1.17.2.
+
 ## [1.9.3] - 2026-11-10
 
 - PATCH DH-20261110-CRM-QUO-LIVE-057: GET /api/pricing/rates/crm-account/{accountId}/dashboard agrupa el estado oficial de todas las QUO vinculadas a esa cuenta, sin depender de oportunidades CRM ni límites de paginación.
