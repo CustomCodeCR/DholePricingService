@@ -73,6 +73,7 @@ public sealed class ServiceDbContext(
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         AddRealtimeRateInvalidations();
+        AddRealtimeCostListInvalidations();
         AddDomainEventsToOutbox();
         return base.SaveChangesAsync(cancellationToken);
     }
@@ -123,6 +124,39 @@ public sealed class ServiceDbContext(
                 CreatedAtUtc = at.UtcDateTime,
             });
         }
+        if (modified.Count > 0) AppendRealtimeListInvalidation("rate-list");
+    }
+
+    private void AddRealtimeCostListInvalidations()
+    {
+        if (!PricingRealtimeInvalidation.IsEnabled(realtimeConfiguration)) return;
+        ChangeTracker.DetectChanges();
+        if (ChangeTracker.Entries<Cost>().Any(e => e.State is
+            EntityState.Added or EntityState.Modified or EntityState.Deleted) ||
+            ChangeTracker.Entries<CostIncoterm>().Any(e => e.State is
+            EntityState.Added or EntityState.Modified or EntityState.Deleted))
+            AppendRealtimeListInvalidation("cost-list");
+    }
+
+    private void AppendRealtimeListInvalidation(string collection)
+    {
+        var eventId = Guid.NewGuid();
+        var eventType = $"pricing.{collection}.changed.v1";
+        var now = DateTimeOffset.UtcNow;
+        var correlationId = (AuditExecutionContextAccessor.Current?.CorrelationId ?? eventId).ToString("D");
+        OutboxMessages.Add(new OutboxMessage
+        {
+            EventId = eventId,
+            EventName = eventType,
+            EventType = eventType,
+            SourceService = SourceService,
+            PayloadJson = PricingRealtimeInvalidation.CollectionEnvelope(eventId, collection,
+                PricingRealtimeInvalidation.NextVersionHint(), now, correlationId),
+            CorrelationId = correlationId,
+            Status = OutboxMessageStatus.Pending,
+            RetryCount = 0,
+            CreatedAtUtc = now.UtcDateTime,
+        });
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

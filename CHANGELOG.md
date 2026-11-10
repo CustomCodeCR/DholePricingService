@@ -9,6 +9,12 @@
 
 # Changelog
 
+## [1.8.2] - 2026-11-09
+
+- PATCH: durable metadata-only list invalidations for Pricing costs and tariffs, including newly created records. Writes and collection invalidations share the existing EF Outbox transaction; no new Hub or direct Redis write from HTTP.
+- Read-only secured realtime ACL endpoints for the Pricing workspace and rate view. Staging infrastructure pinned to DholeSystem/develop. Global 1.15.2; production unchanged.
+
+
 ## [1.7.2] - 2026-11-09
 
 - PATCH QUO-00000-000269: el endpoint comercial expone currentRateStatus desde la cabecera vigente, además del status histórico de la revisión publicada. Las solicitudes realmente abiertas siguen marcándose de forma independiente mediante pricingModificationActive.
