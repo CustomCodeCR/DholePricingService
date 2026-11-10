@@ -1,3 +1,9 @@
+## [1.9.0] - 2026-11-09
+
+- MINOR: endpoint `GET /api/pricing/rates/crm-legacy-catalog` para consultar todas las QUO históricas con búsqueda por código, cliente y ruta, paginación y estado de vinculación CRM.
+- Conciliación manual confirmada a una cuenta CRM para registros con nombres históricos distintos o ausentes, sin reasignar cotizaciones ya vinculadas ni alterar importes, fechas, revisiones o estado comercial. Log estructurado por operación.
+- Release coordinado `DH-20261109-CRM-LEGACY-QUO-CATALOG-055` con DholeWeb 1.16.0 y ecosistema 1.16.0. Pendiente CI y validación en staging.
+
 ## [1.8.1] - 2026-11-09
 
 - PATCH: aceptar/rechazar cotizaciones Open del vendedor con una revisión publicada, sin solicitud de modificación activa ni aprobación de margen pendiente. Conservar importes de la última revisión enviada y no emitir PDF de un borrador.
