@@ -1,3 +1,7 @@
+## [1.9.10] - 2026-11-10
+
+- PATCH DH-20261110-PRICING-CRM-REQUEST-IDENTITY-067: la fuente de modificación devuelve el identificador CRM, nombre del cliente y ejecutivo actuales de la cotización sin reintroducir datos antiguos de la solicitud original. Cotizaciones históricas editables; sin cambios de esquema ni framework. Release global Dhole 1.17.12, CI y staging pendientes.
+
 ## [1.9.9] - 2026-11-10
 
 - PATCH DH-20261110-PRICING-REQUEST-CURRENT-CLIENT-066: las solicitudes asociadas muestran el cliente y ejecutivo vigentes de su tarifa en bandejas, dashboard y detalle, incluso si se crearon antes de la migración CRM. Los cambios de cliente realizados desde el wizard se guardan junto con las solicitudes vinculadas en el mismo SaveChanges. Se preserva el historial original de modificaciones, estados, SLA, revisiones e importes.

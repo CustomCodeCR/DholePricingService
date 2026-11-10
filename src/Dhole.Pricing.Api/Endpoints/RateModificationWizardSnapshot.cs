@@ -116,7 +116,11 @@ internal static class RateModificationWizardSnapshot
             ["serviceIds"] = rate.RateServices.Select(x => x.ServiceId.ToString()).OrderBy(x => x).ToArray(),
             ["loadDate"] = rate.ValidFrom.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             ["validTo"] = rate.ValidTo.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            // Preserve the CRM link even for amendments of quotes created before CRM migration.
+            ["clientId"] = rate.ClientAccountId?.ToString() ?? rate.ClientLeadId?.ToString() ?? "",
+            ["crmClientKind"] = rate.ClientLeadId.HasValue ? "lead" : rate.ClientAccountId.HasValue ? "account" : "",
             ["clientName"] = rate.ClientName ?? "",
+            ["executiveName"] = rate.ExecutiveName ?? "",
             ["cargoCondition"] = CargoCondition(rate),
             ["dangerousCargo"] = false,
             ["nonStackable"] = false,

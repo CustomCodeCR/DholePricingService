@@ -102,14 +102,26 @@ public static class SellerRateRequestEndpoints
             => originalRequest is { ValueKind: JsonValueKind.Object } source
                 && source.TryGetProperty(name, out var value) ? value.Clone() : null;
 
+        var savedForm = PayloadField("form");
+        var sourceForm = RateModificationWizardSnapshot.OriginalForm(rate);
+        if (savedForm is { ValueKind: JsonValueKind.Object } originalForm)
+            foreach (var field in originalForm.EnumerateObject())
+                sourceForm[field.Name] = field.Value.Clone();
+
+        // A legacy request's stored client/executive must not override a CRM
+        // association made after the initial quotation was issued.
+        sourceForm["clientId"] = rate.ClientAccountId?.ToString() ?? rate.ClientLeadId?.ToString() ?? "";
+        sourceForm["crmClientKind"] = rate.ClientLeadId.HasValue ? "lead" : rate.ClientAccountId.HasValue ? "account" : "";
+        sourceForm["clientName"] = rate.ClientName ?? "";
+        sourceForm["executiveName"] = rate.ExecutiveName ?? "";
+
         return Results.Ok(new
         {
             rateId = rate.Id,
             reference = rate.QuoNumber ?? rate.RateCode,
             revisionNumber = rate.RevisionNumber,
             priority = priority ?? "Green",
-            form = (object)(PayloadField("form") ?? JsonSerializer.SerializeToElement(
-                RateModificationWizardSnapshot.OriginalForm(rate))),
+            form = sourceForm,
             pickupLocations = (object)(PayloadField("pickupLocations") ??
                 JsonSerializer.SerializeToElement(RateModificationWizardSnapshot.PickupLocations(rate))),
             supportEntityId = PayloadField("supportEntityId"),
