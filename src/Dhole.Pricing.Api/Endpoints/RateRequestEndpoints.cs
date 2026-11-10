@@ -211,6 +211,7 @@ public static class RateRequestEndpoints
                 .ToListAsync(ct))
                 .ToHashSet();
 
+        await RateRequestCurrentIdentity.ApplyAsync(requests, db, ct);
         return Results.Ok(requests
             .Where(x => RateModificationRequestPayload.IsModification(x.PayloadJson)
                 || !x.RateId.HasValue || !linkedExistingRateIds.Contains(x.RateId.Value))
@@ -245,6 +246,7 @@ public static class RateRequestEndpoints
             .OrderByDescending(x => x.RequestedAtUtc)
             .Take(1000)
             .ToListAsync(ct);
+        await RateRequestCurrentIdentity.ApplyAsync(requests, db, ct);
         var ids = requests.Select(x => x.RateId!.Value).Distinct().ToArray();
         var rates = await db.RateHeaders.AsNoTracking()
             .Where(x => ids.Contains(x.Id) && !x.IsDeleted)
@@ -276,7 +278,9 @@ public static class RateRequestEndpoints
     private static async Task<IResult> GetByIdAsync(Guid id, ServiceDbContext db, CancellationToken ct)
     {
         var request = await db.RateRequests.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct);
-        return request is null ? Results.NotFound() : Results.Ok(ToDto(request));
+        if (request is null) return Results.NotFound();
+        await RateRequestCurrentIdentity.ApplyAsync([request], db, ct);
+        return Results.Ok(ToDto(request));
     }
 
     private static async Task<IResult> AttachRateAsync(

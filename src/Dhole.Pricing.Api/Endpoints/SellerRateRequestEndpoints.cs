@@ -282,6 +282,7 @@ public static class SellerRateRequestEndpoints
             .OrderByDescending(x => x.RequestedAtUtc)
             .ToListAsync(cancellationToken);
 
+        await RateRequestCurrentIdentity.ApplyAsync(requests, db, cancellationToken);
         return Results.Ok(requests.Select(ToDto).ToArray());
     }
 
@@ -297,7 +298,9 @@ public static class SellerRateRequestEndpoints
 
         var request = await db.RateRequests.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == id && x.SellerUserId == currentUserId.Value, cancellationToken);
-        return request is null ? Results.NotFound() : Results.Ok(ToDto(request));
+        if (request is null) return Results.NotFound();
+        await RateRequestCurrentIdentity.ApplyAsync([request], db, cancellationToken);
+        return Results.Ok(ToDto(request));
     }
 
     private static async Task<IResult> UpdateMineAsync(
@@ -435,6 +438,7 @@ public static class SellerRateRequestEndpoints
             .OrderByDescending(request => request.RequestedAtUtc)
             .ToListAsync(cancellationToken);
 
+        await RateRequestCurrentIdentity.ApplyAsync(requests, db, cancellationToken);
         return Results.Ok(requests.Select(ToDto).ToArray());
     }
 
