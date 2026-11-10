@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Dhole.Pricing.Api.Endpoints;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Dhole.Pricing.IntegrationTests;
 
