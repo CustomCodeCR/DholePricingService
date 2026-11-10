@@ -48,6 +48,8 @@ public static class RateEndpoints
         group.MapGet("/", GetRatesAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/crm-account/{accountId:guid}", GetAccountQuotesAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapGet("/crm-account/{accountId:guid}/dashboard", GetAccountQuoteDashboardAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
         group.MapPost("/crm-account/{accountId:guid}/sync-client", SyncCrmAccountQuotesAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapGet("/crm-lead/{leadId:guid}", GetLeadQuotesAsync)
@@ -261,7 +263,7 @@ public static class RateEndpoints
         if (request.AccountId == Guid.Empty || expected.Length is < 1 or > 220 ||
             (!request.ConfirmedForAccount && expected.Length < 3) ||
             request.ExecutiveName?.Length > 220 ||
-            ids.Length is < 1 or > 100 || ids.Any(x => x == Guid.Empty))
+            ids.Length is < 1 or > 1000 || ids.Any(x => x == Guid.Empty))
             return Results.BadRequest(new { message = "Cuenta, razón social y cotizaciones requeridas." });
         var rates = await db.RateHeaders
             .Where(x => ids.Contains(x.Id) && !x.IsDeleted).ToListAsync(ct);
@@ -351,6 +353,34 @@ public static class RateEndpoints
             leads = values.Select(Guid.Parse).Distinct().ToArray();
         }
         return ListCustomerQuotes(db, accountId, leads, page, pageSize, ct);
+    }
+
+    // Official Pricing statuses drive CRM indicators, including QUO linked directly
+    // to an account without a CRM opportunity. A single aggregation has no 100-row cap.
+    private static async Task<IResult> GetAccountQuoteDashboardAsync(
+        Guid accountId, ServiceDbContext db, CancellationToken ct)
+    {
+        if (accountId == Guid.Empty) return Results.BadRequest();
+        var breakdown = await db.RateHeaders.AsNoTracking()
+            .Where(x => !x.IsDeleted && x.ClientAccountId == accountId)
+            .GroupBy(x => x.Status)
+            .Select(x => new { Status = x.Key, Count = x.Count() })
+            .ToListAsync(ct);
+        int Count(params string[] statuses) => breakdown
+            .Where(x => statuses.Contains(x.Status.ToString(), StringComparer.OrdinalIgnoreCase))
+            .Sum(x => x.Count);
+        var total = breakdown.Sum(x => x.Count);
+        var sent = Count("Sent", "RequestedByClient", "Expired");
+        var approved = Count("AcceptedByClient");
+        var rejected = Count("RejectedByClient");
+        var cancelled = Count("Cancelled");
+        return Results.Ok(new {
+            total, sent, approved, rejected, cancelled,
+            other = total - sent - approved - rejected - cancelled,
+            pendingSync = 0, lastSyncAt = (DateTime?)null,
+            linkedOnly = false, truncated = false,
+            source = "Pricing"
+        });
     }
 
     private static async Task<IResult> ListCustomerQuotes(ServiceDbContext db,
