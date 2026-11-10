@@ -123,6 +123,34 @@ public sealed class ServiceDbContext(
                 CreatedAtUtc = at.UtcDateTime,
             });
         }
+
+        // A new rate/cost GUID is unknown to existing open collection screens.
+        // Emit one metadata-only collection signal per changed collection, in
+        // the same EF SaveChanges transaction as the originating write.
+        if (modified.Count != 0) AddCollectionInvalidation("rate-list");
+        if (ChangeTracker.Entries<Cost>().Any(x =>
+                x.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+            AddCollectionInvalidation("cost-list");
+    }
+
+    private void AddCollectionInvalidation(string kind)
+    {
+        var eventId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var eventType = "pricing." + kind + ".changed.v1";
+        OutboxMessages.Add(new OutboxMessage
+        {
+            EventId = eventId,
+            EventType = eventType,
+            EventName = eventType,
+            SourceService = SourceService,
+            PayloadJson = PricingRealtimeInvalidation.CollectionEnvelope(eventId, kind, now,
+                (AuditExecutionContextAccessor.Current?.CorrelationId ?? eventId).ToString("D")),
+            CorrelationId = eventId.ToString("D"),
+            Status = OutboxMessageStatus.Pending,
+            RetryCount = 0,
+            CreatedAtUtc = now.UtcDateTime,
+        });
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

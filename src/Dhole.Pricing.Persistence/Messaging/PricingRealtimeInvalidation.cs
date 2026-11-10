@@ -26,6 +26,36 @@ public static class PricingRealtimeInvalidation
         _ => throw new ArgumentException("Unsupported Pricing rate action.", nameof(action))
     };
 
+
+    public static string CollectionEnvelope(Guid eventId, string kind, DateTimeOffset occurredAt,
+        string correlationId)
+    {
+        var id = kind switch
+        {
+            "rate-list" => Guid.Parse("00000000-0000-4000-8000-000000000044"),
+            "cost-list" => Guid.Parse("00000000-0000-4000-8000-000000000043"),
+            _ => throw new ArgumentException("Unsupported Pricing collection.", nameof(kind))
+        };
+        if (eventId == Guid.Empty || occurredAt.Offset != TimeSpan.Zero ||
+            string.IsNullOrWhiteSpace(correlationId))
+            throw new ArgumentException("Invalid collection invalidation.");
+        return JsonSerializer.Serialize(new
+        {
+            eventId,
+            eventType = "pricing." + kind + ".changed.v1",
+            schemaVersion = 1,
+            aggregateType = kind,
+            aggregateId = id.ToString("D"),
+            // A monotonic-ish notification hint, never the business row version.
+            aggregateVersion = Math.Max(1L, occurredAt.ToUnixTimeMilliseconds()),
+            occurredAtUtc = occurredAt,
+            producer = "DholePricingService",
+            correlationId,
+            audienceRef = "pricing:" + kind + ":" + id.ToString("D"),
+            payload = new { changedFields = new[] { "collection" } }
+        });
+    }
+
     public static string Envelope(
         Guid eventId, Guid rateId, int revision, string action,
         DateTimeOffset occurredAt, string correlationId)
