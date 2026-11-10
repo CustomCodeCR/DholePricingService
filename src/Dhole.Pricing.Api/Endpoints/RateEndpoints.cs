@@ -362,7 +362,8 @@ public static class RateEndpoints
     {
         if (accountId == Guid.Empty) return Results.BadRequest();
         var breakdown = await db.RateHeaders.AsNoTracking()
-            .Where(x => !x.IsDeleted && x.ClientAccountId == accountId)
+            .Where(x => !x.IsDeleted && x.ClientAccountId == accountId &&
+                (x.QuoNumber != null || x.RateCode.StartsWith("QUO-")))
             .GroupBy(x => x.Status)
             .Select(x => new { Status = x.Key, Count = x.Count() })
             .ToListAsync(ct);
@@ -390,8 +391,10 @@ public static class RateEndpoints
         var number = Math.Clamp(page ?? 1, 1, 100000);
         var size = Math.Clamp(pageSize ?? 30, 1, 100);
         var query = db.RateHeaders.AsNoTracking()
-            .Where(x => !x.IsDeleted && (x.ClientAccountId == accountId ||
-                (x.ClientLeadId.HasValue && leadIds.Contains(x.ClientLeadId.Value))));
+            .Where(x => !x.IsDeleted &&
+                (x.QuoNumber != null || x.RateCode.StartsWith("QUO-")) &&
+                (x.ClientAccountId == accountId ||
+                 (x.ClientLeadId.HasValue && leadIds.Contains(x.ClientLeadId.Value))));
         var total = await query.CountAsync(ct);
         var snapshots = await query.OrderByDescending(x => x.CreatedAtUtc)
             .ThenBy(x => x.Id).Skip((number - 1) * size).Take(size)
