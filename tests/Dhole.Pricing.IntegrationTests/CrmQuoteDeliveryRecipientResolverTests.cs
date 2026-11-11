@@ -146,6 +146,63 @@ public sealed class CrmQuoteDeliveryRecipientResolverTests
         Assert.IsNotNull(error);
     }
 
+
+    [TestMethod]
+    public async Task FutureQuotation_ResolvesAllConfiguredContacts()
+    {
+        var contactId2 = Guid.Parse("551b4847-4435-4409-9fd2-9b3668e3b7cf");
+        var preference = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            deliveryTarget = "client", contactIds = new[] { ContactId, contactId2 }
+        });
+        var contacts = System.Text.Json.JsonSerializer.Serialize(new[]
+        {
+            new { contact = new { id = ContactId, name = "María", email = "maria@example.com", status = "Active" } },
+            new { contact = new { id = contactId2, name = "José", email = "jose@example.com", status = "Active" } }
+        });
+        var resolver = CreateResolver(contacts, preferenceJson: preference);
+        var (target, ids, preferenceError) = await resolver.ResolveMultiPreferenceAsync(
+            AccountId, "Bearer sample-token", CancellationToken.None);
+        Assert.IsNull(preferenceError);
+        Assert.AreEqual("client", target);
+        CollectionAssert.AreEquivalent(new[] { ContactId, contactId2 }, ids);
+        var (recipients, deliveryError) = await resolver.ResolveManyAsync(
+            AccountId, ids, "Bearer sample-token", CancellationToken.None);
+        Assert.IsNull(deliveryError);
+        Assert.IsNotNull(recipients);
+        Assert.AreEqual("Carolina Quirós", recipients.AssignedSellerName);
+        CollectionAssert.AreEquivalent(
+            new[] { "maria@example.com", "jose@example.com" },
+            recipients.Contacts.Select(c => c.Email).ToArray());
+    }
+
+    [TestMethod]
+    public async Task FutureQuotation_FailsIfAnyContactWasRemoved()
+    {
+        var missing = Guid.NewGuid();
+        var contacts = System.Text.Json.JsonSerializer.Serialize(new[]
+        {
+            new { contact = new { id = ContactId, name = "María", email = "maria@example.com", status = "Active" } }
+        });
+        var (recipients, error) = await CreateResolver(contacts).ResolveManyAsync(
+            AccountId, new[] { ContactId, missing }, "Bearer sample-token", CancellationToken.None);
+        Assert.IsNull(recipients);
+        StringAssert.Contains(error!, "ya no pertenecen");
+    }
+
+    [TestMethod]
+    public async Task FutureQuotation_FailsClosedForDuplicateSavedContactIds()
+    {
+        var preference = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            deliveryTarget = "client", contactIds = new[] { ContactId, ContactId }
+        });
+        var (target, ids, error) = await CreateResolver("[]", preferenceJson: preference)
+            .ResolveMultiPreferenceAsync(AccountId, "Bearer sample-token", CancellationToken.None);
+        Assert.IsNull(target);
+        Assert.AreEqual(0, ids.Length);
+        Assert.IsNotNull(error);
+    }
     private sealed class LocalCrmHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
         : HttpMessageHandler
     {

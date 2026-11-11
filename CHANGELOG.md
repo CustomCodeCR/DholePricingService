@@ -1,3 +1,8 @@
+## [1.13.0] - 2026-11-11
+
+- MINOR DH-20261111-CRM-QUOTE-MULTI-CONTACTS-102: varios contactos de cuenta seleccionados para todas las cotizaciones futuras, con copia al vendedor asignado. Validación CRM previa al Outbox de cada correo; envío individual por contacto sin revelar otros destinatarios.
+- Compatible con REST y arquitectura realtime existente. Ecosistema global 1.35.0. CI y staging pendientes.
+
 ## [1.12.0] - 2026-11-11
 
 - MINOR DH-20261111-CRM-ACCOUNT-QUOTE-DELIVERY-093: destinatarios permanentes por cuenta para todas las cotizaciones futuras, con validación en CRM antes del Outbox.
