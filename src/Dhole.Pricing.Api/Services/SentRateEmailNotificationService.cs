@@ -22,11 +22,13 @@ public sealed class SentRateEmailNotificationService(
     ServiceDbContext db,
     IPricingConfigCatalogClient configCatalog,
     AuthSellerDirectoryService authDirectory,
+    CrmQuoteDeliveryRecipientResolver crmRecipientResolver,
     IConfiguration configuration,
     ILogger<SentRateEmailNotificationService> logger)
 {
     private const string NotificationEventName = "notifications.notification.requested";
     private const string NotificationType = "pricing.rate.sent-to-seller";
+    private const string ClientNotificationType = "pricing.rate.sent-to-client";
     private const string SalesExecutivesCatalog = "pricing-sales-executives";
     private static readonly string[] CommercialCopyRecipients =
     [
@@ -39,7 +41,11 @@ public sealed class SentRateEmailNotificationService(
     public async Task<string?> QueueBeforeStatusTransitionAsync(
         Guid rateId,
         CancellationToken cancellationToken,
-        string? resendCorrelationId = null)
+        string? resendCorrelationId = null,
+        string? deliveryTarget = null,
+        Guid? contactId = null,
+        string? authorization = null,
+        bool requireAccountVerification = false)
     {
         var rate = await db.RateHeaders
             .AsNoTracking()
@@ -57,6 +63,30 @@ public sealed class SentRateEmailNotificationService(
         // El ejecutivo elegido en el wizard es la fuente de verdad: no enviar
         // por defecto al creador ni a un vendedor de otra solicitud.
         var executiveName = FirstNonEmpty(rate.ExecutiveName, request?.ExecutiveName);
+        var sendToClient = string.Equals(deliveryTarget, "client", StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(deliveryTarget) &&
+            !sendToClient &&
+            !string.Equals(deliveryTarget, "seller", StringComparison.OrdinalIgnoreCase))
+            return "Seleccione un destino válido: vendedor o cliente.";
+        if (sendToClient && !contactId.HasValue)
+            return "Debe elegir un contacto del cliente antes de enviar la cotización.";
+        if (!sendToClient && contactId.HasValue)
+            return "No se admite un contacto cuando el destinatario es el vendedor.";
+
+        CrmQuoteDeliveryRecipient? verifiedAccount = null;
+        if (sendToClient || requireAccountVerification)
+        {
+            if (!rate.ClientAccountId.HasValue || rate.ClientAccountId.Value == Guid.Empty)
+                return "Vincule esta cotización a una cuenta CRM antes de elegir su destinatario.";
+            var verification = await crmRecipientResolver.ResolveAsync(
+                rate.ClientAccountId.Value, sendToClient ? contactId : null,
+                authorization, cancellationToken);
+            if (verification.Error is not null)
+                return verification.Error;
+            verifiedAccount = verification.Recipient;
+            executiveName = verifiedAccount?.AssignedSellerName;
+        }
+
         if (executiveName is null)
             return "Seleccione un vendedor y guarde la tarifa antes de marcarla como Enviada.";
 
@@ -78,12 +108,16 @@ public sealed class SentRateEmailNotificationService(
         // copia. Notifications enviaría correos independientes si añadimos
         // cada destinatario en 'recipients', por eso usamos 'payload.cc'.
         // Evitar que una dirección aparezca simultáneamente en Para y CC.
-        var toRecipients = emails.Take(1).ToArray();
-        var ccRecipients = CommercialCopyRecipients
-            .Where(email => CastroFallasRateEmailRecipientPolicy.CanReceive(executiveName, email))
-            .Where(email => !toRecipients.Contains(email, StringComparer.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var toRecipients = sendToClient
+            ? new[] { verifiedAccount!.ContactEmail! }
+            : emails.Take(1).ToArray();
+        var ccRecipients = sendToClient
+            ? emails.Where(email => !toRecipients.Contains(email, StringComparer.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+            : CommercialCopyRecipients
+                .Where(email => CastroFallasRateEmailRecipientPolicy.CanReceive(executiveName, email))
+                .Where(email => !toRecipients.Contains(email, StringComparer.OrdinalIgnoreCase))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
         var documentResult = await dispatcher.DispatchAsync(
             new GenerateRateDocumentCommand(rate.Id, null, "pdf"),
@@ -124,16 +158,32 @@ public sealed class SentRateEmailNotificationService(
             <p>Inicie sesión en Dhole si se le solicita. El PDF comercial se incluye adjunto.</p>
             """;
 
+        // Clients receive the PDF, never a private Dhole link or internal login instructions.
+        if (sendToClient)
+        {
+            emailBody = $"""
+                <p>Estimado/a {Html(verifiedAccount?.ContactName)},</p>
+                <p>Adjuntamos la cotización <strong>{Html(quo)}</strong> para {Html(client)}.</p>
+                <table style="border-collapse:collapse;width:100%;max-width:740px">
+                  <tr><td style="padding:5px 10px"><strong>Ruta</strong></td><td>{Html(route)}</td></tr>
+                  <tr><td style="padding:5px 10px"><strong>Modalidad</strong></td><td>{Html(rate.ShipmentMode.ToString())}</td></tr>
+                </table>
+                <p>Para cualquier consulta puede comunicarse con su ejecutivo comercial.</p>
+                """;
+        }
+
         await outbox.WriteAsync(
             NotificationEventName,
             NotificationEventName,
             new
             {
-                notificationType = NotificationType,
+                notificationType = sendToClient ? ClientNotificationType : NotificationType,
                 channel = "Email",
                 entityType = "RateHeader",
                 entityId = rate.Id.ToString(),
-                subject = $"Tarifa enviada - {quo} - {client}",
+                subject = sendToClient
+                    ? $"Cotización {quo} - {client}"
+                    : $"Tarifa enviada - {quo} - {client}",
                 body = emailBody,
                 payload = new
                 {
@@ -141,6 +191,8 @@ public sealed class SentRateEmailNotificationService(
                     quoNumber = quo,
                     clientName = client,
                     sellerName = executiveName,
+                    deliveryTarget = sendToClient ? "client" : "seller",
+                    contactId = sendToClient ? contactId : null,
                     action = "open-rate",
                     route = rateRoute,
                     url = rateUrl,
@@ -160,7 +212,7 @@ public sealed class SentRateEmailNotificationService(
                 {
                     userId = (string?)null,
                     address = email,
-                    displayName = executiveName,
+                    displayName = sendToClient ? verifiedAccount?.ContactName : executiveName,
                 }).ToArray(),
             },
             correlationId: resendCorrelationId ?? $"pricing-rate-sent:{rate.Id:N}:rev:{rate.RevisionNumber}",
