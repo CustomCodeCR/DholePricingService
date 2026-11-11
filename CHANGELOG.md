@@ -1,3 +1,8 @@
+## [1.11.3] - 2026-11-11
+
+- PATCH DH-20261111-PRICING-SELLER-REQUEST-HISTORY-093: nuevo GET /api/pricing/rate-requests/by-rate/{rateId}/history que devuelve cronológicamente las solicitudes originales y todas las modificaciones asociadas a una tarifa, con payloads intactos de Ventas y estados históricos, incluso después de completar una modificación.
+- Se permite consultar solicitudes originales e historial con pricing.rate.view, sin ampliar los permisos de escritura y sin tocar montos, estados ni revisiones. Coordinado con DholeWeb 1.32.2 y ecosistema Dhole 1.32.2; CI/staging pendientes, producción no autorizada.
+
 ## [1.11.2] - 2026-11-11
 
 - PATCH DH-20261111-PRICING-NONFCL-DUPLICATE-091: copias editables de LCL, FTL, LTL, aéreo y aéreo consolidado toleran marcadores internos de proveedor, catálogos de equipo terrestre y referencias históricas no-FCL; FCL mantiene validación estricta de navieras y contenedores marítimos.
