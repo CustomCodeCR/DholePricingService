@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.9.11",
-  "ecosystemVersion": "1.17.13",
-  "releaseId": "DH-20261110-CRM-HIDE-TARIFARIO-067",
+  "version": "1.9.12",
+  "ecosystemVersion": "1.21.1",
+  "releaseId": "DH-20261110-SELLER-EXPIRED-081",
   "releaseStatus": "candidate-master-ci-staging-pending"
 }

@@ -130,12 +130,12 @@ public static class SellerRateStatusEndpoints
             return Results.NoContent();
         }
 
-        if (currentRate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient))
+        if (currentRate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient or RateStatus.Expired))
         {
             return Results.Conflict(new
             {
                 code = "Pricing.SellerRateNotAwaitingClient",
-                message = "La tarifa solo puede aceptarse o rechazarse cuando está enviada al cliente.",
+                message = "La tarifa solo puede aceptarse o rechazarse cuando está enviada o vencida.",
             });
         }
 

@@ -468,6 +468,47 @@ public sealed class RateStatusWorkflowTests
     }
 
     [TestMethod]
+    public void ExpiredRate_CanBeAcceptedWithoutRenewingValidity()
+    {
+        var today = DateTime.UtcNow.Date;
+        var validTo = today.AddDays(-1);
+        var rate = CreateRate(validTo: validTo);
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+        Assert.IsTrue(rate.MarkExpired(today));
+
+        rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
+
+        Assert.AreEqual(RateStatus.AcceptedByClient, rate.Status);
+        Assert.AreEqual(validTo, rate.ValidTo);
+        Assert.IsNotNull(rate.AcceptedAtUtc);
+    }
+
+    [TestMethod]
+    public void ExpiredRate_CanBeRejectedWithReasonAndPreservesValidity()
+    {
+        var today = DateTime.UtcNow.Date;
+        var validTo = today.AddDays(-1);
+        var actor = Guid.NewGuid();
+        var rate = CreateRate(validTo: validTo);
+        AddFreight(rate, cost: 80m, sale: 100m);
+        rate.SetAmounts(updatedBy: null);
+        rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+        Assert.IsTrue(rate.MarkExpired(today));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            rate.SetCommercialStatus(RateStatus.RejectedByClient, reason: null, updatedBy: actor));
+
+        rate.SetCommercialStatus(RateStatus.RejectedByClient,
+            reason: "Cliente no acepta", updatedBy: actor);
+
+        Assert.AreEqual(RateStatus.RejectedByClient, rate.Status);
+        Assert.AreEqual(validTo, rate.ValidTo);
+        Assert.AreEqual("Cliente no acepta", rate.ClosedReason);
+        Assert.AreEqual(actor, rate.ClosedBy);
+    }
+
+    [TestMethod]
     public void MarkExpired_DoesNotReplaceClosedDecision()
     {
         var today = DateTime.UtcNow.Date;
