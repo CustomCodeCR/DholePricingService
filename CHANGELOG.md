@@ -1,3 +1,8 @@
+## [1.10.0] - 2026-11-10
+
+- MINOR DH-20261110-CRM-LEAD-QUO-PARITY-080: QUO de prospectos por ClientLeadId, dashboard oficial de estados, reconciliación administrativa de QUO históricas por selección confirmada. Conserva la corrección 1.9.12 para tarifas vencidas del vendedor.
+- Sin migraciones ni modificaciones de importes o estados comerciales; preserva APIs y SignalR.
+
 ## [1.9.12] - 2026-11-10
 
 - PATCH DH-20261110-SELLER-EXPIRED-081: permite al vendedor propietario marcar tarifas vencidas como aceptadas o rechazadas mediante el endpoint existente de decisión comercial; valida motivo de rechazo, preserva auditoría, idempotencia, fechas de vigencia y avisos de apertura.
