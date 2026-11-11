@@ -7,5 +7,6 @@ public sealed record SetRateStatusRequest(
     string? OtherReferences = null,
     string? Observations = null,
     string? DeliveryTarget = null,
-    Guid? ContactId = null
+    Guid? ContactId = null,
+    Guid? LinkedAcceptedRateId = null
 );
