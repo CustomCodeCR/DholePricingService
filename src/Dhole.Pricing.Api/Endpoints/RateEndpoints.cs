@@ -2102,7 +2102,7 @@ public static class RateEndpoints
 
         // A grouped alternative cannot reach Dynamics or commercial acceptance
         // until the user has explicitly selected it in the quotation group.
-        if (status == RateStatus.AcceptedByClient)
+        if (status is RateStatus.AcceptedByClient or RateStatus.Sent)
         {
             var connection = db.Database.GetDbConnection();
             var shouldClose = connection.State != ConnectionState.Open;
