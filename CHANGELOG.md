@@ -1,3 +1,9 @@
+## [1.12.0] - 2026-11-11
+
+- MINOR DH-20261111-CRM-ACCOUNT-QUOTE-DELIVERY-093: destinatarios permanentes por cuenta para todas las cotizaciones futuras, con validación en CRM antes del Outbox.
+- Solo al vendedor, o al contacto elegido con copia al vendedor. REST, realtime y procesamiento idempotente existentes.
+- Ecosistema 1.33.0; CI y staging pendientes.
+
 ## [1.11.3] - 2026-11-11
 
 - PATCH DH-20261111-PRICING-SELLER-REQUEST-HISTORY-093: GET /api/pricing/rate-requests/by-rate/{rateId}/history de solo lectura, que devuelve la solicitud original y las modificaciones vinculadas a una QUO sin alterar payloads, estados ni revisiones existentes.
