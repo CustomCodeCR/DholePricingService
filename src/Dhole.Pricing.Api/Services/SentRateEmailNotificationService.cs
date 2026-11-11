@@ -99,7 +99,7 @@ public sealed class SentRateEmailNotificationService(
             if (!rate.ClientAccountId.HasValue || rate.ClientAccountId.Value == Guid.Empty)
                 return "Vincule esta cotización a una cuenta CRM antes de elegir su destinatario.";
             var verification = await crmRecipientResolver.ResolveManyAsync(
-                rate.ClientAccountId.Value, sendToClient ? configuredContactIds : [],
+                rate.ClientAccountId.Value, sendToClient ? configuredContactIds : Array.Empty<Guid>(),
                 authorization, cancellationToken);
             if (verification.Error is not null)
                 return verification.Error;
@@ -219,7 +219,7 @@ public sealed class SentRateEmailNotificationService(
                     sellerName = executiveName,
                     deliveryTarget = sendToClient ? "client" : "seller",
                     contactId = sendToClient ? contactId : null,
-                    contactIds = sendToClient ? configuredContactIds : [],
+                    contactIds = sendToClient ? configuredContactIds : Array.Empty<Guid>(),
                     action = "open-rate",
                     route = rateRoute,
                     url = rateUrl,
