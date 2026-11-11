@@ -58,6 +58,11 @@ public static class RateEndpoints
             .AddEndpointFilter(LegacyQuoteSuperAdminFilter);
         group.MapGet("/crm-lead/{leadId:guid}", GetLeadQuotesAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapGet("/crm-lead/{leadId:guid}/dashboard", GetLeadQuoteDashboardAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
+        group.MapPost("/crm-legacy-lead-reconcile", ReconcileLegacyLeadQuotesAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate)
+            .AddEndpointFilter(LegacyQuoteSuperAdminFilter);
         group.MapGet("/crm-legacy-catalog", GetLegacyCatalogAsync)
             .RequireScope(PricingConstants.Scopes.RateView)
             .AddEndpointFilter(LegacyQuoteSuperAdminFilter);
@@ -183,6 +188,10 @@ public static class RateEndpoints
 
     public sealed record SyncCrmAccountQuotesRequest(
         string ClientName, string? ExecutiveName, bool ConfirmedForAccount);
+
+    public sealed record ReconcileLegacyLeadQuotesRequest(
+        Guid LeadId, string ClientName, Guid[] RateIds,
+        bool ConfirmedForLead = false, string? ExecutiveName = null);
 
     // Normalize only presentation differences (vowel accents/whitespace).
     // Keep Ñ, punctuation, words and business suffixes: broader fuzzy matches
@@ -363,6 +372,44 @@ public static class RateEndpoints
         return Results.Ok(new { linked = modified, total = rates.Count, requestsUpdated });
     }
 
+    // Manually confirmed lead linkage shares the same privilege and anti-stealing
+    // rules as historical account linkage. A GET never writes the relationship.
+    private static async Task<IResult> ReconcileLegacyLeadQuotesAsync(
+        ReconcileLegacyLeadQuotesRequest request, ServiceDbContext db,
+        ILoggerFactory loggerFactory, CancellationToken ct)
+    {
+        var name = request.ClientName?.Trim();
+        var ids = request.RateIds?.Distinct().ToArray() ?? [];
+        if (request.LeadId == Guid.Empty || !request.ConfirmedForLead ||
+            string.IsNullOrWhiteSpace(name) || name.Length > 220 ||
+            request.ExecutiveName?.Length > 220 ||
+            ids.Length is < 1 or > 1000 || ids.Any(x => x == Guid.Empty))
+            return Results.BadRequest(new { message = "Confirme el prospecto y las QUO seleccionadas." });
+        var rates = await db.RateHeaders.Where(x => ids.Contains(x.Id) && !x.IsDeleted)
+            .ToListAsync(ct);
+        if (rates.Count != ids.Length || rates.Any(x =>
+            x.ClientAccountId != null ||
+            (x.ClientLeadId != null && x.ClientLeadId != request.LeadId) ||
+            (x.QuoNumber == null &&
+             !x.RateCode.StartsWith("QUO-", StringComparison.OrdinalIgnoreCase))))
+            return Results.Conflict(new {
+                message = "Una o más QUO pertenecen a otra identidad CRM o no son cotizaciones."
+            });
+        var updated = 0;
+        foreach (var rate in rates)
+            if (rate.ReconcileLegacyClientLead(request.LeadId, name, request.ExecutiveName))
+                updated++;
+        var requestsUpdated = await SynchronizeLinkedRateRequestsAsync(rates, db, ct);
+        if (updated > 0 || requestsUpdated > 0)
+        {
+            await db.SaveChangesAsync(ct);
+            loggerFactory.CreateLogger("Dhole.Pricing.CrmLegacyQuotes").LogInformation(
+                "Confirmed {Linked} QUO for CRM lead {LeadId}; updated {RequestsUpdated} requests",
+                updated, request.LeadId, requestsUpdated);
+        }
+        return Results.Ok(new { linked = updated, total = rates.Count, requestsUpdated });
+    }
+
     // Reconcile quotes linked before the CRM display-name synchronization was introduced.
     // Deliberately POST-only: GETs never write business data.
     private static async Task<IResult> SyncCrmAccountQuotesAsync(
@@ -439,6 +486,32 @@ public static class RateEndpoints
 
     // Official Pricing statuses drive CRM indicators, including QUO linked directly
     // to an account without a CRM opportunity. A single aggregation has no 100-row cap.
+    private static async Task<IResult> GetLeadQuoteDashboardAsync(
+        Guid leadId, ServiceDbContext db, CancellationToken ct)
+    {
+        if (leadId == Guid.Empty) return Results.BadRequest();
+        var breakdown = await db.RateHeaders.AsNoTracking()
+            .Where(x => !x.IsDeleted && x.ClientLeadId == leadId &&
+                (x.QuoNumber != null || x.RateCode.StartsWith("QUO-")))
+            .GroupBy(x => x.Status)
+            .Select(x => new { Status = x.Key, Count = x.Count() })
+            .ToListAsync(ct);
+        int Count(params string[] statuses) => breakdown
+            .Where(x => statuses.Contains(x.Status.ToString(), StringComparer.OrdinalIgnoreCase))
+            .Sum(x => x.Count);
+        var total = breakdown.Sum(x => x.Count);
+        var sent = Count("Sent", "RequestedByClient", "Expired");
+        var approved = Count("AcceptedByClient");
+        var rejected = Count("RejectedByClient");
+        var cancelled = Count("Cancelled");
+        return Results.Ok(new {
+            total, sent, approved, rejected, cancelled,
+            other = total - sent - approved - rejected - cancelled,
+            pendingSync = 0, lastSyncAt = (DateTime?)null,
+            linkedOnly = true, truncated = false, source = "Pricing"
+        });
+    }
+
     private static async Task<IResult> GetAccountQuoteDashboardAsync(
         Guid accountId, ServiceDbContext db, CancellationToken ct)
     {
