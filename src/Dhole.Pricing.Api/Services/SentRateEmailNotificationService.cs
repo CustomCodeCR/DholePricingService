@@ -60,29 +60,41 @@ public sealed class SentRateEmailNotificationService(
             .OrderByDescending(x => x.RequestedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
-        // El ejecutivo elegido en el wizard es la fuente de verdad: no enviar
-        // por defecto al creador ni a un vendedor de otra solicitud.
+        // The CRM account preference overrides any per-QUO browser recipient.
+        // The internal authenticated lookup also serves delivery retry workers.
         var executiveName = FirstNonEmpty(rate.ExecutiveName, request?.ExecutiveName);
+        CrmQuoteDeliveryRecipient? verifiedAccount = null;
+        CrmQuoteDeliveryRecipientResolver.AccountDelivery? savedPolicy = null;
+        if (rate.ClientAccountId is { } accountId && accountId != Guid.Empty)
+        {
+            var policy = await crmRecipientResolver.ReadAccountDeliveryAsync(accountId, cancellationToken);
+            if (policy.Error is not null) return policy.Error;
+            savedPolicy = policy.Delivery;
+            deliveryTarget = savedPolicy!.DeliveryTarget;
+            contactId = savedPolicy.ContactId;
+            executiveName = savedPolicy.SellerName;
+            verifiedAccount = new CrmQuoteDeliveryRecipient(
+                savedPolicy.SellerName, savedPolicy.ContactName, savedPolicy.ContactEmail);
+        }
+
         var sendToClient = string.Equals(deliveryTarget, "client", StringComparison.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(deliveryTarget) &&
             !sendToClient &&
             !string.Equals(deliveryTarget, "seller", StringComparison.OrdinalIgnoreCase))
             return "Seleccione un destino válido: vendedor o cliente.";
         if (sendToClient && !contactId.HasValue)
-            return "Debe elegir un contacto del cliente antes de enviar la cotización.";
+            return "La cuenta debe tener un contacto válido configurado antes del envío.";
         if (!sendToClient && contactId.HasValue)
             return "No se admite un contacto cuando el destinatario es el vendedor.";
 
-        CrmQuoteDeliveryRecipient? verifiedAccount = null;
-        if (sendToClient || requireAccountVerification)
+        if (savedPolicy is null && (sendToClient || requireAccountVerification))
         {
             if (!rate.ClientAccountId.HasValue || rate.ClientAccountId.Value == Guid.Empty)
                 return "Vincule esta cotización a una cuenta CRM antes de elegir su destinatario.";
             var verification = await crmRecipientResolver.ResolveAsync(
                 rate.ClientAccountId.Value, sendToClient ? contactId : null,
                 authorization, cancellationToken);
-            if (verification.Error is not null)
-                return verification.Error;
+            if (verification.Error is not null) return verification.Error;
             verifiedAccount = verification.Recipient;
             executiveName = verifiedAccount?.AssignedSellerName;
         }
@@ -90,11 +102,10 @@ public sealed class SentRateEmailNotificationService(
         if (executiveName is null)
             return "Seleccione un vendedor y guarde la tarifa antes de marcarla como Enviada.";
 
-        var emails = await ResolveRecipientsAsync(
-            executiveName,
-            request?.SellerName,
-            request?.SellerEmail,
-            cancellationToken);
+        IReadOnlyList<string> emails = savedPolicy is not null
+            ? new[] { savedPolicy.SellerEmail }
+            : await ResolveRecipientsAsync(executiveName, request?.SellerName,
+                request?.SellerEmail, cancellationToken);
 
         if (emails.Count == 0)
         {
