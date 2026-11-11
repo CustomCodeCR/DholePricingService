@@ -1,3 +1,8 @@
+## [1.11.4] - 2026-11-11
+
+- PATCH DH-20261111-PRICING-SELLER-SYNC-094: al guardar correctamente una revisión asociada a una solicitud de modificación, Pricing prepara y completa la solicitud vinculada sin exigir un segundo clic de envío. El envío PDF/correo permanece separado en el Outbox y reintentos idempotentes, respetando aprobación de márgenes.
+- El reconciliador recupera solicitudes históricas abiertas cuya revisión preparada coincide exactamente con la revisión persistida; no cierra revisiones no preparadas, canceladas ni modificaciones de otra QUO. Contratos REST y SignalR compatibles. CI/staging pendientes; sin despliegue autorizado a producción.
+
 ## [1.11.3] - 2026-11-11
 
 - PATCH DH-20261111-PRICING-SELLER-REQUEST-HISTORY-093: nuevo GET /api/pricing/rate-requests/by-rate/{rateId}/history que devuelve cronológicamente las solicitudes originales y todas las modificaciones asociadas a una tarifa, con payloads intactos de Ventas y estados históricos, incluso después de completar una modificación.
