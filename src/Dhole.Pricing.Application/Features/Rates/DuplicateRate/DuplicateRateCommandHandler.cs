@@ -273,17 +273,28 @@ public sealed class DuplicateRateCommandHandler(
         PricingConfigCatalogItem? incoterm = null;
         PricingConfigCatalogItem? currency;
 
+        // LCL and land providers include internal snapshots, not Config catalog items.
+        var isLand = DuplicateRateCatalogPolicy.IsLand(source.ShipmentMode);
+        var isLcl = source.ShipmentMode == ShipmentMode.Lcl;
+        var isOwnLclAgent = DuplicateRateCatalogPolicy.IsInternalLclAgent(
+            source.ShipmentMode, source.AgentId);
+
         try
         {
-            agent = await configCatalog.GetActiveInGroupAsync(
-                source.AgentId, PricingConstants.CatalogSlugs.Agents, cancellationToken);
-            if (source.AgentId.HasValue && agent is null)
+            agent = isLand || isOwnLclAgent ? null
+                : await configCatalog.GetActiveInGroupAsync(
+                    source.AgentId, PricingConstants.CatalogSlugs.Agents, cancellationToken);
+            if (!isLand && !isOwnLclAgent && source.AgentId.HasValue && agent is null
+                && source.ShipmentMode is not (ShipmentMode.Air or ShipmentMode.AirConsol))
                 return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
                     "El agente", PricingConstants.CatalogSlugs.Agents));
 
-            carrier = await configCatalog.GetActiveInGroupAsync(
-                source.CarrierId, PricingConstants.CatalogSlugs.Carriers, cancellationToken);
-            if (source.CarrierId.HasValue && carrier is null)
+            carrier = DuplicateRateCatalogPolicy.RequiresCarrierLookup(
+                source.ShipmentMode, source.CarrierId)
+                ? await configCatalog.GetActiveInGroupAsync(
+                    source.CarrierId, PricingConstants.CatalogSlugs.Carriers, cancellationToken)
+                : null;
+            if (DuplicateRateCatalogPolicy.RequiresActiveCarrier(source.ShipmentMode) && carrier is null)
                 return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
                     "La naviera", PricingConstants.CatalogSlugs.Carriers));
 
@@ -295,8 +306,10 @@ public sealed class DuplicateRateCommandHandler(
                 ? await configCatalog.GetActiveInGroupAsync(
                     source.PodId, PricingConstants.CatalogSlugs.Pod, cancellationToken)
                 : null;
-            containerType = await configCatalog.GetActiveInGroupAsync(
-                source.ContainerTypeId, PricingConstants.CatalogSlugs.ContainerTypes, cancellationToken);
+            containerType = await configCatalog.GetActiveInAnyGroupAsync(
+                source.ContainerTypeId,
+                DuplicateRateCatalogPolicy.EquipmentCatalogGroups(source.ShipmentMode),
+                cancellationToken);
             currency = await configCatalog.GetActiveInGroupAsync(
                 source.CurrencyId, PricingConstants.CatalogSlugs.Currencies, cancellationToken);
 
@@ -307,8 +320,13 @@ public sealed class DuplicateRateCommandHandler(
             if (source.PodId.HasValue && pod is null)
                 return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
                     "El POD", PricingConstants.CatalogSlugs.Pod));
-            if (containerType is null) return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
-                "El tipo de contenedor", PricingConstants.CatalogSlugs.ContainerTypes));
+            if (containerType is null && !(DuplicateRateCatalogPolicy.CanUseHistoricalEquipmentSnapshot(source.ShipmentMode)
+                && source.ContainerTypeId != Guid.Empty
+                && !string.IsNullOrWhiteSpace(source.ContainerTypeName)
+                && !string.IsNullOrWhiteSpace(source.ContainerTypeCode)))
+                return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
+                    isLand ? "La unidad terrestre" : "El tipo de contenedor",
+                    DuplicateRateCatalogPolicy.EquipmentErrorGroup(source.ShipmentMode)));
             if (currency is null) return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
                 "La moneda", PricingConstants.CatalogSlugs.Currencies));
 
@@ -334,6 +352,24 @@ public sealed class DuplicateRateCommandHandler(
         var duplicateValidTo = command.ValidTo
             ?? (source.ShipmentMode == ShipmentMode.Fcl ? duplicateValidFrom : source.ValidTo);
 
+        // Use the same internal provider snapshots as CreateRate and UpdateRate.
+        // For air, preserve historical airline data if the reference is now inactive.
+        var agentId = isLand ? DuplicateRateCatalogPolicy.LandAgentId
+            : isOwnLclAgent ? DuplicateRateCatalogPolicy.OwnLclAgentId : agent?.Id ?? source.AgentId;
+        var agentName = isLand || isOwnLclAgent ? "Grupo Castro Fallas"
+            : agent?.SnapshotName() ?? source.AgentName;
+        var agentCode = isLand || isOwnLclAgent ? "GCF"
+            : agent?.Code ?? source.AgentCode;
+        var carrierId = isLand ? DuplicateRateCatalogPolicy.LandCarrierId
+            : isLcl && carrier is null ? DuplicateRateCatalogPolicy.LclCarrierId
+            : carrier?.Id ?? source.CarrierId;
+        var carrierName = isLand ? source.ShipmentMode == ShipmentMode.Ftl ? "TIGSA" : "No aplica (terrestre)"
+            : isLcl && carrier is null ? "No aplica (LCL)"
+            : carrier?.SnapshotName() ?? source.CarrierName;
+        var carrierCode = isLand ? source.ShipmentMode == ShipmentMode.Ftl ? "TIGSA" : "LAND"
+            : isLcl && carrier is null ? "LCL"
+            : carrier?.Code ?? source.CarrierCode;
+
         RateHeader duplicate;
 
         try
@@ -343,12 +379,12 @@ public sealed class DuplicateRateCommandHandler(
                 // Una copia FCL nunca debe conservar la tarifa importada anterior: el flete
                 // debe seleccionarse otra vez para validar vigencia/disponibilidad actual.
                 sourceImportFclRateId: null,
-                agent?.Id,
-                agent?.SnapshotName(),
-                agent?.Code,
-                carrier?.Id,
-                carrier?.SnapshotName(),
-                carrier?.Code,
+                agentId,
+                agentName,
+                agentCode,
+                carrierId,
+                carrierName,
+                carrierCode,
                 pol.Id,
                 pol.SnapshotName(),
                 pol.Code,
@@ -358,9 +394,9 @@ public sealed class DuplicateRateCommandHandler(
                 pod?.Id,
                 pod?.SnapshotName(),
                 pod?.Code,
-                containerType.Id,
-                containerType.SnapshotName(),
-                containerType.Code,
+                containerType?.Id ?? source.ContainerTypeId,
+                containerType?.SnapshotName() ?? source.ContainerTypeName,
+                containerType?.Code ?? source.ContainerTypeCode,
                 incoterm?.Id,
                 incoterm?.SnapshotName(preferValue: true),
                 incoterm?.Code,
@@ -417,14 +453,27 @@ public sealed class DuplicateRateCommandHandler(
             var sourceContainers = new List<RateContainerAllocationSpec>();
             foreach (var requested in requestedContainers)
             {
-                var resolvedContainer = await configCatalog.GetActiveInGroupAsync(
-                    requested.ContainerTypeId, PricingConstants.CatalogSlugs.ContainerTypes, cancellationToken);
-                if (resolvedContainer is null)
+                var resolvedContainer = await configCatalog.GetActiveInAnyGroupAsync(
+                    requested.ContainerTypeId,
+                    DuplicateRateCatalogPolicy.EquipmentCatalogGroups(source.ShipmentMode),
+                    cancellationToken);
+                var stored = source.RateContainers.FirstOrDefault(
+                    x => x.ContainerTypeId == requested.ContainerTypeId);
+                var storedName = stored?.ContainerTypeName ?? source.ContainerTypeName;
+                var storedCode = stored?.ContainerTypeCode ?? source.ContainerTypeCode;
+                if (resolvedContainer is null && !(DuplicateRateCatalogPolicy.CanUseHistoricalEquipmentSnapshot(source.ShipmentMode)
+                    && requested.ContainerTypeId != Guid.Empty
+                    && !string.IsNullOrWhiteSpace(storedName)
+                    && !string.IsNullOrWhiteSpace(storedCode)))
                     return Result.Failure<Guid>(PricingErrors.InvalidConfigCatalogReference(
-                        "El tipo de contenedor", PricingConstants.CatalogSlugs.ContainerTypes));
+                        isLand ? "La unidad terrestre" : "El tipo de contenedor",
+                        DuplicateRateCatalogPolicy.EquipmentErrorGroup(source.ShipmentMode)));
 
                 sourceContainers.Add(new RateContainerAllocationSpec(
-                    resolvedContainer.Id, resolvedContainer.SnapshotName(), resolvedContainer.Code, requested.Quantity));
+                    resolvedContainer?.Id ?? requested.ContainerTypeId,
+                    resolvedContainer?.SnapshotName() ?? storedName,
+                    resolvedContainer?.Code ?? storedCode,
+                    requested.Quantity));
             }
             duplicate.ReplaceContainerAllocations(sourceContainers, command.CreatedBy);
             duplicate.ConfigureShipment(
@@ -435,8 +484,20 @@ public sealed class DuplicateRateCommandHandler(
                 source.TotalVolumeCbm,
                 source.KgPerCbm,
                 source.CargoLinesJson,
+                command.CreatedBy,
+                source.ChargeableQuantity
+            );
+            duplicate.SetOperationType(source.OperationType, command.CreatedBy);
+            duplicate.ConfigureCargoValue(source.CargoValue);
+            duplicate.ConfigureStorageDays(source.StorageDays);
+            duplicate.ConfigureFinalBackupStorageIds(source.FinalBackupStorageIds);
+            duplicate.ConfigureServices(
+                source.RateServices
+                    .Select(x => new RateServiceSelection(x.ServiceId, x.ServiceName, x.ServiceCode))
+                    .ToArray(),
                 command.CreatedBy
             );
+            duplicate.ConfigureCommercialPresentation(source.UseAllInPresentation, command.CreatedBy);
 
             // Para FCL se conservan únicamente rubros verdaderamente manuales que no sean
             // flete. Todo rubro ligado al catálogo (fijo, variable u opcional) se vuelve a
@@ -478,6 +539,7 @@ public sealed class DuplicateRateCommandHandler(
                     command.CreatedBy
                 );
                 copiedDetail.ConfigureBillToClient(detail.BillToClient);
+                copiedDetail.ConfigureDestinationTax(detail.ApplyDestinationTax, detail.DestinationTaxRate);
             }
 
             // En FCL no cargamos costos automáticos antes de escoger el nuevo flete.
