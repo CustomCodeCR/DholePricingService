@@ -168,6 +168,7 @@ internal static class RateMappings
         {
             ClientAccountId = rate.ClientAccountId,
             ClientLeadId = rate.ClientLeadId,
+            LinkedAcceptedRateId = rate.LinkedAcceptedRateId,
             OtherReferences = rate.OtherReferences,
             CarrierRoute = rate.CarrierRoute,
             CarrierComments = rate.CarrierComments,
