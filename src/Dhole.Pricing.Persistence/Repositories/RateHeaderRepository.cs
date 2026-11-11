@@ -720,6 +720,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             (Status: RateStatus.AcceptedByClient, Count: acceptedCount),
             (Status: RateStatus.RejectedByClient, Count: notAcceptedCount),
             (Status: RateStatus.Cancelled, Count: statusCounts.GetValueOrDefault(RateStatus.Cancelled)),
+            // La QUO vinculada no es una tarifa perdida ni vencida: se informa por separado.
+            (Status: RateStatus.QUOVinculada, Count: statusCounts.GetValueOrDefault(RateStatus.QUOVinculada)),
         };
 
         var statuses = commercialStatusCounts
