@@ -1,3 +1,8 @@
+## [1.11.2] - 2026-11-11
+
+- PATCH DH-20261111-PRICING-NONFCL-DUPLICATE-091: copias editables de LCL, FTL, LTL, aéreo y aéreo consolidado toleran marcadores internos de proveedor, catálogos de equipo terrestre y referencias históricas no-FCL; FCL mantiene validación estricta de navieras y contenedores marítimos.
+- Copia ruta, carga, servicios, volumen cobrable, almacenamiento e impuestos; sin cambios de REST, SignalR, migraciones ni framework. CI y staging pendientes, sin autorización de producción.
+
 ## [1.11.1] - 2026-11-11
 
 - PATCH DH-20261111-CRM-QUOTE-SELLER-ACCESS-090: permite que el vendedor autorizado de una cuenta CRM envíe una QUO creada por otro usuario de Pricing, sin quedar bloqueado por el middleware de propiedad de solicitudes.
