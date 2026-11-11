@@ -2756,6 +2756,10 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("accepted_at_utc");
 
+                    b.Property<Guid?>("LinkedAcceptedRateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("linked_accepted_rate_id");
+
                     b.Property<DateTime?>("SellerReceivedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("seller_received_at_utc");
@@ -3127,6 +3131,8 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasDatabaseName("ix_rate_headers_source_tariff_rate_id");
 
                     b.HasIndex("AcceptedAtUtc");
+
+                    b.HasIndex("LinkedAcceptedRateId");
 
                     b.HasIndex("Status");
 
