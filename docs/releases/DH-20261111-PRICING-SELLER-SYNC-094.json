@@ -1,0 +1,31 @@
+{
+  "releaseId": "DH-20261111-PRICING-SELLER-SYNC-094",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.32.3",
+  "date": "2026-11-11",
+  "components": [
+    {
+      "name": "DholePricingService",
+      "previousVersion": "1.11.3",
+      "version": "1.11.4"
+    },
+    {
+      "name": "DholeWeb",
+      "previousVersion": "1.32.2",
+      "version": "1.32.3"
+    }
+  ],
+  "summary": "Sincronizar el cierre de solicitudes de modificación cuando se guarda la revisión de una QUO, conservando la entrega idempotente por Outbox.",
+  "compatibility": {
+    "rest": "sin cambios de contrato",
+    "realtime": "sin cambios de contrato; actualización de bandeja por evento y polling"
+  },
+  "validation": {
+    "build": "pending",
+    "regressionTests": "pending",
+    "staging": "pending",
+    "masterPromotion": "pending"
+  },
+  "deployment": "No desplegar a producción sin autorización expresa.",
+  "rollback": "Revertir la promoción coordinada de Pricing y Web. No revertir ni eliminar revisiones de QUO guardadas."
+}
