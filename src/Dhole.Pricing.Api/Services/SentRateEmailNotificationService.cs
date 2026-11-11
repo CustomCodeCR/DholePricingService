@@ -114,7 +114,9 @@ public sealed class SentRateEmailNotificationService(
         var ccRecipients = sendToClient
             ? emails.Where(email => !toRecipients.Contains(email, StringComparer.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
-            : CommercialCopyRecipients
+            : string.Equals(deliveryTarget, "seller", StringComparison.OrdinalIgnoreCase)
+                ? Array.Empty<string>() // Explicit "solo al vendedor" has no other CC.
+                : CommercialCopyRecipients
                 .Where(email => CastroFallasRateEmailRecipientPolicy.CanReceive(executiveName, email))
                 .Where(email => !toRecipients.Contains(email, StringComparer.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
