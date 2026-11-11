@@ -13,6 +13,32 @@ public sealed class CrmQuoteDeliveryRecipientResolver(
     IHttpClientFactory httpClientFactory,
     ILogger<CrmQuoteDeliveryRecipientResolver> logger)
 {
+    // Account-level delivery choice is the only source of truth for future quotes.
+    // Fail closed on a CRM outage rather than silently sending to the wrong party.
+    public async Task<(string? DeliveryTarget, Guid? ContactId, string? Error)>
+        ResolvePreferenceAsync(Guid accountId, string? authorization, CancellationToken ct)
+    {
+        if (accountId == Guid.Empty || string.IsNullOrWhiteSpace(authorization) ||
+            !AuthenticationHeaderValue.TryParse(authorization, out var bearer) ||
+            !string.Equals(bearer.Scheme, "Bearer", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrWhiteSpace(bearer.Parameter))
+            return (null, null, "No fue posible verificar la configuración de envío de la cuenta.");
+
+        using var preference = await ReadCrmAsync(
+            $"api/crm/accounts/{accountId:D}/quote-delivery-preference", authorization, ct);
+        if (preference is null)
+            return (null, null, "CRM no está disponible para consultar la configuración de envío.");
+
+        var target = ReadString(preference.RootElement, "deliveryTarget");
+        if (target == "seller") return ("seller", null, null);
+        if (target == "client" &&
+            Guid.TryParse(ReadString(preference.RootElement, "contactId"), out var contactId) &&
+            contactId != Guid.Empty)
+            return ("client", contactId, null);
+
+        return (null, null, "La configuración de envío del cliente no es válida; corríjala en CRM.");
+    }
+
     public async Task<(CrmQuoteDeliveryRecipient? Recipient, string? Error)> ResolveAsync(
         Guid accountId, Guid? contactId, string? authorization, CancellationToken ct)
     {

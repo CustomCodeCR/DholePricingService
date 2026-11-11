@@ -12,7 +12,8 @@ public sealed class CrmQuoteDeliveryRecipientResolverTests
     private static readonly Guid ContactId = Guid.Parse("451b4847-4435-4409-9fd2-9b3668e3b7cf");
 
     private static CrmQuoteDeliveryRecipientResolver CreateResolver(
-        string contactsJson, HttpStatusCode sellerStatus = HttpStatusCode.OK)
+        string contactsJson, HttpStatusCode sellerStatus = HttpStatusCode.OK,
+        string preferenceJson = """{"deliveryTarget":"seller","contactId":null}""")
     {
         var handler = new LocalCrmHandler((request) =>
         {
@@ -21,6 +22,8 @@ public sealed class CrmQuoteDeliveryRecipientResolverTests
                 return Json(HttpStatusCode.Unauthorized, "{}");
             if (path.EndsWith("/assigned-executive", StringComparison.Ordinal))
                 return Json(sellerStatus, """{"displayName":"Carolina Quirós"}""");
+            if (path.EndsWith("/quote-delivery-preference", StringComparison.Ordinal))
+                return Json(sellerStatus, preferenceJson);
             if (path.EndsWith("/contacts", StringComparison.Ordinal))
                 return Json(HttpStatusCode.OK, contactsJson);
             return Json(HttpStatusCode.NotFound, "{}");
@@ -95,6 +98,52 @@ public sealed class CrmQuoteDeliveryRecipientResolverTests
             .ResolveAsync(AccountId, ContactId, null, CancellationToken.None);
         Assert.IsNull(recipient);
         StringAssert.Contains(error!, "iniciar sesión");
+    }
+
+    [TestMethod]
+    public async Task FutureQuotation_UsesAccountClientPreference()
+    {
+        var preference = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            deliveryTarget = "client", contactId = ContactId
+        });
+        var (target, contactId, error) = await CreateResolver("[]",
+            preferenceJson: preference).ResolvePreferenceAsync(
+                AccountId, "Bearer sample-token", CancellationToken.None);
+        Assert.IsNull(error);
+        Assert.AreEqual("client", target);
+        Assert.AreEqual(ContactId, contactId);
+    }
+
+    [TestMethod]
+    public async Task FutureQuotation_DefaultsToSellerWhenAccountHasNoClientPreference()
+    {
+        var (target, contactId, error) = await CreateResolver("[]")
+            .ResolvePreferenceAsync(AccountId, "Bearer sample-token", CancellationToken.None);
+        Assert.IsNull(error);
+        Assert.AreEqual("seller", target);
+        Assert.IsNull(contactId);
+    }
+
+    [TestMethod]
+    public async Task FutureQuotation_FailsClosedWhenClientPreferenceHasNoContact()
+    {
+        var (target, contactId, error) = await CreateResolver("[]",
+            preferenceJson: """{"deliveryTarget":"client","contactId":null}""")
+            .ResolvePreferenceAsync(AccountId, "Bearer sample-token", CancellationToken.None);
+        Assert.IsNull(target);
+        Assert.IsNull(contactId);
+        Assert.IsNotNull(error);
+    }
+
+    [TestMethod]
+    public async Task FutureQuotation_FailsClosedWhenCrmRejectsAccess()
+    {
+        var (target, contactId, error) = await CreateResolver("[]",
+            sellerStatus: HttpStatusCode.Forbidden).ResolvePreferenceAsync(
+                AccountId, "Bearer sample-token", CancellationToken.None);
+        Assert.IsNull(target);
+        Assert.IsNotNull(error);
     }
 
     private sealed class LocalCrmHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
