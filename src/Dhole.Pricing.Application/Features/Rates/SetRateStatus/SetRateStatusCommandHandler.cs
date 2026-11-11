@@ -40,6 +40,32 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateInvalidStatus);
         }
 
+        // El vínculo se valida en el servidor, nunca se confía en un texto/ID enviado por la UI.
+        if (command.Status == RateStatus.QUOVinculada)
+        {
+            if (command.LinkedAcceptedRateId is not { } acceptedId || acceptedId == Guid.Empty || acceptedId == rate.Id)
+                return Result.Failure(PricingErrors.RateInvalidStatus);
+
+            var accepted = await rateHeaders.GetByIdWithDetailsAsync(acceptedId, cancellationToken);
+            if (accepted is null || accepted.IsDeleted || accepted.Status != RateStatus.AcceptedByClient)
+                return Result.Failure(PricingErrors.RateInvalidStatus);
+
+            var sameClient = rate.ClientAccountId.HasValue || accepted.ClientAccountId.HasValue
+                ? rate.ClientAccountId.HasValue && rate.ClientAccountId == accepted.ClientAccountId
+                : rate.ClientLeadId.HasValue || accepted.ClientLeadId.HasValue
+                    ? rate.ClientLeadId.HasValue && rate.ClientLeadId == accepted.ClientLeadId
+                    : !string.IsNullOrWhiteSpace(rate.ClientName) &&
+                        string.Equals(rate.ClientName.Trim(), accepted.ClientName?.Trim(), StringComparison.OrdinalIgnoreCase);
+
+            if (!sameClient)
+                return Result.Failure(PricingErrors.RateInvalidStatus);
+        }
+        else if (command.LinkedAcceptedRateId.HasValue)
+        {
+            // Una relación nunca puede escribirse accidentalmente para otro estado.
+            return Result.Failure(PricingErrors.RateInvalidStatus);
+        }
+
         var advancesQuotation = command.Status is
             RateStatus.Open or
             RateStatus.Sent or
@@ -78,7 +104,8 @@ public sealed class SetRateStatusCommandHandler(
                 command.Status,
                 command.Reason,
                 command.UpdatedBy,
-                command.AllowDirectClientDecision
+                command.AllowDirectClientDecision,
+                command.LinkedAcceptedRateId
             );
         }
         catch (InvalidOperationException)
@@ -99,6 +126,7 @@ public sealed class SetRateStatusCommandHandler(
                 {
                     rate.Id,
                     Status = rate.Status.ToString(),
+                    rate.LinkedAcceptedRateId,
                     rate.IdtraNumber,
                     rate.ClosedReason,
                     rate.ClosedAtUtc,
