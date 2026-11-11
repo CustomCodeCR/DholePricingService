@@ -1,3 +1,9 @@
+## [1.12.0] - 2026-11-11
+
+- MINOR DH-20261111-CRM-ACCOUNT-QUOTE-DELIVERY-093: configura por cuenta destinatarios de todas las próximas cotizaciones: vendedor únicamente o contacto del cliente con copia al vendedor asignado.
+- La preferencia se guarda en CRM, se valida en Pricing en cada envío y se edita sin seleccionar QUO. REST, SignalR, Outbox y el procesamiento idempotente se mantienen.
+- Versión global Dhole 1.33.0. CI y staging pendientes; producción no autorizada hasta validación.
+
 ## [1.11.4] - 2026-11-11
 
 - PATCH DH-20261111-PRICING-SELLER-SYNC-094: al guardar correctamente una revisión asociada a una solicitud de modificación, Pricing prepara y completa la solicitud vinculada sin exigir un segundo clic de envío. El envío PDF/correo permanece separado en el Outbox y reintentos idempotentes, respetando aprobación de márgenes.
