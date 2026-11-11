@@ -38,7 +38,7 @@ public sealed class CrmQuoteDeliveryRecipientResolverTests
     [TestMethod]
     public async Task ClientDelivery_UsesLinkedContactAndAccountSeller()
     {
-        var contacts = $$"""[{"contact":{"id":"{{ContactId:D}}","name":"María Solís","email":"maria@example.com"}}]""";
+        var contacts = System.Text.Json.JsonSerializer.Serialize(new[] { new { contact = new { id = ContactId, name = "María Solís", email = "maria@example.com" } } });
         var (recipient, error) = await CreateResolver(contacts)
             .ResolveAsync(AccountId, ContactId, "Bearer sample-token", CancellationToken.None);
         Assert.IsNull(error);
@@ -51,7 +51,7 @@ public sealed class CrmQuoteDeliveryRecipientResolverTests
     [TestMethod]
     public async Task ClientDelivery_RejectsUnrelatedContact()
     {
-        var contacts = $$"""[{"contact":{"id":"{{Guid.NewGuid():D}}","name":"Other","email":"other@example.com"}}]""";
+        var contacts = System.Text.Json.JsonSerializer.Serialize(new[] { new { contact = new { id = Guid.NewGuid(), name = "Other", email = "other@example.com" } } });
         var (recipient, error) = await CreateResolver(contacts)
             .ResolveAsync(AccountId, ContactId, "Bearer sample-token", CancellationToken.None);
         Assert.IsNull(recipient);
@@ -61,7 +61,7 @@ public sealed class CrmQuoteDeliveryRecipientResolverTests
     [TestMethod]
     public async Task ClientDelivery_RejectsContactWithoutValidEmail()
     {
-        var contacts = $$"""[{"contact":{"id":"{{ContactId:D}}","name":"No mail","email":"invalid"}}]""";
+        var contacts = System.Text.Json.JsonSerializer.Serialize(new[] { new { contact = new { id = ContactId, name = "No mail", email = "invalid" } } });
         var (recipient, error) = await CreateResolver(contacts)
             .ResolveAsync(AccountId, ContactId, "Bearer sample-token", CancellationToken.None);
         Assert.IsNull(recipient);
