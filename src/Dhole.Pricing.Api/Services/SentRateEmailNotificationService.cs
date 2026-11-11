@@ -66,14 +66,16 @@ public sealed class SentRateEmailNotificationService(
 
         // For linked CRM accounts, never accept per-quote recipients from the
         // UI. Every future send reads the durable account configuration.
+        Guid[] configuredContactIds = [];
         if (rate.ClientAccountId is Guid accountId && accountId != Guid.Empty)
         {
-            var preference = await crmRecipientResolver.ResolvePreferenceAsync(
+            var preference = await crmRecipientResolver.ResolveMultiPreferenceAsync(
                 accountId, authorization, cancellationToken);
             if (preference.Error is not null)
                 return preference.Error;
             deliveryTarget = preference.DeliveryTarget;
-            contactId = preference.ContactId;
+            configuredContactIds = preference.ContactIds;
+            contactId = configuredContactIds.Length > 0 ? configuredContactIds[0] : null;
             requireAccountVerification = true;
         }
         else if (deliveryTarget is not null || contactId.HasValue)
@@ -86,22 +88,22 @@ public sealed class SentRateEmailNotificationService(
             !sendToClient &&
             !string.Equals(deliveryTarget, "seller", StringComparison.OrdinalIgnoreCase))
             return "Seleccione un destino válido: vendedor o cliente.";
-        if (sendToClient && !contactId.HasValue)
-            return "Debe elegir un contacto del cliente antes de enviar la cotización.";
-        if (!sendToClient && contactId.HasValue)
-            return "No se admite un contacto cuando el destinatario es el vendedor.";
+        if (sendToClient && configuredContactIds.Length == 0)
+            return "Debe configurar uno o varios contactos del cliente antes de enviar la cotización.";
+        if (!sendToClient && (contactId.HasValue || configuredContactIds.Length > 0))
+            return "No se admiten contactos cuando el destinatario es el vendedor.";
 
-        CrmQuoteDeliveryRecipient? verifiedAccount = null;
+        CrmQuoteDeliveryRecipientResolver.VerifiedRecipients? verifiedAccount = null;
         if (sendToClient || requireAccountVerification)
         {
             if (!rate.ClientAccountId.HasValue || rate.ClientAccountId.Value == Guid.Empty)
                 return "Vincule esta cotización a una cuenta CRM antes de elegir su destinatario.";
-            var verification = await crmRecipientResolver.ResolveAsync(
-                rate.ClientAccountId.Value, sendToClient ? contactId : null,
+            var verification = await crmRecipientResolver.ResolveManyAsync(
+                rate.ClientAccountId.Value, sendToClient ? configuredContactIds : [],
                 authorization, cancellationToken);
             if (verification.Error is not null)
                 return verification.Error;
-            verifiedAccount = verification.Recipient;
+            verifiedAccount = verification.Recipients;
             executiveName = verifiedAccount?.AssignedSellerName;
         }
 
@@ -126,8 +128,12 @@ public sealed class SentRateEmailNotificationService(
         // copia. Notifications enviaría correos independientes si añadimos
         // cada destinatario en 'recipients', por eso usamos 'payload.cc'.
         // Evitar que una dirección aparezca simultáneamente en Para y CC.
+        // Each client receives their own PDF email; Notifications uses its
+        // existing idempotent recipient records instead of exposing other
+        // customers' addresses. The assigned seller remains in CC.
         var toRecipients = sendToClient
-            ? new[] { verifiedAccount!.ContactEmail! }
+            ? verifiedAccount!.Contacts.Select(contact => contact.Email)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
             : emails.Take(1).ToArray();
         var ccRecipients = sendToClient
             ? emails.Where(email => !toRecipients.Contains(email, StringComparer.OrdinalIgnoreCase))
@@ -182,7 +188,7 @@ public sealed class SentRateEmailNotificationService(
         if (sendToClient)
         {
             emailBody = $"""
-                <p>Estimado/a {Html(verifiedAccount?.ContactName)},</p>
+                <p>Estimado cliente,</p>
                 <p>Adjuntamos la cotización <strong>{Html(quo)}</strong> para {Html(client)}.</p>
                 <table style="border-collapse:collapse;width:100%;max-width:740px">
                   <tr><td style="padding:5px 10px"><strong>Ruta</strong></td><td>{Html(route)}</td></tr>
@@ -213,6 +219,7 @@ public sealed class SentRateEmailNotificationService(
                     sellerName = executiveName,
                     deliveryTarget = sendToClient ? "client" : "seller",
                     contactId = sendToClient ? contactId : null,
+                    contactIds = sendToClient ? configuredContactIds : [],
                     action = "open-rate",
                     route = rateRoute,
                     url = rateUrl,
@@ -232,7 +239,10 @@ public sealed class SentRateEmailNotificationService(
                 {
                     userId = (string?)null,
                     address = email,
-                    displayName = sendToClient ? verifiedAccount?.ContactName : executiveName,
+                    displayName = sendToClient
+                        ? verifiedAccount?.Contacts.FirstOrDefault(contact =>
+                            string.Equals(contact.Email, email, StringComparison.OrdinalIgnoreCase))?.Name
+                        : executiveName,
                 }).ToArray(),
             },
             correlationId: resendCorrelationId ?? $"pricing-rate-sent:{rate.Id:N}:rev:{rate.RevisionNumber}",
