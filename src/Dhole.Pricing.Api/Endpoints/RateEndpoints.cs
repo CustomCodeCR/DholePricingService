@@ -1882,6 +1882,45 @@ public static class RateEndpoints
             cancellationToken
         );
 
+        // A successful amendment save is the authoritative completion of Pricing's
+        // work item. PDF / email delivery is handled separately by the durable
+        // retry worker, so a failed delivery never leaves completed work on /open.
+        if (result.IsSuccess && request.ModificationRequestId is { } savedModificationId)
+        {
+            var savedRevision = await db.RateHeaders.AsNoTracking()
+                .Where(x => x.Id == rateId && !x.IsDeleted)
+                .Select(x => (int?)x.RevisionNumber)
+                .FirstOrDefaultAsync(cancellationToken);
+            var sellerRequest = await db.RateRequests
+                .FirstOrDefaultAsync(x => x.Id == savedModificationId, cancellationToken);
+            var sourceRevision = RateModificationRequestPayload.SourceRevisionNumber(sellerRequest?.PayloadJson);
+
+            if (sellerRequest is null || sellerRequest.RateId != rateId
+                || !RateModificationRequestPayload.IsModification(sellerRequest.PayloadJson)
+                || savedRevision is null
+                || savedRevision != request.ExpectedRevisionNumber.GetValueOrDefault() + 1
+                || savedRevision <= sourceRevision)
+                return Results.Conflict(new
+                {
+                    code = "Pricing.RateModificationCompletionReconciliationRequired",
+                    message = "La QUO fue guardada, pero no se pudo verificar la revisión para cerrar la solicitud. No vuelva a guardar la tarifa."
+                });
+
+            if (sellerRequest.Status == RateRequestStatus.Open)
+            {
+                sellerRequest.PrepareModification(savedRevision.Value);
+                sellerRequest.MarkSellerModificationReadyForDelivery(DateTime.UtcNow);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            else if (sellerRequest.Status != RateRequestStatus.Completed
+                || sellerRequest.PreparedRevisionNumber != savedRevision)
+                return Results.Conflict(new
+                {
+                    code = "Pricing.RateModificationCompletionConflict",
+                    message = "La revisión fue guardada, pero la solicitud cambió de estado. Compruebe el historial antes de continuar."
+                });
+        }
+
         return EndpointResults.FromResult(result, httpContext);
     }
 

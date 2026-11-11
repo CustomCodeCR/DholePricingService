@@ -48,6 +48,39 @@ public sealed class SellerRateDeliveryRetryWorker(
         var services = scope.ServiceProvider;
         var db = services.GetRequiredService<ServiceDbContext>();
 
+        // Reconcile legacy prepared amendments whose quote was saved but the
+        // browser closed before "send". Completion is independent of margin
+        // approval and mail delivery. Never infer completion from an unrelated
+        // later revision: only the exact prepared revision is eligible.
+        var savedModifications = await (
+            from request in db.RateRequests
+            join rate in db.RateHeaders.AsNoTracking() on request.RateId equals (Guid?)rate.Id
+            where request.Status == RateRequestStatus.Open
+                && request.PreparedRevisionNumber.HasValue
+                && request.PreparedRevisionNumber == rate.RevisionNumber
+                && !rate.IsDeleted
+            orderby request.RequestedAtUtc
+            select new { Request = request, Revision = rate.RevisionNumber })
+            .Take(100)
+            .ToListAsync(cancellationToken);
+
+        var reconciled = 0;
+        foreach (var saved in savedModifications)
+        {
+            if (!RateModificationRequestPayload.IsModification(saved.Request.PayloadJson)
+                || saved.Revision <= RateModificationRequestPayload.SourceRevisionNumber(saved.Request.PayloadJson))
+                continue;
+
+            saved.Request.MarkSellerModificationReadyForDelivery(DateTime.UtcNow);
+            reconciled++;
+        }
+
+        if (reconciled > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Reconciled {Count} saved seller modifications awaiting delivery.", reconciled);
+        }
+
         // Filter approvals in SQL before Take: a long queue of pending-margin
         // requests must not starve quotes that are ready to be delivered.
         var candidates = await (
