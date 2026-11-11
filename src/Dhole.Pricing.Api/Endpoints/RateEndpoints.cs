@@ -2151,6 +2151,16 @@ public static class RateEndpoints
                 .Select(x => (RateStatus?)x.Status)
                 .FirstOrDefaultAsync(cancellationToken);
 
+            // A seller who is authorised only for CRM account delivery must
+            // not use an idempotent Sent->Sent status call as a hidden mutation.
+            if (canSendFromAccount && !canUpdateRateStatus &&
+                (!previousStatus.HasValue || previousStatus.Value == RateStatus.Sent))
+                return Results.Conflict(new
+                {
+                    code = "Pricing.QuoteDeliveryAlreadySent",
+                    message = "La cotización ya fue enviada o no está disponible para este envío.",
+                });
+
             if (previousStatus.HasValue && previousStatus.Value != RateStatus.Sent)
             {
                 string? emailError;
