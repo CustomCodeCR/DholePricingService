@@ -1,3 +1,8 @@
+## [1.11.3] - 2026-11-11
+
+- PATCH DH-20261111-PRICING-SELLER-REQUEST-HISTORY-093: GET /api/pricing/rate-requests/by-rate/{rateId}/history de solo lectura, que devuelve la solicitud original y las modificaciones vinculadas a una QUO sin alterar payloads, estados ni revisiones existentes.
+- Compatible con pricing.rate.view, coordinado con Web 1.32.2 y ecosistema 1.32.2. CI/staging pendientes. Producción no autorizada.
+
 ## [1.11.2] - 2026-11-11
 
 - PATCH DH-20261111-PRICING-NONFCL-DUPLICATE-091: copias editables de LCL, FTL, LTL, aéreo y aéreo consolidado toleran marcadores internos de proveedor, catálogos de equipo terrestre y referencias históricas no-FCL; FCL mantiene validación estricta de navieras y contenedores marítimos.
