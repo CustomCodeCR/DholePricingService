@@ -1,0 +1,25 @@
+{
+  "releaseId": "DH-20261111-PRICING-NONFCL-DUPLICATE-091",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.31.2",
+  "date": "2026-11-11",
+  "components": [
+    {
+      "name": "DholePricingService",
+      "previousVersion": "1.11.1",
+      "version": "1.11.2"
+    }
+  ],
+  "summary": "Corregir duplicación no-FCL con snapshots internos y catálogos apropiados.",
+  "compatibility": {
+    "rest": "sin cambios",
+    "realtime": "sin cambios"
+  },
+  "validation": {
+    "build": "pending",
+    "regressionTests": "pending",
+    "staging": "pending",
+    "masterPromotion": "pending"
+  },
+  "rollback": "Revertir el commit del parche en la rama correspondiente."
+}
