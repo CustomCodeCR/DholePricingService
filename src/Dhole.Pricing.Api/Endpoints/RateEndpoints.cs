@@ -2009,7 +2009,11 @@ public static class RateEndpoints
             var error = await sentRateEmailNotificationService.QueueBeforeStatusTransitionAsync(
                 rateId,
                 cancellationToken,
-                resendCorrelationId: $"pricing-rate-resend:{rateId:N}:rev:{rate.RevisionNumber}:attempt:{Guid.NewGuid():N}"
+                resendCorrelationId: $"pricing-rate-resend:{rateId:N}:rev:{rate.RevisionNumber}:attempt:{Guid.NewGuid():N}",
+                deliveryTarget: request.DeliveryTarget,
+                contactId: request.ContactId,
+                authorization: httpContext.Request.Headers["Authorization"].ToString(),
+                requireAccountVerification: request.DeliveryTarget is not null
             );
 
             if (error is not null)
@@ -2068,11 +2072,16 @@ public static class RateEndpoints
         );
         var isClientDecision = status is
             RateStatus.AcceptedByClient or RateStatus.RejectedByClient;
+        // A commercial account manager may send a linked quote without unrestricted
+        // permission to edit pricing. CRM verifies account visibility at dispatch.
+        var canSendFromAccount = status == RateStatus.Sent
+            && HasScope(httpContext.User, "crm.account.update")
+            && HasScope(httpContext.User, "crm.quote.read");
 
         // El permiso de aprobación de margen bajo también habilita registrar la
         // decisión del cliente directamente desde una tarifa Abierta. El resto
         // de transiciones comerciales sigue requiriendo pricing.rate.update.
-        if (!canUpdateRateStatus && !(isClientDecision && canApproveLowMargin))
+        if (!canUpdateRateStatus && !canSendFromAccount && !(isClientDecision && canApproveLowMargin))
         {
             return Results.Forbid();
         }
@@ -2143,7 +2152,12 @@ public static class RateEndpoints
                 try
                 {
                     emailError = await sentRateEmailNotificationService
-                        .QueueBeforeStatusTransitionAsync(rateId, cancellationToken);
+                        .QueueBeforeStatusTransitionAsync(
+                            rateId, cancellationToken,
+                            deliveryTarget: request.DeliveryTarget,
+                            contactId: request.ContactId,
+                            authorization: httpContext.Request.Headers["Authorization"].ToString(),
+                            requireAccountVerification: canSendFromAccount || request.DeliveryTarget is not null);
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
