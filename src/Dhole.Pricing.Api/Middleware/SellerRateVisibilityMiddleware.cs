@@ -36,8 +36,8 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
         // No other status or Pricing operation is exempted from visibility.
         if (HttpMethods.IsPatch(context.Request.Method)
             && path.EndsWith("/status", StringComparison.OrdinalIgnoreCase)
-            && visibilityService.HasScope(context.User, "crm.quote.read")
-            && visibilityService.HasScope(context.User, "crm.account.update"))
+            && UserHasScope(context.User, "crm.quote.read")
+            && UserHasScope(context.User, "crm.account.update"))
         {
             await next(context);
             return;
@@ -123,6 +123,18 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
 
         var sellerCapability = sellerRole || hasRequestCreate;
         return sellerCapability && !hasPricingOperatorAccess && !hasGlobalReadAccess;
+    }
+
+    private static bool UserHasScope(ClaimsPrincipal user, string required)
+    {
+        var scopes = user.Claims
+            .Where(claim => claim.Type.Equals("scp", StringComparison.OrdinalIgnoreCase)
+                || claim.Type.Equals("scope", StringComparison.OrdinalIgnoreCase)
+                || claim.Type.Equals("scopes", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(claim => Split(claim.Value))
+            .Select(value => value.Trim().ToLowerInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return HasScope(scopes, required);
     }
 
     private static bool HasScope(HashSet<string> scopes, string required)
