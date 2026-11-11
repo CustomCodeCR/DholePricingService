@@ -29,6 +29,20 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
             return;
         }
 
+        // The CRM account quote delivery endpoint performs its own account,
+        // contact and assigned-seller verification. A seller may therefore send
+        // a quotation linked to their CRM account even if Pricing originally
+        // generated the rate without the seller's RateRequest ownership.
+        // No other status or Pricing operation is exempted from visibility.
+        if (HttpMethods.IsPatch(context.Request.Method)
+            && path.EndsWith("/status", StringComparison.OrdinalIgnoreCase)
+            && visibilityService.HasScope(context.User, "crm.quote.read")
+            && visibilityService.HasScope(context.User, "crm.account.update"))
+        {
+            await next(context);
+            return;
+        }
+
         // El vendedor consume sus tarifas por /api/pricing/seller-rates. Bloquear el browse
         // y el dashboard general evita que pueda enumerar o inferir tarifas de otros vendedores.
         // Importante: esta restricción aplica únicamente a lecturas. Las escrituras deben

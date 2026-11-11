@@ -1,3 +1,9 @@
+## [1.11.1] - 2026-11-11
+
+- PATCH DH-20261111-CRM-QUOTE-SELLER-ACCESS-090: permite que el vendedor autorizado de una cuenta CRM envíe una QUO creada por otro usuario de Pricing, sin quedar bloqueado por el middleware de propiedad de solicitudes.
+- Excepción restringida a PATCH /api/pricing/rates/{id}/status y a scopes crm.quote.read + crm.account.update; Pricing verifica vínculo a cuenta, visibilidad CRM, contacto y vendedor antes de confirmar la transición y el Outbox. No amplía permisos generales de Pricing.
+- Release correctivo de 1.11.0, coordinado con DholeSystem 1.31.1. CI/staging pendientes y producción no autorizada.
+
 ## [1.11.0] - 2026-11-11
 
 - MINOR DH-20261111-CRM-QUOTE-DELIVERY-089: permite enviar las cotizaciones vinculadas a cuentas CRM al vendedor asignado o a un contacto activo seleccionado, con copia exclusiva al vendedor asignado.
