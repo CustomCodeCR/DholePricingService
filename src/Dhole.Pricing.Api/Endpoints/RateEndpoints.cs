@@ -2097,6 +2097,7 @@ public static class RateEndpoints
                 or RateStatus.RejectedByClient
                 or RateStatus.Closed
                 or RateStatus.Cancelled
+                or RateStatus.QUOVinculada
             ))
         {
             return EndpointResults.BadRequest(
@@ -2115,7 +2116,7 @@ public static class RateEndpoints
             PricingConstants.Scopes.RateApproveLowMargin
         );
         var isClientDecision = status is
-            RateStatus.AcceptedByClient or RateStatus.RejectedByClient;
+            RateStatus.AcceptedByClient or RateStatus.RejectedByClient or RateStatus.QUOVinculada;
         // A commercial account manager may send a linked quote without unrestricted
         // permission to edit pricing. CRM verifies account visibility at dispatch.
         var canSendFromAccount = status == RateStatus.Sent
@@ -2239,7 +2240,8 @@ public static class RateEndpoints
                 httpContext.GetCurrentUserId(),
                 canApproveLowMargin,
                 request.OtherReferences,
-                acceptanceObservations
+                acceptanceObservations,
+                request.LinkedAcceptedRateId
             ),
             cancellationToken
         );

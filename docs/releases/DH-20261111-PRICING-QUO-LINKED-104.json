@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261111-PRICING-QUO-LINKED-104",
+  "releaseType": "MINOR",
+  "createdAt": "2026-11-11",
+  "sourceBranch": "feature/quo-vinculada-20261111",
+  "ecosystemVersion": "1.37.0",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "previous": "1.13.0",
+      "next": "1.14.0"
+    },
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "component": "DholeWeb",
+      "previous": "1.36.1",
+      "next": "1.37.0"
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "component": "DholeSystem",
+      "previous": "1.35.0",
+      "next": "1.37.0"
+    }
+  ],
+  "changes": [
+    "Permitir estado interno QUOVinculada (Cliente aceptó otra QUO) con referencia obligatoria a una QUO realmente aceptada del mismo cliente.",
+    "Validar identidad CRM/cliente, transiciones y vínculo en backend; persistir FK y auditar cambios.",
+    "Mostrar búsqueda/selección de la QUO ganadora en la pantalla 9, vínculo persistido en detalle y filtro QUO vinculadas.",
+    "Separar QUOVinculada de indicadores vencidas/no aceptadas en reportes y dashboard; conservar REST y eventos realtime."
+  ],
+  "validation": {
+    "ci": "pending",
+    "staging": "pending",
+    "production": "not-authorized"
+  },
+  "productionDeploymentAuthorized": false
+}
