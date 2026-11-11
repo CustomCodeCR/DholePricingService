@@ -1,3 +1,8 @@
+## [1.10.0] - 2026-11-10
+
+- MINOR DH-20261110-CRM-LEAD-QUO-PARITY-080: incorpora dashboard oficial de cotizaciones por CRM ClientLeadId (mismo cálculo de estados que Cuentas) y vinculación administrativa confirmada de QUO históricas a prospectos. Solo superadministradores con permiso de Pricing Update pueden cambiar la vinculación; rechaza cotizaciones ya asociadas con otra cuenta o prospecto.
+- Sin cambios en importes, revisión comercial ni estados publicados; sincroniza las solicitudes asociadas por RateId y emite eventos del RateHeader existente para la infraestructura realtime. Contratos REST existentes conservados y nuevos endpoints compatibles.
+
 ## [1.9.11] - 2026-11-10
 
 - PATCH DH-20261110-CRM-HIDE-TARIFARIO-067: CRM > Cuentas > Cotizaciones > historial pendiente excluye antes de contar y paginar las QUO sin vincular cuyo nombre de cliente histórico contenga «TARIFARIO» (sin distinguir mayúsculas). Búsqueda, total, paginación y selección masiva usan la misma consulta filtrada.
