@@ -63,6 +63,24 @@ public sealed class SentRateEmailNotificationService(
         // El ejecutivo elegido en el wizard es la fuente de verdad: no enviar
         // por defecto al creador ni a un vendedor de otra solicitud.
         var executiveName = FirstNonEmpty(rate.ExecutiveName, request?.ExecutiveName);
+
+        // For linked CRM accounts, never accept per-quote recipients from the
+        // UI. Every future send reads the durable account configuration.
+        if (rate.ClientAccountId is Guid accountId && accountId != Guid.Empty)
+        {
+            var preference = await crmRecipientResolver.ResolvePreferenceAsync(
+                accountId, authorization, cancellationToken);
+            if (preference.Error is not null)
+                return preference.Error;
+            deliveryTarget = preference.DeliveryTarget;
+            contactId = preference.ContactId;
+            requireAccountVerification = true;
+        }
+        else if (deliveryTarget is not null || contactId.HasValue)
+        {
+            return "Vincule la cotización a una cuenta CRM para utilizar destinatarios configurados.";
+        }
+
         var sendToClient = string.Equals(deliveryTarget, "client", StringComparison.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(deliveryTarget) &&
             !sendToClient &&
