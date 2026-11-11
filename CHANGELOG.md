@@ -1,3 +1,8 @@
+## [1.12.0] - 2026-11-11
+
+- MINOR DH-20261111-CRM-ACCOUNT-FUTURE-QUOTE-DELIVERY-093: entrega futura de QUO por preferencia persistente de la cuenta, con selección de alternativa definitiva y verificación del contacto en CRM por servicio interno, incluso en procesos automáticos y reintentos.
+- Versión global 1.33.0. Conserva OUTBOX/REST/SignalR. CI/staging pendientes.
+
 ## [1.11.4] - 2026-11-11
 
 - PATCH DH-20261111-PRICING-SELLER-SYNC-094: al guardar correctamente una revisión asociada a una solicitud de modificación, Pricing prepara y completa la solicitud vinculada sin exigir un segundo clic de envío. El envío PDF/correo permanece separado en el Outbox y reintentos idempotentes, respetando aprobación de márgenes.

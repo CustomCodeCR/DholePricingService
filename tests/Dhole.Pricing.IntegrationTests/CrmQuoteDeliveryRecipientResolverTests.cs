@@ -29,7 +29,8 @@ public sealed class CrmQuoteDeliveryRecipientResolverTests
         var client = new HttpClient(handler) { BaseAddress = new Uri("http://crm-api:8080/") };
         return new CrmQuoteDeliveryRecipientResolver(
             new LocalCrmClientFactory(client),
-            NullLogger<CrmQuoteDeliveryRecipientResolver>.Instance);
+            NullLogger<CrmQuoteDeliveryRecipientResolver>.Instance,
+            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build());
     }
 
     private static HttpResponseMessage Json(HttpStatusCode code, string content)
