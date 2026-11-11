@@ -1,3 +1,8 @@
+## [1.10.1] - 2026-11-11
+
+- PATCH DH-20261111-PRICING-OPENING-ATTACHMENTS-084: backport de develop para que cada apertura adjunte PDF comercial, soportes de todas las solicitudes relacionadas y documentos finales de la cotización, deduplicados por ID de Storage.
+- El contenido se captura en el Outbox, con controles de 30 archivos/14 MiB e indicación de documentos no disponibles; coordinado con Notifications 1.3.1 y System 1.25.2. CI y validación de staging obligatorios antes de promover master.
+
 ## [1.10.0] - 2026-11-10
 
 - MINOR DH-20261110-CRM-LEAD-QUO-PARITY-082: Dashboard oficial de QUO por ClientLeadId y reconciliación manual de QUO históricas a prospectos, con confirmación superadministrada. No permite reasignar cotizaciones de cuentas/prospectos distintos, no modifica montos ni estados, sincroniza solicitudes por RateId.
