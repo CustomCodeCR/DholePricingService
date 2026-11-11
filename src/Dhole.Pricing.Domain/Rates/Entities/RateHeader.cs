@@ -287,6 +287,38 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         return true;
     }
 
+    /// <summary>
+    /// Manually reconcile a confirmed legacy QUO to its CRM prospect. Never reassign
+    /// another CRM identity and never rewrite prices, statuses or historical revisions.
+    /// </summary>
+    public bool ReconcileLegacyClientLead(Guid leadId, string clientName, string? executiveName)
+    {
+        if (leadId == Guid.Empty)
+            throw new ArgumentException("Valid CRM lead required.", nameof(leadId));
+        var normalizedClient = Normalize(clientName);
+        if (normalizedClient is null || normalizedClient.Length > 220)
+            throw new ArgumentException("Nombre de prospecto obligatorio (máximo 220 caracteres).", nameof(clientName));
+        var normalizedExecutive = Normalize(executiveName);
+        if (normalizedExecutive?.Length > 220)
+            throw new ArgumentException("El vendedor CRM excede 220 caracteres.", nameof(executiveName));
+        if (ClientAccountId.HasValue || (ClientLeadId.HasValue && ClientLeadId != leadId))
+            throw new InvalidOperationException("La QUO ya pertenece a otra identidad CRM.");
+
+        var changed = ClientLeadId != leadId ||
+            !string.Equals(ClientName, normalizedClient, StringComparison.Ordinal) ||
+            (normalizedExecutive is not null &&
+             !string.Equals(ExecutiveName, normalizedExecutive, StringComparison.Ordinal));
+        if (!changed) return false;
+        ClientLeadId = leadId;
+        ClientName = normalizedClient;
+        if (normalizedExecutive is not null) ExecutiveName = normalizedExecutive;
+        RateName = CreateRateName(RateCode, BuildShipmentDescription(),
+            PolName, PoeName, PodName, IncotermName ?? IncotermCode, ClientName);
+        MarkAsUpdated(DateTime.UtcNow, null);
+        AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, null));
+        return true;
+    }
+
     /// <summary>Persist the CRM prospect identity, never infer it from a company name.</summary>
     public void ConfigureClientLead(Guid leadId)
     {
