@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261111-CRM-QUOTE-SELLER-ACCESS-090",
+  "releaseType": "PATCH",
+  "ecosystemVersion": "1.31.1",
+  "createdAt": "2026-11-11",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "from": "1.11.0",
+      "to": "1.11.1"
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "component": "DholeSystem",
+      "from": "1.31.0",
+      "to": "1.31.1"
+    }
+  ],
+  "changes": [
+    "Permitir envío desde una cuenta CRM aun cuando RateRequest fue creado por Pricing u otro usuario, validando visibilidad real de la cuenta",
+    "Excepción limitada a PATCH comercial y scopes de cuenta, manteniendo verificación de destinatarios contra CRM"
+  ],
+  "validation": "CI y staging pendientes",
+  "productionDeploymentAuthorized": false
+}
