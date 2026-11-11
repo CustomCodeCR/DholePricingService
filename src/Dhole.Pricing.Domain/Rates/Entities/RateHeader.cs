@@ -1572,6 +1572,13 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         Status = status;
         LinkedAcceptedRateId = status == RateStatus.QUOVinculada ? linkedAcceptedRateId : null;
+        if (status == RateStatus.QUOVinculada)
+        {
+            // Corrige decisiones previas sin conservar un rechazo o cierre obsoleto.
+            ClosedReason = null;
+            ClosedAtUtc = null;
+            ClosedBy = null;
+        }
         // La fecha real de aceptación no debe confundirse con una edición posterior.
         // Una nueva aceptación comercial reemplaza la fecha de la revisión anterior.
         if (status == RateStatus.AcceptedByClient)
