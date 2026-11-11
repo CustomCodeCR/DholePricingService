@@ -2,6 +2,7 @@ using System.Net;
 using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Application.Features.Rates.GenerateRateDocument;
 using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
@@ -259,6 +260,16 @@ public static class RateRequestCompletionEndpoints
             or RateStatus.Cancelled or RateStatus.Closed)
             return Results.Accepted(value: new { status = "CompletedDeliveryOnHold", rateId = request.RateId });
 
+        // Grouped quotations must not be emailed before the commercial alternative
+        // is selected. The retry worker will deliver the selected QUO after the decision.
+        var groupedStatuses = await db.Database.SqlQueryRaw<string>(
+            "SELECT status AS \"Value\" FROM pricing.rate_quote_alternatives WHERE rate_id = {0}",
+            request.RateId).ToListAsync(cancellationToken);
+        if (groupedStatuses.Count > 0 && groupedStatuses[0] != "Selected")
+            return Results.Accepted(value: new {
+                status = "AwaitingQuoteAlternativeSelection", rateId = request.RateId
+            });
+
         // The revision and work-item completion have already been committed.
         // PDF generation, commercial status and outbox delivery are recoverable
         // operations. Never turn those failures into a misleading "save failed" 500.
@@ -272,6 +283,26 @@ public static class RateRequestCompletionEndpoints
             if (!documentResult.IsSuccess)
                 return Results.Accepted(value: new { status = "CompletedDeliveryRetryPending", rateId = request.RateId });
     
+            // Resolve the latest saved CRM account policy for every completed
+            // seller request, including server-side retries without a browser JWT.
+            CrmQuoteDeliveryRecipientResolver.AccountDelivery? savedPolicy = null;
+            if (rate.ClientAccountId is { } accountId && accountId != Guid.Empty)
+            {
+                var resolver = httpContext.RequestServices
+                    .GetRequiredService<CrmQuoteDeliveryRecipientResolver>();
+                var resolved = await resolver.ReadAccountDeliveryAsync(accountId, cancellationToken);
+                if (resolved.Error is not null)
+                {
+                    loggerFactory.CreateLogger("RateRequestCompletion").LogWarning(
+                        "Se pospone el correo de la solicitud {RequestId}: {Reason}",
+                        requestId, resolved.Error);
+                    return Results.Accepted(value: new {
+                        status = "CompletedDeliveryRetryPending", rateId = request.RateId
+                    });
+                }
+                savedPolicy = resolved.Delivery;
+            }
+
             if (rate.Status != RateStatus.Sent)
             {
                 var actor = httpContext.GetCurrentUserId();
@@ -291,15 +322,31 @@ public static class RateRequestCompletionEndpoints
             }
     
             var document = documentResult.Value;
-            var sellerName = WebUtility.HtmlEncode(entity.SellerName ?? entity.ExecutiveName ?? "Vendedor");
+            var sellerName = WebUtility.HtmlEncode(savedPolicy?.SellerName
+                ?? entity.SellerName ?? entity.ExecutiveName ?? "Vendedor");
             var clientName = WebUtility.HtmlEncode(entity.ClientName ?? "Cliente");
             var routeText = BuildRoute(entity);
             var route = WebUtility.HtmlEncode(routeText);
             var quoteNumberText = rate.QuoNumber ?? rate.RateCode;
             var quoteNumber = WebUtility.HtmlEncode(quoteNumberText);
-            var sellerEmail = entity.SellerEmail.Trim();
-            var sellerDisplayName = entity.SellerName ?? entity.ExecutiveName;
-            var emailBody = $"""
+            var sellerEmail = savedPolicy?.SellerEmail ?? entity.SellerEmail.Trim();
+            var sellerDisplayName = savedPolicy?.SellerName ?? entity.SellerName ?? entity.ExecutiveName;
+            var sendToClient = savedPolicy?.DeliveryTarget == "client";
+            var emailRecipient = sendToClient ? savedPolicy!.ContactEmail! : sellerEmail;
+            var emailRecipientName = sendToClient ? savedPolicy!.ContactName : sellerDisplayName;
+            var emailCopy = savedPolicy is null ? new[] {
+                "jmesen@castrofallas.com",
+                "pricingcf@castrofallas.com",
+                "cquiros@castrofallas.com",
+            } : sendToClient && !string.Equals(emailRecipient, sellerEmail, StringComparison.OrdinalIgnoreCase)
+                ? new[] { sellerEmail } : Array.Empty<string>();
+            var emailBody = sendToClient ? $"""
+                <p>Estimado/a {WebUtility.HtmlEncode(savedPolicy?.ContactName ?? "cliente")},</p>
+                <p>Adjuntamos la cotización <strong>{quoteNumber}</strong> para {clientName}.</p>
+                <p><strong>Ruta:</strong> {route}</p>
+                <p>Para cualquier consulta, contacte a su ejecutivo comercial.</p>
+                <p>Grupo Castro Fallas</p>
+                """ : $"""
                 <p>Hola {sellerName},</p>
                 <p>Pricing { (isModification ? "actualizó" : "terminó") } la tarifa solicitada para <strong>{clientName}</strong>.</p>
                 <p><strong>Tarifa:</strong> {quoteNumber}<br />
@@ -328,12 +375,7 @@ public static class RateRequestCompletionEndpoints
                         quo = quoteNumberText,
                         client = entity.ClientName,
                         route = routeText,
-                        cc = new[]
-                        {
-                            "jmesen@castrofallas.com",
-                            "pricingcf@castrofallas.com",
-                            "cquiros@castrofallas.com",
-                        },
+                        cc = emailCopy,
                         attachments = new[]
                         {
                             new
@@ -349,8 +391,8 @@ public static class RateRequestCompletionEndpoints
                         new
                         {
                             userId = entity.SellerUserId?.ToString(),
-                            address = sellerEmail,
-                            displayName = sellerDisplayName,
+                            address = emailRecipient,
+                            displayName = emailRecipientName,
                         },
                     },
                 },
