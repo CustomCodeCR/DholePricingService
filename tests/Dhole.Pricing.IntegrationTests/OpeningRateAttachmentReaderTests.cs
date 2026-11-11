@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using Dhole.Pricing.Api.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -14,13 +15,19 @@ public sealed class OpeningRateAttachmentReaderTests
     {
         var requestId = Guid.NewGuid();
         var finalId = Guid.NewGuid();
+        var first = JsonSerializer.Serialize(new
+        {
+            supportDocuments = new[] { new { id = requestId, fileName = "Packing List.pdf" } }
+        });
+        var second = JsonSerializer.Serialize(new
+        {
+            payload = new
+            {
+                supportDocuments = new[] { new { id = requestId, fileName = "duplicate.pdf" } }
+            }
+        });
         var references = OpeningRateAttachmentReader.GatherReferences(
-            [requestId, finalId],
-            [
-                $$"""{"supportDocuments":[{"id":"{{requestId}}","fileName":"Packing List.pdf"}]}""",
-                $$"""{"payload":{"supportDocuments":[{"id":"{{requestId}}","fileName":"duplicate.pdf"}]}}""",
-                "{broken-json"
-            ]);
+            [requestId, finalId], [first, second, "{broken-json"]);
 
         Assert.AreEqual(2, references.Count);
         Assert.AreEqual(requestId, references[0].Id);
