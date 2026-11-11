@@ -18,6 +18,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
     IIntegrationEventOutboxWriter outbox,
     ServiceDbContext db,
     SentRateEmailNotificationService sellerEmailNotifications,
+    OpeningRateAttachmentReader attachmentReader,
     ILogger<AcceptedRateOpeningsNotificationService> logger)
 {
     private const string OpeningRecipient = "aperturatramites@grupocastrofallas.com";
@@ -92,11 +93,12 @@ public sealed class AcceptedRateOpeningsNotificationService(
             var recipientEmail = RecipientFor(actor);
             var recipientName = "Apertura de Trámite";
 
-            var request = await db.RateRequests
+            var requests = await db.RateRequests
                 .AsNoTracking()
                 .Where(x => x.RateId == rateId)
                 .OrderByDescending(x => x.RequestedAtUtc)
-                .FirstOrDefaultAsync(cancellationToken);
+                .ToListAsync(cancellationToken);
+            var request = requests.FirstOrDefault();
 
             var documentResult = await dispatcher.DispatchAsync(
                 new GenerateRateDocumentCommand(rate.Id, null, "pdf"),
@@ -229,6 +231,33 @@ public sealed class AcceptedRateOpeningsNotificationService(
             if (string.IsNullOrWhiteSpace(servicesText))
                 servicesText = "—";
 
+            var document = documentResult.Value;
+            var storedReferences = OpeningRateAttachmentReader.GatherReferences(
+                rate.FinalBackupStorageIds, requests.Select(x => x.PayloadJson));
+            var storedDocuments = await attachmentReader.ReadAsync(
+                storedReferences, document.Content.Length, cancellationToken);
+            var emailAttachments = new[]
+                {
+                    new
+                    {
+                        fileName = document.FileName,
+                        contentType = document.ContentType,
+                        contentBase64 = Convert.ToBase64String(document.Content),
+                    },
+                }
+                .Concat(storedDocuments.Documents.Select(file => new
+                {
+                    fileName = file.FileName,
+                    contentType = file.ContentType,
+                    contentBase64 = Convert.ToBase64String(file.Content),
+                }))
+                .ToArray();
+            var unavailableDocumentsHtml = storedDocuments.UnavailableDocuments.Count == 0
+                ? string.Empty
+                : "<p><strong>Documentos que requieren revisión manual en Dhole:</strong> "
+                    + string.Join(", ", storedDocuments.UnavailableDocuments.Select(WebUtility.HtmlEncode))
+                    + ".</p>";
+
             // Store escaped text in the outbox email at acceptance time, so
             // retries never depend on a later edit or request context.
             var observations = acceptanceObservations?.Trim();
@@ -241,7 +270,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 <p>{(idtraPending
                     ? "Hay una nueva tarifa aceptada con <strong>IDTRA pendiente de asignación</strong>."
                     : "Hay una nueva tarifa aceptada para <strong>apertura de trámite</strong>.")}
-                   Se adjunta el PDF de la cotización para continuar con el trámite.</p>
+                   Se adjunta el PDF de la cotización y los documentos disponibles de la cotización y sus solicitudes vinculadas.</p>
                 <table style="border-collapse:collapse; width:100%; max-width:820px">
                   <tr><td style="padding:5px 10px"><strong>QUO</strong></td><td style="padding:5px 10px">{Html(quoteNumber)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Código de tarifa</strong></td><td style="padding:5px 10px">{Html(rate.RateCode)}</td></tr>
@@ -266,10 +295,10 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 <p>{(idtraPending
                     ? "Favor registrar el IDTRA en la tarifa y continuar con el proceso correspondiente."
                     : "Favor continuar con la apertura de trámite utilizando el IDTRA indicado.")}</p>
-                <p><strong>Adjunto:</strong> PDF comercial de la cotización aceptada.</p>
+                <p><strong>Adjuntos:</strong> PDF comercial y {storedDocuments.Documents.Count} documento(s) del expediente.</p>
+                {unavailableDocumentsHtml}
                 """;
 
-            var document = documentResult.Value;
             await outbox.WriteAsync(
                 NotificationEventName,
                 NotificationEventName,
@@ -311,15 +340,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
                         incoterm = incotermText,
                         services = serviceValues,
                         operationType = operationTypeText,
-                        attachments = new[]
-                        {
-                            new
-                            {
-                                fileName = document.FileName,
-                                contentType = document.ContentType,
-                                contentBase64 = Convert.ToBase64String(document.Content),
-                            },
-                        },
+                        attachments = emailAttachments,
                     },
                     maxAttempts = 5,
                     recipients = new[]
