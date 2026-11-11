@@ -1,3 +1,8 @@
+## [1.9.12] - 2026-11-10
+
+- PATCH DH-20261110-SELLER-EXPIRED-081: permite al vendedor propietario marcar tarifas vencidas como aceptadas o rechazadas mediante el endpoint existente de decisión comercial; valida motivo de rechazo, preserva auditoría, idempotencia, fechas de vigencia y avisos de apertura.
+- Mantiene la protección de revisiones no publicadas y agrega el estado Expired a las revisiones previamente enviadas elegibles para decisión. Las solicitudes de modificación sobre vencidas ya estaban admitidas. No cambia contratos REST ni SignalR.
+
 ## [1.9.11] - 2026-11-10
 
 - PATCH DH-20261110-CRM-HIDE-TARIFARIO-067: CRM > Cuentas > Cotizaciones > historial pendiente excluye antes de contar y paginar las QUO sin vincular cuyo nombre de cliente histórico contenga «TARIFARIO» (sin distinguir mayúsculas). Búsqueda, total, paginación y selección masiva usan la misma consulta filtrada.
