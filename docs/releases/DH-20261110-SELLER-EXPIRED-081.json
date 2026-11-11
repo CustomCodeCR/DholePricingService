@@ -1,0 +1,30 @@
+{
+  "releaseId": "DH-20261110-SELLER-EXPIRED-081",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.21.1",
+  "date": "2026-11-10",
+  "components": [
+    {
+      "name": "DholeWeb",
+      "previousVersion": "1.21.0",
+      "version": "1.21.1"
+    },
+    {
+      "name": "DholePricingService",
+      "previousVersion": "1.9.11",
+      "version": "1.9.12"
+    }
+  ],
+  "summary": "Permitir decisiones y solicitudes de modificación sobre tarifas vencidas por vendedor propietario, preservando vigencia original, autorizaciones, auditoría y revisiones publicadas.",
+  "compatibility": {
+    "rest": "sin cambios en contratos",
+    "realtime": "sin cambios en contratos SignalR existentes"
+  },
+  "validation": {
+    "build": "pending",
+    "regressionTests": "pending",
+    "staging": "pending",
+    "masterPromotion": "pending"
+  },
+  "rollback": "Revertir el release coordinadamente en los dos componentes."
+}

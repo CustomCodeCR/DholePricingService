@@ -133,7 +133,7 @@ public static class SellerRateStatusEndpoints
                 var unpublishedNewer = await db.Set<RateRevision>().AsNoTracking()
                     .AnyAsync(x => x.RateHeaderId == rateId
                         && x.RevisionNumber < currentRate.RevisionNumber
-                        && (x.Status == "Sent" || x.Status == "RequestedByClient"),
+                        && (x.Status == "Sent" || x.Status == "RequestedByClient" || x.Status == "Expired"),
                         cancellationToken);
                 if (unpublishedNewer)
                     return Results.Ok(new {
@@ -161,7 +161,7 @@ public static class SellerRateStatusEndpoints
 
             var published = await db.Set<RateRevision>().AsNoTracking()
                 .Where(x => x.RateHeaderId == rateId
-                    && (x.Status == "Sent" || x.Status == "RequestedByClient"))
+                    && (x.Status == "Sent" || x.Status == "RequestedByClient" || x.Status == "Expired"))
                 .OrderByDescending(x => x.RevisionNumber)
                 .Select(x => new { x.RevisionNumber, x.Status })
                 .FirstOrDefaultAsync(cancellationToken);
@@ -183,12 +183,12 @@ public static class SellerRateStatusEndpoints
 
             decisionOnOlderPublishedRevision = currentRate.RevisionNumber > published.RevisionNumber;
         }
-        else if (currentRate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient))
+        else if (currentRate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient or RateStatus.Expired))
         {
             return Results.Conflict(new
             {
                 code = "Pricing.SellerRateNotAwaitingClient",
-                message = "La tarifa solo puede aceptarse o rechazarse cuando está enviada o Abierta con una revisión previamente publicada.",
+                message = "La tarifa solo puede aceptarse o rechazarse cuando está enviada, vencida o Abierta con una revisión previamente publicada.",
             });
         }
 
