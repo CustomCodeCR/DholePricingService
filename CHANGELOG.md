@@ -1,3 +1,9 @@
+## [1.13.0] - 2026-11-11
+
+- MINOR DH-20261111-CRM-QUOTE-MULTI-CONTACTS-102: configuración por cuenta de todos los destinatarios de cotizaciones futuras. Elimina el selector de QUO y permite elegir varios contactos con DhMultiSelect; se preservan las opciones solo vendedor o cliente con CC vendedor asignado.
+- CRM guarda y valida la lista y migra el contacto único anterior; Pricing comprueba todos los contactos antes de preparar el PDF y envía los correos mediante el Outbox idempotente. APIs REST y arquitectura realtime compatibles.
+- Versión global Dhole 1.35.0. CI y staging pendientes; no desplegar a producción sin autorización.
+
 ## [1.12.0] - 2026-11-11
 
 - MINOR DH-20261111-CRM-ACCOUNT-QUOTE-DELIVERY-093: configura por cuenta destinatarios de todas las próximas cotizaciones: vendedor únicamente o contacto del cliente con copia al vendedor asignado.
