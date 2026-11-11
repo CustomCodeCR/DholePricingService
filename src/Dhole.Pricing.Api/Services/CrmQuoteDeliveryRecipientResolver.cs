@@ -11,8 +11,68 @@ public sealed record CrmQuoteDeliveryRecipient(
 
 public sealed class CrmQuoteDeliveryRecipientResolver(
     IHttpClientFactory httpClientFactory,
-    ILogger<CrmQuoteDeliveryRecipientResolver> logger)
+    ILogger<CrmQuoteDeliveryRecipientResolver> logger,
+    IConfiguration configuration)
 {
+    public sealed record AccountDelivery(
+        string DeliveryTarget, Guid? ContactId, string? ContactName,
+        string? ContactEmail, string SellerName, string SellerEmail);
+
+    // The current CRM account preference is authoritative for every later QUO.
+    // Service-key authentication also works for retry workers without a browser JWT.
+    public async Task<(AccountDelivery? Delivery, string? Error)> ReadAccountDeliveryAsync(
+        Guid accountId, CancellationToken ct)
+    {
+        if (accountId == Guid.Empty)
+            return (null, "La cotización no tiene una cuenta CRM vinculada.");
+        var secret = configuration["Crm:Client:InternalServiceKey"]
+            ?? configuration["Auth:Client:InternalServiceKey"]
+            ?? configuration["INTERNAL_SERVICE_KEY"];
+        if (string.IsNullOrWhiteSpace(secret))
+            return (null, "No está configurada la comunicación interna segura con CRM.");
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get,
+                $"api/internal/crm/accounts/{accountId:D}/quote-delivery");
+            request.Headers.TryAddWithoutValidation("X-Dhole-Service-Key", secret);
+            using var response = await httpClientFactory.CreateClient("DholeCrmQuoteDelivery")
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("CRM rejected account delivery policy for {AccountId} ({Status})",
+                    accountId, (int)response.StatusCode);
+                return (null, "CRM no pudo validar la preferencia de envío, el contacto o el vendedor.");
+            }
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var data = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            var json = data.RootElement;
+            var target = ReadString(json, "deliveryTarget");
+            var sellerEmail = ReadString(json, "sellerEmail")?.Trim();
+            var sellerName = ReadString(json, "sellerName");
+            var contactEmail = ReadString(json, "contactEmail")?.Trim();
+            var id = Guid.TryParse(ReadString(json, "contactId"), out var parsed) ? parsed : (Guid?)null;
+            if (target is not ("seller" or "client") ||
+                string.IsNullOrWhiteSpace(sellerName) ||
+                string.IsNullOrWhiteSpace(sellerEmail) ||
+                !MailAddress.TryCreate(sellerEmail, out var sellerAddress) ||
+                !string.Equals(sellerAddress.Address, sellerEmail, StringComparison.OrdinalIgnoreCase))
+                return (null, "El vendedor de la cuenta no tiene correo válido.");
+            if (target == "client" && (id is null || string.IsNullOrWhiteSpace(contactEmail) ||
+                !MailAddress.TryCreate(contactEmail, out var contactAddress) ||
+                !string.Equals(contactAddress.Address, contactEmail, StringComparison.OrdinalIgnoreCase)))
+                return (null, "El contacto seleccionado en la cuenta ya no tiene correo válido.");
+
+            return (new AccountDelivery(target, id, ReadString(json, "contactName"),
+                contactEmail, sellerName, sellerEmail), null);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            logger.LogWarning(error, "Could not resolve CRM quote delivery policy for {AccountId}", accountId);
+            return (null, "No fue posible consultar la preferencia de envío de la cuenta.");
+        }
+    }
+
     public async Task<(CrmQuoteDeliveryRecipient? Recipient, string? Error)> ResolveAsync(
         Guid accountId, Guid? contactId, string? authorization, CancellationToken ct)
     {
