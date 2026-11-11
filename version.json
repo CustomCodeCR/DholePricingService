@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.10.0",
-  "ecosystemVersion": "1.22.0",
-  "releaseId": "DH-20261110-CRM-LEAD-QUO-PARITY-080",
-  "releaseStatus": "candidate-develop-ci-staging-pending"
+  "version": "1.10.1",
+  "ecosystemVersion": "1.25.1",
+  "releaseId": "DH-20261111-PRICING-OPENING-ATTACHMENTS-084",
+  "releaseStatus": "candidate-ci-and-staging-pending"
 }

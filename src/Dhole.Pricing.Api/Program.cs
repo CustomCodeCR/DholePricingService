@@ -34,6 +34,19 @@ builder.Services.AddScoped<AuthSellerDirectoryService>();
 builder.Services.AddScoped<SellerRateAccessService>();
 builder.Services.AddScoped<RateCreatorIdentityService>();
 builder.Services.AddScoped<AcceptedRateOpeningsNotificationService>();
+builder.Services.AddScoped<OpeningRateAttachmentReader>();
+builder.Services.AddHttpClient("DholeStorageForOpenings", client =>
+{
+    var baseAddress = builder.Configuration["Storage:Client:BaseAddress"]
+        ?? "http://192.168.1.12:5207/";
+    client.BaseAddress = new Uri(baseAddress.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(
+        int.TryParse(builder.Configuration["Storage:Client:TimeoutSeconds"], out var timeout)
+        && timeout > 0 ? timeout : 30);
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+{
+    AllowAutoRedirect = false,
+});
 builder.Services.AddScoped<SentRateEmailNotificationService>();
 builder.Services.AddHostedService<SellerRateExpiryReminderWorker>();
 builder.Services.AddHostedService<SellerRateDeliveryRetryWorker>();
