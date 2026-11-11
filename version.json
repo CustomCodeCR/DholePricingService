@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.11.0",
-  "ecosystemVersion": "1.31.0",
-  "releaseId": "DH-20261111-CRM-QUOTE-DELIVERY-089",
+  "version": "1.11.1",
+  "ecosystemVersion": "1.31.1",
+  "releaseId": "DH-20261111-CRM-QUOTE-SELLER-ACCESS-090",
   "releaseStatus": "candidate-ci-and-staging-pending"
 }
