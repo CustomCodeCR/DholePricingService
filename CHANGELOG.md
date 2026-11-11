@@ -1,3 +1,9 @@
+## [1.11.0] - 2026-11-11
+
+- MINOR DH-20261111-CRM-QUOTE-DELIVERY-089: permite enviar las cotizaciones vinculadas a cuentas CRM al vendedor asignado o a un contacto activo seleccionado, con copia exclusiva al vendedor asignado.
+- Resuelve contactos y ejecutivo en CRM con permisos del solicitante antes de crear el Outbox; el PDF comercial se adjunta y no se exponen enlaces privados de Dhole al cliente. Conserva el flujo anterior y la infraestructura de notificaciones idempotente.
+- Release coordinado con DholeWeb 1.31.0 y DholeSystem 1.31.0; CI/staging pendientes; producción no autorizada.
+
 ## [1.10.1] - 2026-11-11
 
 - PATCH DH-20261111-PRICING-OPENING-ATTACHMENTS-084: los correos de apertura agregan los soportes de todas las solicitudes de cotización vinculadas y respaldos finales guardados en Storage, manteniendo el PDF comercial. Dedupe por identificador de Storage y captura de contenido al momento de aceptar para reintentos idempotentes del Outbox.
