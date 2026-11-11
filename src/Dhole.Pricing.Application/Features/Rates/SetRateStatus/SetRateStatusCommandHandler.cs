@@ -40,6 +40,22 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateInvalidStatus);
         }
 
+        // El vínculo se valida en el servidor, nunca se confía en un texto/ID enviado por la UI.
+        if (command.Status == RateStatus.QUOVinculada)
+        {
+            if (command.LinkedAcceptedRateId is not { } acceptedId || acceptedId == Guid.Empty || acceptedId == rate.Id)
+                return Result.Failure(PricingErrors.RateInvalidStatus);
+
+            var accepted = await rateHeaders.GetByIdWithDetailsAsync(acceptedId, cancellationToken);
+            if (accepted is null || !RateAcceptedQuotationLinkPolicy.CanLink(rate, accepted))
+                return Result.Failure(PricingErrors.RateInvalidStatus);
+        }
+        else if (command.LinkedAcceptedRateId.HasValue)
+        {
+            // Una relación nunca puede escribirse accidentalmente para otro estado.
+            return Result.Failure(PricingErrors.RateInvalidStatus);
+        }
+
         var advancesQuotation = command.Status is
             RateStatus.Open or
             RateStatus.Sent or
@@ -78,7 +94,8 @@ public sealed class SetRateStatusCommandHandler(
                 command.Status,
                 command.Reason,
                 command.UpdatedBy,
-                command.AllowDirectClientDecision
+                command.AllowDirectClientDecision,
+                command.LinkedAcceptedRateId
             );
         }
         catch (InvalidOperationException)
@@ -99,6 +116,7 @@ public sealed class SetRateStatusCommandHandler(
                 {
                     rate.Id,
                     Status = rate.Status.ToString(),
+                    rate.LinkedAcceptedRateId,
                     rate.IdtraNumber,
                     rate.ClosedReason,
                     rate.ClosedAtUtc,
