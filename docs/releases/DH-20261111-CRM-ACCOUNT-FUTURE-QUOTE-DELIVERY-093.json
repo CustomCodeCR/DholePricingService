@@ -1,0 +1,19 @@
+{
+  "releaseId": "DH-20261111-CRM-ACCOUNT-FUTURE-QUOTE-DELIVERY-093",
+  "releaseType": "MINOR",
+  "ecosystemVersion": "1.33.0",
+  "date": "2026-11-11",
+  "components": {
+    "DholeCRMService": "1.20.0/1.19.0",
+    "DholePricingService": "1.12.0",
+    "DholeWeb": "1.33.0/1.32.0",
+    "DholeSystem": "1.33.0"
+  },
+  "changes": [
+    "Envíos de QUO futuros según preferencia por cuenta CRM, con PDF y Outbox",
+    "Selección de alternativa antes de enviar",
+    "Background retry usa autenticación interna de servicio"
+  ],
+  "validation": "CI/staging pendientes",
+  "productionAuthorized": false
+}
