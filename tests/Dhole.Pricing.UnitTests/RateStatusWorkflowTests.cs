@@ -1,3 +1,4 @@
+using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -7,6 +8,63 @@ namespace Dhole.Pricing.UnitTests;
 [TestClass]
 public sealed class RateStatusWorkflowTests
 {
+    [TestMethod]
+    public void LinkedQuotation_IsIndependentDecision_AndCannotBecomeExpired()
+    {
+        var source = CreateRate(validTo: DateTime.UtcNow.Date.AddDays(-1));
+        var acceptedId = Guid.NewGuid();
+        AddFreight(source, cost: 80m, sale: 100m);
+        source.SetAmounts(updatedBy: null);
+        source.SetCommercialStatus(RateStatus.Sent, null, null);
+        Assert.IsTrue(source.MarkExpired(DateTime.UtcNow.Date));
+
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            source.SetCommercialStatus(RateStatus.QUOVinculada, null, null));
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            source.SetCommercialStatus(RateStatus.QUOVinculada, null, null,
+                linkedAcceptedRateId: source.Id));
+
+        source.SetCommercialStatus(RateStatus.QUOVinculada, null, null,
+            linkedAcceptedRateId: acceptedId);
+
+        Assert.AreEqual(RateStatus.QUOVinculada, source.Status);
+        Assert.AreEqual(acceptedId, source.LinkedAcceptedRateId);
+        Assert.IsFalse(source.MarkExpired(DateTime.UtcNow.Date.AddDays(30)));
+
+        source.SetCommercialStatus(RateStatus.QUOVinculada, null, null,
+            linkedAcceptedRateId: acceptedId);
+        Assert.AreEqual(acceptedId, source.LinkedAcceptedRateId);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            source.SetCommercialStatus(RateStatus.Sent, null, null));
+    }
+
+    [TestMethod]
+    public void LinkedQuotation_RequiresDifferentAcceptedQuoteFromSameClient()
+    {
+        var source = CreateRate();
+        var accepted = CreateRate("QUO-B7K2P-9X4M8Q");
+        var accountId = Guid.NewGuid();
+        source.ConfigureClientAccount(accountId);
+        accepted.ConfigureClientAccount(accountId);
+
+        Assert.IsFalse(RateAcceptedQuotationLinkPolicy.CanLink(source, accepted));
+        AddFreight(accepted, cost: 80m, sale: 100m);
+        accepted.SetAmounts(updatedBy: null);
+        accepted.SetCommercialStatus(RateStatus.Sent, null, null);
+        accepted.SetCommercialStatus(RateStatus.AcceptedByClient, null, null);
+
+        Assert.IsTrue(RateAcceptedQuotationLinkPolicy.CanLink(source, accepted));
+        Assert.IsFalse(RateAcceptedQuotationLinkPolicy.CanLink(accepted, accepted));
+
+        var differentAccount = CreateRate("QUO-C7K2P-9X4M8Q");
+        differentAccount.ConfigureClientAccount(Guid.NewGuid());
+        Assert.IsFalse(RateAcceptedQuotationLinkPolicy.CanLink(differentAccount, accepted));
+
+        var differentLead = CreateRate("QUO-D7K2P-9X4M8Q");
+        differentLead.ConfigureClientLead(Guid.NewGuid());
+        Assert.IsFalse(RateAcceptedQuotationLinkPolicy.CanLink(differentLead, accepted));
+    }
+
     [TestMethod]
     public void QuoteReferences_IdtraCsvAndInternalReferences_RemainIndependent()
     {
