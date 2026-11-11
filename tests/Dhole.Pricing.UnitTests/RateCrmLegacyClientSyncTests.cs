@@ -68,6 +68,51 @@ public sealed class RateCrmLegacyClientSyncTests
         Assert.AreEqual("CLIENTE HISTORICO", rate.ClientName);
     }
 
+    [TestMethod]
+    public void LinkLegacyQuoteToLead_UpdatesVisibleNameButNotCommercialState()
+    {
+        var rate = NewRate();
+        var leadId = Guid.NewGuid();
+        var status = rate.Status;
+        var revision = rate.RevisionNumber;
+        var sale = rate.TotalSaleAmount;
+        var cost = rate.TotalCostAmount;
+        Assert.IsTrue(rate.ReconcileLegacyClientLead(leadId, "  PROSPECTO CRM  ", "VENDEDOR CRM"));
+        Assert.AreEqual(leadId, rate.ClientLeadId);
+        Assert.AreEqual("PROSPECTO CRM", rate.ClientName);
+        Assert.AreEqual("VENDEDOR CRM", rate.ExecutiveName);
+        StringAssert.Contains(rate.RateName, "PROSPECTO CRM");
+        Assert.AreEqual(status, rate.Status);
+        Assert.AreEqual(revision, rate.RevisionNumber);
+        Assert.AreEqual(sale, rate.TotalSaleAmount);
+        Assert.AreEqual(cost, rate.TotalCostAmount);
+        Assert.IsFalse(rate.ReconcileLegacyClientLead(leadId, "PROSPECTO CRM", "VENDEDOR CRM"));
+    }
+
+    [TestMethod]
+    public void LeadReconciliation_CannotTakeAccountOrAnotherLead()
+    {
+        var account = NewRate();
+        account.ConfigureClientAccount(Guid.NewGuid());
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            account.ReconcileLegacyClientLead(Guid.NewGuid(), "OTRO", null));
+        var lead = NewRate();
+        lead.ConfigureClientLead(Guid.NewGuid());
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            lead.ReconcileLegacyClientLead(Guid.NewGuid(), "OTRO", null));
+    }
+
+    [TestMethod]
+    public void LeadReconciliation_RequiresValidNameAndIdentity()
+    {
+        var rate = NewRate();
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            rate.ReconcileLegacyClientLead(Guid.Empty, "PROSPECTO", null));
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            rate.ReconcileLegacyClientLead(Guid.NewGuid(), "  ", null));
+        Assert.IsNull(rate.ClientLeadId);
+    }
+
     private static RateHeader NewRate()
     {
         var today = DateTime.UtcNow.Date;

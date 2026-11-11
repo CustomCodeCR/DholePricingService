@@ -1,3 +1,8 @@
+## [1.10.0] - 2026-11-10
+
+- MINOR DH-20261110-CRM-LEAD-QUO-PARITY-082: Dashboard oficial de QUO por ClientLeadId y reconciliación manual de QUO históricas a prospectos, con confirmación superadministrada. No permite reasignar cotizaciones de cuentas/prospectos distintos, no modifica montos ni estados, sincroniza solicitudes por RateId.
+- Conserva el release de tarifas vencidas 1.9.12; contratos REST existentes y realtime compatibles. CI y staging verificados para el batch previo de develop.
+
 ## [1.9.12] - 2026-11-10
 
 - PATCH DH-20261110-SELLER-EXPIRED-081: permite que el vendedor asignado acepte o rechace cotizaciones vencidas mediante el endpoint de decisión ya existente. Conserva fecha de vigencia, auditoría, idempotencia y confirmaciones de apertura; requiere motivo para rechazo.
