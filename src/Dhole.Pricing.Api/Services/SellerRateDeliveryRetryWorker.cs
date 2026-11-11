@@ -87,7 +87,7 @@ public sealed class SellerRateDeliveryRetryWorker(
             try
             {
                 await RateRequestCompletionEndpoints.TryCompleteApprovedRateAsync(
-                    rateId, db, dispatcher, outbox, new DefaultHttpContext(),
+                    rateId, db, dispatcher, outbox, new DefaultHttpContext { RequestServices = services },
                     loggerFactory, cancellationToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
