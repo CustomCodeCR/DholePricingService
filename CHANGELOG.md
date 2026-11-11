@@ -1,3 +1,8 @@
+## [1.10.1] - 2026-11-11
+
+- PATCH DH-20261111-PRICING-OPENING-ATTACHMENTS-084: los correos de apertura agregan los soportes de todas las solicitudes de cotización vinculadas y respaldos finales guardados en Storage, manteniendo el PDF comercial. Dedupe por identificador de Storage y captura de contenido al momento de aceptar para reintentos idempotentes del Outbox.
+- Los documentos no disponibles o que superen los límites se informan en el cuerpo del correo; máximo 30 adjuntos y 14 MiB de datos en Pricing, compatible con SMTP/Notifications. REST y SignalR sin cambios; CI y staging pendientes.
+
 ## [1.10.0] - 2026-11-10
 
 - MINOR DH-20261110-CRM-LEAD-QUO-PARITY-080: QUO de prospectos por ClientLeadId, dashboard oficial de estados, reconciliación administrativa de QUO históricas por selección confirmada. Conserva la corrección 1.9.12 para tarifas vencidas del vendedor.
