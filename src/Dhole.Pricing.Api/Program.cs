@@ -72,6 +72,13 @@ builder.Services.AddHttpClient("DholeStorageForOpenings", client =>
 {
     AllowAutoRedirect = false,
 });
+builder.Services.AddHttpClient("DholeCrmQuoteDelivery", client =>
+{
+    var baseAddress = builder.Configuration["Crm:Client:BaseAddress"] ?? "http://crm-api:8080/";
+    client.BaseAddress = new Uri(baseAddress.TrimEnd('/') + "/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+}).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddScoped<CrmQuoteDeliveryRecipientResolver>();
 builder.Services.AddScoped<SentRateEmailNotificationService>();
 builder.Services.AddHostedService<SellerRateExpiryReminderWorker>();
 builder.Services.AddHostedService<SellerRateDeliveryRetryWorker>();

@@ -29,6 +29,20 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
             return;
         }
 
+        // The CRM account quote delivery endpoint performs its own account,
+        // contact and assigned-seller verification. A seller may therefore send
+        // a quotation linked to their CRM account even if Pricing originally
+        // generated the rate without the seller's RateRequest ownership.
+        // No other status or Pricing operation is exempted from visibility.
+        if (HttpMethods.IsPatch(context.Request.Method)
+            && path.EndsWith("/status", StringComparison.OrdinalIgnoreCase)
+            && UserHasScope(context.User, "crm.quote.read")
+            && UserHasScope(context.User, "crm.account.update"))
+        {
+            await next(context);
+            return;
+        }
+
         // El vendedor consume sus tarifas por /api/pricing/seller-rates. Bloquear el browse
         // y el dashboard general evita que pueda enumerar o inferir tarifas de otros vendedores.
         // Importante: esta restricción aplica únicamente a lecturas. Las escrituras deben
@@ -109,6 +123,18 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
 
         var sellerCapability = sellerRole || hasRequestCreate;
         return sellerCapability && !hasPricingOperatorAccess && !hasGlobalReadAccess;
+    }
+
+    private static bool UserHasScope(ClaimsPrincipal user, string required)
+    {
+        var scopes = user.Claims
+            .Where(claim => claim.Type.Equals("scp", StringComparison.OrdinalIgnoreCase)
+                || claim.Type.Equals("scope", StringComparison.OrdinalIgnoreCase)
+                || claim.Type.Equals("scopes", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(claim => Split(claim.Value))
+            .Select(value => value.Trim().ToLowerInvariant())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return HasScope(scopes, required);
     }
 
     private static bool HasScope(HashSet<string> scopes, string required)
