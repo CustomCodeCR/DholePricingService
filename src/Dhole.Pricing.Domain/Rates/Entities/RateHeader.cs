@@ -360,6 +360,8 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
     public bool PendingReapproval { get; private set; }
     public string? ReapprovalReason { get; private set; }
     public RateStatus Status { get; private set; }
+    // QUO comercial que el cliente sí aceptó en lugar de esta cotización.
+    public Guid? LinkedAcceptedRateId { get; private set; }
     public DateTime? AcceptedAtUtc { get; private set; }
     public DateTime? SellerReceivedAtUtc { get; private set; }
     public Guid? SellerReceivedBy { get; private set; }
@@ -1481,14 +1483,27 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         RateStatus status,
         string? reason,
         Guid? updatedBy,
-        bool allowDirectClientDecision = false
+        bool allowDirectClientDecision = false,
+        Guid? linkedAcceptedRateId = null
     )
     {
+        if (status == RateStatus.QUOVinculada &&
+            (!linkedAcceptedRateId.HasValue || linkedAcceptedRateId == Guid.Empty || linkedAcceptedRateId == Id))
+            throw new InvalidOperationException("Seleccione una QUO aceptada diferente de la tarifa actual.");
+
         // Los comandos HTTP pueden reintentarse y el frontend puede refrescar el estado
         // antes de confirmar la transición. Repetir el mismo estado debe ser idempotente,
         // no una operación inválida (por ejemplo Open -> Open al crear una solicitud).
         if (Status == status)
+        {
+            if (status != RateStatus.QUOVinculada || LinkedAcceptedRateId == linkedAcceptedRateId)
+                return;
+            // Permite corregir la relación sin cambiar la decisión ni duplicar efectos.
+            LinkedAcceptedRateId = linkedAcceptedRateId;
+            MarkAsUpdated(DateTime.UtcNow, updatedBy?.ToString());
+            AddDomainEvent(new RateHeaderUpdatedDomainEvent(Id, updatedBy));
             return;
+        }
 
         var isClosing = status is RateStatus.Closed or RateStatus.Cancelled;
         var isValidTransition = (Status, status) switch
@@ -1513,6 +1528,12 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             (RateStatus.RequestedByClient, RateStatus.RejectedByClient) => true,
             (RateStatus.Expired, RateStatus.AcceptedByClient) => true,
             (RateStatus.Expired, RateStatus.RejectedByClient) => true,
+            (RateStatus.Open, RateStatus.QUOVinculada) => true,
+            (RateStatus.Sent, RateStatus.QUOVinculada) => true,
+            (RateStatus.RequestedByClient, RateStatus.QUOVinculada) => true,
+            (RateStatus.Expired, RateStatus.QUOVinculada) => true,
+            (RateStatus.RejectedByClient, RateStatus.QUOVinculada) => true,
+            (RateStatus.Closed, RateStatus.QUOVinculada) => true,
             // Una aceptación puede cancelarse o revertirse a rechazo con motivo auditable.
             (RateStatus.AcceptedByClient, RateStatus.Cancelled) => true,
             (RateStatus.AcceptedByClient, RateStatus.RejectedByClient) => true,
@@ -1550,12 +1571,20 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
         }
 
         Status = status;
+        LinkedAcceptedRateId = status == RateStatus.QUOVinculada ? linkedAcceptedRateId : null;
+        if (status == RateStatus.QUOVinculada)
+        {
+            // Corrige decisiones previas sin conservar un rechazo o cierre obsoleto.
+            ClosedReason = null;
+            ClosedAtUtc = null;
+            ClosedBy = null;
+        }
         // La fecha real de aceptación no debe confundirse con una edición posterior.
         // Una nueva aceptación comercial reemplaza la fecha de la revisión anterior.
         if (status == RateStatus.AcceptedByClient)
             AcceptedAtUtc = DateTime.UtcNow;
         RequiredApproval = false;
-        if (status is RateStatus.AcceptedByClient or RateStatus.RejectedByClient or RateStatus.Closed or RateStatus.Cancelled)
+        if (status is RateStatus.AcceptedByClient or RateStatus.RejectedByClient or RateStatus.Closed or RateStatus.Cancelled or RateStatus.QUOVinculada)
         {
             PendingReapproval = false;
             ReapprovalReason = null;

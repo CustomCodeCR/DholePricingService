@@ -1,3 +1,9 @@
+## [1.14.0] - 2026-11-11
+
+- MINOR DH-20261111-PRICING-QUO-LINKED-104: nuevo estado comercial QUOVinculada para cotizaciones cuya operación fue aceptada bajo otra QUO del mismo cliente. El vínculo a la QUO aceptada es obligatorio, persistente y validado en Pricing.
+- El módulo Web muestra «Cliente aceptó otra QUO» con búsqueda, selección y navegación al documento aceptado; las tarifas vinculadas se muestran por separado y no computan como vencidas o no aceptadas.
+- Componente DholePricingService 1.13.0 → 1.14.0, ecosistema Dhole 1.37.0. Contratos REST, SignalR e infraestructura Outbox preservados. CI/staging pendientes; sin autorización de producción.
+
 ## [1.13.0] - 2026-11-11
 
 - MINOR DH-20261111-CRM-QUOTE-MULTI-CONTACTS-102: varios contactos de cuenta seleccionados para todas las cotizaciones futuras, con copia al vendedor asignado. Validación CRM previa al Outbox de cada correo; envío individual por contacto sin revelar otros destinatarios.

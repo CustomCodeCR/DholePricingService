@@ -90,6 +90,7 @@ public sealed record RateDto(
     public int? GroupAlternativeCount { get; init; }
     public Guid? ClientAccountId { get; init; }
     public Guid? ClientLeadId { get; init; }
+    public Guid? LinkedAcceptedRateId { get; init; }
     public string? OtherReferences { get; init; }
     public string? CarrierRoute { get; init; }
     public string? CarrierComments { get; init; }

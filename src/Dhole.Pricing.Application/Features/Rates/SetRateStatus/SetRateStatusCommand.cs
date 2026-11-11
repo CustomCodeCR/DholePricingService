@@ -12,5 +12,6 @@ public sealed record SetRateStatusCommand(
     Guid? UpdatedBy,
     bool AllowDirectClientDecision = false,
     string? OtherReferences = null,
-    string? AcceptanceObservations = null
+    string? AcceptanceObservations = null,
+    Guid? LinkedAcceptedRateId = null
 ) : ICommand<Result>;

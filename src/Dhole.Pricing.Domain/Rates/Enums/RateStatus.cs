@@ -13,4 +13,5 @@ public enum RateStatus
     Closed = 8,
     Expired = 9,
     Cancelled = 10,
+    QUOVinculada = 11,
 }

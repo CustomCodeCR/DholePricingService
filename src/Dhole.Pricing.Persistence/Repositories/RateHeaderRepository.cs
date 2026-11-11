@@ -491,6 +491,9 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             {
                 CreatedByUserId = x.CreatedBy,
                 LastModifiedByUserId = x.UpdatedBy,
+                ClientAccountId = x.ClientAccountId,
+                ClientLeadId = x.ClientLeadId,
+                LinkedAcceptedRateId = x.LinkedAcceptedRateId,
                 OtherReferences = x.OtherReferences,
                 PendingReapproval = x.PendingReapproval,
                 ReapprovalReason = x.ReapprovalReason,
@@ -720,6 +723,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             (Status: RateStatus.AcceptedByClient, Count: acceptedCount),
             (Status: RateStatus.RejectedByClient, Count: notAcceptedCount),
             (Status: RateStatus.Cancelled, Count: statusCounts.GetValueOrDefault(RateStatus.Cancelled)),
+            // La QUO vinculada no es una tarifa perdida ni vencida: se informa por separado.
+            (Status: RateStatus.QUOVinculada, Count: statusCounts.GetValueOrDefault(RateStatus.QUOVinculada)),
         };
 
         var statuses = commercialStatusCounts
