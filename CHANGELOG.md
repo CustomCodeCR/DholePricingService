@@ -1,3 +1,8 @@
+## [1.9.12] - 2026-11-10
+
+- PATCH DH-20261110-SELLER-EXPIRED-081: permite que el vendedor asignado acepte o rechace cotizaciones vencidas mediante el endpoint de decisión ya existente. Conserva fecha de vigencia, auditoría, idempotencia y confirmaciones de apertura; requiere motivo para rechazo.
+- Solicitar modificación ya era válido con Expired; no cambia la seguridad ni contratos REST/SignalR.
+
 ## [1.9.11] - 2026-11-10
 
 - PATCH DH-20261110-CRM-HIDE-TARIFARIO-067: CRM > Cuentas > Cotizaciones > pendientes excluye antes de contar y paginar las QUO cuyo cliente histórico contenga «TARIFARIO», sin distinguir mayúsculas. La búsqueda, el total y la selección masiva reciben resultados filtrados desde Pricing.
