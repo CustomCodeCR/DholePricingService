@@ -47,17 +47,7 @@ public sealed class SetRateStatusCommandHandler(
                 return Result.Failure(PricingErrors.RateInvalidStatus);
 
             var accepted = await rateHeaders.GetByIdWithDetailsAsync(acceptedId, cancellationToken);
-            if (accepted is null || accepted.IsDeleted || accepted.Status != RateStatus.AcceptedByClient)
-                return Result.Failure(PricingErrors.RateInvalidStatus);
-
-            var sameClient = rate.ClientAccountId.HasValue || accepted.ClientAccountId.HasValue
-                ? rate.ClientAccountId.HasValue && rate.ClientAccountId == accepted.ClientAccountId
-                : rate.ClientLeadId.HasValue || accepted.ClientLeadId.HasValue
-                    ? rate.ClientLeadId.HasValue && rate.ClientLeadId == accepted.ClientLeadId
-                    : !string.IsNullOrWhiteSpace(rate.ClientName) &&
-                        string.Equals(rate.ClientName.Trim(), accepted.ClientName?.Trim(), StringComparison.OrdinalIgnoreCase);
-
-            if (!sameClient)
+            if (accepted is null || !RateAcceptedQuotationLinkPolicy.CanLink(rate, accepted))
                 return Result.Failure(PricingErrors.RateInvalidStatus);
         }
         else if (command.LinkedAcceptedRateId.HasValue)
