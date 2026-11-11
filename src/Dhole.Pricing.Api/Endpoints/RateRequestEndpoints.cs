@@ -32,7 +32,11 @@ public static class RateRequestEndpoints
         group.MapGet("/linked", GetLinkedAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapGet("/by-rate/{rateId:guid}", GetOriginalByRateAsync)
-            .RequireScope(PricingConstants.Scopes.RateUpdate);
+            .RequireScope(PricingConstants.Scopes.RateView);
+        // Original + every seller amendment, including completed/cancelled work.
+        // Read-only and independent of the quote revision audit trail.
+        group.MapGet("/by-rate/{rateId:guid}/history", GetHistoryByRateAsync)
+            .RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/open", GetOpenAsync)
             .RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/{id:guid}", GetByIdAsync)
@@ -234,6 +238,25 @@ public static class RateRequestEndpoints
         var original = linked.FirstOrDefault(x =>
             !RateModificationRequestPayload.IsModification(x.PayloadJson));
         return original is null ? Results.NotFound() : Results.Ok(ToDto(original));
+    }
+
+    // A complete chronological record of sales instructions linked to this quote.
+    // Never rebuild request payloads from the current quote: those are immutable
+    // historical snapshots, even when the quote has later revisions.
+    private static async Task<IResult> GetHistoryByRateAsync(
+        Guid rateId, ServiceDbContext db, CancellationToken ct)
+    {
+        var exists = await db.RateHeaders.AsNoTracking()
+            .AnyAsync(x => x.Id == rateId && !x.IsDeleted, ct);
+        if (!exists) return Results.NotFound();
+
+        var requests = await db.RateRequests.AsNoTracking()
+            .Where(x => x.RateId == rateId)
+            .OrderBy(x => x.RequestedAtUtc)
+            .ThenBy(x => x.Id)
+            .ToListAsync(ct);
+
+        return Results.Ok(requests.Select(ToDto).ToArray());
     }
 
     // A compact historical index. It never includes the full request payload or
