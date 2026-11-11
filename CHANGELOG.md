@@ -1,3 +1,8 @@
+## [1.12.0] - 2026-11-11
+
+- MINOR DH-20261111-CRM-ACCOUNT-FUTURE-QUOTE-DELIVERY-093: El envío manual y el cierre automático de solicitudes leen la preferencia vigente en CRM, esperan selección definitiva de alternativa FCL, mantienen PDF/Outbox/SignalR e impiden destinatarios del navegador por QUO.
+- Versión 1.11.3 → 1.12.0; ecosistema global 1.33.0. CI/staging pendientes; sin promoción a producción antes de validaciones.
+
 ## [1.11.2] - 2026-11-11
 
 - PATCH DH-20261111-PRICING-NONFCL-DUPLICATE-091: copias editables de LCL, FTL, LTL, aéreo y aéreo consolidado toleran marcadores internos de proveedor, catálogos de equipo terrestre y referencias históricas no-FCL; FCL mantiene validación estricta de navieras y contenedores marítimos.
