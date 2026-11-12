@@ -735,14 +735,45 @@ public sealed class DynamicsQuotePayloadBuilderTests
     }
 
     [TestMethod]
-    public void MoreThanTenIdtraCannotBeSilentlyTruncated()
+    public void MoreThanTenIdtraMapsFirstTenWithoutChangingAcceptedSnapshot()
     {
-        var idtras = string.Join(",", Enumerable.Range(1, 11).Select(x => "IDTRA" + x));
-        var schema = DynamicsQuotePayloadBuilder.ReadSchema(Schema);
-        Assert.ThrowsExactly<InvalidOperationException>(() =>
-            BuildForTest(
-                Accepted.Replace("IDTRA-2026-045", idtras, StringComparison.Ordinal),
-                schema));
+        // Regression for QUO-00000-000552: 23 distinct IDTRA, one duplicate,
+        // and only the first ten slots are available in Dataverse.
+        var references = new[]
+        {
+            "IDTRA999.12552", "IDTRA999.12553", "IDTRA999.12640",
+            "IDTRA999.12667", "IDTRA999.12668", "IDTRA999.12669",
+            "IDTRA999.12670", "IDTRA999.12671", "IDTRA999.12672",
+            "IDTRA999.12673", "IDTRA999.12674", "IDTRA999.12675",
+            "IDTRA999.12676", "IDTRA999.12677", "IDTRA999.12678",
+            "IDTRA999.12685", "IDTRA999.12756", "IDTRA999.12757",
+            "IDTRA999.12758", "IDTRA999.12759", "IDTRA999.12760",
+            "IDTRA999.12773", "IDTRA999.12774"
+        };
+        var csv = references[0] + ", " + string.Join(", ", references);
+        Assert.AreEqual(23, DynamicsQuotePayloadBuilder.ParseIdtraNumbers(csv).Length);
+
+        const string anchor = """{"name":"new_cantidadequipos","target":"new_cantidadequipos","type":"string","dataverseType":"String","required":false,"options":[]}""";
+        var lookups = string.Join(",\n", Enumerable.Range(1, 10).Select(i =>
+            "{\"name\":\"new_idtra" + i + "\",\"target\":\"new_idtra" + i +
+            "_incident@odata.bind\",\"type\":\"string\",\"dataverseType\":\"Lookup\",\"required\":false,\"options\":[]}"));
+        var schema = DynamicsQuotePayloadBuilder.ReadSchema(
+            Schema.Replace(anchor, lookups + ",\n" + anchor, StringComparison.Ordinal));
+        var snapshot = Accepted.Replace("IDTRA-2026-045", csv, StringComparison.Ordinal);
+        using var result = JsonDocument.Parse(JsonSerializer.Serialize(
+            BuildForTest(snapshot, schema)));
+        var inputs = result.RootElement.GetProperty("inputs");
+        for (var i = 1; i <= 10; i++)
+            Assert.AreEqual(references[i - 1],
+                inputs.GetProperty("new_idtra" + i).GetString());
+        Assert.IsFalse(inputs.TryGetProperty("new_idtra11", out _));
+        var description = inputs.GetProperty("description").GetString()!;
+        StringAssert.Contains(description, references[9]);
+        Assert.IsFalse(description.Contains(references[10], StringComparison.Ordinal));
+        using var source = JsonDocument.Parse(snapshot);
+        Assert.AreEqual(csv, source.RootElement.GetProperty("idtraNumber").GetString());
+        Assert.AreEqual(TestDholeRateId.ToString("D"),
+            inputs.GetProperty("new_idtraasignado").GetString());
     }
 
     [TestMethod]

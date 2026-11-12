@@ -73,7 +73,10 @@ confiables del nivel superior; no acepta valores financieros arbitrarios
 del template. La moneda corresponde a la tarifa; no se convierte tácitamente.
 
 El campo `new_notifrespuestacotizacion` debe estar mapeado en la versión activa de `crear_oferta` como entrada `integer` vinculada a un atributo Picklist de Dataverse con la opción `100000000`. Además, la clave activa requiere permiso de escritura sobre ese atributo para `create`/`upsert`. Si falta el campo, la opción o el permiso, la sincronización se detiene antes de crear la QUO y la API reporta el ajuste pendiente; jamás se omite silenciosamente ni se envía `true`. La verificación de disponibilidad del conector incluye el campo y sus permisos. El nombre completo se valida contra el MaxLength real del tenant y jamás se trunca silenciosamente; un límite insuficiente se informa antes de escribir.\n\nLos IDTRA se normalizan al prefijo `IDTRA999.`, sin anexos `// QUO`;
-se eliminan duplicados y se valida un máximo de diez. Los campos IDTRA
+se eliminan duplicados preservando el orden original. Cuando hay más
+de diez IDTRA distintos, se envían a Dynamics únicamente los primeros diez
+(incluida la descripción); la lista completa permanece en el snapshot de Pricing
+y en sus datos comerciales. Los campos IDTRA
 no utilizados se omiten si son opcionales; nunca se inventan referencias.
 Un número mayor de IDTRA que de lookups disponibles produce un error
 explícito antes de escribir. `cr933_dholerateid` nunca contiene IDTRA.

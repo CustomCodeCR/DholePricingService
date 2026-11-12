@@ -1,3 +1,9 @@
+## [1.16.1] - 2026-11-12
+
+- PATCH DH-20261112-DYNAMICS-IDTRA-FIRST10-117: el mapeo de QUO hacia Dynamics acepta listas de más de 10 IDTRA, normaliza y deduplica manteniendo el orden y solo envía las primeras 10 referencias a new_idtra1..10 y a la descripción de Dynamics.
+- Conserva todos los IDTRA en el snapshot, el historial y la QUO de Pricing; no cambia montos, RateId, revisión, idempotencia ni el control de lookups faltantes. Incluye regresión con los 23 IDTRA de QUO-00000-000552.
+- DholePricingService 1.16.0 → 1.16.1; ecosistema Dhole 1.43.2 → 1.43.3 (master previo 1.43.1). CI y staging pendientes; producción sin autorización. REST, Outbox y SignalR existentes sin cambios.
+
 ## [1.16.0] - 2026-11-12
 
 - MINOR DH-20261112-PRICING-RESEND-CHOICE-114: el reenvío manual de QUO aceptadas permite escoger notificación de Apertura con PDF y respaldos, correo de cotización enviada según CRM o aviso preliminar de aceptación SIN PDF.
