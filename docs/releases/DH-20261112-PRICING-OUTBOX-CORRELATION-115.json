@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261112-PRICING-OUTBOX-CORRELATION-115",
+  "ecosystem": "Dhole",
+  "releaseType": "PATCH",
+  "ecosystemVersion": "1.43.4",
+  "createdAt": "2026-11-12",
+  "sourceBranch": "fix/outbox-correlation-overflow-quo609-20261112-master",
+  "components": [
+    {
+      "component": "DholePricingService",
+      "repository": "CustomCodeCR/DholePricingService",
+      "previous": "1.16.1",
+      "next": "1.16.2"
+    },
+    {
+      "component": "DholeWeb",
+      "repository": "CustomCodeCR/DholeWeb",
+      "previous": "1.43.2",
+      "next": "1.43.3"
+    },
+    {
+      "component": "DholeSystem",
+      "repository": "CustomCodeCR/DholeSystem",
+      "previous": "1.43.3",
+      "next": "1.43.4"
+    }
+  ],
+  "changes": [
+    "Prevent PostgreSQL varchar(100) outbox correlation overflow for accepted quote resend",
+    "Deterministic hashing safeguard for any overlong integration correlation; same key in Outbox row and Notifications payload",
+    "Display actual backend error in DhModal without misleading fallback"
+  ],
+  "validation": {
+    "ci": "passed",
+    "staging": "passed",
+    "smtp": "not-independently-verified"
+  },
+  "productionDeploymentAuthorized": true,
+  "productionDeploymentAuthorization": "User explicitly requested integration to master for the Outbox correlation fix, 2026-11-12",
+  "stagingWorkflowRunId": 43275871187
+}
