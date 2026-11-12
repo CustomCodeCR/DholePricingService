@@ -32,9 +32,11 @@
     "Display actual backend error in DhModal without misleading fallback"
   ],
   "validation": {
-    "ci": "pending",
-    "staging": "pending",
-    "smtp": "pending"
+    "ci": "passed",
+    "staging": "passed",
+    "smtp": "not-independently-verified"
   },
-  "productionDeploymentAuthorized": false
+  "productionDeploymentAuthorized": true,
+  "productionDeploymentAuthorization": "User explicitly requested integration to master for the Outbox correlation fix, 2026-11-12",
+  "stagingWorkflowRunId": 43275871187
 }
