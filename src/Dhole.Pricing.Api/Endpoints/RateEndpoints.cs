@@ -2342,8 +2342,8 @@ public static class RateEndpoints
                 message = "La operación de reenvío necesita un identificador válido."
             });
 
-        var selectedType = (request.NotificationType ?? "opening").Trim().ToLowerInvariant();
-        if (selectedType is not ("opening" or "quote" or "notice"))
+        var selectedType = AcceptedRateResendPolicy.NormalizeNotificationType(request.NotificationType);
+        if (!AcceptedRateResendPolicy.IsSupportedNotificationType(selectedType))
             return Results.BadRequest(new
             {
                 code = "Pricing.AcceptanceEmailNotificationTypeInvalid",
@@ -2356,7 +2356,7 @@ public static class RateEndpoints
             .FirstOrDefaultAsync(cancellationToken);
         if (rate is null) return Results.NotFound();
 
-        if (rate.Status != RateStatus.AcceptedByClient)
+        if (!AcceptedRateResendPolicy.CanResend(rate.Status))
             return Results.Conflict(new
             {
                 code = "Pricing.AcceptanceEmailRequiresAcceptedQuote",
@@ -2375,7 +2375,7 @@ public static class RateEndpoints
                 var error = await sentRateEmailNotificationService.QueueBeforeStatusTransitionAsync(
                     rateId, cancellationToken,
                     resendCorrelationId: correlationId,
-                    authorization: httpContext.Request.Headers.Authorization.ToString());
+                    authorization: httpContext.Request.Headers["Authorization"].ToString());
 
                 if (error is not null)
                     return Results.UnprocessableEntity(new
