@@ -1945,21 +1945,60 @@ public static class RateEndpoints
         Guid rateId,
         DuplicateRateRequest request,
         ServiceDbContext db,
+        CrmTariffClientIdentityResolver crmIdentityResolver,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
     {
+        var clientName = request.ClientName;
+        var executiveName = request.ExecutiveName;
+        Guid? clientAccountId = null;
+        Guid? clientLeadId = null;
+
+        // Preserve backwards-compatible unlinked duplication, but require the
+        // exact CRM identity to be verified for all linked tariff applications.
+        if (request.ApplyTariff &&
+            (request.ClientAccountId.HasValue || request.ClientLeadId.HasValue))
+        {
+            if (request.ClientAccountId.HasValue == request.ClientLeadId.HasValue ||
+                request.ClientAccountId == Guid.Empty || request.ClientLeadId == Guid.Empty)
+                return Results.BadRequest(new {
+                    code = "Pricing.CrmTariffClientInvalid",
+                    message = "Seleccione una única cuenta o prospecto CRM válido."
+                });
+
+            var crmId = request.ClientAccountId ?? request.ClientLeadId!.Value;
+            var kind = request.ClientAccountId.HasValue ? "account" : "lead";
+            var (client, error) = await crmIdentityResolver.ResolveAsync(
+                crmId, kind, httpContext.Request.Headers.Authorization.ToString(),
+                cancellationToken);
+            if (client is null)
+                return Results.BadRequest(new {
+                    code = "Pricing.CrmTariffClientUnavailable",
+                    message = error ?? "No fue posible validar el cliente en CRM."
+                });
+
+            clientName = client.DisplayName;
+            executiveName = client.ExecutiveName;
+            clientAccountId = kind == "account" ? client.Id : null;
+            clientLeadId = kind == "lead" ? client.Id : null;
+        }
+
         var duplicateCommand = new DuplicateRateCommand(
                 rateId,
                 request.ValidFrom,
                 request.ValidTo,
                 httpContext.GetCurrentUserId(),
                 request.ApplyTariff,
-                request.ClientName,
-                request.ExecutiveName,
+                clientName,
+                executiveName,
                 request.IdtraNumber,
                 request.IdenticalCopy
-            );
+            )
+            {
+                ClientAccountId = clientAccountId,
+                ClientLeadId = clientLeadId
+            };
 
         var result = await DispatchWithTransactionalRateCodeAsync(
             db,

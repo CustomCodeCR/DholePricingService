@@ -120,6 +120,13 @@ public sealed class DuplicateRateCommandHandler(
                         ? source.ExecutiveName
                         : command.ExecutiveName.Trim()
                 );
+                // The authenticated API has verified these IDs and canonical owner
+                // against CRM. Link the derived QUO so CRM history and followups
+                // show it under the selected account or prospect.
+                if (command.ApplyTariff && command.ClientAccountId is Guid accountId)
+                    appliedRate.ConfigureClientAccount(accountId);
+                if (command.ApplyTariff && command.ClientLeadId is Guid leadId)
+                    appliedRate.ConfigureClientLead(leadId);
                 appliedRate.ConfigurePickupLocation(
                     source.WarehouseId,
                     source.PickupAddress,
