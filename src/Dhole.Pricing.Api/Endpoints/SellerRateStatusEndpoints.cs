@@ -125,8 +125,9 @@ public static class SellerRateStatusEndpoints
         // QueueAsync utiliza una clave estable para no duplicar correos de Apertura.
         if (currentRate.Status == status)
         {
-            if (status == RateStatus.AcceptedByClient)
-                await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Seller, cancellationToken);
+            if (status == RateStatus.AcceptedByClient &&
+                !await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Seller, cancellationToken))
+                return AcceptanceEmailPending(rateId);
             return Results.NoContent();
         }
 
@@ -175,12 +176,16 @@ public static class SellerRateStatusEndpoints
             );
 
             if (result.IsSuccess && status == RateStatus.AcceptedByClient)
-                await openingsNotificationService.QueueAsync(
+            {
+                var queued = await openingsNotificationService.QueueAsync(
                     rateId,
                     RateAcceptanceActor.Seller,
                     cancellationToken,
                     acceptanceObservations
                 );
+                if (!queued)
+                    return AcceptanceEmailPending(rateId);
+            }
 
             return EndpointResults.FromResult(result, httpContext);
         }
@@ -205,6 +210,15 @@ public static class SellerRateStatusEndpoints
             );
         }
     }
+
+    private static IResult AcceptanceEmailPending(Guid rateId) => Results.Json(new
+    {
+        code = "Pricing.AcceptanceSavedEmailPending",
+        message = "La tarifa quedó aceptada, pero no se preparó el correo de Apertura. Reintente la notificación.",
+        accepted = true,
+        notificationQueued = false,
+        rateId
+    }, statusCode: StatusCodes.Status202Accepted);
 
     private sealed record SellerRateStatusRequest(
         string Status,
