@@ -64,7 +64,8 @@ public sealed class AcceptedRateOpeningsNotificationService(
         Guid rateId,
         RateAcceptanceActor actor,
         CancellationToken cancellationToken = default,
-        string? acceptanceObservations = null)
+        string? acceptanceObservations = null,
+        string? manualResendCorrelationId = null)
     {
         try
         {
@@ -354,9 +355,9 @@ public sealed class AcceptedRateOpeningsNotificationService(
                         },
                     },
                 },
-                idtraPending
+                manualResendCorrelationId ?? (idtraPending
                     ? $"pricing-idtra-pending:{rate.Id:N}:rev:{rate.RevisionNumber}:actor:{actor}"
-                    : $"pricing-opening:{rate.Id:N}:rev:{rate.RevisionNumber}:actor:{actor}",
+                    : $"pricing-opening:{rate.Id:N}:rev:{rate.RevisionNumber}:actor:{actor}"),
                 cancellationToken
             );
 
