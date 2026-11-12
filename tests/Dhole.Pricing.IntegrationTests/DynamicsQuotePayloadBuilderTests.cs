@@ -758,7 +758,9 @@ public sealed class DynamicsQuotePayloadBuilderTests
             "{\"name\":\"new_idtra" + i + "\",\"target\":\"new_idtra" + i +
             "_incident@odata.bind\",\"type\":\"string\",\"dataverseType\":\"Lookup\",\"required\":false,\"options\":[]}"));
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(
-            Schema.Replace(anchor, lookups + ",\n" + anchor, StringComparison.Ordinal));
+            Schema.Replace(anchor, lookups + ",\n" +
+                """{"name":"description","target":"description","type":"string","dataverseType":"String","required":false,"options":[]}""" +
+                "\n" + anchor, StringComparison.Ordinal));
         var snapshot = Accepted.Replace("IDTRA-2026-045", csv, StringComparison.Ordinal);
         using var result = JsonDocument.Parse(JsonSerializer.Serialize(
             BuildForTest(snapshot, schema)));
