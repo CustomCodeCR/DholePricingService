@@ -2319,8 +2319,8 @@ public static class RateEndpoints
                 message = "Solo se puede utilizar este reenvío con una cotización aceptada."
             });
 
-        var correlationId =
-            $"pricing-manual-notification:{selectedType}:{rateId:N}:rev:{rate.RevisionNumber}:request:{request.RequestId:N}";
+        var correlationId = AcceptedRateResendPolicy.BuildCorrelationId(
+            selectedType, rateId, rate.RevisionNumber, request.RequestId);
 
         if (selectedType == "quote")
         {
