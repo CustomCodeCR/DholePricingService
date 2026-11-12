@@ -1,3 +1,9 @@
+## [1.17.0] - 2026-11-12
+
+- MINOR DH-20261112-PRICING-TARIFF-CRM-121: al aplicar un tarifario maestro a una cuenta/prospecto CRM se valida la identidad por ID y los scopes/ACL efectivos consultando GET /api/crm/pricing-client-options con el token de sesión. Nombres y ejecutivo canónicos son resueltos en el servidor (incluido Castro Fallas).
+- La QUO derivada guarda ClientAccountId o ClientLeadId, conserva íntegros costos, ruta, revisión, vigencia y estado Abierta, sin alterar el maestro. El contrato de duplicación acepta nuevos IDs opcionales y mantiene compatibilidad con las llamadas REST antiguas.
+- Pruebas de integración con un CRM simulado para vendedor institucional, cuenta, permisos insuficientes y discrepancias de ID. Pricing 1.16.3 → 1.17.0, Web 1.43.6 → 1.44.0 y ecosistema 1.43.8 → 1.44.0; pendiente CI, staging y producción autorizada.
+
 ## [1.16.3] - 2026-11-12
 
 - PATCH DH-20261112-DYNAMICS-QUO-613-619-118: recuperación controlada de QUO-00000-000619 solo tras rechazo 4xx probado o conciliación administrativa explícita de la cabecera como no aplicada; nunca interpreta un 409 o no_record_id como ausencia.
