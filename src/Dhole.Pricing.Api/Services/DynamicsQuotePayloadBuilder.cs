@@ -43,11 +43,13 @@ public static class DynamicsQuotePayloadBuilder
             string.IsNullOrWhiteSpace(String(rate, "idtraNumber")))
             throw new InvalidOperationException("Only client-accepted rates with IDTRA may sync.");
 
-        var idtras = ParseIdtraNumbers(String(rate, "idtraNumber"));
+        // The Pricing snapshot retains every IDTRA. Dynamics exposes exactly ten
+        // incident lookup slots: send the first ten distinct normalized values
+        // in their original order, without rejecting a longer accepted list.
+        var idtras = ParseIdtraNumbers(String(rate, "idtraNumber"))
+            .Take(10).ToArray();
         if (idtras.Length == 0)
             throw new InvalidOperationException("Accepted rate has no valid IDTRA before the quote references.");
-        if (idtras.Length > 10)
-            throw new InvalidOperationException("A maximum of ten distinct IDTRA values can be mapped to Dynamics.");
         var idtraSlots = schema.Fields
             .Select(field => (Field: field, Index: IdtraLookupIndex(field)))
             .Where(slot => slot.Index is >= 1 and <= 10)
