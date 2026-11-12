@@ -24,6 +24,12 @@ public static class AcceptedRateResendPolicy
 
     public static bool CanResend(RateStatus status)
         => status == RateStatus.AcceptedByClient;
+
+    // PostgreSQL Outbox correlation_id is varchar(100), therefore use a
+    // bounded human-readable idempotency key for all accepted-rate resends.
+    public static string BuildCorrelationId(
+        string notificationType, Guid rateId, int revisionNumber, Guid requestId)
+        => $"prn:{NormalizeNotificationType(notificationType)}:{rateId:N}:r{revisionNumber}:q{requestId:N}";
 }
 
 
