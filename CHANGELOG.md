@@ -1,3 +1,9 @@
+## [1.16.2] - 2026-11-12
+
+- PATCH DH-20261112-DYNAMICS-QUO-613-619-118: recuperación explícita después de verificar rechazo 4xx o conciliación administrativa de escritura sin efecto. QUO-00000-000619 permanece bloqueada mientras el encabezado esté reservado o ambiguo.
+- El conector verifica la línea única Dhole de QUO-00000-000613 contra la venta aceptada y el RateId; si coincide, se concilia sin crear ni actualizar líneas. Se conserva la revisión, montos y clave base de idempotencia.
+- DholePricingService 1.16.1 → 1.16.2, ecosistema 1.43.4; sin cambios incompatibles de REST, SignalR ni Outbox. CI/staging y verificación en Dataverse pendientes; sin despliegue a producción.
+
 ## [1.16.1] - 2026-11-12
 
 - PATCH DH-20261112-DYNAMICS-IDTRA-FIRST10-117: el mapeo de QUO hacia Dynamics acepta listas de más de 10 IDTRA, normaliza y deduplica manteniendo el orden y solo envía las primeras 10 referencias a new_idtra1..10 y a la descripción de Dynamics.
