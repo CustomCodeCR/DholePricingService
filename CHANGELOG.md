@@ -1,3 +1,10 @@
+## [1.16.2] - 2026-11-12
+
+- PATCH DH-20261112-PRICING-OUTBOX-CORRELATION-115: corregido SQLSTATE 22001 por correlation_id de Outbox (varchar(100)) al reenviar notificaciones de QUO aceptadas; incidente QUO-00000-000609.
+- Clave manual compacta y determinista, preservando tipo, tarifa, revisión y requestId. Normalización SHA-256 de claves largas en IntegrationEventOutboxWriter para que la correlación del registro de Outbox y el idempotencyKey del evento sean exactamente iguales; solución transversal compatible con futuros servicios de Pricing.
+- Sin cambios de esquema, contratos REST, cola Redis/SignalR ni framework. Pruebas contra el límite físico de 100 caracteres, idempotencia y tipos de notificación.
+- DholePricingService 1.16.1 → 1.16.2; Web 1.43.2 → 1.43.3; System/ecosistema 1.43.3 → 1.43.4. CI/staging/SMTP pendientes. Despliegue de producción solo con autorización expresa.
+
 ## [1.16.1] - 2026-11-12
 
 - PATCH DH-20261112-DYNAMICS-IDTRA-FIRST10-117: el mapeo de QUO hacia Dynamics acepta listas de más de 10 IDTRA, normaliza y deduplica manteniendo el orden y solo envía las primeras 10 referencias a new_idtra1..10 y a la descripción de Dynamics.
