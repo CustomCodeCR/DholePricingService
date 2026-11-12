@@ -141,7 +141,9 @@ public static class SellerRateStatusEndpoints
                         openingNotificationDeferred = true,
                     });
 
-                await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Seller, cancellationToken);
+                if (!await openingsNotificationService.QueueAsync(
+                    rateId, RateAcceptanceActor.Seller, cancellationToken))
+                    return AcceptanceEmailPending(rateId);
             }
             return Results.NoContent();
         }
@@ -243,12 +245,12 @@ public static class SellerRateStatusEndpoints
                 }
                 else
                 {
-                    await openingsNotificationService.QueueAsync(
+                    if (!await openingsNotificationService.QueueAsync(
                         rateId,
                         RateAcceptanceActor.Seller,
                         cancellationToken,
-                        acceptanceObservations
-                    );
+                        acceptanceObservations))
+                        return AcceptanceEmailPending(rateId);
                 }
             }
 
@@ -283,6 +285,15 @@ public static class SellerRateStatusEndpoints
             );
         }
     }
+
+    private static IResult AcceptanceEmailPending(Guid rateId) => Results.Json(new
+    {
+        code = "Pricing.AcceptanceSavedEmailPending",
+        message = "La tarifa quedó aceptada, pero no se preparó el correo de Apertura. Reintente la notificación.",
+        accepted = true,
+        notificationQueued = false,
+        rateId
+    }, statusCode: StatusCodes.Status202Accepted);
 
     private sealed record SellerRateStatusRequest(
         string Status,
