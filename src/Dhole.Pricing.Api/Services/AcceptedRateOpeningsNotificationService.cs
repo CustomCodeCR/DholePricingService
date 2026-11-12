@@ -44,7 +44,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
 
         return recipients
             .Where(email => !string.IsNullOrWhiteSpace(email))
-            .Select(email => email.Trim())
+            .Select(email => email.Trim().ToLowerInvariant())
             .Where(email => MailAddress.TryCreate(email, out var address)
                 && string.Equals(address.Address, email, StringComparison.OrdinalIgnoreCase))
             .Where(email => !string.Equals(email, OpeningRecipient, StringComparison.OrdinalIgnoreCase))
