@@ -14,6 +14,18 @@ namespace Dhole.Pricing.Api.Services;
 public enum RateAcceptanceActor { Seller, Pricing }
 
 public sealed record AcceptedOpeningQueueResult(bool Queued, string Code, string Message);
+public static class AcceptedRateResendPolicy
+{
+    public static string NormalizeNotificationType(string? value)
+        => (value ?? "opening").Trim().ToLowerInvariant();
+
+    public static bool IsSupportedNotificationType(string? value)
+        => NormalizeNotificationType(value) is "opening" or "quote" or "notice";
+
+    public static bool CanResend(RateStatus status)
+        => status == RateStatus.AcceptedByClient;
+}
+
 
 public sealed class AcceptedRateOpeningsNotificationService(
     ICommandDispatcher dispatcher,
