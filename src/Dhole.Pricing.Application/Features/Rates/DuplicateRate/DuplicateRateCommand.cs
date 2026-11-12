@@ -13,4 +13,9 @@ public sealed record DuplicateRateCommand(
     string? ExecutiveName = null,
     string? IdtraNumber = null,
     bool IdenticalCopy = false
-) : ICommand<Result<Guid>>;
+) : ICommand<Result<Guid>>
+{
+    public Guid? ClientAccountId { get; init; }
+    public Guid? ClientLeadId { get; init; }
+}
+
