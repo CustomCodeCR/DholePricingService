@@ -1182,9 +1182,10 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         var prefix = "https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta";
         var nextAttempt = job.RecoveryAttempt + 1;
 
-        // Read-only connector ledger verification, scoped to the actual API
-        // key. It also verifies all prior recovery attempts are explicit 4xx
-        // rejects with no quoteId and no total lines.
+        // Read-only connector ledger verification, scoped to the active key.
+        // Only a confirmed pre-write 4xx rejection or a SecurityAdmin
+        // reconciliation proving NO Dataverse effect authorizes a new key.
+        // A reserved/ambiguous HTTP 409 alone never grants recovery.
         var ledgerUrl = prefix + "/recovery-eligibility?connectionCode=principal" +
             "&dholeRateId=" + rateId.ToString("D") +
             "&revisionNumber=" + rate.RevisionNumber +
@@ -1220,7 +1221,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 readOnly.ValueKind != JsonValueKind.True)
                 return Results.Conflict(new {
                     code = "recovery_not_safe",
-                    message = "El conector no confirmó el rechazo previo sin registro creado."
+                    message = "El conector no confirmó rechazo 4xx previo ni conciliación administrativa sin efecto; no se reenvió la QUO."
                 });
         }
 
@@ -1275,8 +1276,9 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(j => j.RecoveryAttempt, nextAttempt)
                 .SetProperty(j => j.RecoveryReason,
-                    "Reenvío solicitado desde Dynamics: HTTP 4xx rechazado, " +
-                    "sin cabecera ni línea creadas; historial y mapeo validados.")
+                    "Recuperación administrativa: cabecera rechazada con 4xx " +
+                    "o conciliada como no aplicada, sin línea enviada; " +
+                    "historial y mapeo validados.")
                 .SetProperty(j => j.RecoveryApprovedBy, actor)
                 .SetProperty(j => j.RecoveryApprovedAtUtc, DateTime.UtcNow)
                 .SetProperty(j => j.Status, "Pending")
