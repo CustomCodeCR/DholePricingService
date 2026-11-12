@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.14.1",
-  "ecosystemVersion": "1.41.2",
+  "version": "1.15.0",
+  "ecosystemVersion": "1.42.0",
   "releaseId": "DH-20261112-PRICING-ACCEPTANCE-MAIL-113",
   "releaseStatus": "candidate-ci-and-staging-pending",
   "businessReleaseId": "DH-20261112-PRICING-ACCEPTANCE-MAIL-113"
