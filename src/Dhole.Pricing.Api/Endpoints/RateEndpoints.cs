@@ -2259,13 +2259,14 @@ public static class RateEndpoints
 
         // No cambia la aceptación, revisión ni IDTRA. El Outbox deduplica por
         // correlación de tarifa/revisión y el mismo actor de la ruta Pricing.
-        var queued = await openingsNotificationService.QueueAsync(
+        var queued = await openingsNotificationService.QueueDetailedAsync(
             rateId, RateAcceptanceActor.Pricing, cancellationToken);
-        if (!queued)
+        if (!queued.Queued)
             return Results.Problem(
                 title: "No se pudo preparar el correo de aceptación",
-                detail: "La tarifa permanece aceptada. Revise la generación del PDF y el Outbox antes de reintentar.",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+                detail: queued.Message,
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                extensions: new Dictionary<string, object?> { ["code"] = queued.Code });
 
         return Results.Accepted(value: new
         {
@@ -2275,52 +2276,117 @@ public static class RateEndpoints
         });
     }
 
-    private sealed record ResendAcceptedRateEmailRequest(Guid RequestId);
+    private sealed record ResendAcceptedRateEmailRequest(Guid RequestId, string? NotificationType = null);
 
+    // Every resend uses the same RequestId for HTTP/outbox idempotency. The
+    // selected notification is validated server-side; clients cannot override
+    // arbitrary recipients or addresses.
     private static async Task<IResult> ResendAcceptedRateEmailAsync(
         Guid rateId,
         ResendAcceptedRateEmailRequest request,
         ServiceDbContext db,
         AcceptedRateOpeningsNotificationService openingsNotificationService,
+        SentRateEmailNotificationService sentRateEmailNotificationService,
+        HttpContext httpContext,
+        ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
     {
-        // Un clic confirmado corresponde a un único requestId reutilizado en
-        // cualquier reintento de red. No se aceptan ids vacíos.
         if (request.RequestId == Guid.Empty)
             return Results.BadRequest(new
             {
                 code = "Pricing.AcceptanceEmailResendIdRequired",
-                message = "La operación de reenvío requiere un identificador válido."
+                message = "La operación de reenvío necesita un identificador válido."
+            });
+
+        var selectedType = AcceptedRateResendPolicy.NormalizeNotificationType(request.NotificationType);
+        if (!AcceptedRateResendPolicy.IsSupportedNotificationType(selectedType))
+            return Results.BadRequest(new
+            {
+                code = "Pricing.AcceptanceEmailNotificationTypeInvalid",
+                message = "Elija una notificación válida: apertura, cotización enviada o aviso sin PDF."
             });
 
         var rate = await db.RateHeaders.AsNoTracking()
             .Where(x => x.Id == rateId && !x.IsDeleted)
-            .Select(x => new { x.Status, x.RevisionNumber })
+            .Select(x => new { x.Status, x.RevisionNumber, x.QuoNumber, x.RateCode })
             .FirstOrDefaultAsync(cancellationToken);
         if (rate is null) return Results.NotFound();
-        if (rate.Status != RateStatus.AcceptedByClient)
+
+        if (!AcceptedRateResendPolicy.CanResend(rate.Status))
             return Results.Conflict(new
             {
                 code = "Pricing.AcceptanceEmailRequiresAcceptedQuote",
-                message = "Solo se puede reenviar la notificación de una cotización aceptada."
+                message = "Solo se puede utilizar este reenvío con una cotización aceptada."
             });
 
         var correlationId =
-            $"pricing-acceptance-manual:{rateId:N}:rev:{rate.RevisionNumber}:request:{request.RequestId:N}";
-        var queued = await openingsNotificationService.QueueAsync(
-            rateId, RateAcceptanceActor.Pricing, cancellationToken,
-            manualResendCorrelationId: correlationId);
+            $"pricing-manual-notification:{selectedType}:{rateId:N}:rev:{rate.RevisionNumber}:request:{request.RequestId:N}";
 
-        if (!queued)
+        if (selectedType == "quote")
+        {
+            try
+            {
+                // Reusar el mismo sistema de preferencias de destinatarios CRM
+                // que utiliza el envío normal, sin aceptar correos arbitrarios.
+                var error = await sentRateEmailNotificationService.QueueBeforeStatusTransitionAsync(
+                    rateId, cancellationToken,
+                    resendCorrelationId: correlationId,
+                    authorization: httpContext.Request.Headers["Authorization"].ToString());
+
+                if (error is not null)
+                    return Results.UnprocessableEntity(new
+                    {
+                        code = "Pricing.QuoteResendNotQueued",
+                        message = error
+                    });
+
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                loggerFactory.CreateLogger(nameof(RateEndpoints)).LogError(exception,
+                    "Falló reenvío de cotización aceptada. RateId={RateId} RequestId={RequestId}",
+                    rateId, request.RequestId);
+                return Results.Problem(
+                    title: "Fallo al registrar el correo de cotización",
+                    detail: "La QUO sigue aceptada. No se confirmó el guardado en Outbox; verifique la cola antes de un nuevo reenvío.",
+                    statusCode: StatusCodes.Status503ServiceUnavailable,
+                    extensions: new Dictionary<string, object?> {
+                        ["code"] = "Pricing.QuoteResendOutboxUnavailable",
+                        ["traceId"] = httpContext.TraceIdentifier,
+                    });
+            }
+
+            return Results.Accepted(value: new
+            {
+                code = "Pricing.QuoteResendQueued",
+                message = "Cotización encolada conforme a los destinatarios comerciales configurados en CRM.",
+                notificationType = selectedType,
+                rateId,
+                requestId = request.RequestId
+            });
+        }
+
+        var queued = await openingsNotificationService.QueueDetailedAsync(
+            rateId, RateAcceptanceActor.Pricing, cancellationToken,
+            manualResendCorrelationId: correlationId,
+            includePdf: selectedType == "opening");
+
+        if (!queued.Queued)
             return Results.Problem(
-                title: "No se pudo preparar el reenvío de la notificación",
-                detail: "La QUO sigue aceptada. Revise el PDF y el Outbox; reintente con la misma operación.",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
+                title: "No se pudo preparar el correo",
+                detail: queued.Message,
+                statusCode: StatusCodes.Status503ServiceUnavailable,
+                extensions: new Dictionary<string, object?> {
+                    ["code"] = queued.Code,
+                    ["traceId"] = httpContext.TraceIdentifier,
+                });
 
         return Results.Accepted(value: new
         {
-            code = "Pricing.AcceptanceEmailResendQueued",
-            message = "Reenvío encolado para Apertura con copia a Pricing y al vendedor. La entrega está pendiente de Notifications.",
+            code = queued.Code,
+            message = queued.Message,
+            notificationType = selectedType,
             rateId,
             requestId = request.RequestId
         });

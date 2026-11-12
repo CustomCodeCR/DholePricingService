@@ -1,3 +1,11 @@
+## [1.16.0] - 2026-11-12
+
+- MINOR DH-20261112-PRICING-RESEND-CHOICE-114: el reenvío manual de QUO aceptadas permite escoger notificación de Apertura con PDF y respaldos, correo de cotización enviada según CRM o aviso preliminar de aceptación SIN PDF.
+- Corrige el fallo genérico de reenvío (QUO-00000-000609) diferenciando etapas Reports/PDF, adjuntos y Outbox con códigos de error explícitos. La alternativa sin PDF es voluntaria, está identificada como incompleta y no autoriza abrir trámite sin los documentos necesarios.
+- Endpoints existentes conservados; /acceptance-email/resend acepta notificationType en allowlist e idempotencia por requestId. Los destinatarios de cotización se validan mediante el resolver CRM existente; no permite emails arbitrarios.
+- DholePricingService 1.15.0 → 1.16.0; DholeWeb 1.42.0 → 1.43.0; ecosistema Dhole 1.43.0. Compatible con REST/SignalR/Outbox; no modifica el framework, historial comercial ni IDTRA.
+- CI, staging y entrega SMTP deben verificarse antes de declarar completado el incidente.
+
 ## [1.15.0] - 2026-11-12
 
 - MINOR DH-20261112-PRICING-ACCEPTANCE-MAIL-113: aceptación desde Pricing incluye a pricingcf@castrofallas.com y al vendedor en CC para que Apertura y el equipo comercial reciban visibilidad consistente.
