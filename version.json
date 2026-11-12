@@ -3,7 +3,7 @@
   "ecosystem": "Dhole",
   "component": "DholePricingService",
   "version": "1.16.3",
-  "ecosystemVersion": "1.43.5",
+  "ecosystemVersion": "1.43.6",
   "releaseId": "DH-20261112-DYNAMICS-QUO-613-619-118",
   "releaseStatus": "candidate-ci-and-staging-pending",
   "businessReleaseId": "DH-20261112-DYNAMICS-QUO-613-619-118"
