@@ -13,6 +13,8 @@ namespace Dhole.Pricing.Api.Services;
 
 public enum RateAcceptanceActor { Seller, Pricing }
 
+public sealed record AcceptedOpeningQueueResult(bool Queued, string Code, string Message);
+
 public sealed class AcceptedRateOpeningsNotificationService(
     ICommandDispatcher dispatcher,
     IIntegrationEventOutboxWriter outbox,
@@ -66,7 +68,19 @@ public sealed class AcceptedRateOpeningsNotificationService(
         CancellationToken cancellationToken = default,
         string? acceptanceObservations = null,
         string? manualResendCorrelationId = null)
+        => (await QueueDetailedAsync(rateId, actor, cancellationToken,
+            acceptanceObservations, manualResendCorrelationId)).Queued;
+
+    // Supports an explicit no-PDF emergency notice without changing the normal opening mail.
+    public async Task<AcceptedOpeningQueueResult> QueueDetailedAsync(
+        Guid rateId,
+        RateAcceptanceActor actor,
+        CancellationToken cancellationToken = default,
+        string? acceptanceObservations = null,
+        string? manualResendCorrelationId = null,
+        bool includePdf = true)
     {
+        var stage = "load-rate";
         try
         {
             var rate = await db.RateHeaders
@@ -81,13 +95,13 @@ public sealed class AcceptedRateOpeningsNotificationService(
                     "No se pudo preparar la solicitud de apertura porque la tarifa {RateId} no existe.",
                     rateId
                 );
-                return false;
+                return new(false, "Pricing.AcceptanceRateNotFound", "No se encontró la cotización.");
             }
 
             // Every accepted commercial quote goes to Apertura, with or without IDTRA.
             // An assigned IDTRA must never be announced as pending.
             if (rate.Status != RateStatus.AcceptedByClient)
-                return false;
+                return new(false, "Pricing.AcceptanceRequiresAcceptedQuote", "Solo se pueden reenviar avisos de una QUO aceptada.");
             var idtraPending = string.IsNullOrWhiteSpace(rate.IdtraNumber);
             var idtraLabel = idtraPending ? "PENDIENTE DE ASIGNAR" : rate.IdtraNumber!.Trim();
 
@@ -101,18 +115,28 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 .ToListAsync(cancellationToken);
             var request = requests.FirstOrDefault();
 
-            var documentResult = await dispatcher.DispatchAsync(
-                new GenerateRateDocumentCommand(rate.Id, null, "pdf"),
-                cancellationToken
-            );
-
-            if (!documentResult.IsSuccess)
+            byte[] pdfContent = [];
+            var pdfFileName = string.Empty;
+            var pdfContentType = "application/pdf";
+            if (includePdf)
             {
-                logger.LogError(
-                    "No se generó el PDF de la tarifa {RateId}; no se encolará a Aperturas un correo incompleto.",
-                    rate.Id
-                );
-                return false;
+                stage = "generate-pdf";
+                var documentResult = await dispatcher.DispatchAsync(
+                    new GenerateRateDocumentCommand(rate.Id, null, "pdf"),
+                    cancellationToken);
+                if (!documentResult.IsSuccess)
+                {
+                    logger.LogError("Reports no pudo generar PDF para RateId={RateId}", rate.Id);
+                    return new(false, "Pricing.AcceptancePdfUnavailable",
+                        "No se generó el PDF en Reports. Elija «Aviso sin PDF» si necesita informar la aceptación ahora.");
+                }
+
+                pdfContent = documentResult.Value.Content;
+                pdfFileName = documentResult.Value.FileName;
+                pdfContentType = documentResult.Value.ContentType;
+                if (pdfContent.Length == 0)
+                    return new(false, "Pricing.AcceptancePdfEmpty",
+                        "Reports devolvió un PDF vacío. Puede enviar un aviso sin PDF.");
             }
 
             // Tanto Pricing como Ventas reciben copia auditable de la aceptación.
@@ -233,27 +257,27 @@ public sealed class AcceptedRateOpeningsNotificationService(
             if (string.IsNullOrWhiteSpace(servicesText))
                 servicesText = "—";
 
-            var document = documentResult.Value;
+            stage = "attachments";
             var storedReferences = OpeningRateAttachmentReader.GatherReferences(
                 rate.FinalBackupStorageIds, requests.Select(x => x.PayloadJson));
-            var storedDocuments = await attachmentReader.ReadAsync(
-                storedReferences, document.Content.Length, cancellationToken);
-            var emailAttachments = new[]
+            var storedDocuments = includePdf
+                ? await attachmentReader.ReadAsync(storedReferences, pdfContent.Length, cancellationToken)
+                : new OpeningRateAttachmentReader.ReadResult(
+                    Array.Empty<OpeningRateAttachmentReader.EmailDocument>(),
+                    Array.Empty<string>());
+            var emailAttachments = storedDocuments.Documents.Select(file => new
+            {
+                fileName = file.FileName,
+                contentType = file.ContentType,
+                contentBase64 = Convert.ToBase64String(file.Content),
+            }).ToList();
+            if (includePdf)
+                emailAttachments.Insert(0, new
                 {
-                    new
-                    {
-                        fileName = document.FileName,
-                        contentType = document.ContentType,
-                        contentBase64 = Convert.ToBase64String(document.Content),
-                    },
-                }
-                .Concat(storedDocuments.Documents.Select(file => new
-                {
-                    fileName = file.FileName,
-                    contentType = file.ContentType,
-                    contentBase64 = Convert.ToBase64String(file.Content),
-                }))
-                .ToArray();
+                    fileName = pdfFileName,
+                    contentType = pdfContentType,
+                    contentBase64 = Convert.ToBase64String(pdfContent),
+                });
             var unavailableDocumentsHtml = storedDocuments.UnavailableDocuments.Count == 0
                 ? string.Empty
                 : "<p><strong>Documentos que requieren revisión manual en Dhole:</strong> "
@@ -269,10 +293,14 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 : $"<tr><td style=\"padding:5px 10px\"><strong>Observaciones del vendedor para apertura</strong></td><td style=\"padding:5px 10px\">{WebUtility.HtmlEncode(observations).Replace("\r\n", "\n").Replace("\n", "<br />")}</td></tr>";
 
             var emailBody = $"""
-                <p>{(idtraPending
-                    ? "Hay una nueva tarifa aceptada con <strong>IDTRA pendiente de asignación</strong>."
-                    : "Hay una nueva tarifa aceptada para <strong>apertura de trámite</strong>.")}
-                   Se adjunta el PDF de la cotización y los documentos disponibles de la cotización y sus solicitudes vinculadas.</p>
+                <p>{(!includePdf
+                    ? "AVISO DE ACEPTACIÓN SIN PDF. La cotización está aceptada pero no se adjunta el documento comercial."
+                    : idtraPending
+                        ? "Hay una nueva tarifa aceptada con <strong>IDTRA pendiente de asignación</strong>."
+                        : "Hay una nueva tarifa aceptada para <strong>apertura de trámite</strong>.")}
+                   {(includePdf
+                       ? "Se adjunta el PDF y los documentos disponibles de la cotización y sus solicitudes."
+                       : "Consulte la cotización en Dhole y obtenga el PDF antes de tramitar su apertura.")}</p>
                 <table style="border-collapse:collapse; width:100%; max-width:820px">
                   <tr><td style="padding:5px 10px"><strong>QUO</strong></td><td style="padding:5px 10px">{Html(quoteNumber)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Código de tarifa</strong></td><td style="padding:5px 10px">{Html(rate.RateCode)}</td></tr>
@@ -297,24 +325,29 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 <p>{(idtraPending
                     ? "Favor registrar el IDTRA en la tarifa y continuar con el proceso correspondiente."
                     : "Favor continuar con la apertura de trámite utilizando el IDTRA indicado.")}</p>
-                <p><strong>Adjuntos:</strong> PDF comercial y {storedDocuments.Documents.Count} documento(s) del expediente.</p>
+                <p><strong>Adjuntos:</strong> {(includePdf ? $"PDF comercial y {storedDocuments.Documents.Count} documento(s) del expediente." : "Aviso preliminar sin PDF ni respaldos adjuntos.")}</p>
                 {unavailableDocumentsHtml}
                 """;
 
+            stage = "write-outbox";
             await outbox.WriteAsync(
                 NotificationEventName,
                 NotificationEventName,
                 new
                 {
-                    notificationType = idtraPending
-                        ? "pricing.rate.accepted.idtra-pending"
-                        : "pricing.rate.accepted.opening",
+                    notificationType = !includePdf
+                        ? "pricing.rate.accepted.notice"
+                        : idtraPending
+                            ? "pricing.rate.accepted.idtra-pending"
+                            : "pricing.rate.accepted.opening",
                     channel = "Email",
                     entityType = "RateHeader",
                     entityId = rate.Id.ToString(),
-                    subject = idtraPending
-                        ? $"IDTRA pendiente de asignar - {quoteNumber} - {clientText}"
-                        : $"Apertura de trámite - {quoteNumber} - {clientText}",
+                    subject = !includePdf
+                        ? $"Aviso de aceptación SIN PDF - {quoteNumber} - {clientText}"
+                        : idtraPending
+                            ? $"IDTRA pendiente de asignar - {quoteNumber} - {clientText}"
+                            : $"Apertura de trámite - {quoteNumber} - {clientText}",
                     body = emailBody,
                     payload = new
                     {
@@ -324,6 +357,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
                         acceptanceOrigin,
                         acceptanceObservations = observations,
                         idtraPending,
+                        pdfAttached = includePdf,
                         idtraNumber = idtraPending ? null : idtraLabel,
                         rateUrl,
                         cc = ccRecipients,
@@ -361,6 +395,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 cancellationToken
             );
 
+            stage = "save-outbox";
             await db.SaveChangesAsync(cancellationToken);
 
             logger.LogInformation(
@@ -370,16 +405,26 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 acceptanceOrigin,
                 recipientEmail
             );
-            return true;
+            return new(true, "Pricing.AcceptanceEmailQueued",
+                includePdf ? "Correo con PDF encolado para Apertura." :
+                    "Aviso SIN PDF encolado. Complete los documentos antes de tramitar apertura.");
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            logger.LogError(
-                exception,
-                "No se pudo encolar en Notifications la aceptación de la tarifa {RateId}.",
-                rateId
-            );
-            return false;
+            logger.LogError(exception,
+                "No se pudo preparar el correo de aceptación de RateId={RateId}, etapa={Stage}",
+                rateId, stage);
+            return stage switch
+            {
+                "generate-pdf" => new(false, "Pricing.AcceptancePdfUnavailable",
+                    "Reports no está generando el PDF; elija un aviso sin PDF si es urgente."),
+                "attachments" => new(false, "Pricing.AcceptanceAttachmentsUnavailable",
+                    "No se pudieron preparar los adjuntos. Reintente o elija un aviso sin PDF."),
+                "write-outbox" or "save-outbox" => new(false, "Pricing.AcceptanceOutboxUnavailable",
+                    "No fue posible registrar la notificación en Outbox. Revise la conexión de Notifications/Pricing."),
+                _ => new(false, "Pricing.AcceptanceNotificationPreparationFailed",
+                    "Error al preparar la notificación. Revise los registros de Pricing para esta QUO."),
+            };
         }
     }
 
