@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.16.3",
-  "ecosystemVersion": "1.43.6",
-  "releaseId": "DH-20261112-DYNAMICS-QUO-613-619-118",
+  "version": "1.17.0",
+  "ecosystemVersion": "1.44.0",
+  "releaseId": "DH-20261112-PRICING-TARIFF-CRM-121",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261112-DYNAMICS-QUO-613-619-118"
+  "businessReleaseId": "DH-20261112-PRICING-TARIFF-CRM-121"
 }
