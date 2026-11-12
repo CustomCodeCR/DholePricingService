@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.16.1",
-  "ecosystemVersion": "1.43.3",
-  "releaseId": "DH-20261112-DYNAMICS-IDTRA-FIRST10-117",
+  "version": "1.16.2",
+  "ecosystemVersion": "1.43.4",
+  "releaseId": "DH-20261112-DYNAMICS-QUO-613-619-118",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261112-DYNAMICS-IDTRA-FIRST10-117"
+  "businessReleaseId": "DH-20261112-DYNAMICS-QUO-613-619-118"
 }
