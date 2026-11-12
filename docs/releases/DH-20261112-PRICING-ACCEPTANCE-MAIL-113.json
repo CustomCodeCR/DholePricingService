@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261112-PRICING-ACCEPTANCE-MAIL-113",
+  "releaseType": "PATCH",
+  "ecosystemVersion": "1.41.2",
+  "createdAt": "2026-11-12",
+  "sourceBranch": "fix/acceptance-mail-quo609-20261112-develop",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "previous": "1.14.0",
+      "next": "1.14.1"
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "component": "DholeSystem",
+      "previous": "1.41.1",
+      "next": "1.41.2"
+    }
+  ],
+  "changes": [
+    "Enviar copia de correo de aceptación a Pricing y al ejecutivo comercial aun si la aceptación se registra desde Pricing",
+    "Informar cuando falla la preparación del Outbox sin revertir el estado comercial aceptado",
+    "Reintento administrativo idempotente POST /api/pricing/rates/{rateId}/acceptance-email/retry",
+    "Mantener IDTRA pendiente, PDF comercial, anexos, REST y flujo SignalR/Outbox existentes"
+  ],
+  "validation": {
+    "ci": "pending",
+    "staging": "pending",
+    "production": "not-authorized"
+  },
+  "productionDeploymentAuthorized": false
+}
