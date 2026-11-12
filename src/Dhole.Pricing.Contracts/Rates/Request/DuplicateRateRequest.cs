@@ -8,4 +8,10 @@ public sealed record DuplicateRateRequest(
     string? ExecutiveName = null,
     string? IdtraNumber = null,
     bool IdenticalCopy = false
-);
+)
+{
+    // Optional for existing REST consumers; new tariff applications resolve these in CRM.
+    public Guid? ClientAccountId { get; init; }
+    public Guid? ClientLeadId { get; init; }
+}
+
