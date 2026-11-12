@@ -1,3 +1,9 @@
+## [1.14.1] - 2026-11-12
+
+- PATCH DH-20261112-PRICING-ACCEPTANCE-MAIL-113: aceptación desde Pricing incluye a pricingcf@castrofallas.com y al vendedor en CC para que Apertura y el equipo comercial reciban visibilidad consistente.
+- Cuando falla el PDF o la preparación del Outbox, el API conserva la aceptación y responde 202 con aviso; se agrega reintento controlado e idempotente para QUO ya aceptadas, incluida QUO-00000-000609.
+- Componente DholePricingService 1.14.0 → 1.14.1 y ecosistema Dhole 1.41.2. Sin cambio de esquema ni framework; REST, SignalR y Outbox vigentes. CI/staging pendientes; sin despliegue de producción.
+
 ## [1.14.0] - 2026-11-11
 
 - MINOR DH-20261111-PRICING-QUO-LINKED-104: nuevo estado comercial QUOVinculada para cotizaciones cuya operación fue aceptada bajo otra QUO del mismo cliente. El vínculo a la QUO aceptada es obligatorio, persistente y validado en Pricing.
