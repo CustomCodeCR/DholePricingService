@@ -881,7 +881,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         Guid? QuoteId, Guid? LineId, bool NoPostExecuted,
         bool PartialResumeSafe = false, bool LiveConfirmed = false,
         string? LiveStatus = null, bool ExistingSaleMatches = false,
-        Guid? ExistingLineId = null);
+        Guid? ExistingLineId = null, bool ExistingLineReconciliationSafe = false);
 
     private static async Task<IResult> ResumePartialAsync(
         Guid rateId, HttpContext http, ServiceDbContext db,
@@ -1094,11 +1094,15 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             HeaderStatus: "succeeded", TotalStatus: "succeeded",
             QuoteId: Guid, LineId: Guid
         };
+        // A previously reserved/ambiguous total operation is NEVER retried.
+        // The connector may prove the exact one existing Dhole line is the
+        // accepted sale, after the write's uncertainty window. This action
+        // remains read-only and must be expressly invoked by SecurityAdmin.
         var existingVerified = confirmation is {
-            ExistingSaleMatches: true, NoPostExecuted: true,
-            HeaderStatus: "succeeded", TotalStatus: "not_sent",
+            ExistingSaleMatches: true, ExistingLineReconciliationSafe: true,
+            NoPostExecuted: true, HeaderStatus: "succeeded",
             QuoteId: Guid, ExistingLineId: Guid
-        };
+        } && confirmation.TotalStatus is "not_sent" or "reserved" or "ambiguous";
         if (reconcileExisting ? !existingVerified : !ledgerVerified)
             return Results.Conflict(new {
                 code = "sync_reconciliation_not_confirmed",
