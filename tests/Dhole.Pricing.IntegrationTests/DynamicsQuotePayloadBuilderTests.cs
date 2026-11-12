@@ -760,7 +760,7 @@ public sealed class DynamicsQuotePayloadBuilderTests
         var schema = DynamicsQuotePayloadBuilder.ReadSchema(
             Schema.Replace(anchor, lookups + ",\n" +
                 """{"name":"description","target":"description","type":"string","dataverseType":"String","required":false,"options":[]}""" +
-                "\n" + anchor, StringComparison.Ordinal));
+                ",\n" + anchor, StringComparison.Ordinal));
         var snapshot = Accepted.Replace("IDTRA-2026-045", csv, StringComparison.Ordinal);
         using var result = JsonDocument.Parse(JsonSerializer.Serialize(
             BuildForTest(snapshot, schema)));
