@@ -2,7 +2,7 @@
 
 - PATCH DH-20261112-DYNAMICS-QUO-613-619-118: recuperación controlada de QUO-00000-000619 solo tras rechazo 4xx probado o conciliación administrativa explícita de la cabecera como no aplicada; nunca interpreta un 409 o no_record_id como ausencia.
 - Verificación idempotente de la única línea de venta reconocida Dhole de QUO-00000-000613 contra la venta, el RateId y el encabezado existente, sin repetir POST de cabecera ni de línea.
-- Pricing 1.16.2 → 1.16.3, Dynamics Connector 1.4.0 → 1.4.1, ecosistema 1.43.5. Sin cambios incompatibles REST, SignalR ni Outbox. CI, staging y consulta real de Dataverse pendientes.
+- Pricing 1.16.2 → 1.16.3, Dynamics Connector 1.4.0 → 1.4.1, ecosistema 1.43.6. Sin cambios incompatibles REST, SignalR ni Outbox. CI, staging y consulta real de Dataverse pendientes.
 
 ## [1.16.2] - 2026-11-12
 
