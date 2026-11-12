@@ -38,13 +38,13 @@ public sealed class AcceptedRateOpeningsNotificationService(
         IEnumerable<string> recipients = actor switch
         {
             RateAcceptanceActor.Seller => new[] { SellerAcceptanceCc }.Concat(sellerEmails ?? []),
-            RateAcceptanceActor.Pricing => [],
+            RateAcceptanceActor.Pricing => new[] { SellerAcceptanceCc }.Concat(sellerEmails ?? []),
             _ => throw new ArgumentOutOfRangeException(nameof(actor), actor, null),
         };
 
         return recipients
             .Where(email => !string.IsNullOrWhiteSpace(email))
-            .Select(email => email.Trim())
+            .Select(email => email.Trim().ToLowerInvariant())
             .Where(email => MailAddress.TryCreate(email, out var address)
                 && string.Equals(address.Address, email, StringComparison.OrdinalIgnoreCase))
             .Where(email => !string.Equals(email, OpeningRecipient, StringComparison.OrdinalIgnoreCase))
@@ -60,11 +60,12 @@ public sealed class AcceptedRateOpeningsNotificationService(
            && string.IsNullOrWhiteSpace(idtraNumber)
            && string.IsNullOrWhiteSpace(idtraProvidedOnAcceptance);
 
-    public async Task QueueAsync(
+    public async Task<bool> QueueAsync(
         Guid rateId,
         RateAcceptanceActor actor,
         CancellationToken cancellationToken = default,
-        string? acceptanceObservations = null)
+        string? acceptanceObservations = null,
+        string? manualResendCorrelationId = null)
     {
         try
         {
@@ -80,13 +81,13 @@ public sealed class AcceptedRateOpeningsNotificationService(
                     "No se pudo preparar la solicitud de apertura porque la tarifa {RateId} no existe.",
                     rateId
                 );
-                return;
+                return false;
             }
 
             // Every accepted commercial quote goes to Apertura, with or without IDTRA.
             // An assigned IDTRA must never be announced as pending.
             if (rate.Status != RateStatus.AcceptedByClient)
-                return;
+                return false;
             var idtraPending = string.IsNullOrWhiteSpace(rate.IdtraNumber);
             var idtraLabel = idtraPending ? "PENDIENTE DE ASIGNAR" : rate.IdtraNumber!.Trim();
 
@@ -111,11 +112,12 @@ public sealed class AcceptedRateOpeningsNotificationService(
                     "No se generó el PDF de la tarifa {RateId}; no se encolará a Aperturas un correo incompleto.",
                     rate.Id
                 );
-                return;
+                return false;
             }
 
+            // Tanto Pricing como Ventas reciben copia auditable de la aceptación.
             var ccRecipients = CopyRecipientsFor(actor);
-            if (actor == RateAcceptanceActor.Seller)
+            if (actor is RateAcceptanceActor.Seller or RateAcceptanceActor.Pricing)
             {
                 // El ejecutivo elegido en la tarifa es la fuente de verdad.
                 // Solo si falta, usar los datos del último requerimiento ligado a la tarifa.
@@ -353,9 +355,9 @@ public sealed class AcceptedRateOpeningsNotificationService(
                         },
                     },
                 },
-                idtraPending
+                manualResendCorrelationId ?? (idtraPending
                     ? $"pricing-idtra-pending:{rate.Id:N}:rev:{rate.RevisionNumber}:actor:{actor}"
-                    : $"pricing-opening:{rate.Id:N}:rev:{rate.RevisionNumber}:actor:{actor}",
+                    : $"pricing-opening:{rate.Id:N}:rev:{rate.RevisionNumber}:actor:{actor}"),
                 cancellationToken
             );
 
@@ -368,6 +370,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 acceptanceOrigin,
                 recipientEmail
             );
+            return true;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -376,6 +379,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 "No se pudo encolar en Notifications la aceptación de la tarifa {RateId}.",
                 rateId
             );
+            return false;
         }
     }
 

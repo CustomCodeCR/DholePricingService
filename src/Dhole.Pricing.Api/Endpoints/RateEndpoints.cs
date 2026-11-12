@@ -131,6 +131,18 @@ public static class RateEndpoints
             .RequireIdempotency()
             .RequireScope(PricingConstants.Scopes.RateUpdate);
 
+        // Reintento seguro para aceptaciones ya guardadas cuyo Outbox quedó pendiente.
+        group
+            .MapPost("/{rateId:guid}/acceptance-email/retry", RetryAcceptedRateEmailAsync)
+            .RequireIdempotency()
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
+
+        // Reenvío manual explícito (con DhModal) con correlación única por operación.
+        group
+            .MapPost("/{rateId:guid}/acceptance-email/resend", ResendAcceptedRateEmailAsync)
+            .RequireIdempotency()
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
+
         group.MapDelete("/", DeleteRatesAsync).RequireScope(PricingConstants.Scopes.RateDelete);
 
         return app;
@@ -2203,9 +2215,115 @@ public static class RateEndpoints
         );
 
         if (result.IsSuccess && status == RateStatus.AcceptedByClient)
-            await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Pricing, cancellationToken, acceptanceObservations);
+        {
+            var emailQueued = await openingsNotificationService.QueueAsync(
+                rateId, RateAcceptanceActor.Pricing, cancellationToken, acceptanceObservations);
+            if (!emailQueued)
+            {
+                // La aceptación ya quedó persistida: responder 202 y no fingir que falló.
+                return Results.Json(new
+                {
+                    code = "Pricing.AcceptanceSavedEmailPending",
+                    message = "La tarifa quedó aceptada, pero el correo de Apertura no se pudo preparar. Reintente la notificación.",
+                    accepted = true,
+                    notificationQueued = false,
+                    rateId
+                }, statusCode: StatusCodes.Status202Accepted);
+            }
+        }
 
         return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static async Task<IResult> RetryAcceptedRateEmailAsync(
+        Guid rateId,
+        ServiceDbContext db,
+        AcceptedRateOpeningsNotificationService openingsNotificationService,
+        CancellationToken cancellationToken)
+    {
+        var rate = await db.RateHeaders
+            .AsNoTracking()
+            .Where(x => x.Id == rateId && !x.IsDeleted)
+            .Select(x => new { x.Status })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (rate is null)
+            return Results.NotFound();
+
+        if (rate.Status != RateStatus.AcceptedByClient)
+            return Results.Conflict(new
+            {
+                code = "Pricing.AcceptanceEmailRequiresAcceptedQuote",
+                message = "Solamente se puede reintentar el correo de una cotización aceptada."
+            });
+
+        // No cambia la aceptación, revisión ni IDTRA. El Outbox deduplica por
+        // correlación de tarifa/revisión y el mismo actor de la ruta Pricing.
+        var queued = await openingsNotificationService.QueueAsync(
+            rateId, RateAcceptanceActor.Pricing, cancellationToken);
+        if (!queued)
+            return Results.Problem(
+                title: "No se pudo preparar el correo de aceptación",
+                detail: "La tarifa permanece aceptada. Revise la generación del PDF y el Outbox antes de reintentar.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+
+        return Results.Accepted(value: new
+        {
+            code = "Pricing.AcceptanceEmailQueued",
+            message = "Correo de aceptación preparado en Outbox. Notifications gestionará la entrega.",
+            rateId
+        });
+    }
+
+    private sealed record ResendAcceptedRateEmailRequest(Guid RequestId);
+
+    private static async Task<IResult> ResendAcceptedRateEmailAsync(
+        Guid rateId,
+        ResendAcceptedRateEmailRequest request,
+        ServiceDbContext db,
+        AcceptedRateOpeningsNotificationService openingsNotificationService,
+        CancellationToken cancellationToken)
+    {
+        // Un clic confirmado corresponde a un único requestId reutilizado en
+        // cualquier reintento de red. No se aceptan ids vacíos.
+        if (request.RequestId == Guid.Empty)
+            return Results.BadRequest(new
+            {
+                code = "Pricing.AcceptanceEmailResendIdRequired",
+                message = "La operación de reenvío requiere un identificador válido."
+            });
+
+        var rate = await db.RateHeaders.AsNoTracking()
+            .Where(x => x.Id == rateId && !x.IsDeleted)
+            .Select(x => new { x.Status, x.RevisionNumber })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (rate is null) return Results.NotFound();
+        if (rate.Status != RateStatus.AcceptedByClient)
+            return Results.Conflict(new
+            {
+                code = "Pricing.AcceptanceEmailRequiresAcceptedQuote",
+                message = "Solo se puede reenviar la notificación de una cotización aceptada."
+            });
+
+        var correlationId =
+            $"pricing-acceptance-manual:{rateId:N}:rev:{rate.RevisionNumber}:request:{request.RequestId:N}";
+        var queued = await openingsNotificationService.QueueAsync(
+            rateId, RateAcceptanceActor.Pricing, cancellationToken,
+            manualResendCorrelationId: correlationId);
+
+        if (!queued)
+            return Results.Problem(
+                title: "No se pudo preparar el reenvío de la notificación",
+                detail: "La QUO sigue aceptada. Revise el PDF y el Outbox; reintente con la misma operación.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+
+        return Results.Accepted(value: new
+        {
+            code = "Pricing.AcceptanceEmailResendQueued",
+            message = "Reenvío encolado para Apertura con copia a Pricing y al vendedor. La entrega está pendiente de Notifications.",
+            rateId,
+            requestId = request.RequestId
+        });
     }
 
     private static async Task<IResult> DeleteRatesAsync(

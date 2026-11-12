@@ -35,24 +35,24 @@ public sealed class AcceptedRateIdtraNotificationPolicyTests
     }
 
     [TestMethod]
-    public void PricingAcceptanceIgnoresSellerCopies()
+    public void PricingAcceptanceCopiesPricingAndAssignedSeller()
     {
         CollectionAssert.AreEqual(
-            Array.Empty<string>(),
+            new[] { "pricingcf@castrofallas.com", "rchaves@castrofallas.com" },
             AcceptedRateOpeningsNotificationService.CopyRecipientsFor(
                 RateAcceptanceActor.Pricing,
                 ["rchaves@castrofallas.com"]));
     }
 
     [TestMethod]
-    public void PricingAcceptanceGoesToAperturaTramiteWithoutCopy()
+    public void PricingAcceptanceGoesToAperturaTramiteWithPricingInCopy()
     {
         Assert.AreEqual(
             "aperturatramites@grupocastrofallas.com",
             AcceptedRateOpeningsNotificationService.RecipientFor(RateAcceptanceActor.Pricing));
-        Assert.AreEqual(
-            0,
-            AcceptedRateOpeningsNotificationService.CopyRecipientsFor(RateAcceptanceActor.Pricing).Length);
+        CollectionAssert.AreEqual(
+            new[] { "pricingcf@castrofallas.com" },
+            AcceptedRateOpeningsNotificationService.CopyRecipientsFor(RateAcceptanceActor.Pricing));
     }
 
     [TestMethod]
