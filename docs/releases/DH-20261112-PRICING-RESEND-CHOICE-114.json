@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261112-PRICING-RESEND-CHOICE-114",
+  "ecosystem": "Dhole",
+  "releaseType": "MINOR",
+  "ecosystemVersion": "1.43.0",
+  "createdAt": "2026-11-12",
+  "sourceBranch": "fix/quo609-select-notification-20261112-master",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "previous": "1.15.0",
+      "next": "1.16.0"
+    },
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "component": "DholeWeb",
+      "previous": "1.42.0",
+      "next": "1.43.0"
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "component": "DholeSystem",
+      "previous": "1.42.0",
+      "next": "1.43.0"
+    }
+  ],
+  "changes": [
+    "Select opening/quote/no-PDF notice for accepted QUO",
+    "Structured PDF/Outbox failure reasons, explicit no-PDF recovery",
+    "Manual idempotent resend preserving status and CRM delivery rules"
+  ],
+  "validation": {
+    "ci": "pending",
+    "staging": "pending",
+    "smtp": "pending"
+  },
+  "productionDeploymentAuthorized": false
+}
