@@ -149,6 +149,9 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 if (pdfContent.Length == 0)
                     return new(false, "Pricing.AcceptancePdfEmpty",
                         "Reports devolvió un PDF vacío. Puede enviar un aviso sin PDF.");
+                if (pdfContent.Length > OpeningRateAttachmentReader.MaxCombinedBytes)
+                    return new(false, "Pricing.AcceptancePdfTooLarge",
+                        "El PDF supera el tamaño admitido para correo. Envíe un aviso sin PDF o reduzca el documento.");
             }
 
             // Tanto Pricing como Ventas reciben copia auditable de la aceptación.
