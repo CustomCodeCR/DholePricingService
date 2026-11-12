@@ -32,9 +32,10 @@
     "Manual idempotent resend preserving status and CRM delivery rules"
   ],
   "validation": {
-    "ci": "pending",
-    "staging": "pending",
-    "smtp": "pending"
+    "ci": "passed",
+    "staging": "not-independently-verified",
+    "smtp": "not-independently-verified"
   },
-  "productionDeploymentAuthorized": false
+  "productionDeploymentAuthorized": true,
+  "productionDeploymentAuthorization": "Explicit user request to promote this release to master in the current conversation on 2026-11-12"
 }
