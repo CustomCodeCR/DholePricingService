@@ -881,7 +881,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         Guid? QuoteId, Guid? LineId, bool NoPostExecuted,
         bool PartialResumeSafe = false, bool LiveConfirmed = false,
         string? LiveStatus = null, bool ExistingSaleMatches = false,
-        Guid? ExistingLineId = null);
+        Guid? ExistingLineId = null, bool ExistingLineReconciliationSafe = false);
 
     private static async Task<IResult> ResumePartialAsync(
         Guid rateId, HttpContext http, ServiceDbContext db,
@@ -1094,11 +1094,15 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             HeaderStatus: "succeeded", TotalStatus: "succeeded",
             QuoteId: Guid, LineId: Guid
         };
+        // A previously reserved/ambiguous total operation is NEVER retried.
+        // The connector may prove the exact one existing Dhole line is the
+        // accepted sale, after the write's uncertainty window. This action
+        // remains read-only and must be expressly invoked by SecurityAdmin.
         var existingVerified = confirmation is {
-            ExistingSaleMatches: true, NoPostExecuted: true,
-            HeaderStatus: "succeeded", TotalStatus: "not_sent",
+            ExistingSaleMatches: true, ExistingLineReconciliationSafe: true,
+            NoPostExecuted: true, HeaderStatus: "succeeded",
             QuoteId: Guid, ExistingLineId: Guid
-        };
+        } && confirmation.TotalStatus is "not_sent" or "reserved" or "ambiguous";
         if (reconcileExisting ? !existingVerified : !ledgerVerified)
             return Results.Conflict(new {
                 code = "sync_reconciliation_not_confirmed",
@@ -1182,9 +1186,10 @@ public static class DynamicsQuoteDiagnosticsEndpoints
         var prefix = "https://api.logisticacastrofallas.com/api/dynamics-connector/keyed/templates/crear_oferta";
         var nextAttempt = job.RecoveryAttempt + 1;
 
-        // Read-only connector ledger verification, scoped to the actual API
-        // key. It also verifies all prior recovery attempts are explicit 4xx
-        // rejects with no quoteId and no total lines.
+        // Read-only connector ledger verification, scoped to the active key.
+        // Only a confirmed pre-write 4xx rejection or a SecurityAdmin
+        // reconciliation proving NO Dataverse effect authorizes a new key.
+        // A reserved/ambiguous HTTP 409 alone never grants recovery.
         var ledgerUrl = prefix + "/recovery-eligibility?connectionCode=principal" +
             "&dholeRateId=" + rateId.ToString("D") +
             "&revisionNumber=" + rate.RevisionNumber +
@@ -1220,7 +1225,7 @@ public static class DynamicsQuoteDiagnosticsEndpoints
                 readOnly.ValueKind != JsonValueKind.True)
                 return Results.Conflict(new {
                     code = "recovery_not_safe",
-                    message = "El conector no confirmó el rechazo previo sin registro creado."
+                    message = "El conector no confirmó rechazo 4xx previo ni conciliación administrativa sin efecto; no se reenvió la QUO."
                 });
         }
 
@@ -1275,8 +1280,9 @@ public static class DynamicsQuoteDiagnosticsEndpoints
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(j => j.RecoveryAttempt, nextAttempt)
                 .SetProperty(j => j.RecoveryReason,
-                    "Reenvío solicitado desde Dynamics: HTTP 4xx rechazado, " +
-                    "sin cabecera ni línea creadas; historial y mapeo validados.")
+                    "Recuperación administrativa: cabecera rechazada con 4xx " +
+                    "o conciliada como no aplicada, sin línea enviada; " +
+                    "historial y mapeo validados.")
                 .SetProperty(j => j.RecoveryApprovedBy, actor)
                 .SetProperty(j => j.RecoveryApprovedAtUtc, DateTime.UtcNow)
                 .SetProperty(j => j.Status, "Pending")
