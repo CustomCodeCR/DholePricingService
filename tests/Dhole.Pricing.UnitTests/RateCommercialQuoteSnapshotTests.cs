@@ -117,6 +117,80 @@ public sealed class RateCommercialQuoteSnapshotTests
             "CreateRateCommandHandler must not inject automatic fixed costs.");
     }
 
+
+    [TestMethod]
+    public void LegacyOwnLclCfs_ProjectsOneChargeableCbmInApiPdfAndTotals()
+    {
+        // Consolidado #56: 0.118 physical CBM is billed at the minimum of 1 CBM.
+        var rate = CreateRate();
+        rate.ConfigureShipment(ShipmentMode.Lcl, 1, 1, 20m, 0.118m, 500m, null, null);
+        var cfs = rate.AddRateDetail(rate.Id, null, "CFS",
+            CostDetailType.OriginCharge, CostType.Fixed, ChargeBasis.PerCbm,
+            rate.CurrencyId, "USD", "USD", 8m, 8m,
+            "LCL PROPIO · ConsolidadoId: 1727285d-5b87-4740-b975-3ff022d66a9f · Consolidado: #56",
+            0.118m, null);
+
+        var snapshot = RateCommercialQuoteSnapshot.Create(rate);
+        Assert.AreEqual(0.118m, cfs.Quantity, "Read projection must leave the published detail unchanged.");
+        Assert.AreEqual(1m, snapshot.For(cfs).Quantity);
+        Assert.AreEqual(8m, snapshot.For(cfs).CostSubtotal);
+        Assert.AreEqual(8m, snapshot.For(cfs).SaleSubtotal);
+        Assert.AreEqual(8m, snapshot.CurrencyTotals.Single().Amount);
+
+        rate.SetAmounts(null);
+        Assert.AreEqual(8m, rate.TotalSaleAmount);
+        Assert.AreEqual(8m, rate.TotalCostAmount);
+
+        using var document = JsonDocument.Parse(
+            new RateReportDataFactory(new ConfigurationBuilder().Build()).CreateDataJson(rate));
+        var item = document.RootElement.GetProperty("items").EnumerateArray().Single();
+        Assert.AreEqual(1m, item.GetProperty("quantity").GetDecimal());
+        Assert.AreEqual(8m, item.GetProperty("lineTotalAmount").GetDecimal());
+    }
+
+    [TestMethod]
+    public void ColoaderAndUnmarkedLclCfs_KeepOriginalPhysicalCbmQuantity()
+    {
+        var rate = CreateRate();
+        rate.ConfigureShipment(ShipmentMode.Lcl, 1, 1, 20m, 0.118m, 500m, null, null);
+        var coloader = rate.AddRateDetail(rate.Id, null, "CFS",
+            CostDetailType.OriginCharge, CostType.Fixed, ChargeBasis.PerCbm,
+            rate.CurrencyId, "USD", "USD", 8m, 8m, "Fuente LCL: Coloader", 0.118m, null);
+        var snapshot = RateCommercialQuoteSnapshot.Create(rate);
+        Assert.AreEqual(0.118m, snapshot.For(coloader).Quantity);
+        Assert.AreEqual(0.944m, snapshot.For(coloader).SaleSubtotal);
+    }
+
+    [TestMethod]
+    public void CreateAndUpdateHandlers_PreserveOwnLclCfsChargeableQuantity()
+    {
+        const string notes = "LCL PROPIO · ConsolidadoId: 1727285d-5b87-4740-b975-3ff022d66a9f";
+        foreach (var handler in new[] { typeof(CreateRateCommandHandler),
+                 typeof(Dhole.Pricing.Application.Features.Rates.UpdateRate.UpdateRateCommandHandler) })
+        {
+            const System.Reflection.BindingFlags flags =
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
+            var normalizeBasis = handler.GetMethod("NormalizeLclChargeBasis", flags)!;
+            var normalizeQuantity = handler.GetMethod("NormalizeLclDetailQuantity", flags)!;
+
+            Assert.AreEqual(ChargeBasis.PerChargeableCbm,
+                normalizeBasis.Invoke(null, [ShipmentMode.Lcl, "CFS", ChargeBasis.PerCbm, notes]),
+                handler.Name);
+            Assert.AreEqual(1m,
+                normalizeQuantity.Invoke(null, [ShipmentMode.Lcl, "CFS", 0.118m, 0.118m, notes, 20m, 500m]),
+                handler.Name);
+            Assert.AreEqual(2.4m,
+                normalizeQuantity.Invoke(null, [ShipmentMode.Lcl, "CFS", 2.4m, 0.118m, notes, 20m, 500m]),
+                handler.Name);
+            Assert.AreEqual(ChargeBasis.PerCbm,
+                normalizeBasis.Invoke(null, [ShipmentMode.Lcl, "CFS", ChargeBasis.PerCbm, "Fuente LCL: Coloader"]),
+                handler.Name);
+            Assert.AreEqual(0.118m,
+                normalizeQuantity.Invoke(null, [ShipmentMode.Lcl, "CFS", 0.118m, 0.118m, "Fuente LCL: Coloader", 20m, 500m]),
+                handler.Name);
+        }
+    }
+
     private static RateHeader CreateRate() => RateHeader.Create(
         rateCode: "QUO-TEST1-PARITY", sourceImportFclRateId: null,
         agentId: Guid.NewGuid(), agentName: "Agente", agentCode: "AG",
