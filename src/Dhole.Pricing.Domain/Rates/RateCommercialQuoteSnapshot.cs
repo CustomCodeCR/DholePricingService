@@ -80,6 +80,14 @@ public sealed class RateCommercialQuoteSnapshot
 
     public RateCommercialLineSnapshot For(RateDetail detail) => _lines[detail.Id];
 
+    private static bool IsOwnLclCfs(RateHeader rate, RateDetail detail) =>
+        rate.ShipmentMode == ShipmentMode.Lcl
+        && string.Equals(detail.Name.Trim(), "CFS", StringComparison.OrdinalIgnoreCase)
+        && !string.IsNullOrWhiteSpace(detail.Notes)
+        && (detail.Notes.Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase)
+            || detail.Notes.Contains("ConsolidadoId:", StringComparison.OrdinalIgnoreCase)
+            || detail.Notes.Contains("Fuente LCL: Propio", StringComparison.OrdinalIgnoreCase));
+
     public static RateCommercialQuoteSnapshot Create(RateHeader rate)
     {
         var isAirLcl = DetectAirLcl(rate);
@@ -92,9 +100,17 @@ public sealed class RateCommercialQuoteSnapshot
             var unitSale = detail.SaleAmount;
             var unitCost = detail.CostAmount;
 
+            // Previously saved own-LCL CFS rows have PerCbm/physical quantity
+            // because old create/update handlers discarded the billable basis.
+            // Project the corrected commercial figures without mutating the
+            // stored detail or a previously published revision snapshot.
+            if (IsOwnLclCfs(rate, detail))
+            {
+                quantity = Math.Max(1m, rate.ChargeableQuantity);
+            }
             // Historical flat pickup rows may carry a volume basis despite being
             // a single explicitly selected charge.
-            if (IsPickup(detail) && !(rate.ShipmentMode == ShipmentMode.Fcl && detail.ChargeBasis == ChargeBasis.PerContainer))
+            else if (IsPickup(detail) && !(rate.ShipmentMode == ShipmentMode.Fcl && detail.ChargeBasis == ChargeBasis.PerContainer))
             {
                 quantity = 1m;
             }

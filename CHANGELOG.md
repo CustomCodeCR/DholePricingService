@@ -1,3 +1,9 @@
+## [1.18.2] - 2026-11-13
+
+- PATCH DH-20261113-PRICING-OWN-LCL-141: CFS del consolidado LCL propio se guarda y actualiza por CBM cobrable, con mínimo 1; nunca se reemplaza por 0,118 CBM físico. Costo/venta se recalculan a USD 8,00 para una unidad con precio USD 8,00/CBM.
+- Cotizaciones históricas usan la proyección comercial de CBM cobrable en API, PDF y totales sin alterar las revisiones publicadas. Coloader, CFT Miami y otros cargos se mantienen independientes.
+- Pricing 1.18.1 → 1.18.2; Web/ecosistema 1.51.2 → 1.51.3. Requiere CI/staging antes de master.
+
 ## [1.18.1] - 2026-11-13
 
 - PATCH DH-20261113-PRICING-OWN-LCL-139: CFS de origen FCA/EXW usa CBM cobrable (incluido el mínimo comercial), no volumen físico. Se mantiene la base por CBM cobrable desde la matriz hacia el asistente.
