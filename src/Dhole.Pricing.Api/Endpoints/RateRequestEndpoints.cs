@@ -530,7 +530,11 @@ public static class RateRequestEndpoints
     private static string BuildRoute(RateRequest request)
     {
         using var document = JsonDocument.Parse(request.PayloadJson);
-        var poes = RateRequestPoeSelection.Names(document.RootElement, request.PoeName);
+        var hasOverride = document.RootElement.TryGetProperty("pricingRouteOverride", out var overrideNode)
+            && overrideNode.ValueKind == JsonValueKind.Object;
+        var poes = hasOverride
+            ? (request.PoeName is { Length: > 0 } name ? new[] { name } : Array.Empty<string>())
+            : RateRequestPoeSelection.Names(document.RootElement, request.PoeName);
         var parts = new[]
         {
             request.OriginName,
@@ -779,6 +783,8 @@ public static class RateRequestEndpoints
     private static object ToDto(RateRequest request)
     {
         using var document = JsonDocument.Parse(request.PayloadJson);
+        var hasOverride = document.RootElement.TryGetProperty("pricingRouteOverride", out var overrideNode)
+            && overrideNode.ValueKind == JsonValueKind.Object;
         return new
         {
             request.Id,
@@ -809,8 +815,12 @@ public static class RateRequestEndpoints
             request.DestinationName,
             request.PoeId,
             request.PoeName,
-            selectedPoeIds = RateRequestPoeSelection.Ids(document.RootElement, request.PoeId),
-            selectedPoeNames = RateRequestPoeSelection.Names(document.RootElement, request.PoeName),
+            selectedPoeIds = hasOverride && request.PoeId.HasValue
+                ? new[] { request.PoeId.Value }
+                : RateRequestPoeSelection.Ids(document.RootElement, request.PoeId),
+            selectedPoeNames = hasOverride && !string.IsNullOrWhiteSpace(request.PoeName)
+                ? new[] { request.PoeName! }
+                : RateRequestPoeSelection.Names(document.RootElement, request.PoeName),
             request.PodId,
             request.PodName,
             lockedByUserId = request.LockExpiresAtUtc > DateTime.UtcNow ? request.LockedByUserId : null,
