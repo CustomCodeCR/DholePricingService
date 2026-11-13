@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using CustomCodeFramework.Core.Domain.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 
@@ -146,6 +147,67 @@ public sealed class RateRequest : Entity<Guid>
         PoeName = Normalize(poeName);
         PodId = podId;
         PodName = Normalize(podName);
+    }
+
+    /// <summary>
+    /// Pricing can replace ONLY POL, POE and POD while the request is open.
+    /// Seller's original form and request context remain immutable in PayloadJson.
+    /// Each replacement is recorded independently for traceability.
+    /// </summary>
+    public void OverridePricingRoute(
+        Guid polId, string polName, Guid poeId, string poeName,
+        Guid? podId, string? podName, string? updatedBy)
+    {
+        if (Status != RateRequestStatus.Open)
+            throw new InvalidOperationException("Solo puede cambiarse la ruta de una solicitud abierta.");
+
+        if (polId == Guid.Empty || poeId == Guid.Empty
+            || string.IsNullOrWhiteSpace(polName) || string.IsNullOrWhiteSpace(poeName)
+            || (podId.HasValue && (podId == Guid.Empty || string.IsNullOrWhiteSpace(podName)))
+            || (!podId.HasValue && !string.IsNullOrWhiteSpace(podName)))
+            throw new ArgumentException("POL, POE y POD deben referirse a ubicaciones válidas.");
+
+        var payload = JsonNode.Parse(PayloadJson) as JsonObject
+            ?? throw new InvalidOperationException("La solicitud no contiene un contexto de Ventas válido.");
+        // Preserve the exact seller-selected route once, even when requests
+        // created before requestContext was introduced are edited.
+        if (payload["sellerRouteOriginal"] is null)
+        {
+            var sellerForm = payload["form"] as JsonObject;
+            payload["sellerRouteOriginal"] = JsonSerializer.SerializeToNode(new
+            {
+                polId = sellerForm?["originId"]?.ToString(),
+                polName = OriginName,
+                poeId = sellerForm?["destinationId"]?.ToString(),
+                poeName = PoeName ?? DestinationName,
+                podId = sellerForm?["podId"]?.ToString(),
+                podName = PodName,
+            });
+        }
+
+        var previous = payload["pricingRouteOverride"]?.DeepClone();
+        if (previous is not null)
+        {
+            if (payload["pricingRouteHistory"] is JsonArray history)
+                history.Add(previous);
+            else
+                payload["pricingRouteHistory"] = new JsonArray(previous);
+        }
+
+        payload["pricingRouteOverride"] = JsonSerializer.SerializeToNode(new
+        {
+            polId, polName = polName.Trim(),
+            poeId, poeName = poeName.Trim(),
+            podId, podName = Normalize(podName),
+            updatedAtUtc = DateTime.UtcNow,
+            updatedBy = Normalize(updatedBy),
+        });
+
+        // The displayed/current request route follows Pricing, never the Sales payload.
+        OriginName = polName.Trim();
+        DestinationName = poeName.Trim();
+        SetRoute(poeId, poeName, podId, podName);
+        PayloadJson = payload.ToJsonString();
     }
 
     /// <summary>

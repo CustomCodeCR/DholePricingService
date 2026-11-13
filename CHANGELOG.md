@@ -1,3 +1,9 @@
+## [1.18.0] - 2026-11-12
+
+- MINOR DH-20261112-PRICING-ROUTE-124: nuevo PATCH /api/pricing/rate-requests/{id}/pricing-route, exclusivo del scope de actualización de tarifas y con reserva vigente. Permite modificar únicamente POL, POE y POD; rechaza solicitudes cerradas.
+- Persiste el cambio de ruta efectiva sin reescribir el formulario, Incoterm, carga, ni los servicios originales de Ventas. Conserva la ruta inicial del vendedor y el historial de ajustes de Pricing en PayloadJson, sin cambiar SLA, prioridad, estados ni los contratos REST anteriores.
+- Pruebas unitarias de inmutabilidad de Ventas, historial y bloqueo de solicitudes finalizadas. PricingService 1.17.0 → 1.18.0; Web 1.44.2 → 1.45.0; ecosistema 1.44.2 → 1.45.0. CI y staging pendientes; sin despliegue a producción.
+
 ## [1.17.0] - 2026-11-12
 
 - MINOR DH-20261112-PRICING-TARIFF-CRM-121: al aplicar un tarifario maestro a una cuenta/prospecto CRM se valida la identidad por ID y los scopes/ACL efectivos consultando GET /api/crm/pricing-client-options con el token de sesión. Nombres y ejecutivo canónicos son resueltos en el servidor (incluido Castro Fallas).
