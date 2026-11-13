@@ -334,7 +334,7 @@ public static class OwnLclFobScenarioEndpoints
                     definition.Scope,
                     definition.Name,
                     definition.ChargeBasis,
-                    IsCostaRicaSaleOnlyLine(definition.LineKey) ? 0m : stored.Cost,
+                    stored.Cost,
                     stored.Sale,
                     stored.CalculationBaseCbm);
             }
@@ -407,7 +407,7 @@ public static class OwnLclFobScenarioEndpoints
                 return row with
                 {
                     LineKey = lineKey,
-                    CostUnit = IsCostaRicaSaleOnlyLine(lineKey) ? 0m : row.CostUnit,
+                    CostUnit = row.CostUnit,
                 };
             })
             .ToArray();
@@ -486,21 +486,16 @@ public static class OwnLclFobScenarioEndpoints
     {
         if (overrides.TryGetValue(lineKey, out var stored))
         {
-            return IsCostaRicaSaleOnlyLine(lineKey)
-                ? (0m, stored.Sale, stored.CalculationBaseCbm)
-                : stored;
+            return stored;
         }
 
         var definition = OwnLclPricingLineCatalog.Find(lineKey)
             ?? throw new InvalidOperationException($"Línea LCL propia desconocida: {lineKey}.");
         return (
-            IsCostaRicaSaleOnlyLine(lineKey) ? 0m : definition.DefaultCostUnit ?? fallbackCost,
+            definition.DefaultCostUnit ?? fallbackCost,
             definition.DefaultSaleUnit,
             IsCentralAmericaInlandLine(lineKey) ? 70m : null);
     }
-
-    private static bool IsCostaRicaSaleOnlyLine(string? lineKey) =>
-        lineKey is "CR_HANDLING" or "CR_ZONE";
 
     private static bool IsCentralAmericaInlandLine(string? lineKey) =>
         lineKey is "CA_INLAND_NI" or "CA_INLAND_HN" or "CA_INLAND_GT" or "CA_INLAND_SV";
