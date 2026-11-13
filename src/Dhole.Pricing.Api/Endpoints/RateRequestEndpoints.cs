@@ -816,7 +816,7 @@ public static class RateRequestEndpoints
             request.PoeId,
             request.PoeName,
             selectedPoeIds = hasOverride && request.PoeId.HasValue
-                ? new[] { request.PoeId.Value }
+                ? new[] { request.PoeId.Value.ToString() }
                 : RateRequestPoeSelection.Ids(document.RootElement, request.PoeId),
             selectedPoeNames = hasOverride && !string.IsNullOrWhiteSpace(request.PoeName)
                 ? new[] { request.PoeName! }
