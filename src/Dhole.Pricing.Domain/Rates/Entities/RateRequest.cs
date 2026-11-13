@@ -188,9 +188,10 @@ public sealed class RateRequest : Entity<Guid>
         var previous = payload["pricingRouteOverride"]?.DeepClone();
         if (previous is not null)
         {
-            var history = payload["pricingRouteHistory"] as JsonArray ?? new JsonArray();
-            history.Add(previous);
-            payload["pricingRouteHistory"] = history;
+            if (payload["pricingRouteHistory"] is JsonArray history)
+                history.Add(previous);
+            else
+                payload["pricingRouteHistory"] = new JsonArray(previous);
         }
 
         payload["pricingRouteOverride"] = JsonSerializer.SerializeToNode(new
