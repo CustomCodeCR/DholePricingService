@@ -1,3 +1,9 @@
+## [1.18.1] - 2026-11-13
+
+- PATCH DH-20261113-PRICING-OWN-LCL-139: CFS de origen FCA/EXW usa CBM cobrable (incluido el mínimo comercial), no volumen físico. Se mantiene la base por CBM cobrable desde la matriz hacia el asistente.
+- CR_HANDLING (Manejos) y CR_ZONE conservan el costo editable al guardar, consultar y calcular la cotización: se elimina la normalización silenciosa a USD 0. Solo los costos/ventas configurados en LCL propios son fuente de los cargos propios; sin modificar las tarifas coloader.
+- Pricing 1.18.0 → 1.18.1; Web 1.50.0 → 1.50.1; ecosistema 1.50.1. CI y staging requeridos antes de master; sin autorización de despliegue a producción.
+
 ## [1.18.0] - 2026-11-12
 
 - MINOR DH-20261112-PRICING-ROUTE-124: nuevo PATCH /api/pricing/rate-requests/{id}/pricing-route, exclusivo del scope de actualización de tarifas y con reserva vigente. Permite modificar únicamente POL, POE y POD; rechaza solicitudes cerradas.
