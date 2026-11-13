@@ -169,6 +169,22 @@ public sealed class RateRequest : Entity<Guid>
 
         var payload = JsonNode.Parse(PayloadJson) as JsonObject
             ?? throw new InvalidOperationException("La solicitud no contiene un contexto de Ventas válido.");
+        // Preserve the exact seller-selected route once, even when requests
+        // created before requestContext was introduced are edited.
+        if (payload["sellerRouteOriginal"] is null)
+        {
+            var sellerForm = payload["form"] as JsonObject;
+            payload["sellerRouteOriginal"] = JsonSerializer.SerializeToNode(new
+            {
+                polId = sellerForm?["originId"]?.ToString(),
+                polName = OriginName,
+                poeId = sellerForm?["destinationId"]?.ToString(),
+                poeName = PoeName ?? DestinationName,
+                podId = sellerForm?["podId"]?.ToString(),
+                podName = PodName,
+            });
+        }
+
         var previous = payload["pricingRouteOverride"]?.DeepClone();
         if (previous is not null)
         {
