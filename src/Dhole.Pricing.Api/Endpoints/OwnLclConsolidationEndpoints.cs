@@ -332,7 +332,6 @@ public static class OwnLclConsolidationEndpoints
             incoterm,
             originPort,
             billableCbm,
-            chargeableCbm,
             Math.Max(1, request.Sets),
             Math.Max(1, request.Hbl),
             consolidationPricingLines);
@@ -513,15 +512,14 @@ public static class OwnLclConsolidationEndpoints
         string incoterm,
         string originPort,
         decimal billableCbm,
-        decimal actualChargeableCbm,
         int sets,
         int hbl,
         IReadOnlyDictionary<string, (decimal CostUnit, decimal SaleUnit, decimal? CalculationBaseCbm)> pricingLines)
     {
         if (incoterm == "FOB") return;
 
-        // CFS is charged on the actual CBM and has no 1-CBM minimum.
-        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_CFS", "CFS", "CBM", actualChargeableCbm);
+        // CFS uses the same chargeable/billable CBM base as the own LCL quotation.
+        AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_CFS", "CFS", "CBM", billableCbm);
         AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_CUSTOMS", "CUSTOMS", "SET", sets);
         AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_DOC", "DOC FEE", "HBL", hbl);
         AddConfiguredOriginLine(lines, pricingLines, "ORIGIN_VGM", "VGM", "HBL", hbl);
