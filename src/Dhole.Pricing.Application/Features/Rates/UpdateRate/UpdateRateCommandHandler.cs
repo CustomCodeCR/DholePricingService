@@ -443,13 +443,17 @@ public sealed class UpdateRateCommandHandler(
             var normalizedChargeBasis = NormalizeLclChargeBasis(
                 command.ShipmentMode,
                 detail.Name,
-                detail.ChargeBasis
+                detail.ChargeBasis,
+                detail.Notes
             );
             var normalizedQuantity = NormalizeLclDetailQuantity(
                 command.ShipmentMode,
                 detail.Name,
                 detail.Quantity,
-                command.TotalVolumeCbm
+                command.TotalVolumeCbm,
+                detail.Notes,
+                command.TotalWeightKg,
+                command.KgPerCbm
             );
             // Solo las unidades por encima de 21.500 kg generan recargo.
             if (command.ShipmentMode is ShipmentMode.Fcl or ShipmentMode.Ftl
@@ -1192,7 +1196,8 @@ public sealed class UpdateRateCommandHandler(
     private static ChargeBasis? NormalizeLclChargeBasis(
         ShipmentMode shipmentMode,
         string? name,
-        ChargeBasis? chargeBasis
+        ChargeBasis? chargeBasis,
+        string? notes
     )
     {
         if (shipmentMode != ShipmentMode.Lcl)
@@ -1200,7 +1205,7 @@ public sealed class UpdateRateCommandHandler(
 
         var normalizedName = NormalizeLclDetailName(name);
         if (normalizedName == "CFS")
-            return ChargeBasis.PerCbm;
+            return IsOwnLclMatrixDetail(notes) ? ChargeBasis.PerChargeableCbm : ChargeBasis.PerCbm;
 
         if (normalizedName is "PICK UP" or "PICKUP" or "RECOLECTA" or "RECOLECCION")
             return ChargeBasis.PerShipment;
@@ -1212,7 +1217,10 @@ public sealed class UpdateRateCommandHandler(
         ShipmentMode shipmentMode,
         string? name,
         decimal? quantity,
-        decimal totalVolumeCbm
+        decimal totalVolumeCbm,
+        string? notes,
+        decimal totalWeightKg,
+        decimal kgPerCbm
     )
     {
         if (shipmentMode != ShipmentMode.Lcl)
@@ -1220,13 +1228,29 @@ public sealed class UpdateRateCommandHandler(
 
         var normalizedName = NormalizeLclDetailName(name);
         if (normalizedName == "CFS")
+        {
+            if (IsOwnLclMatrixDetail(notes))
+            {
+                // Same minimum as own-LCL freight; never overwrite a billable
+                // quantity with the physical CBM received from the browser.
+                var byWeight = totalWeightKg / Math.Max(1m, kgPerCbm);
+                return Math.Max(1m, Math.Max(quantity.GetValueOrDefault(),
+                    Math.Max(totalVolumeCbm, byWeight)));
+            }
             return totalVolumeCbm > 0m ? totalVolumeCbm : quantity;
+        }
 
         if (normalizedName is "PICK UP" or "PICKUP" or "RECOLECTA" or "RECOLECCION")
             return 1m;
 
         return quantity;
     }
+
+    private static bool IsOwnLclMatrixDetail(string? notes) =>
+        !string.IsNullOrWhiteSpace(notes)
+        && (notes.Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase)
+            || notes.Contains("ConsolidadoId:", StringComparison.OrdinalIgnoreCase)
+            || notes.Contains("Fuente LCL: Propio", StringComparison.OrdinalIgnoreCase));
 
     private static string NormalizeLclDetailName(string? name)
     {
