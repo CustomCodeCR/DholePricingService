@@ -64,7 +64,15 @@ public sealed class RateRequestPricingRouteOverrideTests
     {
         var entity = MakeRequest();
         entity.MarkCompleted(DateTime.UtcNow);
-        Assert.ThrowsException<InvalidOperationException>(() =>
-            entity.OverridePricingRoute(Guid.NewGuid(), "Ningbo", Guid.NewGuid(), "Moín", null, null, "Pricing"));
+        var rejected = false;
+        try
+        {
+            entity.OverridePricingRoute(Guid.NewGuid(), "Ningbo", Guid.NewGuid(), "Moín", null, null, "Pricing");
+        }
+        catch (InvalidOperationException)
+        {
+            rejected = true;
+        }
+        Assert.IsTrue(rejected, "A completed Sales request cannot change its route.");
     }
 }
