@@ -49,6 +49,8 @@ public static class RateRequestEndpoints
             .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapPatch("/{id:guid}/work-status", UpdateWorkStatusAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
+        group.MapPatch("/{id:guid}/pricing-route", UpdatePricingRouteAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapPost("/{id:guid}/prepare-modification", PrepareModificationAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
 
@@ -663,6 +665,38 @@ public static class RateRequestEndpoints
         return Results.Ok(new { entity.PreparedRevisionNumber });
     }
 
+    private static async Task<IResult> UpdatePricingRouteAsync(
+        Guid id,
+        UpdatePricingRouteRequest request,
+        ServiceDbContext db,
+        HttpContext context,
+        CancellationToken ct)
+    {
+        if (request.PolId == Guid.Empty || request.PoeId == Guid.Empty
+            || string.IsNullOrWhiteSpace(request.PolName) || string.IsNullOrWhiteSpace(request.PoeName)
+            || request.PolName.Length > 250 || request.PoeName.Length > 250
+            || (request.PodId.HasValue && (request.PodId == Guid.Empty || string.IsNullOrWhiteSpace(request.PodName)))
+            || (!request.PodId.HasValue && !string.IsNullOrWhiteSpace(request.PodName))
+            || request.PodName?.Length > 250)
+            return Results.BadRequest(new { code = "Pricing.InvalidRouteOverride", message = "Seleccione POL, POE y, cuando corresponda, POD del catálogo." });
+
+        var entity = await db.RateRequests.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (entity is null) return Results.NotFound();
+        if (entity.Status != RateRequestStatus.Open)
+            return Results.Conflict(new { code = "Pricing.RouteOverrideClosed", message = "No se puede modificar la ruta de una solicitud finalizada." });
+        if (!RateRequestLeaseEndpoints.HasActiveLease(context, entity))
+            return RateRequestLeaseEndpoints.LeaseRequired();
+
+        var editor = context.User.FindFirst(ClaimTypes.Name)?.Value
+            ?? context.User.FindFirst("name")?.Value
+            ?? context.User.Identity?.Name;
+        entity.OverridePricingRoute(
+            request.PolId, request.PolName!, request.PoeId, request.PoeName!,
+            request.PodId, request.PodName, editor);
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(ToDto(entity));
+    }
+
     private static async Task<IResult> UpdateWorkStatusAsync(
         Guid id,
         UpdateWorkStatusRequest request,
@@ -788,6 +822,8 @@ public static class RateRequestEndpoints
 
     private sealed record PrepareRateModificationRequest(Guid RateId, int RevisionNumber);
     private sealed record UpdateWorkStatusRequest(string? WorkStatus);
+    private sealed record UpdatePricingRouteRequest(
+        Guid PolId, string? PolName, Guid PoeId, string? PoeName, Guid? PodId, string? PodName);
     private sealed record CancelRateRequestRequest(string? Reason, string? Details, string? Confirmation = null);
 
     private sealed record CreateRateRequestRequest(
