@@ -1,3 +1,8 @@
+## [1.19.0] - 2026-11-14 (API Manager discovery)
+
+- MINOR: inventario de rutas REST de Pricing accesible solo por el administrador de integraciones mediante JWT y scope.
+- No altera Pricing, cotizaciones, márgenes ni SignalR; global Dhole 1.56.0.
+
 ## [1.18.2] - 2026-11-13
 
 - PATCH DH-20261113-PRICING-OWN-LCL-141: CFS del consolidado LCL propio se guarda y actualiza por CBM cobrable, con mínimo 1; nunca se reemplaza por 0,118 CBM físico. Costo/venta se recalculan a USD 8,00 para una unidad con precio USD 8,00/CBM.
