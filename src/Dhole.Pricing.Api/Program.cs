@@ -1,3 +1,4 @@
+using Dhole.RouteDiscovery;
 using CustomCodeFramework.Api.DependencyInjection;
 using CustomCodeFramework.Api.Swagger;
 using CustomCodeFramework.Core.Abstractions;
@@ -81,6 +82,7 @@ builder.Services.AddHttpClient("DholeAI", client =>
 });
 
 var app = builder.Build();
+app.MapDholeRouteManifest();
 app.UseCustomCodeApi();
 app.UseCors(CorsPolicyName);
 if (app.Environment.IsDevelopment()) app.UseCustomCodeSwagger();

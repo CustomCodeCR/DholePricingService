@@ -1,3 +1,7 @@
+## [1.20.0] - 2026-11-14 (API Manager discovery)
+
+- JWT and integrations.thirdparty.manage-protected runtime route inventory for API Manager; no automatic external publication.
+
 ## [1.19.0] - 2026-11-14 (API Manager discovery)
 
 - MINOR: inventario de rutas REST de Pricing accesible solo por el administrador de integraciones mediante JWT y scope.
