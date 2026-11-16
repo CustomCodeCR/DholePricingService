@@ -338,7 +338,7 @@ public sealed class RateReportPickupLocationsTests
         var item = report.RootElement.GetProperty("items")[0];
         Assert.AreEqual(1m, item.GetProperty("quantity").GetDecimal());
         Assert.AreEqual(655m, item.GetProperty("lineTotalAmount").GetDecimal());
-        Assert.AreEqual("5.650 CFT", report.RootElement.GetProperty("rate").GetProperty("totalVolume").GetString());
+        Assert.AreEqual("0.160 CBM", report.RootElement.GetProperty("rate").GetProperty("totalVolume").GetString());
     }
 
     [TestMethod]
@@ -392,7 +392,7 @@ public sealed class RateReportPickupLocationsTests
     }
 
     [TestMethod]
-    public void PdfSavedPickupWithZeroSale_RemainsVisibleWithoutInventingACharge()
+    public void PdfSavedPickupWithZeroSale_IsHiddenOnlyOnClientPdf()
     {
         var rate = CreateRate("EXW", "Miami, Estados Unidos", "USMIA");
         rate.ConfigureShipment(
@@ -414,10 +414,8 @@ public sealed class RateReportPickupLocationsTests
 
         using var report = QuoteData(rate);
         var items = report.RootElement.GetProperty("items").EnumerateArray().ToArray();
-        Assert.AreEqual(1, items.Length);
-        Assert.AreEqual("Recolecta", items[0].GetProperty("description").GetString());
-        Assert.AreEqual(1m, items[0].GetProperty("quantity").GetDecimal());
-        Assert.AreEqual(0m, items[0].GetProperty("lineTotalAmount").GetDecimal());
+        Assert.AreEqual(0, items.Length, "Unpriced lines must not appear on the client PDF.");
+        Assert.AreEqual(2, rate.RateDetails.Count, "Zero-sale persisted costs remain available internally.");
     }
 
     [TestMethod]
