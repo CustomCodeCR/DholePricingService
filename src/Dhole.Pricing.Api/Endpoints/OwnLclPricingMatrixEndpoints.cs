@@ -77,8 +77,8 @@ public static class OwnLclPricingMatrixEndpoints
             .WithTags("Own LCL consolidations")
             .RequireAuthorization();
 
-        group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.RateView);
-        group.MapGet("/{id:guid}", GetAsync).RequireScope(PricingConstants.Scopes.RateView);
+        group.MapGet("/", BrowseAsync).RequireAnyScope(PricingConstants.Scopes.OwnLclConsolidationView, PricingConstants.Scopes.RateView);
+        group.MapGet("/{id:guid}", GetAsync).RequireAnyScope(PricingConstants.Scopes.OwnLclConsolidationView, PricingConstants.Scopes.RateView);
         group.MapPost("/{id:guid}/calculate", CalculateAsync).RequireScope(PricingConstants.Scopes.RateCreate);
         return app;
     }
