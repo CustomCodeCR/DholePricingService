@@ -35,6 +35,7 @@ public static class OwnLclConsolidationEndpoints
 
         group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/{id:guid}", GetAsync).RequireScope(PricingConstants.Scopes.RateView);
+        group.MapGet("/{id:guid}/quotes", GetLinkedQuotesAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapPatch("/{id:guid}/name", RenameAsync)
             .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPost("/", CreateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
@@ -94,6 +95,18 @@ public static class OwnLclConsolidationEndpoints
             return Results.NotFound();
 
         return Results.Ok(await WithCapacityAsync(row, rateHeaders, ct));
+    }
+
+    // Quote linkage is read-only and independent of LCL capacity allocation.
+    private static async Task<IResult> GetLinkedQuotesAsync(
+        Guid id, ServiceDbContext db, CancellationToken ct)
+    {
+        var consolidation = await LoadAsync(id, db, ct, includeInactive: true);
+        if (consolidation is null)
+            return Results.NotFound();
+
+        return Results.Ok(await OwnLclLinkedQuoteLookup.LoadAsync(
+            db, consolidation.Id, consolidation.ConsolidationNumber, ct));
     }
 
     private static async Task<IResult> RenameAsync(
@@ -663,7 +676,9 @@ public static class OwnLclConsolidationEndpoints
 
     private static async Task<OwnLclConsolidationDto?> LoadAsync(Guid id, ServiceDbContext db, CancellationToken ct, bool includeInactive = false)
     {
-        await using var connection = db.Database.GetDbConnection();
+        // DbContext owns this connection. Do not dispose it before the subsequent
+        // linked-quote EF query or accepted-capacity calculation in the same request.
+        var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
         await using var command = connection.CreateCommand();
         command.CommandText = """

@@ -69,7 +69,7 @@ public sealed class RateReportMiamiFreightBreakdownTests
         JsonDocument.Parse(new RateReportDataFactory(new ConfigurationBuilder().Build()).CreateDataJson(rate));
 
     private static RateHeader CreateRate(string polName, string polCode) => RateHeader.Create(
-        rateCode: "QUO-MIA-TEST", sourceImportFclRateId: null,
+        rateCode: "QUO-MIA01-000001", sourceImportFclRateId: null,
         agentId: Guid.NewGuid(), agentName: "Grupo Castro Fallas", agentCode: "GCF",
         carrierId: Guid.NewGuid(), carrierName: "Naviera", carrierCode: "CAR",
         polId: Guid.NewGuid(), polName: polName, polCode: polCode,
