@@ -33,13 +33,13 @@ public static class OwnLclConsolidationEndpoints
             .WithTags("Own LCL consolidations")
             .RequireAuthorization();
 
-        group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.RateView);
-        group.MapGet("/{id:guid}", GetAsync).RequireScope(PricingConstants.Scopes.RateView);
-        group.MapGet("/{id:guid}/quotes", GetLinkedQuotesAsync).RequireScope(PricingConstants.Scopes.RateView);
+        group.MapGet("/", BrowseAsync).RequireAnyScope(PricingConstants.Scopes.OwnLclConsolidationView, PricingConstants.Scopes.RateView);
+        group.MapGet("/{id:guid}", GetAsync).RequireAnyScope(PricingConstants.Scopes.OwnLclConsolidationView, PricingConstants.Scopes.RateView);
+        group.MapGet("/{id:guid}/quotes", GetLinkedQuotesAsync).RequireAnyScope(PricingConstants.Scopes.OwnLclConsolidationView, PricingConstants.Scopes.RateView);
         group.MapPatch("/{id:guid}/name", RenameAsync)
-            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
+            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationUpdate);
         group.MapPost("/", CreateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
-        group.MapPut("/{id:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
+        group.MapPut("/{id:guid}", UpdateAsync).RequireScope(PricingConstants.Scopes.OwnLclConsolidationUpdate);
         group.MapPost("/{id:guid}/calculate", CalculateAsync).RequireScope(PricingConstants.Scopes.RateCreate);
 
         return app;
