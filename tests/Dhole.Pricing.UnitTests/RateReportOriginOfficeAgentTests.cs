@@ -80,7 +80,7 @@ public sealed class RateReportOriginOfficeAgentTests
             10m, 15m, notes, 1m, null);
 
     private static RateHeader CreateRate(string agentCode, string agentName) => RateHeader.Create(
-        rateCode: "QUO-RS-LCL-TEST", sourceImportFclRateId: null,
+        rateCode: "QUO-RSLCL-000001", sourceImportFclRateId: null,
         agentId: Guid.NewGuid(), agentName: agentName, agentCode: agentCode,
         carrierId: Guid.NewGuid(), carrierName: "Naviera", carrierCode: "CAR",
         polId: Guid.NewGuid(), polName: "Qingdao, China", polCode: "CNTAO",
