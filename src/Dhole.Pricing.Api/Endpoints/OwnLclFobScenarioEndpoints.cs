@@ -34,15 +34,15 @@ public static class OwnLclFobScenarioEndpoints
             .RequireAuthorization();
 
         group.MapGet("/fob-scenarios", GetScenariosAsync)
-            .RequireScope(PricingConstants.Scopes.RateView);
+            .RequireAnyScope(PricingConstants.Scopes.OwnLclConsolidationView, PricingConstants.Scopes.RateView);
         group.MapPut("/fob-scenarios", SaveScenariosAsync)
-            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
+            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationUpdate);
         group.MapPut("/cost-overrides", SaveCostOverridesAsync)
-            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
+            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationUpdate);
         group.MapGet("/pricing-lines", GetPricingLinesAsync)
-            .RequireScope(PricingConstants.Scopes.RateView);
+            .RequireAnyScope(PricingConstants.Scopes.OwnLclConsolidationView, PricingConstants.Scopes.RateView);
         group.MapPut("/pricing-lines", SavePricingLinesAsync)
-            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
+            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationUpdate);
 
         return app;
     }
@@ -131,7 +131,6 @@ public static class OwnLclFobScenarioEndpoints
             "PA_DESTINATION_CHARGE",
             destinationPerCbm);
         var crTransferPerCbm = (panamaToCr + bunker) / crBase;
-        var warehousePerCbm = CostaRicaWarehouseOperation / CentralAmericaOperationBaseCbm;
 
         var scopedOrigins = OwnLclOriginScope.ScenarioOrigins(polCode, polName, OwnLclOriginScope.ShanghaiOriginSurcharges);
         var countries = Destinations.Select(destination =>
