@@ -1,3 +1,9 @@
+## [1.20.0] - 2026-11-16
+
+- MINOR DH-20261116-OWN-LCL-QUOS-162: GET /api/pricing/own-lcl-consolidations/{id}/quotes consulta QUOs LCL vinculadas explícitamente al consolidado, incluyendo borradores, enviadas, aprobadas y cerradas, aun con consolidado inactivo.
+- Marcadores de GUID o número legado, con precedencia del GUID para evitar asociaciones erróneas; sin escritura de cotizaciones ni cambio en capacidad aprobada.
+- Pricing 1.18.2 → 1.20.0; Web 1.59.0 → 1.60.0; Dhole global 1.60.1 → 1.61.0. CI/staging requeridos antes de producción.
+
 ## [1.18.2] - 2026-11-13
 
 - PATCH DH-20261113-PRICING-OWN-LCL-141: CFS del consolidado LCL propio se guarda y actualiza por CBM cobrable, con mínimo 1; nunca se reemplaza por 0,118 CBM físico. Costo/venta se recalculan a USD 8,00 para una unidad con precio USD 8,00/CBM.

@@ -1,0 +1,31 @@
+{
+  "releaseId": "DH-20261116-OWN-LCL-QUOS-162",
+  "date": "2026-11-16",
+  "releaseType": "MINOR",
+  "ecosystemVersion": "1.61.0",
+  "components": [
+    {
+      "component": "DholePricingService",
+      "version": "1.20.0"
+    },
+    {
+      "component": "DholeWeb",
+      "version": "1.60.0"
+    },
+    {
+      "component": "DholeSystem",
+      "version": "1.61.0"
+    }
+  ],
+  "changes": [
+    "Read-only own LCL quote links using existing explicit markers",
+    "No impact on CBM reservation or quote write path"
+  ],
+  "restCompatible": true,
+  "realtimeCompatible": true,
+  "validation": {
+    "ci": "pending",
+    "staging": "pending"
+  },
+  "productionDeploymentAuthorized": false
+}
