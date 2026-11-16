@@ -1,3 +1,9 @@
+## [1.21.0] - 2026-11-16 (Consolidados LCL propios: permisos independientes)
+
+- MINOR DH-20261116-OWN-LCL-SCOPES-163: crear requiere pricing.own-lcl-consolidation.create; editar, renombrar y actualizar matriz, costos, líneas y escenarios requiere pricing.own-lcl-consolidation.update.
+- Consultas protegidas por pricing.own-lcl-consolidation.view o pricing.rate.view, comprobando los mismos policies dinámicos de Auth para conservar la consulta de consolidados desde las QUOs existentes.
+- Sin cambios en cálculos ni consumo de capacidad. Pricing 1.20.0 → 1.21.0; Auth 1.11.0, Web 1.61.0, Dhole global 1.62.0.
+
 ## [1.20.0] - 2026-11-16
 
 - MINOR DH-20261116-OWN-LCL-QUOS-162: GET /api/pricing/own-lcl-consolidations/{id}/quotes consulta QUOs LCL vinculadas explícitamente al consolidado, incluyendo borradores, enviadas, aprobadas y cerradas, aun con consolidado inactivo.

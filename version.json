@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.20.0",
-  "ecosystemVersion": "1.61.0",
-  "releaseId": "DH-20261116-OWN-LCL-QUOS-162",
+  "version": "1.21.0",
+  "ecosystemVersion": "1.62.0",
+  "releaseId": "DH-20261116-OWN-LCL-SCOPES-163",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261116-OWN-LCL-QUOS-162"
+  "businessReleaseId": "DH-20261116-OWN-LCL-SCOPES-163"
 }
