@@ -1,3 +1,8 @@
+## [1.22.2] - 2026-11-16 (Volumen por QUO en consolidados LCL propios)
+
+- PATCH DH-20261116-OWN-LCL-QUO-CBM-172: GET /api/pricing/own-lcl-consolidations/{id}/quotes informa CBM físicos y CBM cobrables por cotización explícitamente vinculada; conserva mínimos LCL y el cálculo sin mínimo artificial de Miami.
+- No cambia precios, costos, capacidad asignada, permisos ni escritura de QUOs. DholePricingService 1.22.1 → 1.22.2, DholeWeb 1.62.4 → 1.62.5, ecosistema 1.63.6 → 1.63.7; CI, compilación y staging obligatorios antes de master.
+
 ## [1.22.1] - 2026-11-16 (Solicitud externa con actor técnico autorizado)
 
 - PATCH DH-20261116-API-PRICING-IDENTITY-167: valida JWT técnico exclusivo de API Manager en `POST /api/pricing/rate-requests/` y restringe el actor y el vendedor a la identidad y contrato firmados.
