@@ -1,3 +1,9 @@
+## [1.22.1] - 2026-11-16 (Solicitud externa con actor técnico autorizado)
+
+- PATCH DH-20261116-API-PRICING-IDENTITY-167: valida JWT técnico exclusivo de API Manager en `POST /api/pricing/rate-requests/` y restringe el actor y el vendedor a la identidad y contrato firmados.
+- Para ejecutivo institucional Castro Fallas se conserva el actor de servicio; para ejecutivo real se exige vendedor activo en Auth y se permite únicamente la delegación fijada desde el contrato.
+- Impide utilizar el mismo JWT para otras rutas de Pricing, mantiene idempotencia y outbox.
+
 ## [1.21.0] - 2026-11-16 (Consolidados LCL propios: permisos independientes)
 
 - MINOR DH-20261116-OWN-LCL-SCOPES-163: crear requiere pricing.own-lcl-consolidation.create; editar, renombrar y actualizar matriz, costos, líneas y escenarios requiere pricing.own-lcl-consolidation.update.

@@ -142,6 +142,18 @@ app.MapGet(
     .AllowAnonymous();
 
 app.UseAuthentication();
+// Scope-bearing API Manager service JWTs must never authorize other Pricing routes.
+app.Use(async (http, next) =>
+{
+    if (ThirdPartyRateRequestIdentity.IsApiManagerToken(http.User) &&
+        !ThirdPartyRateRequestIdentity.IsAllowedRoute(
+            http.User, http.Request.Method, http.Request.Path.Value))
+    {
+        http.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return;
+    }
+    await next();
+});
 app.UseMiddleware<RateCreationApprovalMiddleware>();
 app.UseMiddleware<SellerRateVisibilityMiddleware>();
 app.UseMiddleware<AuditExecutionContextMiddleware>();
