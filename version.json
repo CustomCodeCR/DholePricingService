@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.22.1",
-  "ecosystemVersion": "1.63.2",
-  "releaseId": "DH-20261116-API-PRICING-IDENTITY-167",
+  "version": "1.22.2",
+  "ecosystemVersion": "1.63.7",
+  "releaseId": "DH-20261116-OWN-LCL-QUO-CBM-172",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261116-API-PRICING-IDENTITY-167"
+  "businessReleaseId": "DH-20261116-OWN-LCL-QUO-CBM-172"
 }
