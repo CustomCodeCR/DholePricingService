@@ -95,6 +95,10 @@ public static class RateRequestEndpoints
         }
 
         var sellerUserId = request.SellerUserId ?? currentUserId.Value;
+        var technicalActor = ThirdPartyRateRequestIdentity.IsDedicatedActor(httpContext.User, currentUserId);
+        if (ThirdPartyRateRequestIdentity.IsApiManagerToken(httpContext.User) &&
+            (!technicalActor || !ThirdPartyRateRequestIdentity.AllowsSeller(httpContext.User, sellerUserId)))
+            return Results.Forbid();
         var sellerName =
             httpContext.User.FindFirst(ClaimTypes.Name)?.Value
             ?? httpContext.User.FindFirst("name")?.Value
@@ -105,19 +109,24 @@ public static class RateRequestEndpoints
 
         if (sellerUserId != currentUserId.Value)
         {
-            var visibility = await visibilityService.ResolveAsync(
-                httpContext,
-                requireElevated: false,
-                ct
-            );
-
-            var canCreateForSeller = visibility is not null
-                && (visibility.Mode == SellerVisibilityMode.All
-                    || visibility.SellerUserIds.Contains(sellerUserId));
-
-            if (!canCreateForSeller)
+            // An API Manager JWT can only delegate to the seller locked in its
+            // signed token. Ordinary sessions retain the normal visibility ACL.
+            if (!technicalActor)
             {
-                return Results.Forbid();
+                var visibility = await visibilityService.ResolveAsync(
+                    httpContext,
+                    requireElevated: false,
+                    ct
+                );
+
+                var canCreateForSeller = visibility is not null
+                    && (visibility.Mode == SellerVisibilityMode.All
+                        || visibility.SellerUserIds.Contains(sellerUserId));
+
+                if (!canCreateForSeller)
+                {
+                    return Results.Forbid();
+                }
             }
 
             var delegatedSeller = await sellerDirectory.GetSellerAsync(sellerUserId, ct);
