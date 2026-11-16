@@ -676,7 +676,9 @@ public static class OwnLclConsolidationEndpoints
 
     private static async Task<OwnLclConsolidationDto?> LoadAsync(Guid id, ServiceDbContext db, CancellationToken ct, bool includeInactive = false)
     {
-        await using var connection = db.Database.GetDbConnection();
+        // DbContext owns this connection. Do not dispose it before the subsequent
+        // linked-quote EF query or accepted-capacity calculation in the same request.
+        var connection = db.Database.GetDbConnection();
         await EnsureOpenAsync(connection, ct);
         await using var command = connection.CreateCommand();
         command.CommandText = """
