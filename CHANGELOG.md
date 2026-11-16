@@ -1,3 +1,8 @@
+## [1.22.0] - 2026-11-16 (Inventario protegido para API Manager)
+
+- MINOR DH-20261116-API-ROUTES-DEFAULTS-165: publica GET /api/internal/third-party-route-catalog con métodos y rutas runtime, accesible solo con JWT y scope integrations.thirdparty.manage; no necesita Swagger de desarrollo.
+- Oculta rutas internas, credenciales y sondas; no modifica seguridad de ninguna operación.
+
 ## [1.21.0] - 2026-11-16 (Consolidados LCL propios: permisos independientes)
 
 - MINOR DH-20261116-OWN-LCL-SCOPES-163: crear requiere pricing.own-lcl-consolidation.create; editar, renombrar y actualizar matriz, costos, líneas y escenarios requiere pricing.own-lcl-consolidation.update.

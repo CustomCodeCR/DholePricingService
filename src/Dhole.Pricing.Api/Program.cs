@@ -167,4 +167,32 @@ app.MapGet("/api/internal/third-party-route-catalog", (HttpContext http) =>
     return (IResult)Results.Ok(routes);
 }).ExcludeFromDescription();
 
+
+app.MapGet("/api/internal/third-party-route-catalog", (HttpContext ctx) =>
+{
+    if (ctx.User.Identity?.IsAuthenticated != true ||
+        !ctx.User.Claims.Where(claim => claim.Type is "scope" or "scp" or "scopes")
+            .SelectMany(claim => claim.Value.Split([' ', ',', ';'], StringSplitOptions.RemoveEmptyEntries))
+            .Contains("integrations.thirdparty.manage", StringComparer.OrdinalIgnoreCase))
+        return Results.Forbid();
+    // Reflect the deployed route table, including MapGroup routes, without Swagger.
+    var sources = ((Microsoft.AspNetCore.Routing.IEndpointRouteBuilder)app).DataSources;
+    var routes = sources.SelectMany(source => source.Endpoints)
+        .OfType<Microsoft.AspNetCore.Routing.RouteEndpoint>()
+        .SelectMany(endpoint => (endpoint.Metadata.GetMetadata<Microsoft.AspNetCore.Routing.IHttpMethodMetadata>()?.HttpMethods
+                ?? Array.Empty<string>())
+            .Where(verb => verb is "GET" or "POST" or "PUT" or "PATCH" or "DELETE")
+            .Select(verb => new { method = verb, path = "/" + endpoint.RoutePattern.RawText?.TrimStart('/') }))
+        .Where(route => route.path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
+            && !route.path.StartsWith("/api/internal/", StringComparison.OrdinalIgnoreCase)
+            && !route.path.Contains("/health", StringComparison.OrdinalIgnoreCase)
+            && !route.path.Contains("/login", StringComparison.OrdinalIgnoreCase)
+            && !route.path.Contains("/refresh", StringComparison.OrdinalIgnoreCase)
+            && !route.path.Contains("/password", StringComparison.OrdinalIgnoreCase)
+            && !route.path.Contains("/impersonation", StringComparison.OrdinalIgnoreCase))
+        .Distinct().OrderBy(route => route.path).ThenBy(route => route.method)
+        .Take(1500).ToArray();
+    return Results.Ok(routes);
+}).RequireAuthorization();
+
 app.Run();
