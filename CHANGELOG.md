@@ -1,3 +1,9 @@
+## [1.22.1] - 2026-11-16 (Solicitud externa con actor técnico autorizado)
+
+- PATCH DH-20261116-API-PRICING-IDENTITY-167: valida JWT técnico exclusivo de API Manager en `POST /api/pricing/rate-requests/` y restringe el actor y el vendedor a la identidad y contrato firmados.
+- Para ejecutivo institucional Castro Fallas, se conserva actor de servicio; para ejecutivo real, se exige vendedor activo en Auth y se permite únicamente la delegación fijada desde el contrato (sin omitir validación en sesiones ordinarias).
+- Impide utilizar el mismo JWT para otras rutas de Pricing. Conserva idempotencia, notificaciones outbox y controles actuales de usuarios reales.
+
 ## [1.22.0] - 2026-11-16 (Inventario protegido para API Manager)
 
 - MINOR DH-20261116-API-ROUTES-DEFAULTS-165: publica GET /api/internal/third-party-route-catalog con métodos y rutas runtime, accesible solo con JWT y scope integrations.thirdparty.manage; no necesita Swagger de desarrollo.
