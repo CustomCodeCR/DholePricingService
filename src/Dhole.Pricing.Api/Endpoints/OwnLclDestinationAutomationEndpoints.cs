@@ -24,14 +24,14 @@ public static class OwnLclDestinationAutomationEndpoints
             .RequireAuthorization();
 
         group.MapGet("/destination-preview", PreviewAsync)
-            .RequireScope(PricingConstants.Scopes.RateView);
+            .RequireAnyScope(PricingConstants.Scopes.OwnLclConsolidationView, PricingConstants.Scopes.RateView);
         group.MapPost("/consolidations", CreateAsync)
             .RequireIdempotency()
             .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPut("/consolidations/{id:guid}", UpdateAsync)
-            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
+            .RequireScope(PricingConstants.Scopes.OwnLclConsolidationUpdate);
         group.MapGet("/consolidations/{id:guid}", GetAutomationAsync)
-            .RequireScope(PricingConstants.Scopes.RateView);
+            .RequireAnyScope(PricingConstants.Scopes.OwnLclConsolidationView, PricingConstants.Scopes.RateView);
 
         return app;
     }
