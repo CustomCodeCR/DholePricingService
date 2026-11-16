@@ -33,6 +33,8 @@ internal static class PricingScopeNames
 
     // Own LCL consolidations
     public const string OwnLclConsolidationCreate = "pricing.own-lcl-consolidation.create";
+    public const string OwnLclConsolidationUpdate = "pricing.own-lcl-consolidation.update";
+    public const string OwnLclConsolidationView = "pricing.own-lcl-consolidation.view";
 
     // Seller rate requests
     public const string RateRequestCreate = "pricing.rate-request.create";
