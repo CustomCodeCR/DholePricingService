@@ -116,7 +116,7 @@ public sealed class RateFreightQuantityTests
     public void LclRecolecta_RemainsFlatByShipment()
     {
         var rate = CreateRate(containerQuantity: 1);
-        rate.ConfigureShipment(ShipmentMode.Lcl, 0, 0, 0m, 0m, 500m, null, null);
+        rate.ConfigureShipment(ShipmentMode.Lcl, 1, 0, 10m, 0.2m, 500m, null, null);
         var detail = rate.AddRateDetail(
             rate.Id, null, "Recolecta", CostDetailType.OriginCharge, CostType.Variable,
             ChargeBasis.PerContainer, rate.CurrencyId, rate.CurrencyName, rate.CurrencyCode,
