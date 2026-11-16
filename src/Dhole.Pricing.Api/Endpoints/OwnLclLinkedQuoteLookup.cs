@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Persistence.DbContexts;
@@ -48,8 +49,34 @@ internal static class OwnLclLinkedQuoteLookup
                 string.IsNullOrWhiteSpace(rate.QuoNumber) ? rate.RateCode : rate.QuoNumber,
                 rate.ClientName,
                 rate.Status.ToString(),
-                rate.CreatedAtUtc))
+                rate.CreatedAtUtc,
+                Math.Max(0m, rate.TotalVolumeCbm),
+                ResolveBillableCbm(rate)))
             .ToArray();
+    }
+
+    // The physical CBM can be fractional. The billable CBM follows the same
+    // freight-quantity-first policy used by own-LCL capacity allocation.
+    // Miami keeps its actual CFT-derived volume and has no artificial 1-CBM floor.
+    internal static decimal ResolveBillableCbm(RateHeader rate)
+    {
+        var freightQuantity = rate.RateDetails
+            .Where(detail => detail.CostDetailType == CostDetailType.Freight
+                && detail.ChargeBasis is ChargeBasis.PerCbm or ChargeBasis.PerChargeableCbm)
+            .Select(detail => detail.Quantity)
+            .DefaultIfEmpty(0m)
+            .Max();
+
+        var cbm = freightQuantity > 0m
+            ? freightQuantity
+            : Math.Max(0m, rate.ChargeableQuantity);
+        if (cbm <= 0m) return 0m;
+
+        var isMiami = string.Equals(rate.PolCode?.Trim(), "MIA", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(rate.PolCode?.Trim(), "USMIA", StringComparison.OrdinalIgnoreCase)
+            || (rate.PolName?.Contains("Miami", StringComparison.OrdinalIgnoreCase) ?? false);
+
+        return isMiami ? cbm : Math.Max(1m, cbm);
     }
 
     internal static bool IsLinkedTo(RateHeader rate, Guid consolidationId, int consolidationNumber)
@@ -81,5 +108,7 @@ public sealed record OwnLclLinkedQuoteDto(
     string QuoNumber,
     string? ClientName,
     string Status,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    decimal PhysicalCbm,
+    decimal BillableCbm);
 
