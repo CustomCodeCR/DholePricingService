@@ -1,3 +1,8 @@
+## [1.22.0] - 2026-11-16 (Inventario HTTP protegido en producción)
+
+- MINOR DH-20261116-API-ROUTES-DEFAULTS-165: porta el catálogo runtime desde develop a master, protegido por JWT y integrations.thirdparty.manage, sin exposición de operaciones internas ni cambio de permisos REST.
+- Se alinea con Gateway 1.10.0 y el manifiesto Dhole 1.63.0.
+
 ## [1.21.0] - 2026-11-16 (Consolidados LCL propios: permisos independientes)
 
 - MINOR DH-20261116-OWN-LCL-SCOPES-163: crear requiere pricing.own-lcl-consolidation.create; editar, renombrar y actualizar matriz, costos, líneas y escenarios requiere pricing.own-lcl-consolidation.update.
