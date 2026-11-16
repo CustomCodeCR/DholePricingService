@@ -221,6 +221,7 @@ public static class ImportShipmentModeClassifier
         || normalized.StartsWith("airconsolidated", StringComparison.Ordinal)
         || normalized.StartsWith("airbacktoback", StringComparison.Ordinal)
         || normalized.StartsWith("airlcl", StringComparison.Ordinal)
+        || normalized.StartsWith("lclair", StringComparison.Ordinal)
         || normalized.StartsWith("aereoconsolidado", StringComparison.Ordinal);
 
     private static bool IsFclEquipment(string normalized)
