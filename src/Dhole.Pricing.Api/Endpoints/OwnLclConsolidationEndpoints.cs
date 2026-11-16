@@ -35,6 +35,7 @@ public static class OwnLclConsolidationEndpoints
 
         group.MapGet("/", BrowseAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapGet("/{id:guid}", GetAsync).RequireScope(PricingConstants.Scopes.RateView);
+        group.MapGet("/{id:guid}/quotes", GetLinkedQuotesAsync).RequireScope(PricingConstants.Scopes.RateView);
         group.MapPatch("/{id:guid}/name", RenameAsync)
             .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPost("/", CreateAsync).RequireIdempotency().RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
@@ -94,6 +95,18 @@ public static class OwnLclConsolidationEndpoints
             return Results.NotFound();
 
         return Results.Ok(await WithCapacityAsync(row, rateHeaders, ct));
+    }
+
+    // Quote linkage is read-only and independent of LCL capacity allocation.
+    private static async Task<IResult> GetLinkedQuotesAsync(
+        Guid id, ServiceDbContext db, CancellationToken ct)
+    {
+        var consolidation = await LoadAsync(id, db, ct, includeInactive: true);
+        if (consolidation is null)
+            return Results.NotFound();
+
+        return Results.Ok(await OwnLclLinkedQuoteLookup.LoadAsync(
+            db, consolidation.Id, consolidation.ConsolidationNumber, ct));
     }
 
     private static async Task<IResult> RenameAsync(
