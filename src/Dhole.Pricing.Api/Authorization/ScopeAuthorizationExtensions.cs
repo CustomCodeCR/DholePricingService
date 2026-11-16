@@ -24,7 +24,7 @@ internal static class ScopeAuthorizationExtensions
                 .GetRequiredService<Microsoft.AspNetCore.Authorization.IAuthorizationService>();
             foreach (var policy in policies)
             {
-                if ((await authorization.AuthorizeAsync(context.HttpContext.User, policy)).Succeeded)
+                if ((await authorization.AuthorizeAsync(context.HttpContext.User, resource: null, policyName: policy)).Succeeded)
                     return await next(context);
             }
             return Results.Forbid();
