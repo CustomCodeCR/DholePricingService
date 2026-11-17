@@ -2,6 +2,8 @@ using System.Net;
 using CustomCodeFramework.Cqrs.Dispatching;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
+using Dhole.Pricing.Api.Services;
+using Dhole.Pricing.Contracts.Rates.Response;
 using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Application.Features.Rates.GenerateRateDocument;
 using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
@@ -33,6 +35,7 @@ public static class RateRequestCompletionEndpoints
         ServiceDbContext db,
         ICommandDispatcher dispatcher,
         IIntegrationEventOutboxWriter outbox,
+        GroupCommercialQuotePdfService groupQuotePdf,
         HttpContext httpContext,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken
@@ -41,7 +44,7 @@ public static class RateRequestCompletionEndpoints
         try
         {
             return await CompleteCoreAsync(requestId, request, db, dispatcher, outbox,
-                httpContext, loggerFactory, requireLease: true, cancellationToken);
+                groupQuotePdf, httpContext, loggerFactory, requireLease: true, cancellationToken);
         }
         catch (Exception error) when (error is not OperationCanceledException)
         {
@@ -69,6 +72,7 @@ public static class RateRequestCompletionEndpoints
         ServiceDbContext db,
         ICommandDispatcher dispatcher,
         IIntegrationEventOutboxWriter outbox,
+        GroupCommercialQuotePdfService groupQuotePdf,
         HttpContext httpContext,
         ILoggerFactory loggerFactory,
         CancellationToken cancellationToken)
@@ -92,7 +96,7 @@ public static class RateRequestCompletionEndpoints
             {
                 var result = await CompleteCoreAsync(
                     requestId, new CompleteRateRequest(rateId), db, dispatcher, outbox,
-                    httpContext, loggerFactory, requireLease: false, cancellationToken);
+                    groupQuotePdf, httpContext, loggerFactory, requireLease: false, cancellationToken);
                 if (result is IStatusCodeHttpResult status && status.StatusCode >= 400)
                 {
                     loggerFactory.CreateLogger("RateRequestCompletion").LogWarning(
@@ -116,6 +120,7 @@ public static class RateRequestCompletionEndpoints
         ServiceDbContext db,
         ICommandDispatcher dispatcher,
         IIntegrationEventOutboxWriter outbox,
+        GroupCommercialQuotePdfService groupQuotePdf,
         HttpContext httpContext,
         ILoggerFactory loggerFactory,
         bool requireLease,
@@ -264,13 +269,29 @@ public static class RateRequestCompletionEndpoints
         // operations. Never turn those failures into a misleading "save failed" 500.
         try
         {
-            var documentResult = await dispatcher.DispatchAsync(
-                new GenerateRateDocumentCommand(request.RateId, null, "pdf"),
-                cancellationToken
-            );
-    
-            if (!documentResult.IsSuccess)
-                return Results.Accepted(value: new { status = "CompletedDeliveryRetryPending", rateId = request.RateId });
+            GroupCommercialQuoteResult? groupQuote;
+            GeneratedRateDocumentDto document;
+            try
+            {
+                groupQuote = await groupQuotePdf.TryGenerateAsync(request.RateId, cancellationToken);
+            }
+            catch (GroupCommercialQuoteApprovalException)
+            {
+                return Results.Accepted(value: new { status = "CompletedAwaitingMarginApproval", rateId = request.RateId });
+            }
+            if (groupQuote?.Document is { } groupedDocument)
+            {
+                document = groupedDocument;
+            }
+            else
+            {
+                var documentResult = await dispatcher.DispatchAsync(
+                    new GenerateRateDocumentCommand(groupQuote?.EffectiveRateId ?? request.RateId, null, "pdf"),
+                    cancellationToken);
+                if (!documentResult.IsSuccess)
+                    return Results.Accepted(value: new { status = "CompletedDeliveryRetryPending", rateId = request.RateId });
+                document = documentResult.Value;
+            }
     
             if (rate.Status != RateStatus.Sent)
             {
@@ -290,12 +311,13 @@ public static class RateRequestCompletionEndpoints
                     return Results.Accepted(value: new { status = "CompletedDeliveryRetryPending", rateId = request.RateId });
             }
     
-            var document = documentResult.Value;
             var sellerName = WebUtility.HtmlEncode(entity.SellerName ?? entity.ExecutiveName ?? "Vendedor");
             var clientName = WebUtility.HtmlEncode(entity.ClientName ?? "Cliente");
             var routeText = BuildRoute(entity);
             var route = WebUtility.HtmlEncode(routeText);
-            var quoteNumberText = rate.QuoNumber ?? rate.RateCode;
+            var quoteNumberText = groupQuote?.Document is not null
+                ? groupQuote.ParentQuoteNumber
+                : rate.QuoNumber ?? rate.RateCode;
             var quoteNumber = WebUtility.HtmlEncode(quoteNumberText);
             var sellerEmail = entity.SellerEmail.Trim();
             var sellerDisplayName = entity.SellerName ?? entity.ExecutiveName;
@@ -319,7 +341,7 @@ public static class RateRequestCompletionEndpoints
                     channel = "Email",
                     entityType = "RateRequest",
                     entityId = requestId.ToString(),
-                    subject = $"{(isModification ? "Tarifa Actualizada" : "Tarifa Lista")} - {(string.IsNullOrWhiteSpace(rate.RateName) ? quoteNumberText : rate.RateName.Trim())}",
+                    subject = $"{(isModification ? "Tarifa Actualizada" : "Tarifa Lista")} - {(groupQuote?.Document is not null || string.IsNullOrWhiteSpace(rate.RateName) ? quoteNumberText : rate.RateName.Trim())}",
                     body = emailBody,
                     payload = new
                     {

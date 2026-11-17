@@ -726,104 +726,31 @@ public static class RateEndpoints
         Guid rateId,
         GenerateRateDocumentRequest request,
         ICommandDispatcher dispatcher,
-        ServiceDbContext db,
-        IRateHeaderRepository rateHeaders,
-        IRateCommentStore rateComments,
-        IRateReportDataFactory dataFactory,
-        IPricingReportsClient reportsClient,
+        GroupCommercialQuotePdfService groupQuotePdf,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
-        // Before a decision the PDF shows the group; after selection only the individual quote is valid.
-        // Look up siblings by the immutable group table, never the currently active POE.
         if (string.IsNullOrWhiteSpace(request.Format) ||
             string.Equals(request.Format, "pdf", StringComparison.OrdinalIgnoreCase))
         {
-            var groupedIds = new List<Guid>();
-            Guid? finalizedRateId = null;
-            var parentQuote = string.Empty;
-            var connection = db.Database.GetDbConnection();
-            var shouldClose = connection.State != ConnectionState.Open;
-            if (shouldClose) await connection.OpenAsync(cancellationToken);
             try
             {
-                await using var lookup = connection.CreateCommand();
-                lookup.CommandText = """
-                    SELECT a.rate_id, a.base_quote, a.status FROM pricing.rate_quote_alternatives a
-                    WHERE a.parent_rate_id = (
-                        SELECT parent_rate_id FROM pricing.rate_quote_alternatives
-                        WHERE rate_id = @rate_id LIMIT 1
-                    ) ORDER BY CASE WHEN a.status = 'Selected' THEN 0 ELSE 1 END,
-                               length(a.suffix), a.suffix
-                    """;
-                var parameter = lookup.CreateParameter();
-                parameter.ParameterName = "@rate_id";
-                parameter.Value = rateId;
-                lookup.Parameters.Add(parameter);
-                await using var reader = await lookup.ExecuteReaderAsync(cancellationToken);
-                while (await reader.ReadAsync(cancellationToken))
-                {
-                    groupedIds.Add(reader.GetGuid(0));
-                    parentQuote = reader.GetString(1);
-                    if (reader.GetString(2) == "Selected") finalizedRateId = reader.GetGuid(0);
-                }
-            }
-            finally
-            {
-                if (shouldClose) await connection.CloseAsync();
-            }
-
-            if (finalizedRateId.HasValue)
-            {
-                // Any historic sub-QUO URL generates the one definitive quote.
-                rateId = finalizedRateId.Value;
-            }
-            else if (groupedIds.Count > 1)
-            {
-                var options = new List<PricingQuoteGroupDocumentItem>(groupedIds.Count);
-                foreach (var childId in groupedIds)
-                {
-                    var rate = await rateHeaders.GetByIdWithDetailsAsync(childId, cancellationToken);
-                    if (rate is null || rate.IsDeleted)
-                        return Results.NotFound(new { code = "Pricing.QuoteAlternativeMissing" });
-                    if (rate.RequiredApproval || rate.Status is not (
-                        RateStatus.ApprovedByManagement or RateStatus.Open or RateStatus.Sent
-                        or RateStatus.AcceptedByClient or RateStatus.RejectedByClient
-                        or RateStatus.Closed or RateStatus.Expired))
-                        return Results.Conflict(new { code = "Pricing.QuoteGroupRequiresApproval" });
-
-                    var comments = await rateComments.GetAsync(childId, cancellationToken);
-                    var json = JsonNode.Parse(dataFactory.CreateDataJson(rate)) as JsonObject;
-                    if (json?["rate"] is JsonObject rateData)
-                        rateData["comments"] = comments?.Trim() ?? string.Empty;
-
-                    var freight = rate.RateDetails.Where(detail => detail.CostDetailType == CostDetailType.Freight).ToArray();
-                    var oceanFreight = freight.Sum(detail => detail.SaleAmount * detail.Quantity);
-                    var freightCurrency = QuoteCurrencyValue.Resolve(freight.FirstOrDefault()?.CurrencyName, rate.CurrencyName);
-                    var route = rate.PolName + " → " + rate.PoeName
-                        + (string.IsNullOrWhiteSpace(rate.PodName) ? "" : " → " + rate.PodName);
-                    if (!string.IsNullOrWhiteSpace(rate.CarrierRoute))
-                        route += " · Ruta naviera: " + rate.CarrierRoute.Trim();
-                    options.Add(new PricingQuoteGroupDocumentItem(
-                        rate.QuoNumber ?? rate.RateCode,
-                        route,
-                        rate.CarrierName,
-                        oceanFreight.ToString("N2", CultureInfo.GetCultureInfo("en-US")),
-                        freightCurrency,
-                        json?.ToJsonString() ?? dataFactory.CreateDataJson(rate)));
-                }
-                try
-                {
-                    var document = await reportsClient.GenerateGroupedPricingQuoteAsync(
-                        parentQuote, options, cancellationToken);
+                var group = await groupQuotePdf.TryGenerateAsync(rateId, cancellationToken);
+                if (group?.Document is { } document)
                     return Results.File(document.Content, document.ContentType, document.FileName);
-                }
-                catch (HttpRequestException)
-                {
-                    return Results.Problem(
-                        title: "No se pudo generar el PDF completo de multiQUO.",
-                        statusCode: StatusCodes.Status502BadGateway);
-                }
+                if (group is not null)
+                    rateId = group.EffectiveRateId;
+            }
+            catch (GroupCommercialQuoteApprovalException error)
+            {
+                return Results.Conflict(new {
+                    code = "Pricing.QuoteGroupRequiresApproval", message = error.Message });
+            }
+            catch (HttpRequestException)
+            {
+                return Results.Problem(
+                    title: "No se pudo generar el PDF completo de multiQUO.",
+                    statusCode: StatusCodes.Status502BadGateway);
             }
         }
 
@@ -1972,6 +1899,7 @@ public static class RateEndpoints
         ServiceDbContext db,
         IIntegrationEventOutboxWriter outbox,
         ILoggerFactory loggerFactory,
+        GroupCommercialQuotePdfService groupQuotePdf,
         HttpContext httpContext,
         CancellationToken cancellationToken
     )
@@ -2036,7 +1964,7 @@ public static class RateEndpoints
             await lowMarginApprovedNotificationService.QueueAsync(
                 anchorId, approvedBy, cancellationToken);
             await RateRequestCompletionEndpoints.TryCompleteApprovedRateAsync(
-                anchorId, db, dispatcher, outbox, httpContext, loggerFactory, cancellationToken);
+                anchorId, db, dispatcher, outbox, groupQuotePdf, httpContext, loggerFactory, cancellationToken);
             return Results.NoContent();
         }
 
@@ -2057,7 +1985,7 @@ public static class RateEndpoints
             // Once approved, send the PDF and close the request without needing an
             // operator to reclaim the lease or manually mark the request completed.
             await RateRequestCompletionEndpoints.TryCompleteApprovedRateAsync(
-                rateId, db, dispatcher, outbox, httpContext, loggerFactory, cancellationToken
+                rateId, db, dispatcher, outbox, groupQuotePdf, httpContext, loggerFactory, cancellationToken
             );
         }
 

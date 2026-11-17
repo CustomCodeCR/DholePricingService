@@ -81,13 +81,14 @@ public sealed class SellerRateDeliveryRetryWorker(
         var dispatcher = services.GetRequiredService<ICommandDispatcher>();
         var outbox = services.GetRequiredService<IIntegrationEventOutboxWriter>();
         var loggerFactory = services.GetRequiredService<ILoggerFactory>();
+        var groupQuotePdf = services.GetRequiredService<GroupCommercialQuotePdfService>();
 
         foreach (var rateId in rateIds)
         {
             try
             {
                 await RateRequestCompletionEndpoints.TryCompleteApprovedRateAsync(
-                    rateId, db, dispatcher, outbox, new DefaultHttpContext(),
+                    rateId, db, dispatcher, outbox, groupQuotePdf, new DefaultHttpContext(),
                     loggerFactory, cancellationToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
