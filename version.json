@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.22.4",
-  "ecosystemVersion": "1.70.5",
-  "releaseId": "DH-20261117-MULTIQUO-VISIBLE-GROUP-PDF-195",
+  "version": "1.22.5",
+  "ecosystemVersion": "1.70.6",
+  "releaseId": "DH-20261117-OWN-LCL-INSURANCE-196",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261117-MULTIQUO-VISIBLE-GROUP-PDF-195"
+  "businessReleaseId": "DH-20261117-OWN-LCL-INSURANCE-196"
 }

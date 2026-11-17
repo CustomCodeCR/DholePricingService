@@ -45,6 +45,33 @@ public static class RateDetailUpdateInputNormalizer
         return persistedDetailIds.Where(id => !retainedIds.Contains(id)).ToArray();
     }
 
+
+    /// <summary>
+    /// A full own-LCL snapshot that omits saved Insurance or Manejos is likely
+    /// an incomplete wizard hydration. Reject before mutating the quote unless
+    /// the caller explicitly asked to remove those saved detail IDs.
+    /// </summary>
+    public static IReadOnlyCollection<Guid> MissingOwnLclProtectedDetailIds(
+        IReadOnlyCollection<UpsertRateExtraDetailCommandItem> normalizedDetails,
+        IEnumerable<(Guid Id, string Name, Dhole.Pricing.Domain.Costs.Enums.CostDetailType Type, string? Notes)> persisted,
+        IReadOnlySet<Guid> explicitlyRemoved)
+    {
+        var rows = persisted.ToArray();
+        if (!rows.Any(detail => (detail.Notes ?? string.Empty).Contains("LCL PROPIO", StringComparison.OrdinalIgnoreCase)
+            || (detail.Notes ?? string.Empty).Contains("ConsolidadoId:", StringComparison.OrdinalIgnoreCase)
+            || (detail.Notes ?? string.Empty).Contains("Fuente LCL: Propio", StringComparison.OrdinalIgnoreCase)))
+            return Array.Empty<Guid>();
+
+        var retained = normalizedDetails.Where(detail => detail.Id.HasValue)
+            .Select(detail => detail.Id!.Value).ToHashSet();
+        return rows.Where(detail => !retained.Contains(detail.Id)
+                && !explicitlyRemoved.Contains(detail.Id)
+                && (detail.Type == Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Insurance
+                    || (detail.Name ?? string.Empty).Trim().StartsWith("Manejos", StringComparison.OrdinalIgnoreCase)))
+            .Select(detail => detail.Id)
+            .ToArray();
+    }
+
     public static IReadOnlyList<UpsertRateExtraDetailCommandItem> Normalize(
         IReadOnlyCollection<UpsertRateExtraDetailCommandItem> requested,
         IReadOnlyDictionary<Guid, Guid?> persistedCostIds)

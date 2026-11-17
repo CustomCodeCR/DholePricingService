@@ -378,6 +378,20 @@ public sealed class UpdateRateCommandHandler(
             }
         }
 
+        // An incomplete own-LCL wizard edit must not silently erase an already
+        // billed Insurance or Manejos detail. Explicit user removal remains valid.
+        if (command.ReplaceExtraDetails && command.ShipmentMode == ShipmentMode.Lcl)
+        {
+            var missingProtected = RateDetailUpdateInputNormalizer.MissingOwnLclProtectedDetailIds(
+                extraDetails,
+                existingDetails.Values.Select(detail =>
+                    (detail.Id, detail.Name, detail.CostDetailType, detail.Notes)),
+                removedIds);
+            if (missingProtected.Count > 0)
+                return Result.Failure(PricingErrors.RateUpdateValidationFailed(
+                    "El guardado no incluye Seguro de carga o Manejos previamente registrados. Recargue la cotización y compruebe ambos cargos antes de guardar."));
+        }
+
         // A complete edit snapshot is authoritative. Older clients can continue
         // sending partial updates (ReplaceExtraDetails=false), while the wizard
         // deletes saved rows absent from its FINAL normalized payload. This also
