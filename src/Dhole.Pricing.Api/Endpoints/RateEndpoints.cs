@@ -2021,6 +2021,69 @@ public static class RateEndpoints
     )
     {
         var approvedBy = httpContext.GetCurrentUserId();
+
+        // The margin decision belongs to the commercial MultiQUO as a whole.
+        // Keep the customer acceptance/definitive-alternative decision separate:
+        // only margin approval is propagated to all sibling rate headers.
+        var siblingRateIds = await db.Database.SqlQueryRaw<Guid>(
+            """
+            SELECT sibling.rate_id AS "Value"
+            FROM pricing.rate_quote_alternatives sibling
+            WHERE sibling.parent_rate_id = (
+                SELECT member.parent_rate_id FROM pricing.rate_quote_alternatives member
+                WHERE member.rate_id = {0} LIMIT 1
+            )
+            ORDER BY length(sibling.suffix), sibling.suffix
+            """, rateId).ToListAsync(cancellationToken);
+
+        if (siblingRateIds.Count > 1)
+        {
+            var siblings = await db.RateHeaders.AsNoTracking()
+                .Where(rate => siblingRateIds.Contains(rate.Id) && !rate.IsDeleted)
+                .Select(rate => new { rate.Id, rate.Status, rate.RequiredApproval })
+                .ToListAsync(cancellationToken);
+            if (siblings.Count != siblingRateIds.Count
+                || siblings.Any(rate => rate.Status == RateStatus.RejectedByManagement
+                    || (rate.Status == RateStatus.PendingApproval && !rate.RequiredApproval)))
+                return Results.Conflict(new {
+                    code = "Pricing.QuoteGroupInvalidApprovalState",
+                    message = "No es posible aprobar un grupo con alternativas eliminadas, rechazadas o inconsistentes."
+                });
+
+            var pending = siblingRateIds.Where(id => siblings.Any(rate =>
+                rate.Id == id && rate.Status == RateStatus.PendingApproval && rate.RequiredApproval)).ToArray();
+            if (pending.Length == 0)
+                return Results.NoContent(); // Idempotent retry after the group was approved.
+
+            // The audit events, updates and outbox records produced by each CQRS
+            // handler are committed as one PostgreSQL transaction, or all rolled back.
+            var strategy = db.Database.CreateExecutionStrategy();
+            var approvalResult = await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+                foreach (var siblingId in pending)
+                {
+                    var outcome = await dispatcher.DispatchAsync(
+                        new ApproveRateMarginCommand(siblingId, approvedBy), cancellationToken);
+                    if (!outcome.IsSuccess)
+                        return EndpointResults.FromResult(outcome, httpContext);
+                }
+                await transaction.CommitAsync(cancellationToken);
+                return (IResult?)null;
+            });
+            if (approvalResult is not null)
+                return approvalResult;
+
+            // The seller request is linked to the group anchor. Produce one
+            // grouped PDF/notification rather than a separate mail for every POE.
+            var anchorId = siblingRateIds[0];
+            await lowMarginApprovedNotificationService.QueueAsync(
+                anchorId, approvedBy, cancellationToken);
+            await RateRequestCompletionEndpoints.TryCompleteApprovedRateAsync(
+                anchorId, db, dispatcher, outbox, httpContext, loggerFactory, cancellationToken);
+            return Results.NoContent();
+        }
+
         var result = await dispatcher.DispatchAsync(
             new ApproveRateMarginCommand(rateId, approvedBy),
             cancellationToken
