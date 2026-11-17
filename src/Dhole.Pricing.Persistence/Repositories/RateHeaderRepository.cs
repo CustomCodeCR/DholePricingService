@@ -675,6 +675,35 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                     && x.ClientName.ToLower().Contains("tarifario"))
             );
 
+
+        // Match the commercial MultiQUO grouping used by the tariffs list:
+        // one group representative (selected or original), never sibling
+        // technical RateCodes or orphan duplicates of a saved sub-QUO.
+        var nonRepresentativeIds = dbContext.Database.SqlQuery<Guid>($"""
+            SELECT a.rate_id AS "Value"
+            FROM pricing.rate_quote_alternatives a
+            WHERE a.rate_id <> COALESCE(
+                (SELECT selected.rate_id
+                 FROM pricing.rate_quote_alternatives selected
+                 WHERE selected.parent_rate_id = a.parent_rate_id
+                   AND selected.status = 'Selected'
+                 LIMIT 1),
+                a.parent_rate_id)
+            """);
+        var duplicateAlternativeIds = dbContext.Database.SqlQuery<Guid>($"""
+            SELECT orphan.id AS "Value"
+            FROM pricing."RateHeaders" orphan
+            JOIN pricing.rate_quote_alternatives member
+              ON member.alternative_quote = orphan.quo_number
+             AND member.rate_id <> orphan.id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM pricing.rate_quote_alternatives owner
+                WHERE owner.rate_id = orphan.id
+            )
+            """);
+        query = query.Where(rate => !nonRepresentativeIds.Contains(rate.Id)
+            && !duplicateAlternativeIds.Contains(rate.Id));
+
         if (createdFrom.HasValue)
         {
             var value = AsUtcDate(createdFrom.Value);
@@ -832,6 +861,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             {
                 x.Id,
                 x.RateCode,
+                x.QuoNumber,
                 x.RateName,
                 x.Status,
                 x.ClientName,
@@ -853,10 +883,33 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             })
             .ToListAsync(cancellationToken);
 
+        var recentRateIds = recentRateRows.Select(rate => rate.Id).ToArray();
+        var commercialGroupByRateId = new Dictionary<Guid, (string Number, int Alternatives)>();
+        if (recentRateIds.Length > 0)
+        {
+            var groupRows = await dbContext.Database.SqlQuery<string>($"""
+                SELECT member.rate_id::text || '|' || MIN(sibling.base_quote) || '|' || COUNT(*)::text AS "Value"
+                FROM pricing.rate_quote_alternatives member
+                JOIN pricing.rate_quote_alternatives sibling
+                  ON sibling.parent_rate_id = member.parent_rate_id
+                WHERE member.rate_id = ANY({recentRateIds})
+                GROUP BY member.rate_id
+                """).ToListAsync(cancellationToken);
+            foreach (var groupRow in groupRows)
+            {
+                var parts = groupRow.Split('|', 3);
+                if (parts.Length == 3 && Guid.TryParse(parts[0], out var id)
+                    && int.TryParse(parts[2], out var count))
+                    commercialGroupByRateId[id] = (parts[1], count);
+            }
+        }
+
         var recentRates = recentRateRows
             .Select(x => new PricingRateDashboardItemDto(
                 x.Id,
-                x.RateCode,
+                commercialGroupByRateId.TryGetValue(x.Id, out var groupNumber)
+                    ? groupNumber.Number
+                    : (x.QuoNumber ?? x.RateCode),
                 x.RateName,
                 x.Status.ToString(),
                 x.ClientName,
@@ -876,6 +929,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             {
                 CreatedByUserId = x.CreatedBy,
                 LastModifiedByUserId = x.UpdatedBy,
+                GroupAlternativeCount = commercialGroupByRateId.TryGetValue(x.Id, out var grouped)
+                    && grouped.Alternatives > 1 ? grouped.Alternatives : null,
             })
             .ToList();
 
