@@ -55,6 +55,7 @@ builder.Services.AddHttpClient("DholeCrmQuoteDelivery", client =>
 }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<CrmQuoteDeliveryRecipientResolver>();
 builder.Services.AddScoped<CrmTariffClientIdentityResolver>();
+builder.Services.AddScoped<GroupCommercialQuotePdfService>();
 builder.Services.AddScoped<SentRateEmailNotificationService>();
 builder.Services.AddHostedService<SellerRateExpiryReminderWorker>();
 builder.Services.AddHostedService<SellerRateDeliveryRetryWorker>();

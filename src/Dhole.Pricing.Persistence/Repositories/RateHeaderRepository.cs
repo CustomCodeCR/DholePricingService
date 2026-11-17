@@ -333,20 +333,9 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
 
         if (groupQuotes)
         {
-            // Choose the selected commercial option when present, otherwise the
-            // original group anchor. Suppress other sub-QUOs before COUNT/SKIP/TAKE.
-            var nonRepresentativeIds = dbContext.Database.SqlQuery<Guid>($"""
-                SELECT a.rate_id AS "Value"
-                FROM pricing.rate_quote_alternatives a
-                WHERE a.rate_id <> COALESCE(
-                    (SELECT selected.rate_id
-                     FROM pricing.rate_quote_alternatives selected
-                     WHERE selected.parent_rate_id = a.parent_rate_id
-                       AND selected.status = 'Selected'
-                     LIMIT 1),
-                    a.parent_rate_id)
-                """);
-            query = query.Where(rate => !nonRepresentativeIds.Contains(rate.Id));
+            // A MultiQUO has one visible row per genuine commercial option:
+            // 672-A and 672-B, never a collapsed 672 plus technical 673.
+            // Keep the immutable internal RateCode as the backend identifier.
 
             // Older single-rate saves can leave an orphan RateHeader with an
             // internal consecutive RateCode (e.g. 673) but a commercial number
@@ -560,14 +549,14 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             // A selected sub-QUO can replace the original anchor. Resolve the
             // commercial group number and alternative count for either identity.
             var groupRows = await dbContext.Database.SqlQuery<string>($"""
-                SELECT COALESCE(
-                    MAX(CASE WHEN a.status = 'Selected' THEN a.rate_id::text END),
-                    a.parent_rate_id::text
-                ) || '|' || MIN(a.base_quote) || '|' || COUNT(*)::text AS "Value"
+                SELECT a.rate_id::text || '|' || a.base_quote || '|' || counts.total::text AS "Value"
                 FROM pricing.rate_quote_alternatives a
-                WHERE a.parent_rate_id = ANY({visibleRateIds})
-                   OR a.rate_id = ANY({visibleRateIds})
-                GROUP BY a.parent_rate_id
+                JOIN (
+                    SELECT parent_rate_id, COUNT(*) AS total
+                    FROM pricing.rate_quote_alternatives
+                    GROUP BY parent_rate_id
+                ) counts ON counts.parent_rate_id = a.parent_rate_id
+                WHERE a.rate_id = ANY({visibleRateIds})
                 """).ToListAsync(cancellationToken);
 
             var groupByRepresentative = new Dictionary<Guid, (string Number, int Count)>();
@@ -713,6 +702,21 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             query = query.Where(x => x.ValidFrom < value);
         }
 
+        // Do not show a legacy orphan twice if its commercial number already
+        // belongs to a real MultiQUO option; preserve the historical row.
+        var duplicateAlternativeIds = dbContext.Database.SqlQuery<Guid>($"""
+            SELECT orphan.id AS "Value"
+            FROM pricing."RateHeaders" orphan
+            JOIN pricing.rate_quote_alternatives member
+              ON member.alternative_quote = orphan.quo_number
+             AND member.rate_id <> orphan.id
+            WHERE NOT EXISTS (
+                SELECT 1 FROM pricing.rate_quote_alternatives owner
+                WHERE owner.rate_id = orphan.id
+            )
+            """);
+        query = query.Where(rate => !duplicateAlternativeIds.Contains(rate.Id));
+
         var totalRates = await query.CountAsync(cancellationToken);
 
         var statusCounts = await query
@@ -832,6 +836,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             {
                 x.Id,
                 x.RateCode,
+                x.QuoNumber,
                 x.RateName,
                 x.Status,
                 x.ClientName,
@@ -874,6 +879,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.ValidTo
             )
             {
+                QuoNumber = x.QuoNumber,
                 CreatedByUserId = x.CreatedBy,
                 LastModifiedByUserId = x.UpdatedBy,
             })

@@ -68,6 +68,7 @@ public sealed record PricingRateDashboardItemDto(
     DateTime ValidTo
 )
 {
+    public string? QuoNumber { get; init; }
     public string? CreatedByUserId { get; init; }
     public string? CreatedByUserName { get; init; }
     public string? CreatedByDisplayName { get; init; }
