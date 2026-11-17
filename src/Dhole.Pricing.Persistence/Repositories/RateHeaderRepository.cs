@@ -347,6 +347,24 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                     a.parent_rate_id)
                 """);
             query = query.Where(rate => !nonRepresentativeIds.Contains(rate.Id));
+
+            // Older single-rate saves can leave an orphan RateHeader with an
+            // internal consecutive RateCode (e.g. 673) but a commercial number
+            // already owned by a grouped alternative (e.g. 672-B). Preserve
+            // the row for audit/recovery while excluding the duplicate from
+            // the commercial group list, counts, search and dashboard.
+            var duplicateAlternativeIds = dbContext.Database.SqlQuery<Guid>($"""
+                SELECT orphan.id AS "Value"
+                FROM pricing."RateHeaders" orphan
+                INNER JOIN pricing.rate_quote_alternatives member
+                    ON member.alternative_quote = orphan.quo_number
+                    AND member.rate_id <> orphan.id
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM pricing.rate_quote_alternatives owner
+                    WHERE owner.rate_id = orphan.id
+                )
+                """);
+            query = query.Where(rate => !duplicateAlternativeIds.Contains(rate.Id));
         }
 
         var total = await query.CountAsync(cancellationToken);
