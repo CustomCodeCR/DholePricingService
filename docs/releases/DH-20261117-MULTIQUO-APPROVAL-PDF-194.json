@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.70.4",
+  "releaseId": "DH-20261117-MULTIQUO-APPROVAL-PDF-194",
+  "releaseType": "PATCH",
+  "createdAt": "2026-11-17",
+  "scope": "MultiQUO FCL commercial suffix numbers, atomic batch margin approval, single grouped PDF and duplicate orphan rate-list suppression",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "from": "1.22.2",
+      "to": "1.22.3",
+      "developPr": null,
+      "masterPr": null
+    },
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "component": "DholeWeb",
+      "from": "1.67.2",
+      "to": "1.67.3",
+      "developPr": null,
+      "masterPr": null
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "component": "DholeSystem",
+      "from": "1.70.3",
+      "to": "1.70.4",
+      "developPr": null,
+      "masterPr": null
+    }
+  ],
+  "releaseBranch": "fix/DH-20261117-MULTIQUO-APPROVAL-PDF-194",
+  "validation": {
+    "build": "pending",
+    "tests": "pending",
+    "versionGate": "pending",
+    "staging": "pending",
+    "groupMarginApproval": "pending",
+    "pdf": "pending",
+    "productionDeploy": "not-authorized"
+  },
+  "productionDeploymentAuthorized": false,
+  "rollback": "Revert coordinated Pricing, Web, System release. No destructive data migration; preserve historical rate records."
+}
