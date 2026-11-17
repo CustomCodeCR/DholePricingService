@@ -183,6 +183,22 @@ public sealed class RateDetailUpdateInputNormalizerTests
     }
 
     [TestMethod]
+    public void OwnLclLegacyDestinationChargeNamedSeguroIsProtected()
+    {
+        var freightId = Guid.NewGuid();
+        var oldInsuranceId = Guid.NewGuid();
+        var persisted = new (Guid Id, string Name, CostDetailType Type, string? Notes)[]
+        {
+            (freightId, "Flete Internacional", CostDetailType.Freight, "LCL PROPIO · Consolidado: #55"),
+            (oldInsuranceId, "Seguro de carga", CostDetailType.DestinationCharge, ""),
+        };
+        var submitted = new[] { Hbl(freightId, null) with { Name = "Flete Internacional", CostDetailType = CostDetailType.Freight } };
+        var missing = RateDetailUpdateInputNormalizer.MissingOwnLclProtectedDetailIds(
+            submitted, persisted, new HashSet<Guid>());
+        CollectionAssert.AreEqual(new[] { oldInsuranceId }, missing.ToArray());
+    }
+
+    [TestMethod]
     public void OrdinaryNonOwnLclDoesNotBlockItsExistingUpdateSemantics()
     {
         var id = Guid.NewGuid();
