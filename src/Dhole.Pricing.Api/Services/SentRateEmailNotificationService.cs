@@ -18,6 +18,7 @@ namespace Dhole.Pricing.Api.Services;
 /// </summary>
 public sealed class SentRateEmailNotificationService(
     ICommandDispatcher dispatcher,
+    GroupCommercialQuotePdfService groupQuotePdf,
     IIntegrationEventOutboxWriter outbox,
     ServiceDbContext db,
     IPricingConfigCatalogClient configCatalog,
@@ -145,18 +146,41 @@ public sealed class SentRateEmailNotificationService(
                 .Where(email => !toRecipients.Contains(email, StringComparer.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
-        var documentResult = await dispatcher.DispatchAsync(
-            new GenerateRateDocumentCommand(rate.Id, null, "pdf"),
-            cancellationToken);
-
-        if (!documentResult.IsSuccess)
+        GroupCommercialQuoteResult? groupQuote = null;
+        Dhole.Pricing.Contracts.Rates.Response.GeneratedRateDocumentDto document;
+        try
         {
-            logger.LogWarning("No se pudo generar el PDF para enviar la tarifa {RateId}.", rate.Id);
-            return "No se pudo generar el PDF de la cotización. No se cambió el estado.";
+            groupQuote = await groupQuotePdf.TryGenerateAsync(rate.Id, cancellationToken);
+            if (groupQuote?.Document is { } groupedDocument)
+            {
+                document = groupedDocument;
+            }
+            else
+            {
+                var result = await dispatcher.DispatchAsync(
+                    new GenerateRateDocumentCommand(groupQuote?.EffectiveRateId ?? rate.Id, null, "pdf"),
+                    cancellationToken);
+                if (!result.IsSuccess)
+                {
+                    logger.LogWarning("No se pudo generar el PDF para enviar la tarifa {RateId}.", rate.Id);
+                    return "No se pudo generar el PDF de la cotización. No se cambió el estado.";
+                }
+                document = result.Value;
+            }
+        }
+        catch (GroupCommercialQuoteApprovalException)
+        {
+            return "Apruebe todas las alternativas de la MultiQUO antes de enviar el PDF conjunto.";
+        }
+        catch (HttpRequestException error)
+        {
+            logger.LogWarning(error, "Reports no pudo preparar el PDF conjunto para {RateId}", rate.Id);
+            return "No se pudo generar el PDF conjunto. No se cambió el estado.";
         }
 
-        var document = documentResult.Value;
-        var quo = FirstNonEmpty(rate.QuoNumber, rate.RateCode) ?? rate.Id.ToString();
+        var quo = groupQuote?.Document is not null
+            ? groupQuote.ParentQuoteNumber
+            : FirstNonEmpty(rate.QuoNumber, rate.RateCode) ?? rate.Id.ToString();
         var client = FirstNonEmpty(rate.ClientName, request?.ClientName) ?? "Cliente";
         var route = string.Join(" → ", new[] { rate.PolName, rate.PoeName, rate.PodName }
             .Where(x => !string.IsNullOrWhiteSpace(x)));
@@ -245,7 +269,10 @@ public sealed class SentRateEmailNotificationService(
                         : executiveName,
                 }).ToArray(),
             },
-            correlationId: resendCorrelationId ?? $"pricing-rate-sent:{rate.Id:N}:rev:{rate.RevisionNumber}",
+            correlationId: resendCorrelationId
+                ?? (groupQuote?.Document is not null
+                    ? $"pricing-rate-sent:group:{groupQuote.ParentRateId:N}:rev:{rate.RevisionNumber}"
+                    : $"pricing-rate-sent:{rate.Id:N}:rev:{rate.RevisionNumber}"),
             cancellationToken: cancellationToken);
 
         logger.LogInformation(

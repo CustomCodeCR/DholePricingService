@@ -1,3 +1,9 @@
+## [1.22.4] - 2026-11-17 (MultiQUO: 672-A/B reales y PDF único en correos)
+
+- PATCH DH-20261117-MULTIQUO-VISIBLE-GROUP-PDF-195: la consulta de tarifas muestra cada opción FCL con su identificador comercial 672-A y 672-B; el consecutivo técnico 673 nunca reemplaza la identidad comercial en dashboard. Los huérfanos duplicados se excluyen sin borrar historial.
+- Descarga PDF, correos de envío comercial y cierre de solicitudes del vendedor utilizan el mismo generador agrupado. Emite un PDF completo con todas las opciones y evita enviarlo si alguna sigue pendiente de aprobación.
+- Clave de idempotencia de Outbox compartida para correos de alternativas antes de selección; selección definitiva y aceptación del cliente siguen siendo exclusivas. Pricing 1.22.3 → 1.22.4; Web 1.67.3 → 1.67.4; ecosistema 1.70.4 → 1.70.5. Pruebas/CI/staging obligatorios antes de promoción.
+
 ## [1.22.3] - 2026-11-17 (MultiQUO: aprobación grupal, PDF y numeración comercial)
 
 - PATCH DH-20261117-MULTIQUO-APPROVAL-PDF-194: aprobación del margen de todas las alternativas FCL de una misma QUO en una transacción de Pricing, con una sola notificación y cierre de solicitud para el grupo.
