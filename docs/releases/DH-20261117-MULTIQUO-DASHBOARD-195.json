@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.70.5",
+  "releaseId": "DH-20261117-MULTIQUO-DASHBOARD-195",
+  "releaseType": "PATCH",
+  "createdAt": "2026-11-17",
+  "dependsOn": "DH-20261117-MULTIQUO-APPROVAL-PDF-194",
+  "scope": "Dhole Pricing dashboard counts one group representative; recent rates show commercial quote base and number of alternatives; preserve historical data",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "from": "1.22.3",
+      "to": "1.22.4"
+    },
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "component": "DholeWeb",
+      "from": "1.67.3",
+      "to": "1.67.4"
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "component": "DholeSystem",
+      "from": "1.70.4",
+      "to": "1.70.5"
+    }
+  ],
+  "validation": {
+    "build": "pending",
+    "tests": "pending",
+    "versionGate": "pending",
+    "staging": "pending",
+    "dashboardQuo672": "pending",
+    "pdfQuo672": "pending",
+    "productionDeploy": "not-authorized"
+  },
+  "productionDeploymentAuthorized": false,
+  "rollback": "Revert dashboard filters & display snapshots; no DB migration or deletion.",
+  "releaseBranch": "fix/DH-20261117-MULTIQUO-DASHBOARD-195-develop"
+}
