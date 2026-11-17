@@ -1,3 +1,9 @@
+## [1.22.4] - 2026-11-17 (MultiQUO: dashboard sin duplicados)
+
+- PATCH DH-20261117-MULTIQUO-DASHBOARD-195: el dashboard aplica exactamente la misma selección de representantes de grupo y supresión de QUO huérfana que el listado de tarifas. La MultiQUO cuenta una vez en totales, estados, importes y actividad reciente.
+- La referencia del resumen reciente es el número comercial base del grupo y se expone la cantidad de alternativas, preservando IDs y RateCodes técnicos para auditoría.
+- Pricing 1.22.3 → 1.22.4; ecosistema 1.70.4 → 1.70.5. CI/staging antes de master; sin despliegue autorizado a producción.
+
 ## [1.22.3] - 2026-11-17 (MultiQUO: aprobación grupal, PDF y numeración comercial)
 
 - PATCH DH-20261117-MULTIQUO-APPROVAL-PDF-194: aprobación del margen de todas las alternativas FCL de una misma QUO en una transacción de Pricing (auditoría/outbox), con una sola notificación y un solo cierre de solicitud vinculado al grupo.
