@@ -1,3 +1,10 @@
+## [1.22.3] - 2026-11-17 (MultiQUO: aprobación grupal, PDF y numeración comercial)
+
+- PATCH DH-20261117-MULTIQUO-APPROVAL-PDF-194: aprobación del margen de todas las alternativas FCL de una misma QUO en una transacción de Pricing, con una sola notificación y cierre de solicitud para el grupo.
+- La elección comercial definitiva sigue siendo exclusiva de una alternativa; no se aceptan automáticamente las dos opciones por el cliente.
+- El listado agrupado excluye registros huérfanos duplicados sin eliminarlos; la conciliación histórica requiere verificación en DB.
+- PDF multiQUO tras resolver todas las aprobaciones. Pricing 1.22.2 → 1.22.3; ecosistema 1.70.3 → 1.70.4. CI/staging pendientes; sin despliegue.
+
 ## [1.22.2] - 2026-11-16 (Volumen por QUO en consolidados LCL propios)
 
 - PATCH DH-20261116-OWN-LCL-QUO-CBM-172: GET /api/pricing/own-lcl-consolidations/{id}/quotes informa CBM físicos y CBM cobrables por cotización explícitamente vinculada; conserva mínimos LCL y el cálculo sin mínimo artificial de Miami.
