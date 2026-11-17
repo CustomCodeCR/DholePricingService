@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.70.4",
+  "releaseId": "DH-20261117-MULTIQUO-APPROVAL-PDF-194",
+  "releaseType": "PATCH",
+  "createdAt": "2026-11-17",
+  "scope": "MultiQUO FCL group margin approval, commercial QUO suffixes, PDF and orphan duplicate suppression",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "from": "1.22.2",
+      "to": "1.22.3"
+    },
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "component": "DholeWeb",
+      "from": "1.67.2",
+      "to": "1.67.3"
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "component": "DholeSystem",
+      "from": "1.70.3",
+      "to": "1.70.4"
+    }
+  ],
+  "releaseBranch": "fix/DH-20261117-MULTIQUO-APPROVAL-PDF-194-develop",
+  "validation": {
+    "build": "pending",
+    "tests": "pending",
+    "versionGate": "pending",
+    "staging": "pending",
+    "groupMarginApproval": "pending",
+    "pdf": "pending",
+    "productionDeploy": "not-authorized"
+  },
+  "productionDeploymentAuthorized": false,
+  "rollback": "Revert coordinated Pricing, Web and System code/metadata; preserve quote history, no DB deletion"
+}
