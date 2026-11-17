@@ -94,7 +94,7 @@ public sealed class GroupCommercialQuotePdfService(
                 route += " · Ruta naviera: " + rate.CarrierRoute.Trim();
             options.Add(new PricingQuoteGroupDocumentItem(
                 QuoteAlternativeNumbering.SubQuoteNumber(child.BaseQuote, child.Suffix),
-                route, rate.CarrierName,
+                route, rate.CarrierName ?? string.Empty,
                 ofAmount.ToString("N2", CultureInfo.GetCultureInfo("en-US")),
                 currency, json?.ToJsonString() ?? dataFactory.CreateDataJson(rate)));
         }
