@@ -67,6 +67,8 @@ public static class RateDetailUpdateInputNormalizer
         return rows.Where(detail => !retained.Contains(detail.Id)
                 && !explicitlyRemoved.Contains(detail.Id)
                 && (detail.Type == Dhole.Pricing.Domain.Costs.Enums.CostDetailType.Insurance
+                    || (detail.Name ?? string.Empty).Contains("Seguro", StringComparison.OrdinalIgnoreCase)
+                    || (detail.Name ?? string.Empty).Contains("Insurance", StringComparison.OrdinalIgnoreCase)
                     || (detail.Name ?? string.Empty).Trim().StartsWith("Manejos", StringComparison.OrdinalIgnoreCase)))
             .Select(detail => detail.Id)
             .ToArray();
