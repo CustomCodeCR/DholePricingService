@@ -77,4 +77,5 @@ public sealed record PricingRateDashboardItemDto(
     public string? LastModifiedByUserId { get; init; }
     public string? LastModifiedByUserName { get; init; }
     public string? LastModifiedByDisplayName { get; init; }
+    public int? GroupAlternativeCount { get; init; }
 }
