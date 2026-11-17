@@ -160,6 +160,58 @@ public sealed class RateDetailUpdateInputNormalizerTests
     }
 
     [TestMethod]
+    public void OwnLclIncompleteSnapshot_ProtectsInsuranceAndHandlingUnlessExplicitlyRemoved()
+    {
+        var freightId = Guid.NewGuid();
+        var insuranceId = Guid.NewGuid();
+        var handlingId = Guid.NewGuid();
+        var rows = new (Guid Id, string Name, CostDetailType Type, string? Notes)[]
+        {
+            (freightId, "Flete internacional", CostDetailType.Freight, "LCL PROPIO · Consolidado: #55"),
+            (insuranceId, "Seguro de carga", CostDetailType.Insurance, ""),
+            (handlingId, "Manejos", CostDetailType.AgentCharge, ""),
+        };
+        var submitted = new[] { Hbl(freightId, null) with { Name = "Flete internacional", CostDetailType = CostDetailType.Freight } };
+
+        var missing = RateDetailUpdateInputNormalizer.MissingOwnLclProtectedDetailIds(
+            submitted, rows, new HashSet<Guid>());
+        CollectionAssert.AreEquivalent(new[] { insuranceId, handlingId }, missing.ToArray());
+
+        var explicitInsuranceRemoval = RateDetailUpdateInputNormalizer.MissingOwnLclProtectedDetailIds(
+            submitted, rows, new HashSet<Guid> { insuranceId });
+        CollectionAssert.AreEquivalent(new[] { handlingId }, explicitInsuranceRemoval.ToArray());
+    }
+
+    [TestMethod]
+    public void OwnLclLegacyDestinationChargeNamedSeguroIsProtected()
+    {
+        var freightId = Guid.NewGuid();
+        var oldInsuranceId = Guid.NewGuid();
+        var persisted = new (Guid Id, string Name, CostDetailType Type, string? Notes)[]
+        {
+            (freightId, "Flete Internacional", CostDetailType.Freight, "LCL PROPIO · Consolidado: #55"),
+            (oldInsuranceId, "Seguro de carga", CostDetailType.DestinationCharge, ""),
+        };
+        var submitted = new[] { Hbl(freightId, null) with { Name = "Flete Internacional", CostDetailType = CostDetailType.Freight } };
+        var missing = RateDetailUpdateInputNormalizer.MissingOwnLclProtectedDetailIds(
+            submitted, persisted, new HashSet<Guid>());
+        CollectionAssert.AreEqual(new[] { oldInsuranceId }, missing.ToArray());
+    }
+
+    [TestMethod]
+    public void OrdinaryNonOwnLclDoesNotBlockItsExistingUpdateSemantics()
+    {
+        var id = Guid.NewGuid();
+        var rows = new (Guid Id, string Name, CostDetailType Type, string? Notes)[]
+        {
+            (id, "Seguro de carga", CostDetailType.Insurance, "LCL COLOADER"),
+        };
+        var missing = RateDetailUpdateInputNormalizer.MissingOwnLclProtectedDetailIds(
+            Array.Empty<UpsertRateExtraDetailCommandItem>(), rows, new HashSet<Guid>());
+        Assert.AreEqual(0, missing.Count);
+    }
+
+    [TestMethod]
     public void CompleteEditSnapshot_RemovesOnlyOmittedPersistedDetailIds()
     {
         var retainedVgmId = Guid.NewGuid();

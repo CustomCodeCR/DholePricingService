@@ -1,3 +1,8 @@
+## [1.22.5] - 2026-11-17 (LCL propio: persistir Seguro de carga y Manejos)
+
+- PATCH DH-20261117-OWN-LCL-INSURANCE-196: impedir actualizaciones LCL propias que borren involuntariamente Seguro de carga o Manejos ya persistidos; la eliminación explícita se mantiene habilitada.
+- Validaciones de omisión involuntaria, exclusión expresa y compatibilidad de LCL Coloader. Pricing 1.22.3 → 1.22.5; Web 1.67.5; ecosistema 1.70.6; CI/staging pendientes y sin autorización de despliegue productivo.
+
 ## [1.22.4] - 2026-11-17 (MultiQUO: 672-A/B reales y PDF único en correos)
 
 - PATCH DH-20261117-MULTIQUO-VISIBLE-GROUP-PDF-195: la consulta de tarifas muestra cada opción FCL con su identificador comercial 672-A y 672-B; el consecutivo técnico 673 nunca reemplaza la identidad comercial en dashboard. Los huérfanos duplicados se excluyen sin borrar historial.
