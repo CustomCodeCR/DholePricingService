@@ -1,8 +1,14 @@
-## [1.23.6] - 2026-11-18 (Pricing: limpieza de reservas fantasma por operador)
+## [1.23.7] - 2026-11-18 (Pricing: liberar reservas huérfanas sin reclamarlas)
 
-- PATCH DH-20261118-PRICING-LEASE-218: la adquisición y renovación de una solicitud liberan, en la misma transacción PostgreSQL, cualquier otra reserva del mismo usuario, con bloqueo asesor transaccional para concurrencia entre instancias. No altera reservas de otros usuarios.
-- Se registra en auditoría de aplicación cuántos bloqueos anteriores fueron revocados; se conservan WorkStatus, rutas REST, scopes y SignalR. Pruebas de exclusión, aislamiento y reentrada.
-- DholePricingService 1.23.5 → 1.23.6; ecosistema 1.83.1 → 1.83.2. CI/staging obligatorios antes de promocionar.
+- PATCH DH-20261118-PRICING-LEASE-219: nuevos endpoints de liberación de reserva propia sin claim y liberación de bloqueo ajeno solo tras 45 segundos sin heartbeat, con verificación atómica, scope pricing.rate.update y trazabilidad estructurada.
+- Bloqueos activos continúan protegidos, sin cambios de estado Trabajando, contratos existentes, outbox ni SignalR. Pruebas de frescura, expiración, propiedad y no modificación de solicitudes completadas.
+- Pricing 1.23.6 → 1.23.7; Web 1.79.2 → 1.79.3; System/ecosistema 1.83.2 → 1.83.3. CI y staging previos a promoción.
+
+## [1.23.6] - 2026-11-18 (Pricing: una sola reserva activa por operador)
+
+- PATCH DH-20261118-PRICING-LEASE-218: claim y heartbeat serializan por actor y limpian únicamente las otras reservas del mismo usuario; no liberan trabajo de terceros. Auditoría estructurada de reservas liberadas y pruebas de aislamiento.
+- Sin cambios de scopes, REST, SignalR, workflows ni estado Trabajando. Revisión de staging previa a promoción.
+- Pricing 1.23.5 → 1.23.6; Web 1.79.1 → 1.79.2; ecosistema 1.83.1 → 1.83.2.
 
 ## [1.23.5] - 2026-11-18 (MultiQUO: conservar 672-A/B, nunca 672/673 comerciales)
 
@@ -11,12 +17,11 @@
 - Listados y búsqueda dejan de usar el consecutivo técnico de subQUO como número comercial. Se conservan auditoría, permisos, eventos Outbox/SignalR y PDFs agrupados.
 - DholePricingService 1.23.3/1.23.4 → 1.23.5; DholeWeb 1.78.0/1.78.1 → 1.78.2; ecosistema 1.82.0/1.82.1 → 1.83.1. CI + staging obligatorios antes de master; sin autorización de despliegue productivo.
 
-## [1.23.4] - 2026-11-18 (Solicitudes: impedir reservas fantasmas después de liberar)
+## [1.23.4] - 2026-11-18 (Solicitudes: impedir reservas fantasma después de cerrar)
 
-- PATCH DH-20261118-PRICING-LEASE-214: el claim atómico rechaza el token que ya fue liberado por otra operación; la recuperación intencional de la propia reserva sigue permitida.
-- El backend mantiene el control por usuario y token, el TTL de dos minutos, scopes, auditoría y estado Trabajando sin modificar los contratos REST ni SignalR.
-- Pruebas de token obsoleto, reingreso manual y exclusión de terceros; CI y staging obligatorios antes de promoción.
-- DholePricingService 1.23.3 → 1.23.4; DholeWeb 1.77.2 → 1.77.3; DholeSystem 1.81.2 → 1.81.3.
+- PATCH DH-20261118-PRICING-LEASE-214: el claim atómico rechaza tokens liberados que intentan retomar automáticamente el bloqueo; recuperación manual propia autorizada.
+- Scopes, auditoría, contratos REST, SignalR y estado «Trabajando» preservados. Tests de tokens y exclusividad.
+- Pricing 1.23.3 → 1.23.4; Web 1.77.2 → 1.77.3; System 1.81.1 → 1.81.3. CI/staging pendientes.
 
 ## [1.23.3] - 2026-11-18 (Cotizaciones aceptadas: solo Pricing modifica)
 
@@ -24,18 +29,18 @@
 - La validación usa el estado y AcceptedAtUtc persistidos. La autorización pricing.rate-request.create del vendedor no habilita modificar tarifas aceptadas; Pricing conserva su ruta de modificación bajo pricing.rate.update.
 - Pruebas de regresión para estados aceptados, revisiones de Pricing y cotizaciones no aceptadas. Se conservan auditoría, outbox/SignalR, API de edición de Pricing y esquema. Pricing 1.23.2 → 1.23.3, Web 1.77.1 → 1.77.2, ecosistema 1.81.1 → 1.81.2. CI/staging antes de master.
 
-## [1.23.2] - 2026-11-17 (Ventas: cancelar solo cotizaciones previamente aceptadas)
+## [1.23.2] - 2026-11-17 (Solicitudes de tarifas: propietario vendedor CRM)
 
-- PATCH DH-20261117-SELLER-CANCEL-ACCEPTED-203: cancelar cotizaciones comerciales únicamente cuando el estado guardado es AcceptedByClient; el endpoint de vendedores devuelve HTTP 409 Pricing.SellerCancellationRequiresAcceptance para otros estados.
-- Dominio elimina las transiciones desde Sent, RequestedByClient y Expired hacia Cancelled, preserva auditoría, motivo obligatorio, ClosedBy/ClosedAtUtc, idempotencia y eventos realtime. Pruebas unitarias positivas y negativas.
-- Pricing 1.23.1 → 1.23.2; ecosistema 1.72.1 → 1.73.2. Se preserva el release de asignación comercial de CRM ya incorporado a develop. CI y staging pendientes.
+- PATCH DH-20261117-CRM-RATE-OWNER-PROD-205: las solicitudes creadas por otro usuario conservan el usuario creador en auditoría y se asignan al vendedor responsable de la cuenta/prospecto según CRM, verificado por el backend. GET/PUT /mine sigue validando propietario.
+- El wizard de solicitud delegada toma executiveUserId desde CRM y registra el observador de cambios al montar el componente, después de inicializar el formulario (evita ReferenceError de TDZ en producción).
+- Se conservan API REST, outbox/SignalR, vendedor institucional Castro Fallas y credenciales técnicas del API Manager. Requiere validaciones de CI, staging y publicación coordinada de Pricing + Web.
+- DholePricingService 1.23.1 → 1.23.2; ecosistema 1.73.2/1.74.0 → 1.74.1.
 
-## [1.23.1] - 2026-11-17 (Solicitudes de tarifa: vendedor asignado por CRM)
+## [1.23.1] - 2026-11-17 (Pricing: cancelar solo cotizaciones aceptadas)
 
-- PATCH DH-20261117-CRM-RATE-REQUEST-OWNER-203: para solicitudes normales vinculadas a cuenta/prospecto, Pricing valida la identidad comercial contra el selector CRM usando el JWT del creador y asigna SellerUserId al ejecutivo real. El usuario que envía la solicitud permanece en auditoría, sin apropiarse de la solicitud.
-- Se ignora cualquier SellerUserId distinto enviado por el navegador para cuentas con vendedor personal; /mine y PUT /mine se conservan limitados al vendedor asignado, evitando acceso indebido. Se admite delegación entre vendedores únicamente si CRM permite al actor consultar el cliente y confirma la asignación.
-- Castro Fallas institucional y tokens técnicos de API Manager conservan su comportamiento; si CRM no responde o no hay ejecutivo activo, no se crea una solicitud con propietario incorrecto.
-- Pricing 1.23.0 → 1.23.1; Web 1.69.0 → 1.69.1; ecosistema 1.72.0 → 1.72.1. CI/staging y reconciliación de solicitudes históricas pendientes.
+- PATCH DH-20261117-SELLER-CANCEL-ACCEPTED-203: el endpoint de estado del vendedor rechaza con HTTP 409 / Pricing.SellerCancellationRequiresAcceptance las cancelaciones cuando la QUO no está en estado AcceptedByClient. Reintentos de una QUO ya cancelada siguen siendo idempotentes.
+- La entidad RateHeader solo permite AcceptedByClient → Cancelled; se eliminan Sent/RequestedByClient/Expired → Cancelled. El motivo obligatorio, ClosedReason/ClosedBy/ClosedAtUtc, auditoría, y eventos Outbox/SignalR se mantienen.
+- Regresiones negativas de estados no aceptados y cancelación válida de aceptadas. Pricing 1.23.0 → 1.23.1; ecosistema 1.72.0 → 1.73.2. CI y staging pendientes.
 
 ## [1.23.0] - 2026-11-17 (Vendedores: cancelación comercial)
 
@@ -43,10 +48,10 @@
 - Se habilita la transición Sent/RequestedByClient/Expired/AcceptedByClient → Cancelled. Persistencia de ClosedReason/ClosedBy/ClosedAtUtc, evento de dominio y auditoría existentes. Respuesta idempotente al reintentar sin notificación adicional.
 - Pricing 1.22.5 → 1.23.0; ecosistema 1.70.6 → 1.72.0; CI/staging pendientes y sin autorización de despliegue productivo.
 
-## [1.22.5] - 2026-11-17 (LCL propio: guardado seguro de cargas y Manejos)
+## [1.22.5] - 2026-11-17 (LCL propio: persistir Seguro de carga y Manejos)
 
-- PATCH DH-20261117-OWN-LCL-INSURANCE-196: el UpdateRate rechaza snapshots incompletos de LCL propio que omitan Seguro de carga o Manejos previamente facturados sin eliminación explícita. No altera contratos de Coloader/FCL ni duplicados y conserva validaciones existentes.
-- Pruebas unitarias de omisión accidental, eliminación explícita y cotizaciones ajenas. Pricing 1.22.4 → 1.22.5; Web 1.67.5; ecosistema 1.70.6. CI/staging pendientes; producción no autorizada.
+- PATCH DH-20261117-OWN-LCL-INSURANCE-196: impedir actualizaciones LCL propias que borren involuntariamente Seguro de carga o Manejos ya persistidos; la eliminación explícita se mantiene habilitada.
+- Validaciones de omisión involuntaria, exclusión expresa y compatibilidad de LCL Coloader. Pricing 1.22.3 → 1.22.5; Web 1.67.5; ecosistema 1.70.6; CI/staging pendientes y sin autorización de despliegue productivo.
 
 ## [1.22.4] - 2026-11-17 (MultiQUO: 672-A/B reales y PDF único en correos)
 
@@ -56,10 +61,10 @@
 
 ## [1.22.3] - 2026-11-17 (MultiQUO: aprobación grupal, PDF y numeración comercial)
 
-- PATCH DH-20261117-MULTIQUO-APPROVAL-PDF-194: aprobación del margen de todas las alternativas FCL de una misma QUO en una transacción de Pricing, con una sola notificación y cierre de solicitud para el grupo.
-- La elección comercial definitiva sigue siendo exclusiva de una alternativa; no se aceptan automáticamente las dos opciones por el cliente.
-- El listado agrupado excluye registros huérfanos duplicados sin eliminarlos; la conciliación histórica requiere verificación en DB.
-- PDF multiQUO tras resolver todas las aprobaciones. Pricing 1.22.2 → 1.22.3; ecosistema 1.70.3 → 1.70.4. CI/staging pendientes; sin despliegue.
+- PATCH DH-20261117-MULTIQUO-APPROVAL-PDF-194: aprobación del margen de todas las alternativas FCL de una misma QUO en una transacción de Pricing (auditoría/outbox), con una sola notificación y un solo cierre de solicitud vinculado al grupo.
+- Se conserva la elección comercial exclusiva de una sub-QUO definitiva; no se aceptan automáticamente todas las rutas por el cliente.
+- El listado agrupado deja de mostrar copias huérfanas cuyo número comercial pertenece a una alternativa existente; no se elimina ningún registro, y queda pendiente conciliar duplicados históricos con la base real.
+- PDF multiQUO disponible tras resolver las aprobaciones del grupo. Pricing 1.22.2 → 1.22.3; ecosistema 1.70.3 → 1.70.4. CI/staging pendientes, sin despliegue autorizado.
 
 ## [1.22.2] - 2026-11-16 (Volumen por QUO en consolidados LCL propios)
 
@@ -69,13 +74,8 @@
 ## [1.22.1] - 2026-11-16 (Solicitud externa con actor técnico autorizado)
 
 - PATCH DH-20261116-API-PRICING-IDENTITY-167: valida JWT técnico exclusivo de API Manager en `POST /api/pricing/rate-requests/` y restringe el actor y el vendedor a la identidad y contrato firmados.
-- Para ejecutivo institucional Castro Fallas, se conserva actor de servicio; para ejecutivo real, se exige vendedor activo en Auth y se permite únicamente la delegación fijada desde el contrato (sin omitir validación en sesiones ordinarias).
-- Impide utilizar el mismo JWT para otras rutas de Pricing. Conserva idempotencia, notificaciones outbox y controles actuales de usuarios reales.
-
-## [1.22.0] - 2026-11-16 (Inventario protegido para API Manager)
-
-- MINOR DH-20261116-API-ROUTES-DEFAULTS-165: publica GET /api/internal/third-party-route-catalog con métodos y rutas runtime, accesible solo con JWT y scope integrations.thirdparty.manage; no necesita Swagger de desarrollo.
-- Oculta rutas internas, credenciales y sondas; no modifica seguridad de ninguna operación.
+- Para ejecutivo institucional Castro Fallas se conserva el actor de servicio; para ejecutivo real se exige vendedor activo en Auth y se permite únicamente la delegación fijada desde el contrato.
+- Impide utilizar el mismo JWT para otras rutas de Pricing, mantiene idempotencia y outbox.
 
 ## [1.21.0] - 2026-11-16 (Consolidados LCL propios: permisos independientes)
 
@@ -85,26 +85,21 @@
 
 ## [1.20.0] - 2026-11-16
 
-- MINOR DH-20261116-OWN-LCL-QUOS-162: GET /api/pricing/own-lcl-consolidations/{id}/quotes consulta QUOs LCL vinculadas explícitamente al consolidado, incluyendo cotizaciones borrador, enviadas, aprobadas y cerradas, aun con consolidado inactivo.
+- MINOR DH-20261116-OWN-LCL-QUOS-162: GET /api/pricing/own-lcl-consolidations/{id}/quotes consulta QUOs LCL vinculadas explícitamente al consolidado, incluyendo borradores, enviadas, aprobadas y cerradas, aun con consolidado inactivo.
 - Marcadores de GUID o número legado, con precedencia del GUID para evitar asociaciones erróneas; sin escritura de cotizaciones ni cambio en capacidad aprobada.
-- Pricing 1.19.0 → 1.20.0; Web 1.59.0 → 1.60.0; Dhole global 1.60.1 → 1.61.0. CI/staging requeridos antes de producción.
-
-## [1.19.0] - 2026-11-14 (API Manager discovery)
-
-- MINOR: inventario de rutas REST de Pricing accesible solo por el administrador de integraciones mediante JWT y scope.
-- No altera Pricing, cotizaciones, márgenes ni SignalR; global Dhole 1.56.0.
+- Pricing 1.18.2 → 1.20.0; Web 1.59.0 → 1.60.0; Dhole global 1.60.1 → 1.61.0. CI/staging requeridos antes de producción.
 
 ## [1.18.2] - 2026-11-13
 
 - PATCH DH-20261113-PRICING-OWN-LCL-141: CFS del consolidado LCL propio se guarda y actualiza por CBM cobrable, con mínimo 1; nunca se reemplaza por 0,118 CBM físico. Costo/venta se recalculan a USD 8,00 para una unidad con precio USD 8,00/CBM.
 - Cotizaciones históricas usan la proyección comercial de CBM cobrable en API, PDF y totales sin alterar las revisiones publicadas. Coloader, CFT Miami y otros cargos se mantienen independientes.
-- Pricing 1.18.1 → 1.18.2; Web/ecosistema 1.51.2 → 1.51.3. Requiere CI/staging antes de master.
+- Pricing 1.18.1 → 1.18.2; Web/ecosistema 1.51.2 → 1.52.1. Requiere CI/staging antes de master.
 
 ## [1.18.1] - 2026-11-13
 
 - PATCH DH-20261113-PRICING-OWN-LCL-139: CFS de origen FCA/EXW usa CBM cobrable (incluido el mínimo comercial), no volumen físico. Se mantiene la base por CBM cobrable desde la matriz hacia el asistente.
 - CR_HANDLING (Manejos) y CR_ZONE conservan el costo editable al guardar, consultar y calcular la cotización: se elimina la normalización silenciosa a USD 0. Solo los costos/ventas configurados en LCL propios son fuente de los cargos propios; sin modificar las tarifas coloader.
-- Pricing 1.18.0 → 1.18.1; Web 1.51.0 → 1.51.1; ecosistema 1.51.1. CI y staging requeridos antes de master; sin autorización de despliegue a producción.
+- Pricing 1.18.0 → 1.18.1; Web 1.50.0 → 1.50.1; ecosistema 1.50.1. CI y staging requeridos antes de master; sin autorización de despliegue a producción.
 
 ## [1.18.0] - 2026-11-12
 
