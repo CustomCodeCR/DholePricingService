@@ -184,6 +184,8 @@ internal static class RateMappings
             PickupLocations = DeserializePickupLocations(rate.PickupLocationsJson),
             InlandPickupLocation = DeserializeInlandServiceLocation(rate.InlandServiceLocationsJson, "pickup"),
             InlandDeliveryLocation = DeserializeInlandServiceLocation(rate.InlandServiceLocationsJson, "delivery"),
+            InlandPickupLocations = DeserializeInlandServiceLocations(rate.InlandServiceLocationsJson, "pickups", "pickup"),
+            InlandDeliveryLocations = DeserializeInlandServiceLocations(rate.InlandServiceLocationsJson, "deliveries", "delivery"),
             CreatedByUserId = rate.CreatedBy,
             LastModifiedByUserId = rate.UpdatedBy,
         };
@@ -207,6 +209,31 @@ internal static class RateMappings
         {
             return null;
         }
+    }
+
+    private static IReadOnlyCollection<Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation>
+        DeserializeInlandServiceLocations(string? json, string pluralKey, string legacyKey)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return [];
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            var root = document.RootElement;
+            var options = new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            if (root.TryGetProperty(pluralKey, out var points)
+                && points.ValueKind == System.Text.Json.JsonValueKind.Array)
+                return System.Text.Json.JsonSerializer.Deserialize<Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation[]>(
+                    points.GetRawText(), options) ?? [];
+            if (root.TryGetProperty(legacyKey, out var point)
+                && point.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                var legacy = System.Text.Json.JsonSerializer.Deserialize<Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation>(
+                    point.GetRawText(), options);
+                return legacy is null ? [] : [legacy];
+            }
+        }
+        catch (System.Text.Json.JsonException) { }
+        return [];
     }
 
     private static IReadOnlyCollection<RatePickupLocationDto> DeserializePickupLocations(string? json)

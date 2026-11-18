@@ -1,0 +1,22 @@
+{
+  "releaseId": "DH-20261118-INLAND-MULTIPOINT-219",
+  "component": "DholePricingService",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.84.0",
+  "releaseType": "MINOR",
+  "previousVersion": "1.23.6",
+  "version": "1.24.0",
+  "changes": [
+    "Recolección y entrega con múltiples ubicaciones, tipo de carga por parada y responsable de costo",
+    "ExW/DDP se interpretan desde la perspectiva de importación, exportación o tránsito doméstico sin invertir los Incoterms ICC",
+    "Compatibilidad de escritura y lectura con la dirección histórica en JSONB; sin migración de esquema"
+  ],
+  "scopes": "unchanged",
+  "rest": "backward-compatible",
+  "realtime": "existing infrastructure unchanged",
+  "validation": {
+    "ci": "pending",
+    "staging": "pending",
+    "production": "not-approved"
+  }
+}
