@@ -1,8 +1,7 @@
-## [1.24.1] - 2026-11-18 (Pricing: corregir error HTTP 500 al adquirir solicitud)
+## [1.24.2] - 2026-11-18 (MultiQUO: una QUO comercial, alternativas dentro)
 
-- PATCH DH-20261118-PRICING-LEASE-220: la reserva por operador utiliza el resultado tipado de pg_try_advisory_xact_lock dentro de la transacción actual en vez de ejecutar un SELECT como SQL sin resultado. Contención concurrente devuelve 409 con código explícito; errores de base de datos se registran con TraceId y responden 503 legible.
-- La liberación de reservas inactivas usa fecha límite precalculada en la expresión EF, evitando cálculos DateTime no traducibles. El lease vigente, scopes, auditoría, SignalR y contratos REST existentes se conservan.
-- Pruebas de autorización de claim, exclusión de terceros y predicado SQL; staging obligatorio antes de master. Pricing 1.24.0 → 1.24.1; Web según rama, System/ecosistema 1.83.3 → 1.83.4.
+- PATCH DH-20261118-MULTIQUO-SINGLE-221: unifica listado y dashboard por grupo comercial y selecciona una opción A/B sin reportar la otra como cotización no aceptada; permite decisiones de vendedor con validación de pertenencia y mantiene auditoría, REST, SignalR y Outbox.
+- Preserva Pricing multipunto 1.24.0 y corrección de reservas 1.24.1. Pricing 1.24.1 → 1.24.2, Web 1.80.1 → 1.80.2, ecosistema 1.83.4 → 1.84.1. Requiere CI y staging antes de master.
 
 ## [1.24.0] - 2026-11-18 (Pricing: múltiples puntos y perspectiva comercial)
 

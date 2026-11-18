@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.24.1",
-  "ecosystemVersion": "1.83.4",
-  "releaseId": "DH-20261118-PRICING-LEASE-220",
+  "version": "1.24.2",
+  "ecosystemVersion": "1.84.1",
+  "releaseId": "DH-20261118-MULTIQUO-SINGLE-221",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261118-PRICING-LEASE-220"
+  "businessReleaseId": "DH-20261118-MULTIQUO-SINGLE-221"
 }

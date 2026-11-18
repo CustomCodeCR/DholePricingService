@@ -27,6 +27,14 @@ public static class SellerRateStatusEndpoints
             .RequireAuthorization()
             .RequireScope(PricingConstants.Scopes.RateRequestCreate);
 
+        app.MapGet("/api/pricing/seller-rates/{rateId:guid}/options", GetGroupOptionsAsync)
+            .WithTags("Seller rates").RequireAuthorization()
+            .RequireScope(PricingConstants.Scopes.RateRequestCreate);
+
+        app.MapPost("/api/pricing/seller-rates/{rateId:guid}/group-select", SelectSellerGroupOptionAsync)
+            .WithTags("Seller rates").RequireAuthorization()
+            .RequireScope(PricingConstants.Scopes.RateRequestCreate);
+
         return app;
     }
 
@@ -80,6 +88,97 @@ public static class SellerRateStatusEndpoints
         return Results.NoContent();
     }
 
+
+    private static async Task<IResult> GetGroupOptionsAsync(
+        Guid rateId, ServiceDbContext db, SellerRateAccessService sellerAccess,
+        HttpContext httpContext, CancellationToken cancellationToken)
+    {
+        var userId = httpContext.GetCurrentUserId();
+        if (!userId.HasValue || userId.Value == Guid.Empty) return Results.Unauthorized();
+        var requested = await db.RateHeaders.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
+        if (requested is null) return Results.NotFound();
+        if (!await sellerAccess.CanReadAsync(requested, userId.Value, cancellationToken))
+            return Results.Forbid();
+
+        var connection = db.Database.GetDbConnection();
+        var close = connection.State != System.Data.ConnectionState.Open;
+        if (close) await connection.OpenAsync(cancellationToken);
+        var options = new List<(Guid Id, string BaseQuote, string Suffix,
+            string Selection, string Status, string Poe, string? Pod, string Carrier)>();
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT a.rate_id, a.base_quote, a.suffix, a.status,
+                       h.status, h.poe_name, h.pod_name, h.carrier_name
+                FROM pricing.rate_quote_alternatives a
+                JOIN pricing."RateHeaders" h ON h.id = a.rate_id AND NOT h.is_deleted
+                WHERE a.parent_rate_id = (
+                    SELECT parent_rate_id FROM pricing.rate_quote_alternatives
+                    WHERE rate_id = @rate_id LIMIT 1)
+                ORDER BY length(a.suffix), a.suffix;
+                """;
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "@rate_id";
+            parameter.Value = rateId;
+            command.Parameters.Add(parameter);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                options.Add((reader.GetGuid(0), reader.GetString(1), reader.GetString(2),
+                    reader.GetString(3), reader.GetString(4), reader.GetString(5),
+                    reader.IsDBNull(6) ? null : reader.GetString(6), reader.GetString(7)));
+        }
+        finally
+        {
+            if (close) await connection.CloseAsync();
+        }
+
+        if (options.Count == 0)
+            return Results.Ok(new { parentQuoteNumber = requested.QuoNumber ?? requested.RateCode,
+                selectedRateId = (Guid?)null, alternatives = Array.Empty<object>() });
+
+        var available = new List<object>();
+        foreach (var option in options)
+        {
+            var member = await db.RateHeaders.AsNoTracking()
+                .FirstOrDefaultAsync(rate => rate.Id == option.Id && !rate.IsDeleted, cancellationToken);
+            if (member is null || !await sellerAccess.CanReadAsync(member, userId.Value, cancellationToken))
+                continue;
+            // Never expose prices or unpublished supplier costs from a draft to Sales.
+            available.Add(new
+            {
+                rateId = option.Id, suffix = option.Suffix,
+                status = option.Selection, rateStatus = option.Status,
+                poeName = option.Poe, podName = option.Pod, carrierName = option.Carrier
+            });
+        }
+        return Results.Ok(new
+        {
+            parentQuoteNumber = options[0].BaseQuote,
+            selectedRateId = options.Where(x => x.Selection == "Selected")
+                .Select(x => (Guid?)x.Id).FirstOrDefault(),
+            alternatives = available,
+        });
+    }
+
+    private static async Task<IResult> SelectSellerGroupOptionAsync(
+        Guid rateId, ServiceDbContext db, SellerRateAccessService sellerAccess,
+        HttpContext httpContext, CancellationToken cancellationToken)
+    {
+        var userId = httpContext.GetCurrentUserId();
+        if (!userId.HasValue || userId.Value == Guid.Empty) return Results.Unauthorized();
+        var rate = await db.RateHeaders.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
+        if (rate is null) return Results.NotFound();
+        if (!await sellerAccess.CanReadAsync(rate, userId.Value, cancellationToken))
+            return Results.Forbid();
+        if (rate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient or RateStatus.Expired))
+            return Results.Conflict(new { code = "Pricing.SellerAlternativeNotSent",
+                message = "Solo puede elegir una opción previamente enviada al cliente." });
+        return await RateEndpoints.SelectRateGroupAsync(rateId, db, httpContext, cancellationToken);
+    }
+
     private static async Task<IResult> SetStatusAsync(
         Guid rateId,
         SellerRateStatusRequest request,
@@ -121,6 +220,29 @@ public static class SellerRateStatusEndpoints
         if (rateRequest is null
             && !await sellerAccess.IsAssignedExecutiveAsync(currentRate, currentUserId.Value, cancellationToken))
             return Results.Forbid();
+
+        // An option can never be commercially accepted while another option
+        // is selected, or before the seller explicitly chooses the winner.
+        var groupChoices = await db.Database.SqlQuery<string>($"""
+            SELECT a.status || '|' || COALESCE(
+                (SELECT chosen.rate_id::text FROM pricing.rate_quote_alternatives chosen
+                 WHERE chosen.parent_rate_id = a.parent_rate_id
+                   AND chosen.status = 'Selected' LIMIT 1), '') AS "Value"
+            FROM pricing.rate_quote_alternatives a
+            WHERE a.rate_id = {rateId}
+            """).ToListAsync(cancellationToken);
+        if (status == RateStatus.AcceptedByClient && groupChoices.Count > 0)
+        {
+            var choice = groupChoices[0].Split('|', 2);
+            if (choice[0] != "Selected" || choice.Length < 2 ||
+                !Guid.TryParse(choice[1], out var chosenId) || chosenId != rateId)
+                return Results.Conflict(new { code = "Pricing.SellerAlternativeRequiresSelection",
+                    message = "Seleccione una opción de la cotización antes de aceptarla." });
+        }
+        if (groupChoices.Count > 0 && groupChoices[0].Split('|', 2) is { Length: 2 } selected
+            && Guid.TryParse(selected[1], out var selectedId) && selectedId != rateId)
+            return Results.Conflict(new { code = "Pricing.QuoteAlternativeDiscarded",
+                message = "La decisión comercial corresponde a la opción elegida del grupo." });
 
         // Reintentos después de guardar correctamente deben ser idempotentes.
         // QueueAsync utiliza una clave estable para no duplicar correos de Apertura.
