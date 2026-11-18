@@ -1519,10 +1519,6 @@ public static class RateEndpoints
                 var raw = await check.ExecuteScalarAsync(cancellationToken);
                 existingSelectedId = raw is null or DBNull ? null : (Guid)raw;
             }
-            if (existingSelectedId.HasValue && existingSelectedId.Value != rateId)
-                return Results.Conflict(new { code = "Pricing.QuoteGroupSelectionFinal",
-                    message = "La sub-QUO definitiva ya fue elegida; no puede cambiarse." });
-
             // Never replace a prior customer acceptance, even for old groups.
             await using (var acceptance = db.Database.GetDbConnection().CreateCommand())
             {
@@ -1541,7 +1537,9 @@ public static class RateEndpoints
                     return Results.Conflict(new { code = "Pricing.QuoteGroupAlreadyAccepted",
                         message = "Otra alternativa del grupo ya fue aceptada." });
             }
-            if (!existingSelectedId.HasValue)
+            // The seller can compare and replace the candidate until the single
+            // commercial QUO is accepted. Selection is not rejection of siblings.
+            if (existingSelectedId != rateId)
             {
                 await db.Database.ExecuteSqlInterpolatedAsync(
                     $@"UPDATE pricing.rate_quote_alternatives SET status = 'NotSelected'
@@ -1552,6 +1550,8 @@ public static class RateEndpoints
                     cancellationToken);
             }
 
+            // Selection keeps suffixes only as internal option identifiers.
+            // The commercial quotation remains the parent's unsuffixed base number.
             // Choosing a winning alternative is a STATUS decision, never a renumbering.
             // A and B retain immutable suffixes even after commercial acceptance.
             var selectedQuote = await db.Database.SqlQueryRaw<string>(
