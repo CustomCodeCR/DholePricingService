@@ -1,8 +1,15 @@
-## [1.23.8] - 2026-11-18 (MultiQUO: cotización única con alternativas internas)
+## [1.24.1] - 2026-11-18 (MultiQUO: una cotización comercial con opciones internas)
 
-- PATCH DH-20261118-MULTIQUO-SINGLE-220: agrupa A/B en una sola fila comercial con número base y estado del seleccionado, antes del conteo/paginación; preserva las opciones para su elección y sus códigos técnicos.
-- Vendedores pueden consultar opciones autorizadas y elegir una ganadora; la alternativa no seleccionada no se considera rechazo comercial. Conserva auditoría, permisos, eventos Outbox y SignalR.
-- Pricing 1.23.7 → 1.23.8, Web 1.79.3 → 1.79.4, ecosistema 1.83.3 → 1.83.4. CI y staging requeridos antes de master.
+- PATCH DH-20261118-MULTIQUO-SINGLE-220: agrupa opciones FCL en una sola fila QUO (ej. 672) antes de paginación, métricas y dashboard. El estado y los importes representan únicamente la opción elegida. Las otras opciones no cuentan como cotizaciones rechazadas.
+- Vendedores pueden consultar y elegir opciones con autorización por cuenta; se mantienen los códigos A/B para auditoría y PDF, sin exponer costos internos en la API comercial.
+- Compatible con las mejoras multipunto 1.24.0. Pricing 1.24.0 → 1.24.1; Web 1.80.0 → 1.80.1; ecosistema 1.84.0 → 1.84.1. Verificar CI y staging previo a master.
+
+## [1.24.0] - 2026-11-18 (Pricing: múltiples puntos y perspectiva comercial)
+
+- MINOR DH-20261118-INLAND-MULTIPOINT-219: recolección y entrega registran múltiples paradas con tipo de carga y responsable de costos por punto. Se conservan coordenadas opcionales y soporte a solicitudes históricas de un solo punto.
+- Incoterms EXW y DDP mantienen significado ICC; importación/exportación cambian la perspectiva de quién contrata/paga y tránsito doméstico permite responsable híbrido por tramo.
+- API REST retrocompatible, outbox/inbox/SignalR y scopes existentes sin cambios; CI/staging pendientes, sin despliegue a producción.
+- DholeWeb 1.79.2 → 1.80.0; DholePricingService 1.23.6 → 1.24.0; ecosistema 1.83.2 → 1.84.0.
 
 ## [1.23.7] - 2026-11-18 (Pricing: liberar reservas huérfanas sin reclamarlas)
 

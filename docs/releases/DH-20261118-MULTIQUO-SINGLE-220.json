@@ -1,31 +1,27 @@
 {
   "releaseId": "DH-20261118-MULTIQUO-SINGLE-220",
   "date": "2026-11-18",
-  "ecosystem": "Dhole",
-  "ecosystemVersion": "1.83.4",
-  "scope": "FCL MultiQUO is one commercial quotation with nested options A/B; status from selected winner only",
+  "ecosystemVersion": "1.84.1",
   "components": [
     {
-      "component": "DholePricingService",
-      "version": "1.23.8"
+      "component": "DholeSystem",
+      "version": "1.84.1"
     },
     {
       "component": "DholeWeb",
-      "version": "1.79.4"
+      "version": "1.80.1"
     },
     {
-      "component": "DholeSystem",
-      "version": "1.83.4"
+      "component": "DholePricingService",
+      "version": "1.24.1"
     }
   ],
-  "unchangedComponents": "Other 14 components retain existing versions in DholeSystem/release-manifest.json",
-  "requirements": [
-    "one parent QUO row across browse/search/seller dashboard",
-    "winner selection inside quote (pricing and seller)",
-    "nonchosen alternative is not a rejected commercial quote",
-    "no new scopes; existing scope and ownership checks remain authoritative",
-    "audit, Outbox, SignalR, REST and PDF contract preserved"
+  "scope": "one commercial quotation, nested alternatives, one selected commercial status",
+  "changes": [
+    "Grouped pricing listing, search and dashboard metrics",
+    "Seller options with ownership checks",
+    "Single commercial group identity, historic internal alternative A/B remain",
+    "CI staging verification before master, preserve multipoint routing"
   ],
-  "validation": "CI and staging required before master promotion",
   "productionDeployment": "not-authorized"
 }
