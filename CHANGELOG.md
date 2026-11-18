@@ -1,3 +1,10 @@
+## [1.23.4] - 2026-11-18 (Solicitudes: impedir reservas fantasmas después de liberar)
+
+- PATCH DH-20261118-PRICING-LEASE-214: el claim atómico rechaza el token que ya fue liberado por otra operación; la recuperación intencional de la propia reserva sigue permitida.
+- El backend mantiene el control por usuario y token, el TTL de dos minutos, scopes, auditoría y estado Trabajando sin modificar los contratos REST ni SignalR.
+- Pruebas de token obsoleto, reingreso manual y exclusión de terceros; CI y staging obligatorios antes de promoción.
+- DholePricingService 1.23.3 → 1.23.4; DholeWeb 1.77.2 → 1.77.3; DholeSystem 1.81.2 → 1.81.3.
+
 ## [1.23.3] - 2026-11-18 (Cotizaciones aceptadas: solo Pricing modifica)
 
 - PATCH DH-20261118-SELLER-ACCEPTED-213: GET modification-source y POST modification-requests bloquean con HTTP 409/Pricing.SellerModificationRequiresPricing solicitudes de vendedores sobre cotizaciones aceptadas o aceptadas anteriormente, incluso tras iniciar una nueva revisión.
