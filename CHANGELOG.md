@@ -1,3 +1,9 @@
+## [1.24.8] - 2026-11-18 (Pricing: corregir guardado 500 por fechas sin UTC)
+
+- PATCH DH-20261118-PRICING-SAVE-500-230: crear y editar tarifas convierte fechas comerciales YYYY-MM-DD a medianoche UTC antes de persistir en PostgreSQL timestamptz; conserva el día comercial sin desplazamientos por zona horaria.
+- Regresiones para entrada JSON sin offset, DateTime local y UTC. No requiere migraciones; contratos REST, scopes, auditoría y Outbox/SignalR sin cambios.
+- Pricing 1.24.7 → 1.24.8, ecosistema 1.86.1 → 1.86.2. CI y staging obligatorios antes de master; no se autoriza despliegue productivo.
+
 ## [1.24.7] - 2026-11-18 (Release coordinado: peso unitario LCL/LTL)
 
 - PATCH DH-20261118-CARGO-WEIGHT-PER-UNIT-229: versión coordinada con DholeWeb 1.82.1. Los consumidores convierten peso por unidad × cantidad en peso total por línea antes de invocar Pricing. Se conserva el contrato REST y la semántica existente del peso agregado en cargoLines[].weightKg y totalWeightKg, sin migraciones ni alteraciones en el cálculo backend.
