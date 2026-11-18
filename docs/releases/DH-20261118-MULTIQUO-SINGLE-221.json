@@ -1,0 +1,27 @@
+{
+  "releaseId": "DH-20261118-MULTIQUO-SINGLE-221",
+  "date": "2026-11-18",
+  "ecosystemVersion": "1.84.1",
+  "components": [
+    {
+      "component": "DholeSystem",
+      "version": "1.84.1"
+    },
+    {
+      "component": "DholeWeb",
+      "version": "1.80.2"
+    },
+    {
+      "component": "DholePricingService",
+      "version": "1.24.2"
+    }
+  ],
+  "scope": "One visible commercial quotation with selectable internal alternatives A/B",
+  "changes": [
+    "Commercial browse count/pagination, status and dashboard count one group",
+    "Pricing and assigned sellers choose accepted option without marking other option rejected",
+    "Ownership and permissions enforced; historic technical codes and PDF alternatives preserved"
+  ],
+  "prerequisites": "CI and staging successful before any production promotion",
+  "productionDeployment": "not-authorized"
+}
