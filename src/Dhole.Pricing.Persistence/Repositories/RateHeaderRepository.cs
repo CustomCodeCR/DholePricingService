@@ -733,7 +733,19 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 WHERE owner.rate_id = orphan.id
             )
             """);
-        query = query.Where(rate => !duplicateAlternativeIds.Contains(rate.Id));
+        // The dashboard counts one commercial QUO, not one row per A/B option.
+        // Use the selected option's financials/status, else the parent until chosen.
+        var hiddenGroupMembers = dbContext.Database.SqlQuery<Guid>($"""
+            SELECT member.rate_id AS "Value"
+            FROM pricing.rate_quote_alternatives member
+            WHERE member.rate_id <> COALESCE(
+                (SELECT chosen.rate_id FROM pricing.rate_quote_alternatives chosen
+                 WHERE chosen.parent_rate_id = member.parent_rate_id
+                   AND chosen.status = 'Selected' LIMIT 1),
+                member.parent_rate_id)
+            """);
+        query = query.Where(rate => !duplicateAlternativeIds.Contains(rate.Id)
+            && !hiddenGroupMembers.Contains(rate.Id));
 
         var totalRates = await query.CountAsync(cancellationToken);
 
@@ -876,6 +888,20 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             })
             .ToListAsync(cancellationToken);
 
+        var recentIds = recentRateRows.Select(rate => rate.Id).ToArray();
+        var recentGroupRows = await dbContext.Database.SqlQuery<string>($"""
+            SELECT a.rate_id::text || '|' || a.base_quote AS "Value"
+            FROM pricing.rate_quote_alternatives a
+            WHERE a.rate_id = ANY({recentIds})
+            """).ToListAsync(cancellationToken);
+        var recentGroupNumbers = new Dictionary<Guid, string>();
+        foreach (var line in recentGroupRows)
+        {
+            var parts = line.Split('|', 2);
+            if (parts.Length == 2 && Guid.TryParse(parts[0], out var id))
+                recentGroupNumbers[id] = parts[1];
+        }
+
         var recentRates = recentRateRows
             .Select(x => new PricingRateDashboardItemDto(
                 x.Id,
@@ -897,7 +923,8 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 x.ValidTo
             )
             {
-                QuoNumber = x.QuoNumber,
+                QuoNumber = recentGroupNumbers.TryGetValue(x.Id, out var groupNumber)
+                    ? groupNumber : x.QuoNumber,
                 CreatedByUserId = x.CreatedBy,
                 LastModifiedByUserId = x.UpdatedBy,
             })
