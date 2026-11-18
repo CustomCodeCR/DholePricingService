@@ -5,6 +5,42 @@ using Dhole.Pricing.Domain.Rates.Enums;
 namespace Dhole.Pricing.UnitTests;
 
 [TestClass]
+public sealed class ExwPickupPricePolicyTests
+{
+    [TestMethod]
+    public void NewExwFixedPickup_KeepsAuthorizedManualCostInsteadOfCatalogDefault()
+    {
+        var resolved = Dhole.Pricing.Application.Services.ExwPickupPricePolicy.ResolveFixedCostAmount(
+            requestedAmount: 110m,
+            catalogAmount: 60m,
+            updatingPersistedDetail: false,
+            selectedCurrencyDiffers: false,
+            notes: "Recolecta EXW: precio autorizado en Pricing");
+        Assert.AreEqual(110m, resolved);
+    }
+
+    [TestMethod]
+    public void OtherNewFixedCosts_StillUseCatalogCost()
+    {
+        var resolved = Dhole.Pricing.Application.Services.ExwPickupPricePolicy.ResolveFixedCostAmount(
+            requestedAmount: 110m,
+            catalogAmount: 60m,
+            updatingPersistedDetail: false,
+            selectedCurrencyDiffers: false,
+            notes: "Manejo documental");
+        Assert.AreEqual(60m, resolved);
+    }
+
+    [TestMethod]
+    public void ExistingFixedCostAndCurrencyOverride_KeepCurrentBehavior()
+    {
+        var policy = Dhole.Pricing.Application.Services.ExwPickupPricePolicy.ResolveFixedCostAmount;
+        Assert.AreEqual(110m, policy(110m, 60m, true, false, null));
+        Assert.AreEqual(110m, policy(110m, 60m, false, true, null));
+    }
+}
+
+[TestClass]
 public sealed class OwnLclMatrixFixedChargePolicyTests
 {
     [TestMethod]
