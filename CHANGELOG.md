@@ -1,3 +1,9 @@
+## [1.24.8] - 2026-11-18 (Pricing: corregir guardado 500 por fechas sin UTC · master)
+
+- PATCH DH-20261118-PRICING-SAVE-500-230: backport exacto de la normalización de fechas comerciales YYYY-MM-DD a medianoche UTC para evitar escritura de DateTimeKind.Unspecified en columnas PostgreSQL timestamptz.
+- Tres regresiones de fechas sin offset, local y UTC; no altera contrato REST, audit logs, scopes ni SignalR/Outbox. Sin migración de base de datos.
+- Pricing 1.24.7→1.24.8, ecosistema 1.86.1→1.86.2. Build y staging obligatorios antes de integrar a master. Producción no autorizada.
+
 ## [1.24.7] - 2026-11-18 (Release coordinado: peso por unidad LCL/LTL · master)
 
 - PATCH DH-20261118-CARGO-WEIGHT-PER-UNIT-229: promover en master el contrato de peso agregado LCL/LTL validado en develop y staging. DholeWeb multiplica el peso por unidad × cantidad antes de guardar; Pricing sigue recibiendo peso total por línea, sin cambios de esquema, scopes, eventos, REST ni lógica backend.
