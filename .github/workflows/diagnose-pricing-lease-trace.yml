@@ -1,0 +1,42 @@
+name: Pricing lease claim trace diagnostic (read-only)
+on:
+  push:
+    branches:
+      - diagnostics/pricing-claim-trace-20261118
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: [self-hosted, linux, x64, dhole]
+    timeout-minutes: 3
+    steps:
+      - name: Identify exception class for the supplied trace
+        shell: bash
+        run: |
+          set -euo pipefail
+          ids="$(docker ps --filter 'name=pricing-api' -q)"
+          if [ -z "$ids" ]; then echo 'No running Pricing API container'; exit 1; fi
+          for id in $ids; do
+            docker logs --since 6h "$id" > "$RUNNER_TEMP/pricing-lease-claim-logs" 2>&1 || true
+            python3 - "$RUNNER_TEMP/pricing-lease-claim-logs" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+          trace = "0HNQ5JP78QTL4:00000009"
+          data = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace").splitlines()
+          indices = [i for i, line in enumerate(data) if trace in line]
+          print("Trace matching entries:", len(indices))
+          for index in indices[-3:]:
+              fragment = data[index:index+50]
+              for line in fragment:
+                  match = re.search(r"\b(?:Npgsql\.)?(?:PostgresException|NpgsqlException)|\b(?:InvalidOperationException|DbUpdateException|ArgumentException|NotSupportedException|TimeoutException|ObjectDisposedException|InvalidCastException|NullReferenceException)", line)
+                  if match:
+                      start = match.start()
+                      print("Exception category and sanitized message:", re.sub(r"(password|secret|token|apikey)\s*[=:]\s*\S+", r"\1=<redacted>", line[start:start+280], flags=re.I))
+                  if re.search(r"\bat Dhole\.Pricing\.|\bat Microsoft\.EntityFrameworkCore\.", line):
+                      print("Stack frame:", line.strip()[:220])
+                  if "SqlState:" in line or "SQLSTATE" in line:
+                      print("PostgreSQL state:", line.strip()[:100])
+              print("Trace located; inspected 50 adjacent lines without printing request data.")
+          PY
+          done
