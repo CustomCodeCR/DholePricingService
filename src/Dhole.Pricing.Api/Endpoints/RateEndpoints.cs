@@ -1223,13 +1223,9 @@ public static class RateEndpoints
                 OtherReferences = request.OtherReferences,
                 LclGroupAgentId = request.LclGroupAgentId,
                 PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
-                InlandServiceLocationsJson = request.InlandPickupLocation is null && request.InlandDeliveryLocation is null
-                    ? null
-                    : System.Text.Json.JsonSerializer.Serialize(new
-                    {
-                        pickup = request.InlandPickupLocation,
-                        delivery = request.InlandDeliveryLocation
-                    }),
+                InlandServiceLocationsJson = SerializeInlandServiceLocations(
+                    request.InlandPickupLocation, request.InlandDeliveryLocation,
+                    request.InlandPickupLocations, request.InlandDeliveryLocations),
                 StorageDays = request.StorageDays,
                 CargoValue = request.CargoValue,
                 TransitDays = request.TransitDays,
@@ -1817,13 +1813,9 @@ public static class RateEndpoints
                 ExpectedRevisionNumber = request.ExpectedRevisionNumber,
                 ModificationRequestId = request.ModificationRequestId,
                 PickupLocationsJson = SerializePickupLocations(request.PickupLocations),
-                InlandServiceLocationsJson = request.InlandPickupLocation is null && request.InlandDeliveryLocation is null
-                    ? null
-                    : System.Text.Json.JsonSerializer.Serialize(new
-                    {
-                        pickup = request.InlandPickupLocation,
-                        delivery = request.InlandDeliveryLocation
-                    }),
+                InlandServiceLocationsJson = SerializeInlandServiceLocations(
+                    request.InlandPickupLocation, request.InlandDeliveryLocation,
+                    request.InlandPickupLocations, request.InlandDeliveryLocations),
                 StorageDays = request.StorageDays,
                 CargoValue = request.CargoValue,
                 TransitDays = request.TransitDays,
@@ -2486,6 +2478,47 @@ public static class RateEndpoints
         );
 
         return EndpointResults.FromResult(result, httpContext);
+    }
+
+    // Compatible with historic single-stop clients and new multi-stop requests.
+    // The original pickup/delivery keys remain available for old readers.
+    private static string? SerializeInlandServiceLocations(
+        Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation? pickup,
+        Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation? delivery,
+        IReadOnlyCollection<Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation>? pickups,
+        IReadOnlyCollection<Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation>? deliveries)
+    {
+        if (pickup is null && delivery is null && pickups is null && deliveries is null)
+            return null; // Older clients: do not erase previously saved locations.
+
+        static Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation[] Normalize(
+            IReadOnlyCollection<Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation>? locations,
+            Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation? legacy)
+        {
+            var source = locations ?? (legacy is null ? [] : [legacy]);
+            return source
+                .Where(x => !string.IsNullOrWhiteSpace(x.Address))
+                .Take(50)
+                .Select(x => x with
+                {
+                    Address = x.Address.Trim(),
+                    CargoCondition = x.CargoCondition is "FiscalCargo" or "NationalizedCargo"
+                        ? x.CargoCondition : null,
+                    BillingParty = x.BillingParty is "Exporter" or "Importer" or "Both" or "ByAgreement"
+                        ? x.BillingParty : null
+                })
+                .ToArray();
+        }
+
+        var normalizedPickups = Normalize(pickups, pickup);
+        var normalizedDeliveries = Normalize(deliveries, delivery);
+        return System.Text.Json.JsonSerializer.Serialize(new
+        {
+            pickup = normalizedPickups.FirstOrDefault(),
+            delivery = normalizedDeliveries.FirstOrDefault(),
+            pickups = normalizedPickups,
+            deliveries = normalizedDeliveries
+        });
     }
 
     private static string? SerializePickupLocations(
