@@ -95,6 +95,9 @@ public sealed record CreateRateCommand(
     Guid? CreatedBy
 ) : ICommand<Result<Guid>>
 {
+    // Trusted API-only allocation: one consecutive belongs to the entire grouped commercial QUO.
+    // Never bind this value from CreateRateRequest or a browser payload.
+    public string? ReservedGroupRateCode { get; init; }
     public IReadOnlyCollection<Guid> FinalBackupStorageIds { get; init; } = [];
     public string? PickupLocationsJson { get; init; }
     public string? InlandServiceLocationsJson { get; init; }

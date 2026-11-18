@@ -62,6 +62,20 @@ public sealed class QuoteAlternativeNumberingTests
     }
 
     [TestMethod]
+    public void CommercialGroupUsesOneParentConsecutiveWithoutUnsuffixedChildren()
+    {
+        var options = QuoteAlternativeNumbering.Append(Parent,
+            [Candidate(Caldera, Msc), Candidate(Moin, Maersk)], []);
+        CollectionAssert.AreEquivalent(
+            new[] { Parent + "-A", Parent + "-B" },
+            options.Select(option => option.QuoteNumber).ToArray());
+        Assert.IsFalse(options.Any(option => option.QuoteNumber == Parent));
+        var selected = QuoteAlternativeNumbering.Select(options, options[1].Key);
+        Assert.AreEqual(Parent + "-B", selected[1].QuoteNumber);
+        Assert.AreEqual(Parent + "-A", selected[0].QuoteNumber);
+    }
+
+    [TestMethod]
     public void InvalidAndDuplicateOptions_CannotCauseAmbiguousCommercialNumbers()
     {
         Assert.ThrowsExactly<ArgumentException>(() =>

@@ -1,3 +1,10 @@
+## [1.23.5] - 2026-11-18 (MultiQUO: conservar 672-A/B, nunca 672/673 comerciales)
+
+- PATCH DH-20261118-MULTIQUO-IDENTITY-217: una sola reserva transaccional de consecutivo por grupo FCL; RateCode único por opción con sufijos A/B, mientras QuoNumber es siempre el identificador comercial. La selección exclusiva ya no elimina el sufijo de la alternativa aceptada.
+- Migración idempotente de grupos existentes: restaura QuoNumber y alternative_quote originales desde base_quote + suffix sin modificar RateCode, importes ni referencias históricas; amplía únicamente el formato técnico permitido en RateCode.
+- Listados y búsqueda dejan de usar el consecutivo técnico de subQUO como número comercial. Se conservan auditoría, permisos, eventos Outbox/SignalR y PDFs agrupados.
+- DholePricingService 1.23.3/1.23.4 → 1.23.5; DholeWeb 1.78.0/1.78.1 → 1.78.2; ecosistema 1.82.0/1.82.1 → 1.83.1. CI + staging obligatorios antes de master; sin autorización de despliegue productivo.
+
 ## [1.23.4] - 2026-11-18 (Solicitudes: impedir reservas fantasmas después de liberar)
 
 - PATCH DH-20261118-PRICING-LEASE-214: el claim atómico rechaza el token que ya fue liberado por otra operación; la recuperación intencional de la propia reserva sigue permitida.
