@@ -1,0 +1,22 @@
+{
+  "releaseId": "DH-20261118-DDP-EXPORT-FREIGHT-225",
+  "component": "DholePricingService",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.84.3",
+  "releaseType": "PATCH",
+  "previousVersion": "1.24.3",
+  "version": "1.24.4",
+  "changes": [
+    "Corregir flete internacional DDP de exportación LTL/FTL",
+    "Respetar perspectiva de comprador/vendedor sin alterar reglas ICC",
+    "No borrar Freight mientras se hidrata el catálogo de servicios"
+  ],
+  "scopes": "unchanged",
+  "rest": "compatible",
+  "realtime": "unchanged",
+  "validation": {
+    "ci": "pending",
+    "staging": "pending",
+    "production": "not-approved"
+  }
+}
