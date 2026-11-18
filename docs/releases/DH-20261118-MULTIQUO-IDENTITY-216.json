@@ -1,0 +1,24 @@
+{
+  "releaseId": "DH-20261118-MULTIQUO-IDENTITY-216",
+  "date": "2026-11-18",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.82.2",
+  "components": [
+    {
+      "name": "DholePricingService",
+      "version": "1.23.5"
+    },
+    {
+      "name": "DholeWeb",
+      "version": "1.78.2"
+    }
+  ],
+  "changes": [
+    "One transactionally reserved consecutive per FCL quotation group, with suffixed technical and commercial child identities",
+    "Selection does not promote a chosen option to an unsuffixed quote",
+    "Migration reconciles older selected grouped quotes without modifying internal historic rate codes",
+    "Federated and pricing searches use the persisted commercial identifier"
+  ],
+  "validation": "CI build and regression, staging verification required before master",
+  "productionDeployment": "not-authorized"
+}
