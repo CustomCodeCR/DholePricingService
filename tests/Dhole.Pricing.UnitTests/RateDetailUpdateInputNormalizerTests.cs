@@ -34,9 +34,10 @@ public sealed class ExwPickupPricePolicyTests
     [TestMethod]
     public void ExistingFixedCostAndCurrencyOverride_KeepCurrentBehavior()
     {
-        var policy = Dhole.Pricing.Application.Services.ExwPickupPricePolicy.ResolveFixedCostAmount;
-        Assert.AreEqual(110m, policy(110m, 60m, true, false, null));
-        Assert.AreEqual(110m, policy(110m, 60m, false, true, null));
+        Assert.AreEqual(110m, Dhole.Pricing.Application.Services.ExwPickupPricePolicy.ResolveFixedCostAmount(
+            110m, 60m, true, false, null));
+        Assert.AreEqual(110m, Dhole.Pricing.Application.Services.ExwPickupPricePolicy.ResolveFixedCostAmount(
+            110m, 60m, false, true, null));
     }
 }
 
