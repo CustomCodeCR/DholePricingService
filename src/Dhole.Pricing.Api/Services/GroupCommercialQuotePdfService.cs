@@ -62,9 +62,31 @@ public sealed class GroupCommercialQuotePdfService(
         var selected = rows.FirstOrDefault(row => row.Status == "Selected");
         if (selected.Id != Guid.Empty)
         {
-            // Historical links to discarded sub-QUOs must use the definitive one.
-            return new GroupCommercialQuoteResult(
-                selected.Id, first.ParentId, first.BaseQuote, null);
+            // After acceptance there is ONE commercial PDF numbered by the
+            // unsuffixed parent. Keep child RateCode/QuoNumber unchanged in storage;
+            // only the outgoing report payload and filename use the parent number.
+            var chosen = await rateHeaders.GetByIdWithDetailsAsync(selected.Id, cancellationToken);
+            if (chosen is null || chosen.IsDeleted)
+                throw new GroupCommercialQuoteApprovalException("La alternativa elegida ya no existe.");
+            if (chosen.Status == RateStatus.AcceptedByClient)
+            {
+                if (chosen.RequiredApproval)
+                    throw new GroupCommercialQuoteApprovalException("La QUO requiere aprobación de margen.");
+                var payload = JsonNode.Parse(dataFactory.CreateDataJson(chosen)) as JsonObject;
+                if (payload?["rate"] is JsonObject commercialRate)
+                {
+                    commercialRate["quoteNumber"] = first.BaseQuote;
+                    commercialRate["rateCode"] = first.BaseQuote;
+                    commercialRate["comments"] =
+                        (await rateComments.GetAsync(chosen.Id, cancellationToken))?.Trim() ?? string.Empty;
+                }
+                var document = await reportsClient.GenerateAsync(
+                    "pricing-fcl-client-quote", "pdf",
+                    payload?.ToJsonString() ?? dataFactory.CreateDataJson(chosen),
+                    first.BaseQuote, "Tarifa", cancellationToken);
+                return new GroupCommercialQuoteResult(
+                    selected.Id, first.ParentId, first.BaseQuote, document);
+            }
         }
 
         var options = new List<PricingQuoteGroupDocumentItem>(rows.Count);
