@@ -1,0 +1,18 @@
+{
+  "releaseId": "DH-20261117-SELLER-CANCEL-ACCEPTED-203",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.73.1",
+  "component": "DholePricingService",
+  "previousVersion": "1.23.1",
+  "version": "1.23.2",
+  "type": "PATCH",
+  "date": "2026-11-17",
+  "status": "candidate-ci-and-staging-pending",
+  "branch": "fix/DH-20261117-SELLER-CANCEL-ACCEPTED-203-develop-v2",
+  "targetBranch": "develop",
+  "change": "Únicamente AcceptedByClient → Cancelled en API y dominio; motivo, auditoría y realtime preservados.",
+  "reuses": [
+    "DholeWeb 1.70.1 on develop",
+    "DholeSystem 1.73.1 global"
+  ]
+}
