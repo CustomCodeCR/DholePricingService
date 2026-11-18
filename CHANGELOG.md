@@ -1,8 +1,7 @@
-## [1.24.1] - 2026-11-18 (MultiQUO: una cotización comercial con opciones internas)
+## [1.24.2] - 2026-11-18 (MultiQUO: una QUO comercial, alternativas dentro)
 
-- PATCH DH-20261118-MULTIQUO-SINGLE-220: agrupa opciones FCL en una sola fila QUO (ej. 672) antes de paginación, métricas y dashboard. El estado y los importes representan únicamente la opción elegida. Las otras opciones no cuentan como cotizaciones rechazadas.
-- Vendedores pueden consultar y elegir opciones con autorización por cuenta; se mantienen los códigos A/B para auditoría y PDF, sin exponer costos internos en la API comercial.
-- Compatible con las mejoras multipunto 1.24.0. Pricing 1.24.0 → 1.24.1; Web 1.80.0 → 1.80.1; ecosistema 1.84.0 → 1.84.1. Verificar CI y staging previo a master.
+- PATCH DH-20261118-MULTIQUO-SINGLE-221: unifica listado y dashboard por grupo comercial y selecciona una opción A/B sin reportar la otra como cotización no aceptada; permite decisiones de vendedor con validación de pertenencia y mantiene auditoría, REST, SignalR y Outbox.
+- Preserva Pricing multipunto 1.24.0 y corrección de reservas 1.24.1. Pricing 1.24.1 → 1.24.2, Web 1.80.1 → 1.80.2, ecosistema 1.83.4 → 1.84.1. Requiere CI y staging antes de master.
 
 ## [1.24.0] - 2026-11-18 (Pricing: múltiples puntos y perspectiva comercial)
 
