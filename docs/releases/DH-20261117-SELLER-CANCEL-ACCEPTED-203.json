@@ -1,7 +1,7 @@
 {
   "releaseId": "DH-20261117-SELLER-CANCEL-ACCEPTED-203",
   "ecosystem": "Dhole",
-  "ecosystemVersion": "1.73.1",
+  "ecosystemVersion": "1.73.2",
   "component": "DholePricingService",
   "previousVersion": "1.23.1",
   "version": "1.23.2",
