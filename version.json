@@ -3,8 +3,8 @@
   "ecosystem": "Dhole",
   "component": "DholePricingService",
   "version": "1.23.5",
-  "ecosystemVersion": "1.82.2",
-  "releaseId": "DH-20261118-MULTIQUO-IDENTITY-216",
+  "ecosystemVersion": "1.83.1",
+  "releaseId": "DH-20261118-MULTIQUO-IDENTITY-217",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261118-MULTIQUO-IDENTITY-216"
+  "businessReleaseId": "DH-20261118-MULTIQUO-IDENTITY-217"
 }
