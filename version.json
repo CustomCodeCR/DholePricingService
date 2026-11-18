@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.23.0",
-  "ecosystemVersion": "1.72.0",
-  "releaseId": "DH-20261117-SELLER-CANCEL-202",
+  "version": "1.23.1",
+  "ecosystemVersion": "1.72.1",
+  "releaseId": "DH-20261117-CRM-RATE-REQUEST-OWNER-203",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261117-SELLER-CANCEL-202"
+  "businessReleaseId": "DH-20261117-CRM-RATE-REQUEST-OWNER-203"
 }
