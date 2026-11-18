@@ -1,0 +1,17 @@
+{
+  "releaseId": "DH-20261118-PRICING-LEASE-220",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.83.4",
+  "component": "DholePricingService",
+  "from": "1.23.7",
+  "to": "1.23.8",
+  "type": "PATCH",
+  "summary": "Scalar PostgreSQL advisory try-lock and actionable request-claim failures",
+  "status": "candidate-ci-and-staging-pending",
+  "scopes": "unchanged",
+  "realtime": "unchanged",
+  "validation": {
+    "ci": "pending",
+    "staging": "pending"
+  }
+}

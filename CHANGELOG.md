@@ -1,3 +1,8 @@
+## [1.23.8] - 2026-11-18 (Pricing: error de reserva en wizard)
+
+- PATCH DH-20261118-PRICING-LEASE-220: adquisición tipada de pg_try_advisory_xact_lock en transacción, 409 de concurrencia y 503 con TraceId ante excepción SQL, y predicado de inactividad con corte precalculado EF. Preserva un lease por operador, scopes, auditoría, REST y SignalR.
+- Pruebas de claim, bloqueo ajeno y liberación inactiva; CI/staging pendientes. Pricing 1.23.7→1.23.8; Web 1.79.3→1.79.4; ecosistema 1.83.3→1.83.4.
+
 ## [1.23.7] - 2026-11-18 (Pricing: liberar reservas huérfanas sin reclamarlas)
 
 - PATCH DH-20261118-PRICING-LEASE-219: nuevos endpoints de liberación de reserva propia sin claim y liberación de bloqueo ajeno solo tras 45 segundos sin heartbeat, con verificación atómica, scope pricing.rate.update y trazabilidad estructurada.
