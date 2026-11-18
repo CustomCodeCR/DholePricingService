@@ -62,6 +62,7 @@ public static class RateRequestEndpoints
         ServiceDbContext db,
         SellerVisibilityService visibilityService,
         AuthSellerDirectoryService sellerDirectory,
+        CrmTariffClientIdentityResolver crmClientResolver,
         IPricingNotificationRecipientProvider recipientProvider,
         IIntegrationEventOutboxWriter outbox,
         ILoggerFactory loggerFactory,
@@ -96,6 +97,49 @@ public static class RateRequestEndpoints
 
         var sellerUserId = request.SellerUserId ?? currentUserId.Value;
         var technicalActor = ThirdPartyRateRequestIdentity.IsDedicatedActor(httpContext.User, currentUserId);
+
+        // CRM is authoritative for the commercial owner. The person submitting a
+        // request is the audit actor; the assigned seller owns /mine and edits.
+        // Dedicated API Manager actors remain bound to their signed seller identity.
+        VerifiedCrmTariffClient? crmClient = null;
+        if (!technicalActor && request.Payload.ValueKind == JsonValueKind.Object
+            && request.Payload.TryGetProperty("form", out var crmForm)
+            && crmForm.ValueKind == JsonValueKind.Object
+            && crmForm.TryGetProperty("crmClientKind", out var kindElement)
+            && kindElement.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(kindElement.GetString()))
+        {
+            var kind = kindElement.GetString()!;
+            if (kind is not ("account" or "lead")
+                || !crmForm.TryGetProperty("clientId", out var clientElement)
+                || clientElement.ValueKind != JsonValueKind.String
+                || !Guid.TryParse(clientElement.GetString(), out var clientId)
+                || clientId == Guid.Empty)
+                return Results.BadRequest(new {
+                    code = "Pricing.RateRequestInvalidCrmClient",
+                    message = "Seleccione una cuenta o prospecto válido de CRM."
+                });
+
+            var (verifiedClient, verificationError) = await crmClientResolver.ResolveAsync(
+                clientId, kind, httpContext.Request.Headers.Authorization.ToString(), ct);
+            if (verifiedClient is null)
+                return Results.BadRequest(new {
+                    code = "Pricing.RateRequestCrmVerificationFailed",
+                    message = verificationError ?? "No se pudo verificar el vendedor responsable en CRM."
+                });
+
+            crmClient = verifiedClient;
+            if (!verifiedClient.IsCastroFallasExecutive)
+            {
+                if (verifiedClient.ExecutiveUserId == Guid.Empty)
+                    return Results.BadRequest(new {
+                        code = "Pricing.RateRequestCrmSellerUnavailable",
+                        message = "El cliente no tiene un vendedor responsable válido en CRM."
+                    });
+                sellerUserId = verifiedClient.ExecutiveUserId;
+            }
+        }
+
         if (ThirdPartyRateRequestIdentity.IsApiManagerToken(httpContext.User) &&
             (!technicalActor || !ThirdPartyRateRequestIdentity.AllowsSeller(httpContext.User, sellerUserId)))
             return Results.Forbid();
@@ -111,7 +155,8 @@ public static class RateRequestEndpoints
         {
             // An API Manager JWT can only delegate to the seller locked in its
             // signed token. Ordinary sessions retain the normal visibility ACL.
-            if (!technicalActor)
+            if (!technicalActor && !(crmClient is { IsCastroFallasExecutive: false }
+                && crmClient.ExecutiveUserId == sellerUserId))
             {
                 var visibility = await visibilityService.ResolveAsync(
                     httpContext,
@@ -161,8 +206,8 @@ public static class RateRequestEndpoints
             sellerUserId,
             sellerName,
             sellerEmail,
-            request.ClientName,
-            request.ExecutiveName,
+            crmClient?.DisplayName ?? request.ClientName,
+            crmClient?.ExecutiveName ?? request.ExecutiveName,
             request.ShipmentMode,
             request.OriginName,
             request.DestinationName,
