@@ -1,3 +1,9 @@
+## [1.23.0] - 2026-11-17 (Vendedores: cancelación comercial)
+
+- MINOR DH-20261117-SELLER-CANCEL-202: `PATCH /api/pricing/seller-rates/{rateId}/status` admite `Cancelled` con motivo obligatorio de hasta 1000 caracteres y validación de propiedad del vendedor.
+- Se habilita la transición Sent/RequestedByClient/Expired/AcceptedByClient → Cancelled. Persistencia de ClosedReason/ClosedBy/ClosedAtUtc, evento de dominio y auditoría existentes. Respuesta idempotente al reintentar sin notificación adicional.
+- Pricing 1.22.5 → 1.23.0; ecosistema 1.70.6 → 1.72.0; CI/staging pendientes y sin autorización de despliegue productivo.
+
 ## [1.22.5] - 2026-11-17 (LCL propio: guardado seguro de cargas y Manejos)
 
 - PATCH DH-20261117-OWN-LCL-INSURANCE-196: el UpdateRate rechaza snapshots incompletos de LCL propio que omitan Seguro de carga o Manejos previamente facturados sin eliminación explícita. No altera contratos de Coloader/FCL ni duplicados y conserva validaciones existentes.
