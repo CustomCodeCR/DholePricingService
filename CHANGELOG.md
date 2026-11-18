@@ -1,3 +1,8 @@
+## [1.24.7] - 2026-11-18 (Release coordinado: peso por unidad LCL/LTL · master)
+
+- PATCH DH-20261118-CARGO-WEIGHT-PER-UNIT-229: promover en master el contrato de peso agregado LCL/LTL validado en develop y staging. DholeWeb multiplica el peso por unidad × cantidad antes de guardar; Pricing sigue recibiendo peso total por línea, sin cambios de esquema, scopes, eventos, REST ni lógica backend.
+- DholePricingService master 1.24.5 → 1.24.7 (salto monotónico a la versión del release coordinado develop), DholeWeb 1.82.1 y DholeSystem/ecosistema 1.86.1. Validación de CI master y prueba funcional autenticada pendientes; producción requiere autorización expresa.
+
 ## [1.24.5] - 2026-11-18 (Pricing: compatibilidad de recolecta EXW / LCL propio)
 
 - PATCH DH-20261118-PRICING-EXW-PICKUP-226: backport master del release EXW own-LCL de develop; preserva el contrato de detalle con costo, venta y cantidad de recolecta ingresados desde Web.
