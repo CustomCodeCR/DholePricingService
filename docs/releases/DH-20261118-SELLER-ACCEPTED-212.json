@@ -1,0 +1,38 @@
+{
+  "releaseId": "DH-20261118-SELLER-ACCEPTED-212",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.81.1",
+  "component": "DholePricingService",
+  "previousVersion": "1.23.2",
+  "version": "1.23.3",
+  "type": "PATCH",
+  "date": "2026-11-18",
+  "status": "candidate-ci-and-staging-pending",
+  "candidateBranch": "fix/DH-20261118-SELLER-ACCEPTED-212-develop",
+  "targetBranch": "develop",
+  "summary": "Vendedores no pueden solicitar modificaciones de QUO aceptadas; solo Pricing puede editar",
+  "validation": [
+    "GET/POST vendedor con cotización aceptada: HTTP 409",
+    "Aceptación histórica mantiene el bloqueo tras revisión",
+    "Cotizaciones no aceptadas conservan el flujo comercial",
+    "Scopes, auditoría y SignalR sin regresiones",
+    "dotnet build, dotnet test, CI y staging antes de master"
+  ],
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "previousVersion": "1.77.0",
+      "version": "1.77.1"
+    },
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "previousVersion": "1.23.2",
+      "version": "1.23.3"
+    }
+  ],
+  "compatibility": {
+    "rest": "Sin cambios para operaciones exitosas; 409 en solicitudes prohibidas",
+    "realtime": "Sin cambios; conserva outbox y SignalR",
+    "databaseMigration": false
+  }
+}
