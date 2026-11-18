@@ -1,3 +1,9 @@
+## [1.23.3] - 2026-11-18 (Cotizaciones aceptadas: solo Pricing modifica)
+
+- PATCH DH-20261118-SELLER-ACCEPTED-213: GET modification-source y POST modification-requests bloquean con HTTP 409/Pricing.SellerModificationRequiresPricing solicitudes de vendedores sobre cotizaciones aceptadas o aceptadas anteriormente, incluso tras iniciar una nueva revisión.
+- La validación usa el estado y AcceptedAtUtc persistidos. La autorización pricing.rate-request.create del vendedor no habilita modificar tarifas aceptadas; Pricing conserva su ruta de modificación bajo pricing.rate.update.
+- Pruebas de regresión para estados aceptados, revisiones de Pricing y cotizaciones no aceptadas. Se conservan auditoría, outbox/SignalR, API de edición de Pricing y esquema. Pricing 1.23.2 → 1.23.3, Web 1.77.1 → 1.77.2, ecosistema 1.81.1 → 1.81.2. CI/staging antes de master.
+
 ## [1.23.2] - 2026-11-17 (Solicitudes de tarifas: propietario vendedor CRM)
 
 - PATCH DH-20261117-CRM-RATE-OWNER-PROD-205: las solicitudes creadas por otro usuario conservan el usuario creador en auditoría y se asignan al vendedor responsable de la cuenta/prospecto según CRM, verificado por el backend. GET/PUT /mine sigue validando propietario.

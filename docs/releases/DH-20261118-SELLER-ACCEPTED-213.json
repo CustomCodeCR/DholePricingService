@@ -1,0 +1,37 @@
+{
+  "releaseId": "DH-20261118-SELLER-ACCEPTED-213",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.81.2",
+  "component": "DholePricingService",
+  "previousVersion": "1.23.2",
+  "version": "1.23.3",
+  "type": "PATCH",
+  "date": "2026-11-18",
+  "status": "candidate-ci-and-staging-pending",
+  "candidateBranch": "fix/DH-20261118-SELLER-ACCEPTED-213-master",
+  "targetBranch": "master",
+  "summary": "Bloqueo servidor de solicitudes de vendedor sobre cotizaciones aceptadas; Pricing puede modificarlas",
+  "validation": [
+    "GET/POST responden 409 en aceptación actual o histórica",
+    "Modificaciones de no aceptadas siguen funcionando",
+    "pricing.rate.update reservado a editor Pricing",
+    "Pruebas, compilación, CI y staging antes de master"
+  ],
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "previousVersion": "1.77.1",
+      "version": "1.77.2"
+    },
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "previousVersion": "1.23.2",
+      "version": "1.23.3"
+    }
+  ],
+  "compatibility": {
+    "rest": "Solo cambia el 409 para operaciones no permitidas",
+    "realtime": "Outbox y SignalR sin cambios",
+    "databaseMigration": false
+  }
+}
