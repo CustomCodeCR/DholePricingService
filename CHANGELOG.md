@@ -1,3 +1,10 @@
+## [1.24.5] - 2026-11-18 (Pricing: compatibilidad de recolecta EXW / LCL propio)
+
+- PATCH DH-20261118-PRICING-EXW-PICKUP-226: backport master del release EXW own-LCL de develop; preserva el contrato de detalle con costo, venta y cantidad de recolecta ingresados desde Web.
+- No cambia lógica REST, base de datos, scopes, AuditLogs ni eventos SignalR del backend; incremento sincronizado con Web 1.80.4 y System 1.84.4 para la promoción coordinada.
+- Staging develop aprobado en build/health; CI del backport y smoke autenticado pendientes.
+- Staging comprobado: Pricing https://github.com/CustomCodeCR/DholePricingService/actions/runs/44381748194 y Web https://github.com/CustomCodeCR/DholeWeb/actions/runs/44381755824 (ambos success). CI de backport debe superar controles propios de master antes de integrar.
+
 ## [1.24.4] - 2026-11-18 (Pricing: flete DDP exportación terrestre LTL/FTL)
 
 - PATCH DH-20261118-DDP-EXPORT-FREIGHT-225: corregir el filtrado de flete internacional por Incoterm para distinguir exportador/importador. DDP en exportación y EXW en importación conservan flete cuando el servicio internacional está contratado.
