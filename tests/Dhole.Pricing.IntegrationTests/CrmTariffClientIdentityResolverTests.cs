@@ -87,7 +87,7 @@ public sealed class CrmTariffClientIdentityResolverTests
         var resolver = Resolver(request => {
             StringAssert.Contains(request.RequestUri!.Query, $"selectedClientId={id:D}");
             return new HttpResponseMessage(HttpStatusCode.OK) {
-                Content = new StringContent($"""
+                Content = new StringContent($$"""
                 {"items":[{"kind":"account","id":"{{id}}",
                  "displayName":"Cliente de rsoto", "executiveName":"rsoto",
                  "executiveUserId":"{{assignedSellerId}}",
