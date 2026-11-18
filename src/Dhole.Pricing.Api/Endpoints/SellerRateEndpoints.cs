@@ -98,8 +98,28 @@ public static class SellerRateEndpoints
         if (orderedIds.Length == 0)
             return Results.Ok(Array.Empty<RateDto>());
 
-        var items = new List<RateDto>(orderedIds.Length);
-        foreach (var rateId in orderedIds)
+        // A linked/assigned child grants access to its group, but each sibling
+        // is separately checked against the seller's authorization before use.
+        var allIds = orderedIds.ToList();
+        var siblingIds = await db.Database.SqlQuery<Guid>($"""
+            SELECT DISTINCT sibling.rate_id AS "Value"
+            FROM pricing.rate_quote_alternatives sibling
+            WHERE sibling.parent_rate_id IN (
+                SELECT linked.parent_rate_id
+                FROM pricing.rate_quote_alternatives linked
+                WHERE linked.rate_id = ANY({orderedIds}))
+            """).ToListAsync(cancellationToken);
+        foreach (var siblingId in siblingIds.Except(allIds).ToArray())
+        {
+            var member = await db.RateHeaders.AsNoTracking()
+                .FirstOrDefaultAsync(rate => rate.Id == siblingId && !rate.IsDeleted, cancellationToken);
+            if (member is not null &&
+                await sellerAccess.CanReadAsync(member, currentUserId.Value, cancellationToken))
+                allIds.Add(siblingId);
+        }
+
+        var items = new List<RateDto>(allIds.Count);
+        foreach (var rateId in allIds)
         {
             var result = await dispatcher.DispatchAsync(
                 new GetRateByIdQuery(rateId),
@@ -115,8 +135,54 @@ public static class SellerRateEndpoints
             cancellationToken
         );
 
-        var visibleItems = new List<object>(enrichedItems.Count);
-        foreach (var item in enrichedItems)
+        // Parent or chosen child represents the entire QUO. This happens
+        // before the seller dashboard counts/ranks accepted vs rejected.
+        var visibleIds = enrichedItems.Select(item => item.Id).ToArray();
+        var groupData = await db.Database.SqlQuery<string>($"""
+            SELECT a.rate_id::text || '|' || a.parent_rate_id::text || '|' ||
+                   a.base_quote || '|' || COALESCE(chosen.rate_id::text, '') ||
+                   '|' || totals.total::text AS "Value"
+            FROM pricing.rate_quote_alternatives a
+            LEFT JOIN pricing.rate_quote_alternatives chosen
+              ON chosen.parent_rate_id = a.parent_rate_id AND chosen.status = 'Selected'
+            JOIN (
+                SELECT parent_rate_id, COUNT(*) AS total
+                FROM pricing.rate_quote_alternatives GROUP BY parent_rate_id
+            ) totals ON totals.parent_rate_id = a.parent_rate_id
+            WHERE a.rate_id = ANY({visibleIds})
+            """).ToListAsync(cancellationToken);
+        var membership = new Dictionary<Guid, (Guid Parent, string BaseQuote, Guid? Selected, int Count)>();
+        foreach (var row in groupData)
+        {
+            var fields = row.Split('|', 5);
+            if (fields.Length != 5 || !Guid.TryParse(fields[0], out var id)
+                || !Guid.TryParse(fields[1], out var parent)
+                || !int.TryParse(fields[4], out var count)) continue;
+            membership[id] = (parent, fields[2],
+                Guid.TryParse(fields[3], out var selected) ? selected : null, count);
+        }
+        var representatives = enrichedItems.GroupBy(item =>
+            membership.TryGetValue(item.Id, out var group) ? group.Parent : item.Id)
+            .Select(group =>
+            {
+                var info = group.Select(item => membership.TryGetValue(item.Id, out var m)
+                    ? m : ((Guid Parent, string BaseQuote, Guid? Selected, int Count)?)null)
+                    .FirstOrDefault(value => value.HasValue);
+                if (!info.HasValue) return group.First();
+                var member = info.Value;
+                var chosen = group.FirstOrDefault(item => item.Id == (member.Selected ?? member.Parent))
+                    ?? group.First();
+                var prefix = chosen.RateName.StartsWith(chosen.RateCode, StringComparison.OrdinalIgnoreCase)
+                    ? chosen.RateCode : chosen.QuoNumber ?? chosen.RateCode;
+                var commercialName = chosen.RateName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                    ? member.BaseQuote + chosen.RateName[prefix.Length..] : chosen.RateName;
+                return chosen with { QuoNumber = member.BaseQuote,
+                    GroupQuoteNumber = member.BaseQuote, GroupAlternativeCount = member.Count,
+                    RateName = commercialName };
+            }).ToArray();
+
+        var visibleItems = new List<object>(representatives.Length);
+        foreach (var item in representatives)
         {
             var published = await ToSellerViewAsync(item, db, cancellationToken);
             if (published is not null)
@@ -401,6 +467,8 @@ public static class SellerRateEndpoints
         rate.RateName,
         rate.RevisionNumber,
         rate.QuoNumber,
+        rate.GroupQuoteNumber,
+        rate.GroupAlternativeCount,
         rate.IdtraNumber,
         rate.ClientName,
         rate.ExecutiveName,
