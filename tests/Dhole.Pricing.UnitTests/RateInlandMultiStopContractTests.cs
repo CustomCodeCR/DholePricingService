@@ -30,7 +30,7 @@ public sealed class RateInlandMultiStopContractTests
         var recovered = JsonSerializer.Deserialize<RateInlandServiceLocation[]>(
             JsonSerializer.Serialize(points));
         Assert.IsNotNull(recovered);
-        Assert.HasCount(2, recovered);
+        Assert.AreEqual(2, recovered.Length);
         Assert.AreEqual("FiscalCargo", recovered[0].CargoCondition);
         Assert.AreEqual("Exporter", recovered[0].BillingParty);
         Assert.AreEqual("NationalizedCargo", recovered[1].CargoCondition);
