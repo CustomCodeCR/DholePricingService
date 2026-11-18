@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Claims;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Api.Extensions;
@@ -5,6 +6,7 @@ using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Dhole.Pricing.Api.Endpoints;
 
@@ -30,6 +32,33 @@ public static class RateRequestLeaseEndpoints
     private static async Task<IResult> ClaimAsync(
         Guid id, LeaseRequest request, ServiceDbContext db, HttpContext context, CancellationToken ct)
     {
+        try
+        {
+            return await ClaimCoreAsync(id, request, db, context, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception failure)
+        {
+            context.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("PricingRateRequestLeaseAudit")
+                .LogError(failure,
+                    "Claim of request {RequestId} failed before opening the wizard; TraceId={TraceId}",
+                    id, context.TraceIdentifier);
+            return Results.Json(new
+            {
+                code = "Pricing.RateRequestLeaseUnavailable",
+                message = "No se pudo reservar la solicitud en Pricing. Actualice la bandeja o reintente.",
+                traceId = context.TraceIdentifier
+            }, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    private static async Task<IResult> ClaimCoreAsync(
+        Guid id, LeaseRequest request, ServiceDbContext db, HttpContext context, CancellationToken ct)
+    {
         var actor = context.GetCurrentUserId();
         if (actor is null) return Results.Unauthorized();
         var now = DateTime.UtcNow;
@@ -44,7 +73,12 @@ public static class RateRequestLeaseEndpoints
 
         // Enforce one active work lease per authenticated operator, across API nodes.
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await LockOperatorAsync(db, actor.Value, ct);
+        if (!await TryLockOperatorAsync(db, actor.Value, ct))
+            return Results.Conflict(new
+            {
+                code = "Pricing.RateRequestOperatorBusy",
+                message = "Otra operación de reserva de este usuario está en curso. Reintente."
+            });
         var updated = await db.RateRequests
             .Where(RateRequestLeaseClaimPolicy.Eligible(
                 id, actor.Value, request.Token, request.RecoverOwnLease, now))
@@ -80,7 +114,12 @@ public static class RateRequestLeaseEndpoints
         var now = DateTime.UtcNow;
         var expires = now.Add(Duration);
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await LockOperatorAsync(db, actor.Value, ct);
+        if (!await TryLockOperatorAsync(db, actor.Value, ct))
+            return Results.Conflict(new
+            {
+                code = "Pricing.RateRequestOperatorBusy",
+                message = "Otra operación de reserva de este usuario está en curso. Reintente."
+            });
         var updated = await db.RateRequests
             .Where(x => x.Id == id && x.Status == RateRequestStatus.Open
                 && x.LockedByUserId == actor.Value && x.LockToken == request.Token
@@ -127,7 +166,12 @@ public static class RateRequestLeaseEndpoints
         var actor = context.GetCurrentUserId();
         if (actor is null) return Results.Unauthorized();
         await using var tx = await db.Database.BeginTransactionAsync(ct);
-        await LockOperatorAsync(db, actor.Value, ct);
+        if (!await TryLockOperatorAsync(db, actor.Value, ct))
+            return Results.Conflict(new
+            {
+                code = "Pricing.RateRequestOperatorBusy",
+                message = "Otra operación de reserva de este usuario está en curso. Reintente."
+            });
         var released = await ClearLeaseAsync(
             db.RateRequests.Where(x => x.Id == id
                 && x.Status == RateRequestStatus.Open
@@ -173,11 +217,25 @@ public static class RateRequestLeaseEndpoints
             .SetProperty(x => x.LockedAtUtc, (DateTime?)null)
             .SetProperty(x => x.LockExpiresAtUtc, (DateTime?)null), ct);
 
-    // Transaction-scoped PostgreSQL lock prevents concurrent API instances from
-    // preserving more than one live lease for the same operator.
-    private static Task LockOperatorAsync(ServiceDbContext db, Guid actor, CancellationToken ct)
-        => db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(hashtextextended({actor.ToString("N")}, 0))", ct);
+    // Query a PostgreSQL advisory lock using ADO.NET's scalar API. EF Core's
+    // ExecuteSql* methods are designed for non-query SQL and do not validate
+    // the result of SELECT pg_advisory_xact_lock(...). A try-lock gives a
+    // deterministic 409 instead of an opaque timeout/500 under contention.
+    private static async Task<bool> TryLockOperatorAsync(
+        ServiceDbContext db, Guid actor, CancellationToken ct)
+    {
+        var transaction = db.Database.CurrentTransaction?.GetDbTransaction()
+            ?? throw new InvalidOperationException("Lease acquisition requires a database transaction.");
+        await using var command = db.Database.GetDbConnection().CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT pg_try_advisory_xact_lock(hashtextextended(@actor, 0::bigint))";
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "actor";
+        parameter.DbType = DbType.String;
+        parameter.Value = actor.ToString("N");
+        command.Parameters.Add(parameter);
+        return await command.ExecuteScalarAsync(ct) is true;
+    }
 
     private static Task<int> RevokeOlderOwnedLeasesAsync(
         Guid activeId, Guid actor, ServiceDbContext db, CancellationToken ct)
