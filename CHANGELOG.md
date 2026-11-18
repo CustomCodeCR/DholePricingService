@@ -1,3 +1,8 @@
+## [1.24.7] - 2026-11-18 (Release coordinado: peso unitario LCL/LTL)
+
+- PATCH DH-20261118-CARGO-WEIGHT-PER-UNIT-229: versión coordinada con DholeWeb 1.82.1. Los consumidores convierten peso por unidad × cantidad en peso total por línea antes de invocar Pricing. Se conserva el contrato REST y la semántica existente del peso agregado en cargoLines[].weightKg y totalWeightKg, sin migraciones ni alteraciones en el cálculo backend.
+- Ecosistema 1.86.0 → 1.86.1. Pruebas y validación staging pendientes. Sin autorización de producción.
+
 ## [1.24.6] - 2026-11-18 (EXW LCL propio: preservar costo manual del catálogo fijo)
 
 - PATCH DH-20261118-EXW-LCL-PICKUP-ROUNDTRIP-227: si el costo de recolecta EXW fijo está marcado explícitamente como autorizado por Pricing, conservar costo manual solicitado incluso al crear el RateDetail. Resto de fijos mantiene costo maestro; sin cambios de API, scopes, auditoría ni SignalR.
