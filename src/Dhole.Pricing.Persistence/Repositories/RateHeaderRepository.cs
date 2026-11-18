@@ -333,9 +333,22 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
 
         if (groupQuotes)
         {
-            // A MultiQUO has one visible row per genuine commercial option:
-            // 672-A and 672-B, never a collapsed 672 plus technical 673.
-            // Keep the immutable internal RateCode as the backend identifier.
+            // One commercial quotation must occupy ONE list row, independent of
+            // its A/B technical alternatives. Before selection show its parent;
+            // after selection show the chosen child so status and totals are accurate.
+            // Filter BEFORE COUNT/PAGINATION (never collapse an already paged list).
+            var hiddenAlternativeIds = dbContext.Database.SqlQuery<Guid>($"""
+                SELECT member.rate_id AS "Value"
+                FROM pricing.rate_quote_alternatives member
+                WHERE member.rate_id <> COALESCE(
+                    (SELECT chosen.rate_id
+                       FROM pricing.rate_quote_alternatives chosen
+                      WHERE chosen.parent_rate_id = member.parent_rate_id
+                        AND chosen.status = 'Selected'
+                      LIMIT 1),
+                    member.parent_rate_id)
+                """);
+            query = query.Where(rate => !hiddenAlternativeIds.Contains(rate.Id));
 
             // Older single-rate saves can leave an orphan RateHeader with an
             // internal consecutive RateCode (e.g. 673) but a commercial number
@@ -569,7 +582,12 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             }
             items = items.Select(rate =>
                 groupByRepresentative.TryGetValue(rate.Id, out var group)
-                    ? rate with { GroupQuoteNumber = group.Number, GroupAlternativeCount = group.Count }
+                    ? rate with
+                    {
+                        QuoNumber = group.Number,
+                        GroupQuoteNumber = group.Number,
+                        GroupAlternativeCount = group.Count
+                    }
                     : rate).ToList();
         }
 
