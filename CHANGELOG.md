@@ -1,3 +1,9 @@
+## [1.24.5] - 2026-11-18 (Pricing: compatibilidad de recolecta EXW / LCL propio)
+
+- PATCH DH-20261118-PRICING-EXW-PICKUP-226: release coordinado con DholeWeb 1.81.1. Se mantiene el contrato de RateDetails para rubros manuales de recolección, costo y venta, sin alterar REST, scopes, AuditLogs ni SignalR.
+- No se modifica lógica del servidor ni base de datos; el cambio funcional está en la persistencia y reconstrucción del wizard Web. Versión de Pricing sincronizada para la liberación conjunta.
+- DholePricingService 1.24.4 → 1.24.5; DholeWeb 1.81.0 → 1.81.1; ecosistema 1.85.0 → 1.85.1. CI/staging pendientes; producción sin autorización.
+
 ## [1.24.4] - 2026-11-18 (Pricing: flete DDP exportación terrestre LTL/FTL)
 
 - PATCH DH-20261118-DDP-EXPORT-FREIGHT-225: corregir el filtrado de flete internacional por Incoterm para distinguir exportador/importador. DDP en exportación y EXW en importación conservan flete cuando el servicio internacional está contratado.

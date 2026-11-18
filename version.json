@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.24.4",
-  "ecosystemVersion": "1.84.3",
-  "releaseId": "DH-20261118-DDP-EXPORT-FREIGHT-225",
+  "version": "1.24.5",
+  "ecosystemVersion": "1.85.1",
+  "releaseId": "DH-20261118-PRICING-EXW-PICKUP-226",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261118-DDP-EXPORT-FREIGHT-225"
+  "businessReleaseId": "DH-20261118-PRICING-EXW-PICKUP-226"
 }
