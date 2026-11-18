@@ -22,4 +22,11 @@ public static class RateRequestLeaseClaimPolicy
                     && ((suppliedToken != null && item.LockToken == suppliedToken)
                         || recoverOwnLease))
             );
+
+    // Never unlock a different operator's request, nor the active request.
+    public static Expression<Func<RateRequest, bool>> OtherOwnedLeases(Guid actor, Guid activeId)
+        => item => item.Id != activeId
+            && item.Status == RateRequestStatus.Open
+            && item.LockedByUserId == actor
+            && item.LockToken != null;
 }

@@ -1,3 +1,9 @@
+## [1.23.6] - 2026-11-18 (Pricing: una sola reserva activa por operador)
+
+- PATCH DH-20261118-PRICING-LEASE-218: claim y heartbeat serializan por actor y limpian únicamente las otras reservas del mismo usuario; no liberan trabajo de terceros. Auditoría estructurada de reservas liberadas y pruebas de aislamiento.
+- Sin cambios de scopes, REST, SignalR, workflows ni estado Trabajando. Revisión de staging previa a promoción.
+- Pricing 1.23.5 → 1.23.6; Web 1.79.1 → 1.79.2; ecosistema 1.83.1 → 1.83.2.
+
 ## [1.23.5] - 2026-11-18 (MultiQUO: conservar 672-A/B, nunca 672/673 comerciales)
 
 - PATCH DH-20261118-MULTIQUO-IDENTITY-217: una sola reserva transaccional de consecutivo por grupo FCL; RateCode único por opción con sufijos A/B, mientras QuoNumber es siempre el identificador comercial. La selección exclusiva ya no elimina el sufijo de la alternativa aceptada.

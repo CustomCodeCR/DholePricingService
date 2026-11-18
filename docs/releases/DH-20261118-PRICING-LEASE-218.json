@@ -1,0 +1,22 @@
+{
+  "releaseId": "DH-20261118-PRICING-LEASE-218",
+  "component": "DholePricingService",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.83.2",
+  "releaseType": "PATCH",
+  "previousVersion": "1.23.5",
+  "version": "1.23.6",
+  "changes": [
+    "One lease per operator across API replicas",
+    "Heartbeat cleans other abandoned same-owner leases",
+    "Never revoke another actor's lease"
+  ],
+  "scopes": "unchanged",
+  "rest": "compatible",
+  "realtime": "unchanged",
+  "validation": {
+    "ci": "pending",
+    "staging": "pending",
+    "production": "not-approved"
+  }
+}

@@ -40,9 +40,9 @@ public static class RateRequestLeaseEndpoints
         name = name.Trim();
         if (name.Length > 200) name = name[..200];
 
-        // The conditional UPDATE arbitrates simultaneous claims across all API instances.
-        // Normal reentry uses the tab token. Explicit recovery rotates an abandoned
-        // lease only when its owner is the same authenticated user.
+        // Enforce one active work lease per authenticated operator, across API nodes.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await LockOperatorAsync(db, actor.Value, ct);
         var updated = await db.RateRequests
             .Where(RateRequestLeaseClaimPolicy.Eligible(
                 id, actor.Value, request.Token, request.RecoverOwnLease, now))
@@ -54,7 +54,17 @@ public static class RateRequestLeaseEndpoints
                 .SetProperty(x => x.LockExpiresAtUtc, expires)
                 .SetProperty(x => x.WorkStatus, x => x.WorkStatus ?? "Working")
                 .SetProperty(x => x.WorkStatusUpdatedAtUtc, x => x.WorkStatus == null ? now : x.WorkStatusUpdatedAtUtc), ct);
-        if (updated == 1) return Results.Ok(new { token, ownerName = name, expiresAtUtc = expires });
+        if (updated == 1)
+        {
+            var revoked = await RevokeOlderOwnedLeasesAsync(id, actor.Value, db, ct);
+            await tx.CommitAsync(ct);
+            if (revoked > 0)
+                context.RequestServices.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("PricingRateRequestLeaseAudit")
+                    .LogInformation("Actor {ActorId} superseded {RevokedCount} old leases while claiming {RequestId}", actor.Value, revoked, id);
+            return Results.Ok(new { token, ownerName = name, expiresAtUtc = expires });
+        }
+        await tx.RollbackAsync(ct);
         return await ConflictOrMissingAsync(id, db, ct);
     }
 
@@ -67,13 +77,25 @@ public static class RateRequestLeaseEndpoints
             return Results.BadRequest(new { message = "Token de reserva requerido." });
         var now = DateTime.UtcNow;
         var expires = now.Add(Duration);
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await LockOperatorAsync(db, actor.Value, ct);
         var updated = await db.RateRequests
             .Where(x => x.Id == id && x.Status == RateRequestStatus.Open
                 && x.LockedByUserId == actor.Value && x.LockToken == request.Token
                 && x.LockExpiresAtUtc > now)
             .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.LockExpiresAtUtc, expires), ct);
-        return updated == 1 ? Results.Ok(new { expiresAtUtc = expires })
-            : await ConflictOrMissingAsync(id, db, ct);
+        if (updated == 1)
+        {
+            var revoked = await RevokeOlderOwnedLeasesAsync(id, actor.Value, db, ct);
+            await tx.CommitAsync(ct);
+            if (revoked > 0)
+                context.RequestServices.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("PricingRateRequestLeaseAudit")
+                    .LogInformation("Actor {ActorId} superseded {RevokedCount} old leases while renewing {RequestId}", actor.Value, revoked, id);
+            return Results.Ok(new { expiresAtUtc = expires });
+        }
+        await tx.RollbackAsync(ct);
+        return await ConflictOrMissingAsync(id, db, ct);
     }
 
     private static async Task<IResult> ReleaseAsync(
@@ -94,6 +116,23 @@ public static class RateRequestLeaseEndpoints
                 .SetProperty(x => x.LockExpiresAtUtc, (DateTime?)null), ct);
         return Results.NoContent();
     }
+
+    // Transaction-scoped PostgreSQL lock prevents concurrent API instances from
+    // preserving more than one live lease for the same operator.
+    private static Task LockOperatorAsync(ServiceDbContext db, Guid actor, CancellationToken ct)
+        => db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended({actor.ToString("N")}, 0))", ct);
+
+    private static Task<int> RevokeOlderOwnedLeasesAsync(
+        Guid activeId, Guid actor, ServiceDbContext db, CancellationToken ct)
+        => db.RateRequests
+            .Where(RateRequestLeaseClaimPolicy.OtherOwnedLeases(actor, activeId))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.LockedByUserId, (Guid?)null)
+                .SetProperty(x => x.LockedByName, (string?)null)
+                .SetProperty(x => x.LockToken, (Guid?)null)
+                .SetProperty(x => x.LockedAtUtc, (DateTime?)null)
+                .SetProperty(x => x.LockExpiresAtUtc, (DateTime?)null), ct);
 
     public static bool HasActiveLease(HttpContext context, RateRequest request)
         => context.GetCurrentUserId() is { } actor
