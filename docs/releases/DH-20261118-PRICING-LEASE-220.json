@@ -1,0 +1,18 @@
+{
+  "releaseId": "DH-20261118-PRICING-LEASE-220",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.83.4",
+  "component": "DholePricingService",
+  "version": "1.24.1",
+  "previousVersion": "1.24.0",
+  "changeType": "PATCH",
+  "summary": "Use scalar PostgreSQL transaction advisory try-lock, explicit claim error codes, and precalculated stale cutoff.",
+  "scope": "pricing.rate.update",
+  "apiCompatibility": "existing paths preserved",
+  "realtime": "unchanged",
+  "validation": {
+    "ci": "pending",
+    "staging": "pending",
+    "production": "not-authorized"
+  }
+}
