@@ -1,3 +1,9 @@
+## [1.24.6] - 2026-11-18 (EXW LCL propio: preservar costo manual del catálogo fijo)
+
+- PATCH DH-20261118-EXW-LCL-PICKUP-ROUNDTRIP-227: si el costo de recolecta EXW fijo está marcado explícitamente como autorizado por Pricing, conservar costo manual solicitado incluso al crear el RateDetail. Resto de fijos mantiene costo maestro; sin cambios de API, scopes, auditoría ni SignalR.
+- Las líneas con CostId nulo ya conservan monto por contrato; se incorpora regresión unitaria para precio EXW autorizado, fijo ordinario y detalle existente con moneda distinta.
+- Release conjunto Web 1.81.2 y DholeSystem/ecosistema 1.85.2; Pricing 1.24.5 → 1.24.6. CI, staging y smoke autenticado pendiente.
+
 ## [1.24.5] - 2026-11-18 (Pricing: compatibilidad de recolecta EXW / LCL propio)
 
 - PATCH DH-20261118-PRICING-EXW-PICKUP-226: release coordinado con DholeWeb 1.81.1. Se mantiene el contrato de RateDetails para rubros manuales de recolección, costo y venta, sin alterar REST, scopes, AuditLogs ni SignalR.
