@@ -1535,6 +1535,9 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
             (RateStatus.RejectedByClient, RateStatus.QUOVinculada) => true,
             (RateStatus.Closed, RateStatus.QUOVinculada) => true,
             // Una aceptación puede cancelarse o revertirse a rechazo con motivo auditable.
+            (RateStatus.Sent, RateStatus.Cancelled) => true,
+            (RateStatus.RequestedByClient, RateStatus.Cancelled) => true,
+            (RateStatus.Expired, RateStatus.Cancelled) => true,
             (RateStatus.AcceptedByClient, RateStatus.Cancelled) => true,
             (RateStatus.AcceptedByClient, RateStatus.RejectedByClient) => true,
             (RateStatus.PendingApproval, RateStatus.Closed) => true,
