@@ -1,3 +1,9 @@
+## [1.24.6] - 2026-11-18 (EXW LCL: conservar importes de recolecta fija autorizada)
+
+- PATCH DH-20261118-EXW-LCL-PICKUP-ROUNDTRIP-227: el backend Pricing respeta el costo manual explícitamente autorizado en las recolectas EXW nuevas con CostId fijo, sin alterar el comportamiento de los demás costos fijos de catálogo.
+- Regresiones unitarias de costo fijo ordinario, recolecta EXW y edición histórica; preserva REST, scopes, AuditLogs, SignalR e idempotencia.
+- Coordinación Web master 1.81.1, System/ecosistema 1.85.2; Pricing master 1.24.5→1.24.6. Producción condicionada a CI y staging.
+
 ## [1.24.5] - 2026-11-18 (Pricing: compatibilidad de recolecta EXW / LCL propio)
 
 - PATCH DH-20261118-PRICING-EXW-PICKUP-226: backport master del release EXW own-LCL de develop; preserva el contrato de detalle con costo, venta y cantidad de recolecta ingresados desde Web.
