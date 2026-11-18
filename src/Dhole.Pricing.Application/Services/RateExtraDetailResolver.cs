@@ -146,9 +146,15 @@ public sealed class RateExtraDetailResolver(
             }
 
             var selectedCurrencyDiffers = currency.Id != cost.CurrencyId;
-            var costAmount = input.Id.HasValue || selectedCurrencyDiffers
-                ? input.CostAmount
-                : cost.CostAmount;
+            // An operator-priced EXW origin pickup has an explicit marker in
+            // its quoted notes. Preserve its negotiated amount on INSERT too;
+            // ordinary fixed catalog costs still use the master amount.
+            var costAmount = ExwPickupPricePolicy.ResolveFixedCostAmount(
+                input.CostAmount,
+                cost.CostAmount,
+                input.Id.HasValue,
+                selectedCurrencyDiffers,
+                input.Notes);
 
             // Un costo puede pertenecer a un agente y aun así ser un OriginCharge vendible.
             // Solo los AgentCharge son costos internos del agente y conservan venta en cero.
