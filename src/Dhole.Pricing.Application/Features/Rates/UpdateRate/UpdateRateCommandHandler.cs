@@ -591,8 +591,10 @@ public sealed class UpdateRateCommandHandler(
         var currencyName = command.CurrencyName;
         var currencyCode = command.CurrencyCode;
         var freeDays = command.FreeDays;
-        var validFrom = command.ValidFrom;
-        var validTo = command.ValidTo;
+        // Date-only JSON is Unspecified; Npgsql timestamptz requires UTC.
+        // Preserve the commercial calendar day, not the server's time-zone offset.
+        var validFrom = RateValidityDateNormalizer.AsUtcCalendarDate(command.ValidFrom);
+        var validTo = RateValidityDateNormalizer.AsUtcCalendarDate(command.ValidTo);
         // La vigencia comercial de la QUO se recibe del wizard: ValidFrom es la
         // fecha de carga/embarque, no la vigencia de la tarifa importada asociada.
         // El flete fuente se verifica como referencia, sin reescribir las fechas.
