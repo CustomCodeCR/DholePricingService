@@ -1,3 +1,9 @@
+## [1.23.3] - 2026-11-18 (Cotización aceptada: modificación exclusiva de Pricing)
+
+- PATCH DH-20261118-SELLER-ACCEPTED-212: la API de solicitudes de modificación del vendedor responde 409 (Pricing.SellerModificationRequiresPricing) cuando la cotización está aceptada o registra una aceptación previa, incluso después de iniciar una revisión de Pricing.
+- El bloqueo se aplica tanto a GET /api/pricing/seller-rates/{rateId}/modification-source como a POST /api/pricing/seller-rates/{rateId}/modification-requests, conservando los scopes pricing.rate-request.create y pricing.rate.update; Pricing mantiene su editor normal.
+- Sin cambio de esquema, contratos de respuesta exitosos, auditoría ni infraestructura outbox/SignalR. Pruebas de política positiva y negativa. DholePricingService 1.23.2 → 1.23.3; ecosistema 1.81.0 → 1.81.1; requiere CI y staging antes de promoción a master.
+
 ## [1.23.2] - 2026-11-17 (Solicitudes de tarifas: propietario vendedor CRM)
 
 - PATCH DH-20261117-CRM-RATE-OWNER-PROD-205: las solicitudes creadas por otro usuario conservan el usuario creador en auditoría y se asignan al vendedor responsable de la cuenta/prospecto según CRM, verificado por el backend. GET/PUT /mine sigue validando propietario.
