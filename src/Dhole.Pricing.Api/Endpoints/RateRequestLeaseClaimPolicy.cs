@@ -23,6 +23,16 @@ public static class RateRequestLeaseClaimPolicy
                         || recoverOwnLease))
             );
 
+    // The heartbeat interval is 20 seconds; require 45 seconds without a
+    // successful renewal before making a foreign lease recoverable.
+    public static Expression<Func<RateRequest, bool>> StaleLease(Guid id, DateTime now)
+        => item => item.Id == id
+            && item.Status == RateRequestStatus.Open
+            && item.LockedByUserId != null
+            && item.LockToken != null
+            && item.LockExpiresAtUtc > now
+            && item.LockExpiresAtUtc <= now.AddMinutes(2).AddSeconds(-45);
+
     // Never unlock a different operator's request, nor the active request.
     public static Expression<Func<RateRequest, bool>> OtherOwnedLeases(Guid actor, Guid activeId)
         => item => item.Id != activeId
