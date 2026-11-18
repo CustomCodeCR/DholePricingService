@@ -1,3 +1,9 @@
+## [1.23.10] - 2026-11-18 (MultiQUO: una sola cotización comercial)
+
+- PATCH DH-20261118-MULTIQUO-SINGLE-223: integra de develop la lógica MultiQUO con una fila QUO base, alternativas A/B internas, selección de una ganadora y conteos/estados comerciales consolidados.
+- Conserva correcciones posteriores de reservas Pricing 1.23.9, autorización de vendedores, auditoría, REST, Outbox/SignalR y alternativas PDF.
+- Pricing 1.23.9 → 1.23.10; Web 1.79.4 → 1.79.5; DholeSystem 1.83.5 → 1.83.6. Staging/CI obligatorios antes de integración a master.
+
 ## [1.23.9] - 2026-11-18 (Pricing: corregir HTTP 503 en reservas)
 
 - PATCH DH-20261118-PRICING-LEASE-TX-222: causa confirmada mediante TraceId 0HNQ5JP78QTL4:00000009. NpgsqlRetryingExecutionStrategy no admite transacciones externas; claim, heartbeat y release-own ejecutan el BEGIN/COMMIT dentro de CreateExecutionStrategy().ExecuteAsync.

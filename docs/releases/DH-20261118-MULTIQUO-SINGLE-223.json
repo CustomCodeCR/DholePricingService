@@ -1,0 +1,30 @@
+{
+  "releaseId": "DH-20261118-MULTIQUO-SINGLE-223",
+  "date": "2026-11-18",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.83.6",
+  "scope": "Single commercial MultiQUO with internal A/B alternatives, one selected outcome",
+  "components": [
+    {
+      "component": "DholePricingService",
+      "version": "1.23.10"
+    },
+    {
+      "component": "DholeWeb",
+      "version": "1.79.5"
+    },
+    {
+      "component": "DholeSystem",
+      "version": "1.83.6"
+    }
+  ],
+  "unchangedComponents": "Remaining 14 components retain versions in DholeSystem/release-manifest.json",
+  "requirements": [
+    "one QUO in browse/search/dashboard counts",
+    "A/B visible and selectable in detail",
+    "nonchosen alternative is history, not commercially rejected",
+    "existing scopes, audit, Outbox/SignalR preserved"
+  ],
+  "validation": "CI and staging required before master promotion",
+  "productionDeployment": "not-authorized"
+}
