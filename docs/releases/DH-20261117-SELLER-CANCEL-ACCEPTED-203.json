@@ -1,0 +1,40 @@
+{
+  "releaseId": "DH-20261117-SELLER-CANCEL-ACCEPTED-203",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.73.2",
+  "component": "DholePricingService",
+  "previousVersion": "1.23.0",
+  "version": "1.23.1",
+  "type": "PATCH",
+  "date": "2026-11-17",
+  "status": "candidate-ci-and-staging-pending",
+  "candidateBranch": "fix/DH-20261117-SELLER-CANCEL-ACCEPTED-203-master",
+  "targetBranch": "master",
+  "change": "Cancelación solo cuando la QUO está AcceptedByClient; no disponible antes de aceptación",
+  "validation": [
+    "Estado no aceptado bloqueado en UI",
+    "API devuelve 409 si no ha sido aceptada",
+    "Dominio permite solo AcceptedByClient -> Cancelled",
+    "Motivo obligatorio, auditoría y reintento idempotente",
+    "CI build, pruebas y staging requeridos"
+  ],
+  "compatibility": {
+    "rest": "El mismo endpoint PATCH /api/pricing/seller-rates/{rateId}/status valida la precondición",
+    "realtime": "Conserva publicación de eventos y cache; sin nuevos contratos",
+    "databaseMigration": false
+  },
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "version": "1.69.1"
+    },
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "version": "1.23.1"
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "version": "1.72.1"
+    }
+  ]
+}
