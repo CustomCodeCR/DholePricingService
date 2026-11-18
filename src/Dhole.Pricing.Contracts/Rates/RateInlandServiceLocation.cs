@@ -4,5 +4,7 @@ namespace Dhole.Pricing.Contracts.Rates;
 public sealed record RateInlandServiceLocation(
     string Address,
     decimal? Latitude = null,
-    decimal? Longitude = null
+    decimal? Longitude = null,
+    string? CargoCondition = null,
+    string? BillingParty = null
 );
