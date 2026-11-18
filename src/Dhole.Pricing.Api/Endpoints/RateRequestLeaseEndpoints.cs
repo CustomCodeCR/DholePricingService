@@ -44,10 +44,8 @@ public static class RateRequestLeaseEndpoints
         // Normal reentry uses the tab token. Explicit recovery rotates an abandoned
         // lease only when its owner is the same authenticated user.
         var updated = await db.RateRequests
-            .Where(x => x.Id == id && x.Status == RateRequestStatus.Open
-                && (x.LockExpiresAtUtc == null || x.LockExpiresAtUtc <= now
-                    || (x.LockedByUserId == actor.Value
-                        && (x.LockToken == token || request.RecoverOwnLease))))
+            .Where(RateRequestLeaseClaimPolicy.Eligible(
+                id, actor.Value, request.Token, request.RecoverOwnLease, now))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.LockedByUserId, actor.Value)
                 .SetProperty(x => x.LockedByName, name)

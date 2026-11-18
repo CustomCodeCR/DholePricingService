@@ -1,0 +1,23 @@
+{
+  "releaseId": "DH-20261118-PRICING-LEASE-214",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.81.3",
+  "date": "2026-11-18",
+  "type": "PATCH",
+  "status": "candidate-ci-and-staging-pending",
+  "summary": "Reject stale tokens after lease release while keeping explicit own-lease resume and atomic acquisition.",
+  "component": "DholePricingService",
+  "previousVersion": "1.23.3",
+  "version": "1.23.4",
+  "relatedComponents": {
+    "DholeWeb": "1.77.3",
+    "DholeSystem": "1.81.3"
+  },
+  "tests": [
+    "RateRequestLeaseClaimPolicyTests",
+    "DholeWeb lease lifecycle tests",
+    "CI build and staging"
+  ],
+  "restCompatibility": "No API route changes",
+  "realtimeCompatibility": "No SignalR changes"
+}
