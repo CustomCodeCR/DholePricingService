@@ -15,7 +15,7 @@ internal sealed class RateRevisionConfiguration : IEntityTypeConfiguration<RateR
         builder.Property(x => x.RevisionNumber).IsRequired();
         builder.Property(x => x.Status).HasMaxLength(50).IsRequired();
         builder.Property(x => x.RateName).HasMaxLength(500).IsRequired();
-        builder.Property(x => x.IdtraNumber).HasMaxLength(100).IsRequired(false);
+        builder.Property(x => x.IdtraNumber).HasMaxLength(2000).IsRequired(false);
         builder.Property(x => x.QuoNumber).HasMaxLength(100).IsRequired(false);
         builder.Property(x => x.TotalSaleUsd).HasPrecision(18,2).IsRequired();
         builder.Property(x => x.TotalSaleCrc).HasPrecision(18,2).IsRequired();
