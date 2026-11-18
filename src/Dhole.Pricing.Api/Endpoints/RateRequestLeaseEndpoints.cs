@@ -72,6 +72,8 @@ public static class RateRequestLeaseEndpoints
         if (name.Length > 200) name = name[..200];
 
         // Enforce one active work lease per authenticated operator, across API nodes.
+        return await ExecuteLeaseTransactionAsync(db, async () =>
+        {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         if (!await TryLockOperatorAsync(db, actor.Value, ct))
             return Results.Conflict(new
@@ -102,6 +104,7 @@ public static class RateRequestLeaseEndpoints
         }
         await tx.RollbackAsync(ct);
         return await ConflictOrMissingAsync(id, db, ct);
+        });
     }
 
     private static async Task<IResult> HeartbeatAsync(
@@ -113,6 +116,8 @@ public static class RateRequestLeaseEndpoints
             return Results.BadRequest(new { message = "Token de reserva requerido." });
         var now = DateTime.UtcNow;
         var expires = now.Add(Duration);
+        return await ExecuteLeaseTransactionAsync(db, async () =>
+        {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         if (!await TryLockOperatorAsync(db, actor.Value, ct))
             return Results.Conflict(new
@@ -137,6 +142,7 @@ public static class RateRequestLeaseEndpoints
         }
         await tx.RollbackAsync(ct);
         return await ConflictOrMissingAsync(id, db, ct);
+        });
     }
 
     private static async Task<IResult> ReleaseAsync(
@@ -165,6 +171,8 @@ public static class RateRequestLeaseEndpoints
     {
         var actor = context.GetCurrentUserId();
         if (actor is null) return Results.Unauthorized();
+        return await ExecuteLeaseTransactionAsync(db, async () =>
+        {
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         if (!await TryLockOperatorAsync(db, actor.Value, ct))
             return Results.Conflict(new
@@ -186,6 +194,7 @@ public static class RateRequestLeaseEndpoints
             .LogInformation("Actor {ActorId} explicitly released own lease for request {RequestId}",
                 actor.Value, id);
         return Results.NoContent();
+        });
     }
 
     // An operator may recover abandoned work, but NEVER displace a lease that
@@ -216,6 +225,12 @@ public static class RateRequestLeaseEndpoints
             .SetProperty(x => x.LockToken, (Guid?)null)
             .SetProperty(x => x.LockedAtUtc, (DateTime?)null)
             .SetProperty(x => x.LockExpiresAtUtc, (DateTime?)null), ct);
+
+    // Keep the entire user-initiated transaction inside EF Core's retry
+    // strategy. NpgsqlRetryingExecutionStrategy rejects external transactions.
+    private static Task<IResult> ExecuteLeaseTransactionAsync(
+        ServiceDbContext db, Func<Task<IResult>> operation)
+        => db.Database.CreateExecutionStrategy().ExecuteAsync(operation);
 
     // Query a PostgreSQL advisory lock using ADO.NET's scalar API. EF Core's
     // ExecuteSql* methods are designed for non-query SQL and do not validate

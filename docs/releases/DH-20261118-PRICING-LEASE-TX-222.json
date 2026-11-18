@@ -1,0 +1,22 @@
+{
+  "releaseId": "DH-20261118-PRICING-LEASE-TX-222",
+  "date": "2026-11-18",
+  "component": "DholePricingService",
+  "type": "PATCH",
+  "from": "1.23.8",
+  "to": "1.23.9",
+  "ecosystemVersion": "1.83.5",
+  "rootCause": "NpgsqlRetryingExecutionStrategy does not support user-initiated transactions",
+  "traceId": "0HNQ5JP78QTL4:00000009",
+  "affectedActions": [
+    "claim",
+    "heartbeat",
+    "release-own"
+  ],
+  "scope": "unchanged",
+  "audit": "unchanged",
+  "realtime": "unchanged",
+  "ci": "pending",
+  "staging": "pending",
+  "production": "not-authorized"
+}
