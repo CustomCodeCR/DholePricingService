@@ -2495,7 +2495,8 @@ public static class RateEndpoints
             IReadOnlyCollection<Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation>? locations,
             Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation? legacy)
         {
-            var source = locations ?? (legacy is null ? [] : [legacy]);
+            IReadOnlyCollection<Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation> source = locations
+                ?? (legacy is null ? Array.Empty<Dhole.Pricing.Contracts.Rates.RateInlandServiceLocation>() : [legacy]);
             return source
                 .Where(x => !string.IsNullOrWhiteSpace(x.Address))
                 .Take(50)
