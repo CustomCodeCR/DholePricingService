@@ -1,3 +1,9 @@
+## [1.23.6] - 2026-11-18 (Pricing: limpieza de reservas fantasma por operador)
+
+- PATCH DH-20261118-PRICING-LEASE-218: la adquisición y renovación de una solicitud liberan, en la misma transacción PostgreSQL, cualquier otra reserva del mismo usuario, con bloqueo asesor transaccional para concurrencia entre instancias. No altera reservas de otros usuarios.
+- Se registra en auditoría de aplicación cuántos bloqueos anteriores fueron revocados; se conservan WorkStatus, rutas REST, scopes y SignalR. Pruebas de exclusión, aislamiento y reentrada.
+- DholePricingService 1.23.5 → 1.23.6; ecosistema 1.83.1 → 1.83.2. CI/staging obligatorios antes de promocionar.
+
 ## [1.23.5] - 2026-11-18 (MultiQUO: conservar 672-A/B, nunca 672/673 comerciales)
 
 - PATCH DH-20261118-MULTIQUO-IDENTITY-217: una sola reserva transaccional de consecutivo por grupo FCL; RateCode único por opción con sufijos A/B, mientras QuoNumber es siempre el identificador comercial. La selección exclusiva ya no elimina el sufijo de la alternativa aceptada.
