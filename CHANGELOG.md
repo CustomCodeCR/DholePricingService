@@ -1,3 +1,10 @@
+## [1.24.9] - 2026-11-18 (Fix 500 guardando QUO con múltiples IDTRA)
+
+- PATCH DH-20261118-RATE-REVISION-IDTRA-232: corregida causa confirmada por SQLSTATE 22001. El historial RateRevisions.IdtraNumber estaba limitado a varchar(100), mientras RateHeaders.idtra_number permite 2000. Una revisión con múltiples IDTRA (366 caracteres en caso QUO-00000-000552) fallaba al guardar.
+- Migración segura 20261118231500_ExpandRateRevisionIdtraNumber: ampliar la columna histórica a varchar(2000), sin modificar registros, ni truncar datos, ni cambiar identificadores. Down protege contra reducción con datos largos.
+- Pruebas de regresión sobre mapping EF, equivalencia de máximos e integridad de IDTRA largos. REST, realtime, scopes y auditoría conservados.
+- Pricing 1.24.8→1.24.9; ecosistema 1.87.2→1.87.3. Staging y CI antes de master.
+
 ## [1.24.8] - 2026-11-18 (Pricing: corregir guardado 500 por fechas sin UTC · master)
 
 - PATCH DH-20261118-PRICING-SAVE-500-230: backport exacto de la normalización de fechas comerciales YYYY-MM-DD a medianoche UTC para evitar escritura de DateTimeKind.Unspecified en columnas PostgreSQL timestamptz.
