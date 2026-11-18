@@ -506,7 +506,7 @@ public sealed class RateStatusWorkflowTests
     }
 
     [TestMethod]
-    public void SentRate_CannotBeCancelledWithoutPriorAcceptance()
+    public void SentRate_CanBeCancelledWithReason_WithoutPriorAcceptance()
     {
         var rate = CreateRate();
         AddFreight(rate, cost: 80m, sale: 100m);
@@ -514,9 +514,10 @@ public sealed class RateStatusWorkflowTests
         rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
 
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            rate.SetCommercialStatus(RateStatus.Cancelled, reason: "Motivo", updatedBy: null)
-        );
-        Assert.AreEqual(RateStatus.Sent, rate.Status);
+            rate.SetCommercialStatus(RateStatus.Cancelled, reason: null, updatedBy: null));
+        rate.SetCommercialStatus(RateStatus.Cancelled, reason: "Motivo", updatedBy: null);
+        Assert.AreEqual(RateStatus.Cancelled, rate.Status);
+        Assert.AreEqual("Motivo", rate.ClosedReason);
     }
 
     [TestMethod]
