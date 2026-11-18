@@ -1,3 +1,9 @@
+## [1.24.1] - 2026-11-18 (Pricing: corregir error HTTP 500 al adquirir solicitud)
+
+- PATCH DH-20261118-PRICING-LEASE-220: la reserva por operador utiliza el resultado tipado de pg_try_advisory_xact_lock dentro de la transacción actual en vez de ejecutar un SELECT como SQL sin resultado. Contención concurrente devuelve 409 con código explícito; errores de base de datos se registran con TraceId y responden 503 legible.
+- La liberación de reservas inactivas usa fecha límite precalculada en la expresión EF, evitando cálculos DateTime no traducibles. El lease vigente, scopes, auditoría, SignalR y contratos REST existentes se conservan.
+- Pruebas de autorización de claim, exclusión de terceros y predicado SQL; staging obligatorio antes de master. Pricing 1.24.0 → 1.24.1; Web según rama, System/ecosistema 1.83.3 → 1.83.4.
+
 ## [1.24.0] - 2026-11-18 (Pricing: múltiples puntos y perspectiva comercial)
 
 - MINOR DH-20261118-INLAND-MULTIPOINT-219: recolección y entrega registran múltiples paradas con tipo de carga y responsable de costos por punto. Se conservan coordenadas opcionales y soporte a solicitudes históricas de un solo punto.
