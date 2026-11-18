@@ -1,3 +1,10 @@
+## [1.23.2] - 2026-11-17 (Solicitudes de tarifas: propietario vendedor CRM)
+
+- PATCH DH-20261117-CRM-RATE-OWNER-PROD-205: las solicitudes creadas por otro usuario conservan el usuario creador en auditoría y se asignan al vendedor responsable de la cuenta/prospecto según CRM, verificado por el backend. GET/PUT /mine sigue validando propietario.
+- El wizard de solicitud delegada toma executiveUserId desde CRM y registra el observador de cambios al montar el componente, después de inicializar el formulario (evita ReferenceError de TDZ en producción).
+- Se conservan API REST, outbox/SignalR, vendedor institucional Castro Fallas y credenciales técnicas del API Manager. Requiere validaciones de CI, staging y publicación coordinada de Pricing + Web.
+- DholePricingService 1.23.1 → 1.23.2; ecosistema 1.73.2/1.74.0 → 1.74.1.
+
 ## [1.23.1] - 2026-11-17 (Pricing: cancelar solo cotizaciones aceptadas)
 
 - PATCH DH-20261117-SELLER-CANCEL-ACCEPTED-203: el endpoint de estado del vendedor rechaza con HTTP 409 / Pricing.SellerCancellationRequiresAcceptance las cancelaciones cuando la QUO no está en estado AcceptedByClient. Reintentos de una QUO ya cancelada siguen siendo idempotentes.

@@ -9,7 +9,8 @@ namespace Dhole.Pricing.Api.Services;
 /// available to the authenticated caller. Never trust browser-supplied names or
 /// seller identity when applying a master tariff.
 /// </summary>
-public sealed record VerifiedCrmTariffClient(Guid Id, string Kind, string DisplayName, string ExecutiveName);
+public sealed record VerifiedCrmTariffClient(Guid Id, string Kind, string DisplayName, string ExecutiveName,
+    Guid ExecutiveUserId = default, bool IsCastroFallasExecutive = false);
 
 public sealed class CrmTariffClientIdentityResolver(
     IHttpClientFactory clientFactory,
@@ -62,7 +63,10 @@ public sealed class CrmTariffClientIdentityResolver(
                     string.IsNullOrWhiteSpace(seller) || seller.Length > 220 ||
                     string.Equals(seller, "Vendedor no disponible", StringComparison.OrdinalIgnoreCase))
                     return (null, "La cuenta o prospecto no tiene un ejecutivo comercial válido en CRM.");
-                return (new VerifiedCrmTariffClient(id, kind, name, seller), null);
+                var executiveUserId = Guid.TryParse(ReadString(row, "executiveUserId"), out var assignedId)
+                    ? assignedId : Guid.Empty;
+                return (new VerifiedCrmTariffClient(id, kind, name, seller,
+                    executiveUserId, institutional), null);
             }
             return (null, "La cuenta o prospecto seleccionado ya no está disponible para este usuario.");
         }

@@ -1,0 +1,29 @@
+{
+  "releaseId": "DH-20261117-CRM-RATE-OWNER-PROD-205",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.74.1",
+  "date": "2026-11-17",
+  "type": "PATCH",
+  "status": "candidate-ci-and-staging-pending",
+  "branches": [
+    "release/rate-owner-master-20261117-v1232",
+    "master"
+  ],
+  "summary": "Rate request owner is authoritative CRM seller, even when another user submits request. Safe delayed frontend watcher initialization. Creator is retained by existing audit; seller owns /mine reads and edits.",
+  "component": "DholePricingService",
+  "previousVersion": "1.23.1",
+  "version": "1.23.2",
+  "relatedComponents": {
+    "DholePricingService": "1.23.2",
+    "DholeWebMaster": "1.70.2",
+    "DholeWebDevelop": "1.71.1"
+  },
+  "restCompatibility": "Existing POST and seller /mine routes preserved",
+  "realtimeCompatibility": "Existing outbox and SignalR preserved",
+  "tests": [
+    "CI build / unit / integration",
+    "production-browser Pricing wizard smoke",
+    "Pricing staging pass",
+    "Web staging pass"
+  ]
+}
