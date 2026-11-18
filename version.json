@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.22.5",
-  "ecosystemVersion": "1.70.6",
-  "releaseId": "DH-20261117-OWN-LCL-INSURANCE-196",
+  "version": "1.23.0",
+  "ecosystemVersion": "1.72.0",
+  "releaseId": "DH-20261117-SELLER-CANCEL-202",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261117-OWN-LCL-INSURANCE-196"
+  "businessReleaseId": "DH-20261117-SELLER-CANCEL-202"
 }
