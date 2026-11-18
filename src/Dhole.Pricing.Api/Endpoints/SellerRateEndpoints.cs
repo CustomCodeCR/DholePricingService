@@ -206,9 +206,41 @@ public static class SellerRateEndpoints
         if (rate is null) return Results.NotFound();
         if (!await sellerAccess.CanReadAsync(rate, userId.Value, cancellationToken)) return Results.Forbid();
 
+        // Old child URLs still resolve to the chosen option of the same QUO.
+        var snapshot = await db.Database.SqlQuery<string>($"""
+            SELECT a.base_quote || '|' || totals.total::text || '|' ||
+                   COALESCE(chosen.rate_id::text, '') AS "Value"
+            FROM pricing.rate_quote_alternatives a
+            JOIN (SELECT parent_rate_id, COUNT(*) AS total
+                  FROM pricing.rate_quote_alternatives GROUP BY parent_rate_id)
+              totals ON totals.parent_rate_id = a.parent_rate_id
+            LEFT JOIN pricing.rate_quote_alternatives chosen
+              ON chosen.parent_rate_id = a.parent_rate_id AND chosen.status = 'Selected'
+            WHERE a.rate_id = {rateId}
+            """).FirstOrDefaultAsync(cancellationToken);
+        var groupData = snapshot?.Split('|', 3);
+        if (groupData is { Length: 3 } &&
+            Guid.TryParse(groupData[2], out var selectedId) && selectedId != rateId)
+        {
+            var selected = await db.RateHeaders.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == selectedId && !x.IsDeleted, cancellationToken);
+            if (selected is not null &&
+                await sellerAccess.CanReadAsync(selected, userId.Value, cancellationToken))
+                rateId = selectedId;
+        }
         var result = await dispatcher.DispatchAsync(new GetRateByIdQuery(rateId), cancellationToken);
         if (!result.IsSuccess || result.Value is null) return Results.NotFound();
-        var visible = await ToSellerViewAsync(result.Value, db, cancellationToken);
+        var commercial = result.Value;
+        if (groupData is { Length: 3 } && int.TryParse(groupData[1], out var count))
+        {
+            var code = commercial.RateName.StartsWith(commercial.RateCode, StringComparison.OrdinalIgnoreCase)
+                ? commercial.RateCode : commercial.QuoNumber ?? commercial.RateCode;
+            var name = commercial.RateName.StartsWith(code, StringComparison.OrdinalIgnoreCase)
+                ? groupData[0] + commercial.RateName[code.Length..] : commercial.RateName;
+            commercial = commercial with { QuoNumber = groupData[0], GroupQuoteNumber = groupData[0],
+                GroupAlternativeCount = count, RateName = name };
+        }
+        var visible = await ToSellerViewAsync(commercial, db, cancellationToken);
         return visible is not null ? Results.Ok(visible) : Results.NotFound();
     }
 
@@ -418,13 +450,21 @@ public static class SellerRateEndpoints
                 )).ToArray()
             : Array.Empty<SellerPublishedRateDetail>();
 
+        var historicalName = published.RateName;
+        if (current.GroupQuoteNumber is not null &&
+            !string.IsNullOrWhiteSpace(published.QuoNumber) &&
+            historicalName.StartsWith(published.QuoNumber, StringComparison.OrdinalIgnoreCase))
+            historicalName = current.GroupQuoteNumber + historicalName[published.QuoNumber.Length..];
+
         return new
         {
             current.Id,
             RateCode = Text(previous, "RateCode") ?? current.RateCode,
-            RateName = published.RateName,
+            RateName = historicalName,
             RevisionNumber = published.RevisionNumber,
-            QuoNumber = published.QuoNumber,
+            QuoNumber = current.GroupQuoteNumber ?? published.QuoNumber,
+            current.GroupQuoteNumber,
+            current.GroupAlternativeCount,
             IdtraNumber = published.IdtraNumber,
             ClientName = Text(previous, "ClientName"),
             ExecutiveName = Text(previous, "ExecutiveName"),
