@@ -68,6 +68,11 @@ public static class SellerRateRequestEndpoints
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, ct);
         if (rate is null) return Results.NotFound();
         if (!await access.CanReadAsync(rate, userId.Value, ct)) return Results.Forbid();
+        if (SellerRateModificationPolicy.RequiresPricing(rate.Status, rate.AcceptedAtUtc.HasValue))
+            return Results.Conflict(new {
+                code = "Pricing.SellerModificationRequiresPricing",
+                message = "Una cotización aceptada solo puede ser modificada por Pricing."
+            });
         if (!RateModificationWizardSnapshot.IsEligible(rate))
             return Results.Conflict(new { message = "Esta tarifa no admite solicitudes de modificación." });
 
@@ -147,6 +152,11 @@ public static class SellerRateRequestEndpoints
         if (rate is null) return Results.NotFound();
         if (!await sellerAccess.CanReadAsync(rate, sellerId.Value, cancellationToken))
             return Results.Forbid();
+        if (SellerRateModificationPolicy.RequiresPricing(rate.Status, rate.AcceptedAtUtc.HasValue))
+            return Results.Conflict(new {
+                code = "Pricing.SellerModificationRequiresPricing",
+                message = "Una cotización aceptada solo puede ser modificada por Pricing."
+            });
         if (!RateModificationWizardSnapshot.IsEligible(rate))
             return Results.Conflict(new { message = "Esta tarifa no admite solicitudes de modificación." });
         if (!Enum.TryParse<RateRequestPriority>(request.Priority, true, out var priority) || !Enum.IsDefined(priority))

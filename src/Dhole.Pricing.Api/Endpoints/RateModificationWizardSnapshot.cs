@@ -42,11 +42,8 @@ internal static class RateModificationWizardSnapshot
     ];
 
     public static bool IsEligible(RateHeader rate)
-        => !rate.IsDeleted
-            && rate.Status is not (RateStatus.Closed or RateStatus.Cancelled)
-            && (rate.SellerReceivedAtUtc.HasValue ||
-                rate.Status is RateStatus.Sent or RateStatus.RequestedByClient
-                    or RateStatus.AcceptedByClient or RateStatus.RejectedByClient or RateStatus.Expired);
+        => SellerRateModificationPolicy.CanSellerRequest(
+            rate.Status, rate.SellerReceivedAtUtc.HasValue, rate.AcceptedAtUtc.HasValue, rate.IsDeleted);
 
     private static JsonElement? FirstCargo(RateHeader rate)
     {
