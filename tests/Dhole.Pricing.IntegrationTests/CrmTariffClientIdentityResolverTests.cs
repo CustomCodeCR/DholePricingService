@@ -80,6 +80,30 @@ public sealed class CrmTariffClientIdentityResolverTests
     }
 
     [TestMethod]
+    public async Task AccountExposesAuthoritativeSellerIdForDelegatedRateRequests()
+    {
+        var id = Guid.NewGuid();
+        var assignedSellerId = Guid.NewGuid();
+        var resolver = Resolver(request => {
+            StringAssert.Contains(request.RequestUri!.Query, $"selectedClientId={id:D}");
+            return new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new StringContent($"""
+                {"items":[{"kind":"account","id":"{{id}}",
+                 "displayName":"Cliente de rsoto", "executiveName":"rsoto",
+                 "executiveUserId":"{{assignedSellerId}}",
+                 "isCastroFallasExecutive":false}]}
+                """, Encoding.UTF8, "application/json")
+            };
+        });
+        var (client, error) = await resolver.ResolveAsync(id, "account",
+            "Bearer test-token", CancellationToken.None);
+        Assert.IsNull(error);
+        Assert.IsNotNull(client);
+        Assert.AreEqual(assignedSellerId, client.ExecutiveUserId);
+        Assert.IsFalse(client.IsCastroFallasExecutive);
+    }
+
+    [TestMethod]
     public async Task CannotLinkInaccessibleOrMismatchedCrmIdentity()
     {
         var id = Guid.NewGuid();
