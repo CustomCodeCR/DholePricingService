@@ -96,12 +96,12 @@ public static class SellerRateStatusEndpoints
             return Results.Unauthorized();
 
         if (!Enum.TryParse<RateStatus>(request.Status, true, out var status)
-            || status is not (RateStatus.AcceptedByClient or RateStatus.RejectedByClient))
+            || status is not (RateStatus.AcceptedByClient or RateStatus.RejectedByClient or RateStatus.Cancelled))
         {
             return Results.BadRequest(new
             {
                 code = "Pricing.SellerInvalidRateStatus",
-                message = "El vendedor únicamente puede marcar su tarifa como aceptada o rechazada.",
+                message = "El vendedor solo puede aceptar, rechazar o cancelar sus cotizaciones.",
             });
         }
 
@@ -131,12 +131,13 @@ public static class SellerRateStatusEndpoints
             return Results.NoContent();
         }
 
-        if (currentRate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient or RateStatus.Expired))
+        if (currentRate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient or RateStatus.Expired)
+            && !(status == RateStatus.Cancelled && currentRate.Status == RateStatus.AcceptedByClient))
         {
             return Results.Conflict(new
             {
                 code = "Pricing.SellerRateNotAwaitingClient",
-                message = "La tarifa solo puede aceptarse o rechazarse cuando está enviada o vencida.",
+                message = "La tarifa no permite esa transición comercial: cancelar exige que esté enviada, vencida o aceptada.",
             });
         }
 
@@ -155,6 +156,15 @@ public static class SellerRateStatusEndpoints
             {
                 code = "Pricing.SellerRejectionReasonRequired",
                 message = "Indique el motivo por el que el cliente rechazó la tarifa.",
+            });
+        }
+
+        if (status == RateStatus.Cancelled && (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length > 1000))
+        {
+            return Results.BadRequest(new
+            {
+                code = "Pricing.SellerCancellationReasonRequired",
+                message = "Indique un motivo de cancelación de 1 a 1000 caracteres.",
             });
         }
 

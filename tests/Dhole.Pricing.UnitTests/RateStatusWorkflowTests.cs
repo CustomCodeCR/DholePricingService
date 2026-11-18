@@ -454,7 +454,7 @@ public sealed class RateStatusWorkflowTests
     }
 
     [TestMethod]
-    public void SentRate_CannotBeCancelledWithoutPriorAcceptance()
+    public void SentRate_CanBeCancelledWithReason_WithoutPriorAcceptance()
     {
         var rate = CreateRate();
         AddFreight(rate, cost: 80m, sale: 100m);
@@ -462,9 +462,10 @@ public sealed class RateStatusWorkflowTests
         rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
 
         Assert.ThrowsExactly<InvalidOperationException>(() =>
-            rate.SetCommercialStatus(RateStatus.Cancelled, reason: "Motivo", updatedBy: null)
-        );
-        Assert.AreEqual(RateStatus.Sent, rate.Status);
+            rate.SetCommercialStatus(RateStatus.Cancelled, reason: null, updatedBy: null));
+        rate.SetCommercialStatus(RateStatus.Cancelled, reason: "Motivo", updatedBy: null);
+        Assert.AreEqual(RateStatus.Cancelled, rate.Status);
+        Assert.AreEqual("Motivo", rate.ClosedReason);
     }
 
     [TestMethod]
@@ -605,6 +606,43 @@ public sealed class RateStatusWorkflowTests
         var rate = CreateRate("quo-a7k2p-9x4m8q");
 
         Assert.AreEqual("QUO-A7K2P-9X4M8Q", rate.RateCode);
+    }
+
+    [TestMethod]
+    public void SellerCancellation_FromPublishedStatuses_RequiresReasonAndIsIdempotent()
+    {
+        foreach (var origin in new[] {
+            RateStatus.Sent,
+            RateStatus.RequestedByClient,
+            RateStatus.Expired,
+            RateStatus.AcceptedByClient,
+        })
+        {
+            var rate = CreateRate(validTo: origin == RateStatus.Expired
+                ? DateTime.UtcNow.Date.AddDays(-1) : null);
+            AddFreight(rate, cost: 80m, sale: 100m);
+            rate.SetAmounts(updatedBy: null);
+            rate.SetCommercialStatus(RateStatus.Sent, reason: null, updatedBy: null);
+            if (origin == RateStatus.RequestedByClient)
+                rate.SetCommercialStatus(RateStatus.RequestedByClient, reason: null, updatedBy: null);
+            if (origin == RateStatus.AcceptedByClient)
+                rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: null);
+            if (origin == RateStatus.Expired)
+                Assert.IsTrue(rate.MarkExpired(DateTime.UtcNow.Date));
+
+            var actor = Guid.NewGuid();
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+                rate.SetCommercialStatus(RateStatus.Cancelled, reason: "  ", updatedBy: actor));
+
+            rate.SetCommercialStatus(RateStatus.Cancelled, reason: "Operación cancelada", updatedBy: actor);
+            rate.SetCommercialStatus(RateStatus.Cancelled, reason: "Operación cancelada", updatedBy: actor);
+            Assert.AreEqual(RateStatus.Cancelled, rate.Status);
+            Assert.AreEqual("Operación cancelada", rate.ClosedReason);
+            Assert.AreEqual(actor, rate.ClosedBy);
+            Assert.IsNotNull(rate.ClosedAtUtc);
+            Assert.ThrowsExactly<InvalidOperationException>(() =>
+                rate.SetCommercialStatus(RateStatus.AcceptedByClient, reason: null, updatedBy: actor));
+        }
     }
 
     private static RateHeader CreateRate(
