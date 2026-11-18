@@ -3,7 +3,7 @@
   "ecosystem": "Dhole",
   "component": "DholePricingService",
   "version": "1.23.2",
-  "ecosystemVersion": "1.73.1",
+  "ecosystemVersion": "1.73.2",
   "releaseId": "DH-20261117-SELLER-CANCEL-ACCEPTED-203",
   "releaseStatus": "candidate-ci-and-staging-pending",
   "businessReleaseId": "DH-20261117-SELLER-CANCEL-ACCEPTED-203"
