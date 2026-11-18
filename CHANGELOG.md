@@ -1,3 +1,9 @@
+## [1.23.4] - 2026-11-18 (Solicitudes: impedir reservas fantasma después de cerrar)
+
+- PATCH DH-20261118-PRICING-LEASE-214: el claim atómico rechaza tokens liberados que intentan retomar automáticamente el bloqueo; recuperación manual propia autorizada.
+- Scopes, auditoría, contratos REST, SignalR y estado «Trabajando» preservados. Tests de tokens y exclusividad.
+- Pricing 1.23.3 → 1.23.4; Web 1.77.2 → 1.77.3; System 1.81.1 → 1.81.3. CI/staging pendientes.
+
 ## [1.23.3] - 2026-11-18 (Cotizaciones aceptadas: solo Pricing modifica)
 
 - PATCH DH-20261118-SELLER-ACCEPTED-213: GET modification-source y POST modification-requests bloquean con HTTP 409/Pricing.SellerModificationRequiresPricing solicitudes de vendedores sobre cotizaciones aceptadas o aceptadas anteriormente, incluso tras iniciar una nueva revisión.
