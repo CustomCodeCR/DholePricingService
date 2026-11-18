@@ -1,3 +1,9 @@
+## [1.23.8] - 2026-11-18 (MultiQUO: cotización única con alternativas internas)
+
+- PATCH DH-20261118-MULTIQUO-SINGLE-220: agrupa A/B en una sola fila comercial con número base y estado del seleccionado, antes del conteo/paginación; preserva las opciones para su elección y sus códigos técnicos.
+- Vendedores pueden consultar opciones autorizadas y elegir una ganadora; la alternativa no seleccionada no se considera rechazo comercial. Conserva auditoría, permisos, eventos Outbox y SignalR.
+- Pricing 1.23.7 → 1.23.8, Web 1.79.3 → 1.79.4, ecosistema 1.83.3 → 1.83.4. CI y staging requeridos antes de master.
+
 ## [1.23.6] - 2026-11-18 (Pricing: una sola reserva activa por operador)
 
 - PATCH DH-20261118-PRICING-LEASE-218: claim y heartbeat serializan por actor y limpian únicamente las otras reservas del mismo usuario; no liberan trabajo de terceros. Auditoría estructurada de reservas liberadas y pruebas de aislamiento.
