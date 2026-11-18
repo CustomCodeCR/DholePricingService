@@ -354,6 +354,25 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
                 )
                 """);
             query = query.Where(rate => !duplicateAlternativeIds.Contains(rate.Id));
+
+            // One group is ONE commercial quotation. Only the selected option
+            // represents the group after selection; before selection its original
+            // parent is the representative. Pagination and status filters must
+            // operate on these representatives, never on discarded alternatives.
+            // Keep all RateHeaders for pricing details, revision history and audit.
+            var hiddenGroupAlternativeIds = dbContext.Database.SqlQuery<Guid>($"""
+                SELECT member.rate_id AS "Value"
+                FROM pricing.rate_quote_alternatives member
+                WHERE member.rate_id <> COALESCE(
+                    (SELECT selected.rate_id
+                     FROM pricing.rate_quote_alternatives selected
+                     JOIN pricing."RateHeaders" h ON h.id = selected.rate_id
+                     WHERE selected.parent_rate_id = member.parent_rate_id
+                       AND selected.status = 'Selected' AND NOT h.is_deleted
+                     LIMIT 1),
+                    member.parent_rate_id)
+                """);
+            query = query.Where(rate => !hiddenGroupAlternativeIds.Contains(rate.Id));
         }
 
         var total = await query.CountAsync(cancellationToken);
@@ -569,7 +588,7 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             }
             items = items.Select(rate =>
                 groupByRepresentative.TryGetValue(rate.Id, out var group)
-                    ? rate with { GroupQuoteNumber = group.Number, GroupAlternativeCount = group.Count }
+                    ? rate with { QuoNumber = group.Number, GroupQuoteNumber = group.Number, GroupAlternativeCount = group.Count }
                     : rate).ToList();
         }
 
