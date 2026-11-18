@@ -1,3 +1,10 @@
+## [1.23.1] - 2026-11-17 (Solicitudes de tarifa: vendedor asignado por CRM)
+
+- PATCH DH-20261117-CRM-RATE-REQUEST-OWNER-203: para solicitudes normales vinculadas a cuenta/prospecto, Pricing valida la identidad comercial contra el selector CRM usando el JWT del creador y asigna SellerUserId al ejecutivo real. El usuario que envía la solicitud permanece en auditoría, sin apropiarse de la solicitud.
+- Se ignora cualquier SellerUserId distinto enviado por el navegador para cuentas con vendedor personal; /mine y PUT /mine se conservan limitados al vendedor asignado, evitando acceso indebido. Se admite delegación entre vendedores únicamente si CRM permite al actor consultar el cliente y confirma la asignación.
+- Castro Fallas institucional y tokens técnicos de API Manager conservan su comportamiento; si CRM no responde o no hay ejecutivo activo, no se crea una solicitud con propietario incorrecto.
+- Pricing 1.23.0 → 1.23.1; Web 1.69.0 → 1.69.1; ecosistema 1.72.0 → 1.72.1. CI/staging y reconciliación de solicitudes históricas pendientes.
+
 ## [1.23.0] - 2026-11-17 (Vendedores: cancelación comercial)
 
 - MINOR DH-20261117-SELLER-CANCEL-202: `PATCH /api/pricing/seller-rates/{rateId}/status` admite `Cancelled` con motivo obligatorio de hasta 1000 caracteres y validación de propiedad del vendedor.

@@ -1,0 +1,28 @@
+{
+  "releaseId": "DH-20261117-CRM-RATE-REQUEST-OWNER-203",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.72.1",
+  "date": "2026-11-17",
+  "type": "PATCH",
+  "status": "candidate-ci-and-staging-pending",
+  "branches": [
+    "fix/rate-request-crm-owner-20261117",
+    "develop",
+    "master"
+  ],
+  "summary": "Pricing now authoritatively resolves SellerUserId via authenticated CRM account/lead and preserves audit actor while enforcing ownership on seller /mine endpoints.",
+  "restCompatibility": "No existing endpoint or contract removed; SellerUserId on existing POST is reconciled against authorized CRM identity; /mine GET/PUT behavior unchanged",
+  "realtimeCompatibility": "Existing outbox notification and SignalR delivery preserved",
+  "tests": [
+    "CRM lookup and assigned seller resolver regression",
+    "Frontend owner synchronization regression",
+    "CI, tests and staging pending"
+  ],
+  "component": "DholePricingService",
+  "previousVersion": "1.23.0",
+  "version": "1.23.1",
+  "relatedComponents": {
+    "DholePricingService": "1.23.1",
+    "DholeWeb": "1.69.1"
+  }
+}
