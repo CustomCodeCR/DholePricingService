@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.24.6",
-  "ecosystemVersion": "1.85.2",
-  "releaseId": "DH-20261118-EXW-LCL-PICKUP-ROUNDTRIP-227",
+  "version": "1.24.7",
+  "ecosystemVersion": "1.86.1",
+  "releaseId": "DH-20261118-CARGO-WEIGHT-PER-UNIT-229",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261118-EXW-LCL-PICKUP-ROUNDTRIP-227"
+  "businessReleaseId": "DH-20261118-CARGO-WEIGHT-PER-UNIT-229"
 }
