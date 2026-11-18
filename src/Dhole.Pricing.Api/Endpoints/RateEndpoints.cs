@@ -41,6 +41,7 @@ public static class RateEndpoints
 {
     private const string GroupDispatcherKey = "Dhole.Pricing.RateGroup.Dispatcher";
     private const string GroupCreatedIdKey = "Dhole.Pricing.RateGroup.CreatedRateId";
+    private const string GroupRateCodeKey = "Dhole.Pricing.RateGroup.ReservedChildCode";
     public static IEndpointRouteBuilder MapRateEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/pricing/rates").WithTags("Rates").RequireAuthorization();
@@ -1234,6 +1235,8 @@ public static class RateEndpoints
                 TransitDays = request.TransitDays,
                 CarrierRoute = request.CarrierRoute,
                 CarrierComments = request.CarrierComments,
+                ReservedGroupRateCode = httpContext.Items.TryGetValue(GroupRateCodeKey, out var groupCode)
+                    ? groupCode as string : null,
             };
 
         var result = await DispatchWithTransactionalRateCodeAsync(
@@ -1306,12 +1309,19 @@ public static class RateEndpoints
             var scopedDb = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
             var scopedDispatcher = scope.ServiceProvider.GetRequiredService<ICommandDispatcher>();
             await using var transaction = await scopedDb.Database.BeginTransactionAsync(cancellationToken);
+            // Reserve a single parent consecutive inside the shared transaction.
+            await using var groupReservation = await scope.ServiceProvider
+                .GetRequiredService<IRateCodeGenerator>().ReserveAsync(cancellationToken);
+            var baseQuote = groupReservation.Code;
             var created = new List<Guid>(alternatives.Length);
             httpContext.Items[GroupDispatcherKey] = scopedDispatcher;
             try
             {
-                foreach (var alternative in alternatives)
+                for (var index = 0; index < alternatives.Length; index++)
                 {
+                    var alternative = alternatives[index];
+                    httpContext.Items[GroupRateCodeKey] = QuoteAlternativeNumbering.SubQuoteNumber(
+                        baseQuote, QuoteAlternativeNumbering.SuffixAt(index));
                     httpContext.Items.Remove(GroupCreatedIdKey);
                     // The final commercial number is assigned after the root QUO
                     // has been reserved, never accepted from a browser payload.
@@ -1334,10 +1344,6 @@ public static class RateEndpoints
                 }
 
                 var parentId = created[0];
-                var baseQuote = await scopedDb.RateHeaders.AsNoTracking()
-                    .Where(rate => rate.Id == parentId)
-                    .Select(rate => rate.RateCode)
-                    .SingleAsync(cancellationToken);
                 var responseAlternatives = new List<object>(created.Count);
                 for (var index = 0; index < created.Count; index++)
                 {
@@ -1373,6 +1379,7 @@ public static class RateEndpoints
             {
                 httpContext.Items.Remove(GroupDispatcherKey);
                 httpContext.Items.Remove(GroupCreatedIdKey);
+                httpContext.Items.Remove(GroupRateCodeKey);
             }
         });
     }
@@ -1550,16 +1557,16 @@ public static class RateEndpoints
                     cancellationToken);
             }
 
-            // Keep the immutable parent_rate_id and internal RateCode intact.
-            // Only the chosen rate takes the unsuffixed commercial QUO number.
-            var baseQuote = await db.Database.SqlQueryRaw<string>(
-                    "SELECT base_quote AS \"Value\" FROM pricing.rate_quote_alternatives WHERE rate_id = {0}", rateId)
+            // Choosing a winning alternative is a STATUS decision, never a renumbering.
+            // A and B retain immutable suffixes even after commercial acceptance.
+            var selectedQuote = await db.Database.SqlQueryRaw<string>(
+                    "SELECT (base_quote || '-' || suffix) AS \"Value\" FROM pricing.rate_quote_alternatives WHERE rate_id = {0}", rateId)
                 .SingleAsync(cancellationToken);
             await db.Database.ExecuteSqlInterpolatedAsync(
-                $@"UPDATE pricing.""RateHeaders"" SET quo_number = {baseQuote} WHERE id = {rateId};",
+                $@"UPDATE pricing.""RateHeaders"" SET quo_number = {selectedQuote} WHERE id = {rateId};",
                 cancellationToken);
             await db.Database.ExecuteSqlInterpolatedAsync(
-                $@"UPDATE pricing.rate_quote_alternatives SET alternative_quote = {baseQuote}
+                $@"UPDATE pricing.rate_quote_alternatives SET alternative_quote = {selectedQuote}
                    WHERE rate_id = {rateId} AND status = 'Selected';", cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return Results.Ok(new { parentRateId = parentId.Value, selectedRateId = rateId, finalized = true });
