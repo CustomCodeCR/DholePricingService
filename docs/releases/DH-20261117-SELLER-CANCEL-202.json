@@ -1,0 +1,23 @@
+{
+  "releaseId": "DH-20261117-SELLER-CANCEL-202",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.72.0",
+  "date": "2026-11-17",
+  "type": "MINOR",
+  "status": "candidate-ci-and-staging-pending",
+  "branches": [
+    "develop",
+    "master"
+  ],
+  "summary": "Vendedores pueden cancelar cotizaciones enviadas, vencidas o aceptadas con motivo obligatorio; guardas de autoría, auditoría e idempotencia.",
+  "restCompatibility": "PATCH /api/pricing/seller-rates/{rateId}/status añade status Cancelled sin romper aceptar/rechazar",
+  "realtimeCompatibility": "Se conservan eventos de RateHeaderUpdatedDomainEvent y la invalidación de caché existente",
+  "tests": [
+    "Unit tests RateStatusWorkflowTests",
+    "UI source contract tests",
+    "Build, version gates and staging pending"
+  ],
+  "component": "DholePricingService",
+  "previousVersion": "1.22.5",
+  "version": "1.23.0"
+}
