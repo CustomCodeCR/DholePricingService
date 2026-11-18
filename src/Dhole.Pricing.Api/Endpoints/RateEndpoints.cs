@@ -1444,7 +1444,7 @@ public static class RateEndpoints
     /// Selects exactly one commercial alternative. The parent row lock serializes
     /// concurrent decisions; the unique partial index is the final DB safeguard.
     /// </summary>
-    private static async Task<IResult> SelectRateGroupAsync(
+    internal static async Task<IResult> SelectRateGroupAsync(
         Guid rateId,
         ServiceDbContext db,
         HttpContext httpContext,

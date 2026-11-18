@@ -28,6 +28,8 @@ jobs:
           else
             dotnet restore 'DholePricingService.slnx'
           fi
+      - name: Verify Pricing lease transactions use EF execution strategy
+        run: python3 scripts/tests/check_pricing_lease_strategy.py
       - name: Compile release solution
         run: dotnet build 'DholePricingService.slnx' --configuration Release --no-restore
       - name: Run release solution tests

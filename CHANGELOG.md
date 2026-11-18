@@ -5,6 +5,23 @@
 - API REST retrocompatible, outbox/inbox/SignalR y scopes existentes sin cambios; CI/staging pendientes, sin despliegue a producción.
 - DholeWeb 1.79.2 → 1.80.0; DholePricingService 1.23.6 → 1.24.0; ecosistema 1.83.2 → 1.84.0.
 
+## [1.23.10] - 2026-11-18 (MultiQUO: una sola cotización comercial)
+
+- PATCH DH-20261118-MULTIQUO-SINGLE-223: integra de develop la lógica MultiQUO con una fila QUO base, alternativas A/B internas, selección de una ganadora y conteos/estados comerciales consolidados.
+- Conserva correcciones posteriores de reservas Pricing 1.23.9, autorización de vendedores, auditoría, REST, Outbox/SignalR y alternativas PDF.
+- Pricing 1.23.9 → 1.23.10; Web 1.79.4 → 1.79.5; DholeSystem 1.83.5 → 1.83.6. Staging/CI obligatorios antes de integración a master.
+
+## [1.23.9] - 2026-11-18 (Pricing: corregir HTTP 503 en reservas)
+
+- PATCH DH-20261118-PRICING-LEASE-TX-222: causa confirmada mediante TraceId 0HNQ5JP78QTL4:00000009. NpgsqlRetryingExecutionStrategy no admite transacciones externas; claim, heartbeat y release-own ejecutan el BEGIN/COMMIT dentro de CreateExecutionStrategy().ExecuteAsync.
+- Preserva bloqueo por operador, tokens, auditoría, scopes, APIs REST y SignalR. Regresión estructural de CI obligatoria.
+- Pricing 1.23.8 → 1.23.9; ecosistema 1.83.4 → 1.83.5; Web y servicios no afectados sin cambios.
+
+## [1.23.8] - 2026-11-18 (Pricing: error de reserva en wizard)
+
+- PATCH DH-20261118-PRICING-LEASE-220: adquisición tipada de pg_try_advisory_xact_lock en transacción, 409 de concurrencia y 503 con TraceId ante excepción SQL, y predicado de inactividad con corte precalculado EF. Preserva un lease por operador, scopes, auditoría, REST y SignalR.
+- Pruebas de claim, bloqueo ajeno y liberación inactiva; CI/staging pendientes. Pricing 1.23.7→1.23.8; Web 1.79.3→1.79.4; ecosistema 1.83.3→1.83.4.
+
 ## [1.23.7] - 2026-11-18 (Pricing: liberar reservas huérfanas sin reclamarlas)
 
 - PATCH DH-20261118-PRICING-LEASE-219: nuevos endpoints de liberación de reserva propia sin claim y liberación de bloqueo ajeno solo tras 45 segundos sin heartbeat, con verificación atómica, scope pricing.rate.update y trazabilidad estructurada.
