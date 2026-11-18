@@ -2,7 +2,7 @@
 
 - PATCH DH-20261117-SELLER-CANCEL-ACCEPTED-203: cancelar cotizaciones comerciales únicamente cuando el estado guardado es AcceptedByClient; el endpoint de vendedores devuelve HTTP 409 Pricing.SellerCancellationRequiresAcceptance para otros estados.
 - Dominio elimina las transiciones desde Sent, RequestedByClient y Expired hacia Cancelled, preserva auditoría, motivo obligatorio, ClosedBy/ClosedAtUtc, idempotencia y eventos realtime. Pruebas unitarias positivas y negativas.
-- Pricing 1.23.1 → 1.23.2; ecosistema 1.72.1 → 1.73.1. Se preserva el release de asignación comercial de CRM ya incorporado a develop. CI y staging pendientes.
+- Pricing 1.23.1 → 1.23.2; ecosistema 1.72.1 → 1.73.2. Se preserva el release de asignación comercial de CRM ya incorporado a develop. CI y staging pendientes.
 
 ## [1.23.1] - 2026-11-17 (Solicitudes de tarifa: vendedor asignado por CRM)
 
