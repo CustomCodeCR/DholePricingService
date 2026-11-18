@@ -98,8 +98,63 @@ public static class SellerRateEndpoints
         if (orderedIds.Length == 0)
             return Results.Ok(Array.Empty<RateDto>());
 
-        var items = new List<RateDto>(orderedIds.Length);
-        foreach (var rateId in orderedIds)
+        // A quotation with multiple FCL alternatives is a single customer-facing
+        // record. Collapse by parent BEFORE rendering seller lists and search.
+        // An accepted B replaces the original A; A remains available by ID for
+        // revisions/audit, but is never a second "not accepted" quotation.
+        var groupMembers = await db.Database.SqlQuery<string>($"""
+            SELECT member.rate_id::text || '|' || member.parent_rate_id::text || '|' ||
+                   member.base_quote || '|' || COALESCE((
+                       SELECT chosen.rate_id::text FROM pricing.rate_quote_alternatives chosen
+                       WHERE chosen.parent_rate_id = member.parent_rate_id
+                         AND chosen.status = 'Selected' LIMIT 1), '') || '|' ||
+                   (SELECT COUNT(*)::text FROM pricing.rate_quote_alternatives other
+                    WHERE other.parent_rate_id = member.parent_rate_id) AS "Value"
+            FROM pricing.rate_quote_alternatives member
+            WHERE member.rate_id = ANY({orderedIds})
+            """).ToListAsync(cancellationToken);
+        var membership = new Dictionary<Guid, (Guid ParentId, Guid RepresentativeId, string BaseNumber, int Count)>();
+        foreach (var row in groupMembers)
+        {
+            var parts = row.Split('|');
+            if (parts.Length != 5 || !Guid.TryParse(parts[0], out var member)
+                || !Guid.TryParse(parts[1], out var parent) || !int.TryParse(parts[4], out var count))
+                continue;
+            var representative = Guid.TryParse(parts[3], out var selected) ? selected : parent;
+            membership[member] = (parent, representative, parts[2], count);
+        }
+        // Preserve seller-specific authorization when the chosen rate belongs
+        // to another member of an already visible commercial group.
+        var allowedRepresentatives = new HashSet<Guid>(orderedIds);
+        foreach (var representativeId in membership.Values.Select(value => value.RepresentativeId).Distinct())
+        {
+            if (allowedRepresentatives.Contains(representativeId)) continue;
+            var representativeHeader = await db.RateHeaders.AsNoTracking()
+                .FirstOrDefaultAsync(rate => rate.Id == representativeId && !rate.IsDeleted, cancellationToken);
+            if (representativeHeader is not null
+                && await sellerAccess.CanReadAsync(representativeHeader, currentUserId.Value, cancellationToken))
+                allowedRepresentatives.Add(representativeId);
+        }
+        var seenGroups = new HashSet<Guid>();
+        var singleCommercialIds = new List<Guid>(orderedIds.Length);
+        foreach (var id in orderedIds)
+        {
+            if (!membership.TryGetValue(id, out var group))
+            {
+                singleCommercialIds.Add(id);
+                continue;
+            }
+            if (!seenGroups.Add(group.ParentId)) continue;
+            if (allowedRepresentatives.Contains(group.RepresentativeId))
+                singleCommercialIds.Add(group.RepresentativeId);
+        }
+
+        var groupByRepresentative = membership.Values
+            .GroupBy(value => value.RepresentativeId)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        var items = new List<RateDto>(singleCommercialIds.Count);
+        foreach (var rateId in singleCommercialIds)
         {
             var result = await dispatcher.DispatchAsync(
                 new GetRateByIdQuery(rateId),
@@ -107,7 +162,13 @@ public static class SellerRateEndpoints
             );
 
             if (result.IsSuccess && result.Value is not null)
-                items.Add(result.Value);
+            {
+                var rate = result.Value;
+                if (groupByRepresentative.TryGetValue(rateId, out var group))
+                    rate = rate with { QuoNumber = group.BaseNumber, GroupQuoteNumber = group.BaseNumber,
+                        GroupAlternativeCount = group.Count };
+                items.Add(rate);
+            }
         }
 
         var enrichedItems = await creatorIdentityService.EnrichAsync(
@@ -358,7 +419,7 @@ public static class SellerRateEndpoints
             RateCode = Text(previous, "RateCode") ?? current.RateCode,
             RateName = published.RateName,
             RevisionNumber = published.RevisionNumber,
-            QuoNumber = published.QuoNumber,
+            QuoNumber = current.GroupQuoteNumber ?? published.QuoNumber,
             IdtraNumber = published.IdtraNumber,
             ClientName = Text(previous, "ClientName"),
             ExecutiveName = Text(previous, "ExecutiveName"),
