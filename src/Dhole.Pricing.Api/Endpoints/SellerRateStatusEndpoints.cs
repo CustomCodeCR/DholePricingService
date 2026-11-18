@@ -148,6 +148,18 @@ public static class SellerRateStatusEndpoints
             return Results.NoContent();
         }
 
+        // Cancellation follows the same rule as Pricing: only an accepted quote can be cancelled.
+        // Check the persisted state, not the status sent from the browser.
+        // An already-cancelled quote remains idempotent in the block above.
+        if (status == RateStatus.Cancelled && currentRate.Status != RateStatus.AcceptedByClient)
+        {
+            return Results.Conflict(new
+            {
+                code = "Pricing.SellerCancellationRequiresAcceptance",
+                message = "Solo puede cancelar una cotización aceptada por el cliente.",
+            });
+        }
+
         // The seller can decide on a PREVIOUSLY ISSUED quote even if Pricing
         // reopened the current header. Do not grant this to a brand-new unsent
         // draft, low-margin pending approval, or active seller modification.
@@ -191,7 +203,7 @@ public static class SellerRateStatusEndpoints
             return Results.Conflict(new
             {
                 code = "Pricing.SellerRateNotAwaitingClient",
-                message = "La tarifa no permite esa transición comercial: cancelar exige que esté enviada, vencida o aceptada.",
+                message = "La tarifa no permite esa transición comercial: solo las cotizaciones aceptadas pueden cancelarse.",
             });
         }
 
