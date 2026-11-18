@@ -1,3 +1,9 @@
+## [1.24.3] - 2026-11-18 (Pricing: transacciones de reservas compatibles con Npgsql)
+
+- PATCH DH-20261118-PRICING-LEASE-TX-222: corrige la causa real del HTTP 503. Claim, heartbeat y release-own ahora ejecutan BEGIN/COMMIT dentro de Database.CreateExecutionStrategy().ExecuteAsync.
+- Evidencia de logs TraceId 0HNQ5JP78QTL4:00000009: InvalidOperationException de NpgsqlRetryingExecutionStrategy por transacción iniciada fuera de la estrategia.
+- Mantiene advisory lock, concurrencia, auditoría, scopes, SignalR y compatibilidad REST. Prueba de protección de transacciones integrada al CI. Pricing 1.24.2 → 1.24.3; ecosistema 1.84.1 → 1.84.2.
+
 ## [1.24.2] - 2026-11-18 (MultiQUO: una QUO comercial, alternativas dentro)
 
 - PATCH DH-20261118-MULTIQUO-SINGLE-221: unifica listado y dashboard por grupo comercial y selecciona una opción A/B sin reportar la otra como cotización no aceptada; permite decisiones de vendedor con validación de pertenencia y mantiene auditoría, REST, SignalR y Outbox.
