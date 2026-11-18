@@ -1,3 +1,10 @@
+## [1.24.4] - 2026-11-18 (Pricing: flete DDP exportación terrestre LTL/FTL)
+
+- PATCH DH-20261118-DDP-EXPORT-FREIGHT-225: corregir el filtrado de flete internacional por Incoterm para distinguir exportador/importador. DDP en exportación y EXW en importación conservan flete cuando el servicio internacional está contratado.
+- La pantalla de proveedor ya no oculta ni borra costo/venta o líneas de Freight para DDP exportación; mantiene la protección contra reinicios transitorios durante carga de catálogos. Importación DDP continúa sin cargar automáticamente el flete al importador; doméstico permite tramos contratados.
+- Regresiones de tipos de operación y flujo de cotización; sin migraciones, nuevos scopes ni cambios de contrato REST o eventos SignalR.
+- DholeWeb 1.80.2 → 1.80.3; DholePricingService 1.24.3 → 1.24.4; ecosistema 1.84.2 → 1.84.3. CI y staging requeridos antes de master.
+
 ## [1.24.0] - 2026-11-18 (Pricing: múltiples puntos y perspectiva comercial)
 
 - MINOR DH-20261118-INLAND-MULTIPOINT-219: recolección y entrega registran múltiples paradas con tipo de carga y responsable de costos por punto. Se conservan coordenadas opcionales y soporte a solicitudes históricas de un solo punto.
