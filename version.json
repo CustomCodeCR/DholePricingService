@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.24.8",
-  "ecosystemVersion": "1.86.2",
-  "releaseId": "DH-20261118-PRICING-SAVE-500-230",
+  "version": "1.24.9",
+  "ecosystemVersion": "1.87.3",
+  "releaseId": "DH-20261118-RATE-REVISION-IDTRA-232",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261118-PRICING-SAVE-500-230"
+  "businessReleaseId": "DH-20261118-RATE-REVISION-IDTRA-232"
 }

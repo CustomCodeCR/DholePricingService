@@ -3253,8 +3253,8 @@ namespace Dhole.Pricing.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("IdtraNumber")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<decimal>("MarginPercentage")
                         .HasPrecision(18, 4)
