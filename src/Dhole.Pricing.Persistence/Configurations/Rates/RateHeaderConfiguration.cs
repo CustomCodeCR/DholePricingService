@@ -118,7 +118,7 @@ internal sealed class RateHeaderConfiguration : EntityTypeConfigurationBase<Rate
 
         builder.Property(x => x.ValidTo).IsRequired();
 
-        builder.Property(x => x.RateCode).HasMaxLength(16).IsRequired();
+        builder.Property(x => x.RateCode).HasMaxLength(32).IsRequired();
 
         builder.Property(x => x.RateName).HasMaxLength(500).IsRequired();
         builder.Property(x => x.RevisionNumber).IsRequired().HasDefaultValue(1).IsConcurrencyToken();

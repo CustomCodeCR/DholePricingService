@@ -2909,8 +2909,8 @@ namespace Dhole.Pricing.Persistence.Migrations
 
                     b.Property<string>("RateCode")
                         .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("rate_code");
 
                     b.Property<string>("RateName")

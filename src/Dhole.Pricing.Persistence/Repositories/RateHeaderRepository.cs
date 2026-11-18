@@ -964,8 +964,12 @@ public sealed class RateHeaderRepository(ServiceDbContext dbContext)
             var value = NormalizeSearchValue(search);
 
             query = query.Where(x =>
-                x.RateCode.ToLower().Contains(value)
-                || x.RateName.ToLower().Contains(value)
+                // A grouped alternative may have an old technical code 673;
+                // searchable identity is its persisted 672-B commercial number.
+                (x.RateCode.ToLower().Contains(value)
+                    && (x.QuoNumber == null || x.QuoNumber == x.RateCode))
+                || ((x.QuoNumber == null || x.QuoNumber == x.RateCode)
+                    && x.RateName.ToLower().Contains(value))
                 || (x.ClientName ?? string.Empty).ToLower().Contains(value)
                 || (x.IdtraNumber ?? string.Empty).ToLower().Contains(value)
                 || (x.QuoNumber ?? string.Empty).ToLower().Contains(value)

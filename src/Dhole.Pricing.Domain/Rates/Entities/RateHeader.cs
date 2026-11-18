@@ -1634,19 +1634,29 @@ public sealed class RateHeader : SoftDeletableAggregateRoot<Guid>
 
         if (
             normalized is null
-            || normalized.Length != 16
+            || (normalized.Length != 16 && (normalized.Length < 18 || normalized.Length > 32))
             || !normalized.StartsWith("QUO-", StringComparison.Ordinal)
             || normalized[9] != '-'
             || !IsAsciiAlphanumeric(normalized.AsSpan(4, 5))
             || !IsAsciiAlphanumeric(normalized.AsSpan(10, 6))
+            || (normalized.Length > 16 &&
+                (normalized[16] != '-' || !IsAsciiUppercase(normalized.AsSpan(17))))
         )
         {
             throw new InvalidOperationException(
-                "El identificador QUO debe cumplir el formato alfanumérico QUO-XXXXX-XXXXXX."
+                "El identificador QUO debe cumplir QUO-XXXXX-XXXXXX o QUO-XXXXX-XXXXXX-A/B."
             );
         }
 
         return normalized;
+    }
+
+    private static bool IsAsciiUppercase(ReadOnlySpan<char> value)
+    {
+        if (value.IsEmpty) return false;
+        foreach (var character in value)
+            if (character is < 'A' or > 'Z') return false;
+        return true;
     }
 
     private static bool IsAsciiAlphanumeric(ReadOnlySpan<char> value)
