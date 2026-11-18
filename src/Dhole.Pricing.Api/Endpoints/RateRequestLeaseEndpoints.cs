@@ -22,6 +22,8 @@ public static class RateRequestLeaseEndpoints
         group.MapPost("/claim", ClaimAsync);
         group.MapPost("/heartbeat", HeartbeatAsync);
         group.MapPost("/release", ReleaseAsync);
+        group.MapPost("/release-own", ReleaseOwnAsync);
+        group.MapPost("/release-stale", ReleaseStaleAsync);
         return app;
     }
 
@@ -116,6 +118,60 @@ public static class RateRequestLeaseEndpoints
                 .SetProperty(x => x.LockExpiresAtUtc, (DateTime?)null), ct);
         return Results.NoContent();
     }
+
+    // Never claim again in order to release a reservation. A different browser tab
+    // or impersonation session may have lost its local token.
+    private static async Task<IResult> ReleaseOwnAsync(
+        Guid id, ServiceDbContext db, HttpContext context, CancellationToken ct)
+    {
+        var actor = context.GetCurrentUserId();
+        if (actor is null) return Results.Unauthorized();
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await LockOperatorAsync(db, actor.Value, ct);
+        var released = await ClearLeaseAsync(
+            db.RateRequests.Where(x => x.Id == id
+                && x.Status == RateRequestStatus.Open
+                && x.LockedByUserId == actor.Value
+                && x.LockToken != null), ct);
+        await tx.CommitAsync(ct);
+        if (released == 0)
+            return Results.Conflict(new { code = "Pricing.RateRequestNotOwned",
+                message = "La solicitud no tiene una reserva activa a su nombre. Actualice la bandeja." });
+        context.RequestServices.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("PricingRateRequestLeaseAudit")
+            .LogInformation("Actor {ActorId} explicitly released own lease for request {RequestId}",
+                actor.Value, id);
+        return Results.NoContent();
+    }
+
+    // An operator may recover abandoned work, but NEVER displace a lease that
+    // is receiving heartbeats. The 45-second threshold is based on the server's
+    // last renewal (lease expiry minus the fixed two-minute duration).
+    private static async Task<IResult> ReleaseStaleAsync(
+        Guid id, ServiceDbContext db, HttpContext context, CancellationToken ct)
+    {
+        var actor = context.GetCurrentUserId();
+        if (actor is null) return Results.Unauthorized();
+        var now = DateTime.UtcNow;
+        var released = await ClearLeaseAsync(
+            db.RateRequests.Where(RateRequestLeaseClaimPolicy.StaleLease(id, now)), ct);
+        if (released == 0)
+            return Results.Conflict(new { code = "Pricing.RateRequestLeaseStillActive",
+                message = "La reserva sigue activa o ya fue liberada. Actualice la bandeja." });
+        context.RequestServices.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("PricingRateRequestLeaseAudit")
+            .LogWarning("Actor {ActorId} released inactive lease for request {RequestId}, inactivity >= 45 seconds",
+                actor.Value, id);
+        return Results.NoContent();
+    }
+
+    private static Task<int> ClearLeaseAsync(IQueryable<RateRequest> query, CancellationToken ct)
+        => query.ExecuteUpdateAsync(setters => setters
+            .SetProperty(x => x.LockedByUserId, (Guid?)null)
+            .SetProperty(x => x.LockedByName, (string?)null)
+            .SetProperty(x => x.LockToken, (Guid?)null)
+            .SetProperty(x => x.LockedAtUtc, (DateTime?)null)
+            .SetProperty(x => x.LockExpiresAtUtc, (DateTime?)null), ct);
 
     // Transaction-scoped PostgreSQL lock prevents concurrent API instances from
     // preserving more than one live lease for the same operator.

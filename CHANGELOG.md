@@ -1,3 +1,9 @@
+## [1.23.7] - 2026-11-18 (Pricing: liberar reservas huérfanas sin reclamarlas)
+
+- PATCH DH-20261118-PRICING-LEASE-219: nuevos endpoints de liberación de reserva propia sin claim y liberación de bloqueo ajeno solo tras 45 segundos sin heartbeat, con verificación atómica, scope pricing.rate.update y trazabilidad estructurada.
+- Bloqueos activos continúan protegidos, sin cambios de estado Trabajando, contratos existentes, outbox ni SignalR. Pruebas de frescura, expiración, propiedad y no modificación de solicitudes completadas.
+- Pricing 1.23.6 → 1.23.7; Web 1.79.2 → 1.79.3; System/ecosistema 1.83.2 → 1.83.3. CI y staging previos a promoción.
+
 ## [1.23.6] - 2026-11-18 (Pricing: una sola reserva activa por operador)
 
 - PATCH DH-20261118-PRICING-LEASE-218: claim y heartbeat serializan por actor y limpian únicamente las otras reservas del mismo usuario; no liberan trabajo de terceros. Auditoría estructurada de reservas liberadas y pruebas de aislamiento.
