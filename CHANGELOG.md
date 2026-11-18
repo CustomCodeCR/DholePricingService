@@ -1,3 +1,9 @@
+## [1.23.1] - 2026-11-17 (Pricing: cancelar solo cotizaciones aceptadas)
+
+- PATCH DH-20261117-SELLER-CANCEL-ACCEPTED-203: el endpoint de estado del vendedor rechaza con HTTP 409 / Pricing.SellerCancellationRequiresAcceptance las cancelaciones cuando la QUO no está en estado AcceptedByClient. Reintentos de una QUO ya cancelada siguen siendo idempotentes.
+- La entidad RateHeader solo permite AcceptedByClient → Cancelled; se eliminan Sent/RequestedByClient/Expired → Cancelled. El motivo obligatorio, ClosedReason/ClosedBy/ClosedAtUtc, auditoría, y eventos Outbox/SignalR se mantienen.
+- Regresiones negativas de estados no aceptados y cancelación válida de aceptadas. Pricing 1.23.0 → 1.23.1; ecosistema 1.72.0 → 1.72.1. CI y staging pendientes.
+
 ## [1.23.0] - 2026-11-17 (Vendedores: cancelación comercial)
 
 - MINOR DH-20261117-SELLER-CANCEL-202: `PATCH /api/pricing/seller-rates/{rateId}/status` admite `Cancelled` con motivo obligatorio de hasta 1000 caracteres y validación de propiedad del vendedor.
