@@ -1,3 +1,9 @@
+## [1.25.1] - 2026-11-19 (DH-20261119-PRICING-RETURN-PROMOTION-272 · promover devolución de solicitudes a producción)
+ 
+- PATCH de versión coordinado 1.25.1, ecosistema 1.103.0. Se promueve a master la funcionalidad de devolución de solicitudes con motivo obligatorio, notificaciones por sistema/correo, historial y corrección/reenvío, validada en staging desde Pricing 1.25.0.
+- Sin cambios de esquema: el estado Returned usa el texto existente, el historial se conserva en payload_json y el evento se envía por outbox.
+- Validación obligatoria de compilación, pruebas y gates antes de promover a producción. Contiene la misma funcionalidad que develop 1.25.0.
+ 
 ## [1.25.0] - 2026-11-19 (Devolución de solicitudes de Ventas para corrección)
 
 - MINOR DH-20261119-PRICING-RETURN-REQUEST-271: Pricing puede devolver solicitudes abiertas sin tarifa vinculada, con motivo obligatorio (10–1000 caracteres), validación de autorización y reserva vigente.
