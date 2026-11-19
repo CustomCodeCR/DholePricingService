@@ -1,3 +1,9 @@
+## [1.25.1] - 2026-11-19 (DH-20261119-PRICING-RETURN-PROMOTION-272 · devolución de solicitudes a producción)
+
+- MINOR funcionalidad ya validada en develop: permite devolver solicitudes abiertas sin tarifa vinculada, con motivo obligatorio, estado Returned, historial y reenvío de solicitudes corregidas.
+- Las notificaciones de System y Email se entregan a Notifications por outbox, conservando los endpoints REST existentes y la reserva exclusiva.
+- Promoción aislada de los archivos de funcionalidad; versión Pricing 1.24.9→1.25.1 y ecosistema 1.102.0→1.103.0. Sin migración. Pruebas de CI y staging antes de producción.
+
 ## [1.24.9] - 2026-11-18 (Fix 500 guardando QUO con múltiples IDTRA)
 
 - PATCH DH-20261118-RATE-REVISION-IDTRA-232: corregida causa confirmada por SQLSTATE 22001. El historial RateRevisions.IdtraNumber estaba limitado a varchar(100), mientras RateHeaders.idtra_number permite 2000. Una revisión con múltiples IDTRA (366 caracteres en caso QUO-00000-000552) fallaba al guardar.
