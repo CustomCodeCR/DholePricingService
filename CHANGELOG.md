@@ -1,3 +1,9 @@
+## [1.25.2] - 2026-11-19 (DH-20261119-PRICING-LTL-DDP-FREIGHT-284 · DDP terrestre con flete explícito)
+
+- PATCH: permite flete internacional explícito en cotizaciones terrestres LTL/FTL con Incoterm DDP; no compara CBM con cantidades de contenedores. Corrige Pricing.RateInvalidFreightDistribution al crear LTL de San José a Ciudad de Guatemala (33.33 CBM).
+- Creación y edición usan la misma regla. Se mantiene exclusión histórica de CIF/FCL y control de distribución de FCL; sin migración, cambios de contrato REST, ni modificaciones a realtime.
+- DholePricingService 1.25.1 → 1.25.2; ecosistema 1.103.7 → 1.103.8. Validaciones CI/staging obligatorias antes de producción.
+
 ## [1.25.1] - 2026-11-19 (DH-20261119-PRICING-RETURN-PROMOTION-272 · promover devolución de solicitudes a producción)
  
 - PATCH de versión coordinado 1.25.1, ecosistema 1.103.0. Se promueve a master la funcionalidad de devolución de solicitudes con motivo obligatorio, notificaciones por sistema/correo, historial y corrección/reenvío, validada en staging desde Pricing 1.25.0.

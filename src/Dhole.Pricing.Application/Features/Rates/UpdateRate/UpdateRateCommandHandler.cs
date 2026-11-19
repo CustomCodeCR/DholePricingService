@@ -314,7 +314,7 @@ public sealed class UpdateRateCommandHandler(
 
         var existingDetails = rate.RateDetails.ToDictionary(x => x.Id);
         var excludesQuotedFreight = RateQuotedFreightPolicy.ExcludesQuotedFreight(
-            command.IncotermCode, command.IncotermName);
+            command.ShipmentMode, command.IncotermCode, command.IncotermName);
         var previousFreightDetailIds = existingDetails.Values
             .Where(detail => detail.CostDetailType == CostDetailType.Freight)
             .Select(detail => detail.Id)
@@ -1347,7 +1347,7 @@ public sealed class UpdateRateCommandHandler(
         // La distribución de flete sólo existe si ese Incoterm cotiza flete.
         // Una edición CIF manual debe guardar exactamente los cargos de destino,
         // sin requerir filas Freight por tipo o cantidad de contenedor.
-        if (RateQuotedFreightPolicy.ExcludesQuotedFreight(incotermCode, incotermName))
+        if (RateQuotedFreightPolicy.ExcludesQuotedFreight(shipmentMode, incotermCode, incotermName))
             return !details.Any(detail => detail.CostDetailType == CostDetailType.Freight);
 
         if (rate.SourceImportFclRateId.HasValue) return true;
