@@ -1,3 +1,10 @@
+## [1.25.0] - 2026-11-19 (Devolución de solicitudes de Ventas para corrección)
+
+- MINOR DH-20261119-PRICING-RETURN-REQUEST-271: Pricing puede devolver solicitudes abiertas sin tarifa vinculada, con motivo obligatorio (10–1000 caracteres), validación de autorización y reserva vigente.
+- Nuevo estado Returned y motivo/historial preservados en payload_json; sin migración. El vendedor puede corregir y reenviar la misma solicitud, restableciendo el SLA y notificando a Pricing.
+- Notificación individual al vendedor por sistema/SignalR y correo mediante outbox persistente. Contratos REST existentes conservados; pruebas unitarias de devolución y reenvío.
+- DholePricingService 1.24.9→1.25.0; ecosistema 1.100.0→1.101.0. Staging/CI obligatorios antes de master.
+
 ## [1.24.9] - 2026-11-18 (Fix 500 guardando QUO con múltiples IDTRA)
 
 - PATCH DH-20261118-RATE-REVISION-IDTRA-232: corregida causa confirmada por SQLSTATE 22001. El historial RateRevisions.IdtraNumber estaba limitado a varchar(100), mientras RateHeaders.idtra_number permite 2000. Una revisión con múltiples IDTRA (366 caracteres en caso QUO-00000-000552) fallaba al guardar.

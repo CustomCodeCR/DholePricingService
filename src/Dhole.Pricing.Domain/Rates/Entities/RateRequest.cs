@@ -116,7 +116,8 @@ public sealed class RateRequest : Entity<Guid>
         string? destinationName,
         string payloadJson)
     {
-        if (Status != RateRequestStatus.Open || RateId.HasValue)
+        var resubmitting = Status == RateRequestStatus.Returned;
+        if (Status is not (RateRequestStatus.Open or RateRequestStatus.Returned) || RateId.HasValue)
             throw new InvalidOperationException("La solicitud ya no está disponible para edición.");
 
         if (Priority != priority)
@@ -138,7 +139,31 @@ public sealed class RateRequest : Entity<Guid>
         ShipmentMode = Normalize(shipmentMode);
         OriginName = Normalize(originName);
         DestinationName = Normalize(destinationName);
-        PayloadJson = string.IsNullOrWhiteSpace(payloadJson) ? "{}" : payloadJson;
+        if (resubmitting)
+        {
+            // Preserve the reason and every previous review while Sales corrects its form.
+            var corrected = JsonNode.Parse(payloadJson) as JsonObject
+                ?? throw new ArgumentException("La solicitud corregida debe contener un objeto JSON.", nameof(payloadJson));
+            var previous = JsonNode.Parse(PayloadJson) as JsonObject;
+            if (previous?["pricingReturnHistory"] is { } history)
+                corrected["pricingReturnHistory"] = history.DeepClone();
+            if (previous?["pricingReturn"] is { } review)
+                corrected["pricingReturn"] = review.DeepClone();
+            PayloadJson = corrected.ToJsonString();
+            RequestedAtUtc = DateTime.UtcNow;
+            DueAtUtc = RequestedAtUtc.AddHours(priority switch
+            {
+                RateRequestPriority.Red => 24,
+                RateRequestPriority.Yellow => 48,
+                _ => 72,
+            });
+            SlaReminderSentAtUtc = null;
+            Status = RateRequestStatus.Open;
+        }
+        else
+        {
+            PayloadJson = string.IsNullOrWhiteSpace(payloadJson) ? "{}" : payloadJson;
+        }
     }
 
     public void SetRoute(Guid? poeId, string? poeName, Guid? podId, string? podName)
@@ -284,6 +309,34 @@ public sealed class RateRequest : Entity<Guid>
         DeliveryConfirmedAtUtc = deliveredAtUtc;
         Status = RateRequestStatus.Completed;
         CompletedAtUtc = deliveredAtUtc;
+        ClearWorkState();
+    }
+
+    public void ReturnToSeller(string reason, Guid actorId, string actorName, DateTime returnedAtUtc)
+    {
+        if (Status != RateRequestStatus.Open || RateId.HasValue)
+            throw new InvalidOperationException("Solo se pueden devolver solicitudes abiertas sin tarifa vinculada.");
+        reason = reason.Trim();
+        if (reason.Length is < 10 or > 1000 || actorId == Guid.Empty)
+            throw new ArgumentException("El motivo de devolución debe contener entre 10 y 1000 caracteres.", nameof(reason));
+
+        var payload = JsonNode.Parse(PayloadJson) as JsonObject
+            ?? throw new InvalidOperationException("La solicitud no contiene un formulario válido.");
+        if (payload["pricingReturnHistory"] is not JsonArray)
+            payload["pricingReturnHistory"] = new JsonArray();
+        var history = (JsonArray)payload["pricingReturnHistory"]!;
+        var review = JsonSerializer.SerializeToNode(new
+        {
+            reason,
+            returnedAtUtc,
+            returnedByUserId = actorId,
+            returnedByName = Normalize(actorName),
+            revision = history.Count + 1,
+        })!;
+        history.Add(review);
+        payload["pricingReturn"] = review.DeepClone();
+        PayloadJson = payload.ToJsonString();
+        Status = RateRequestStatus.Returned;
         ClearWorkState();
     }
 

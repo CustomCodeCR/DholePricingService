@@ -18,6 +18,7 @@ public static class RateRequestEndpoints
     private const string NotificationEventName = "notifications.notification.requested";
     private const string RateRequestCreatedNotificationType = "pricing.rate-request.created";
     private const string RateRequestWorkStatusChangedNotificationType = "pricing.rate-request.work-status.changed";
+    private const string RateRequestReturnedNotificationType = "pricing.rate-request.returned";
 
     public static IEndpointRouteBuilder MapRateRequestEndpoints(this IEndpointRouteBuilder app)
     {
@@ -46,6 +47,8 @@ public static class RateRequestEndpoints
         group.MapPost("/{id:guid}/complete", CompleteAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapPost("/{id:guid}/cancel", CancelAsync)
+            .RequireScope(PricingConstants.Scopes.RateUpdate);
+        group.MapPost("/{id:guid}/return-to-seller", ReturnToSellerAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
         group.MapPatch("/{id:guid}/work-status", UpdateWorkStatusAsync)
             .RequireScope(PricingConstants.Scopes.RateUpdate);
@@ -464,6 +467,87 @@ public static class RateRequestEndpoints
         return Results.NoContent();
     }
 
+    private static async Task<IResult> ReturnToSellerAsync(
+        Guid id, ReturnRateRequestRequest request, ServiceDbContext db,
+        HttpContext context, IIntegrationEventOutboxWriter outbox, CancellationToken ct)
+    {
+        var actor = context.GetCurrentUserId();
+        if (!actor.HasValue || actor.Value == Guid.Empty) return Results.Unauthorized();
+
+        var reason = request.Reason?.Trim() ?? "";
+        if (reason.Length is < 10 or > 1000)
+            return Results.BadRequest(new
+            {
+                code = "Pricing.RateRequestReturnReasonRequired",
+                message = "Explique el motivo de devolución (entre 10 y 1000 caracteres).",
+            });
+
+        var entity = await db.RateRequests.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (entity is null) return Results.NotFound();
+        if (entity.Status != RateRequestStatus.Open || entity.RateId.HasValue)
+            return Results.Conflict(new
+            {
+                code = "Pricing.RateRequestCannotReturn",
+                message = "Solo puede devolverse una solicitud abierta que todavía no tenga tarifa vinculada.",
+            });
+        if (!RateRequestLeaseEndpoints.HasActiveLease(context, entity))
+            return RateRequestLeaseEndpoints.LeaseRequired();
+        if (entity.SellerUserId is not { } sellerId || sellerId == Guid.Empty
+            || string.IsNullOrWhiteSpace(entity.SellerEmail))
+            return Results.Conflict(new
+            {
+                code = "Pricing.RateRequestSellerContactMissing",
+                message = "No se encontró el usuario y correo del vendedor para notificar la devolución.",
+            });
+
+        var actorName = context.User.FindFirst(ClaimTypes.Name)?.Value
+            ?? context.User.FindFirst("name")?.Value
+            ?? context.User.Identity?.Name ?? "Pricing";
+        var returnedAtUtc = DateTime.UtcNow;
+        entity.ReturnToSeller(reason, actor.Value, actorName, returnedAtUtc);
+        var notificationPayload = new
+        {
+            type = RateRequestReturnedNotificationType,
+            rateRequestId = entity.Id,
+            reason,
+            returnedAtUtc,
+            action = "edit-returned-rate-request",
+            route = $"/pricing/request-rate/{entity.Id}/edit",
+        };
+        var subject = $"Solicitud de tarifa devuelta para corrección · {entity.ClientName ?? "Cliente"}";
+        var body = $"Pricing devolvió su solicitud de tarifa para {entity.ClientName ?? "su cliente"}. "
+            + $"Motivo: {reason} Revise la información, corrija y vuelva a enviar la solicitud.";
+        foreach (var channel in new[] { "System", "Email" })
+        {
+            var message = new
+            {
+                notificationType = RateRequestReturnedNotificationType,
+                templateCode = (string?)null,
+                channel,
+                entityType = "RateRequest",
+                entityId = entity.Id.ToString(),
+                subject,
+                body,
+                payload = notificationPayload,
+                maxAttempts = 3,
+                recipients = new[]
+                {
+                    new
+                    {
+                        userId = sellerId.ToString(),
+                        address = channel == "Email" ? entity.SellerEmail! : sellerId.ToString(),
+                        displayName = entity.SellerName ?? "Vendedor",
+                    },
+                },
+            };
+            await outbox.WriteAsync(NotificationEventName, NotificationEventName, message,
+                correlationId: $"pricing-rate-request-return:{id:N}:{returnedAtUtc.Ticks}:{channel}",
+                cancellationToken: ct);
+        }
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { status = entity.Status.ToString(), returnedAtUtc });
+    }
+
     internal static async Task QueuePricingRealtimeNotificationAsync(
         RateRequest request,
         IPricingNotificationRecipientProvider recipientProvider,
@@ -856,6 +940,10 @@ public static class RateRequestEndpoints
             request.CancelledByName,
             request.CancellationReason,
             request.CancellationDetails,
+            returnReason = document.RootElement.TryGetProperty("pricingReturn", out var returnNode)
+                && returnNode.ValueKind == JsonValueKind.Object
+                && returnNode.TryGetProperty("reason", out var returnReasonNode)
+                ? returnReasonNode.GetString() : null,
             request.SlaReminderSentAtUtc,
             request.RateId,
             request.SellerUserId,
@@ -889,6 +977,7 @@ public static class RateRequestEndpoints
     private sealed record UpdatePricingRouteRequest(
         Guid PolId, string? PolName, Guid PoeId, string? PoeName, Guid? PodId, string? PodName);
     private sealed record CancelRateRequestRequest(string? Reason, string? Details, string? Confirmation = null);
+    private sealed record ReturnRateRequestRequest(string? Reason);
 
     private sealed record CreateRateRequestRequest(
         string Priority,
