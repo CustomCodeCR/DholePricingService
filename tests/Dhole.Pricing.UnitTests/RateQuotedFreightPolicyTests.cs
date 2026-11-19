@@ -1,4 +1,5 @@
 using Dhole.Pricing.Domain.Rates;
+using Dhole.Pricing.Domain.Rates.Enums;
 
 namespace Dhole.Pricing.UnitTests;
 
@@ -26,6 +27,25 @@ public sealed class RateQuotedFreightPolicyTests
     public void BuyerFreightIncoterm_RetainsDistributionValidation(string code)
     {
         Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight(code, code));
+    }
+
+    [TestMethod]
+    [DataRow(ShipmentMode.Ltl)]
+    [DataRow(ShipmentMode.Ftl)]
+    public void DdpLandShipment_AllowsExplicitFreightPerCbmOrTruck(ShipmentMode shipmentMode)
+    {
+        // Incident: LTL, DDP, 33.33 CBM, quantity=0, no physical containers.
+        Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight(
+            shipmentMode, "INC-2026-011", "DDP"));
+        Assert.IsTrue(RateQuotedFreightPolicy.ExcludesQuotedFreight(
+            shipmentMode, "INC-2026-011", "CIF"));
+    }
+
+    [TestMethod]
+    public void DdpFcl_StillExcludesFreightLikeExistingMaritimeQuotes()
+    {
+        Assert.IsTrue(RateQuotedFreightPolicy.ExcludesQuotedFreight(
+            ShipmentMode.Fcl, "INC-2026-011", "DDP"));
     }
 
     [TestMethod]
