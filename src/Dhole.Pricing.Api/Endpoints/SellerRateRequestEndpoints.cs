@@ -330,6 +330,8 @@ public static class SellerRateRequestEndpoints
         UpdateSellerRateRequest request,
         ServiceDbContext db,
         HttpContext httpContext,
+        IPricingNotificationRecipientProvider recipientProvider,
+        IIntegrationEventOutboxWriter outbox,
         CancellationToken cancellationToken)
     {
         var currentUserId = httpContext.GetCurrentUserId();
@@ -341,7 +343,8 @@ public static class SellerRateRequestEndpoints
             .FirstOrDefaultAsync(x => x.Id == id && x.SellerUserId == currentUserId.Value, cancellationToken);
         if (entity is null) return Results.NotFound();
 
-        if (entity.Status != Dhole.Pricing.Domain.Rates.Enums.RateRequestStatus.Open || entity.RateId.HasValue)
+        var wasReturned = entity.Status == RateRequestStatus.Returned;
+        if (entity.Status is not (RateRequestStatus.Open or RateRequestStatus.Returned) || entity.RateId.HasValue)
             return Results.Conflict(new { message = "La solicitud ya está siendo procesada o fue completada y no puede editarse." });
 
         if (entity.LockExpiresAtUtc > DateTime.UtcNow)
@@ -388,11 +391,13 @@ public static class SellerRateRequestEndpoints
         var now = DateTime.UtcNow;
         var updated = await db.RateRequests
             .Where(x => x.Id == id && x.SellerUserId == currentUserId.Value
-                && x.Status == Dhole.Pricing.Domain.Rates.Enums.RateRequestStatus.Open
+                && x.Status == (wasReturned ? RateRequestStatus.Returned : RateRequestStatus.Open)
                 && x.RateId == null
                 && (x.LockExpiresAtUtc == null || x.LockExpiresAtUtc <= now))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.Priority, entity.Priority)
+                .SetProperty(x => x.Status, entity.Status)
+                .SetProperty(x => x.RequestedAtUtc, entity.RequestedAtUtc)
                 .SetProperty(x => x.DueAtUtc, entity.DueAtUtc)
                 .SetProperty(x => x.SlaReminderSentAtUtc, entity.SlaReminderSentAtUtc)
                 .SetProperty(x => x.ClientName, entity.ClientName)
@@ -429,6 +434,16 @@ public static class SellerRateRequestEndpoints
             });
         }
 
+        // ExecuteUpdate wrote the corrected request atomically; detach the stale
+        // tracked entity before flushing notifications so no later SaveChanges
+        // can overwrite a Pricing claim from another connection.
+        db.Entry(entity).State = EntityState.Detached;
+        if (wasReturned)
+        {
+            await RateRequestEndpoints.QueuePricingRealtimeNotificationAsync(
+                entity, recipientProvider, outbox, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+        }
         return Results.Ok(entity.Id);
     }
 
@@ -487,6 +502,10 @@ public static class SellerRateRequestEndpoints
             request.CancelledByName,
             request.CancellationReason,
             request.CancellationDetails,
+            returnReason = root.TryGetProperty("pricingReturn", out var returnNode)
+                && returnNode.ValueKind == JsonValueKind.Object
+                && returnNode.TryGetProperty("reason", out var returnReasonNode)
+                ? returnReasonNode.GetString() : null,
             request.SlaReminderSentAtUtc,
             request.RateId,
             request.LockedByUserId,

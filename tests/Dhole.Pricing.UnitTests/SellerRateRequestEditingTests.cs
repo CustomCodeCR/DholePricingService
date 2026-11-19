@@ -120,6 +120,47 @@ public sealed class SellerRateRequestEditingTests
     }
 
     [TestMethod]
+    public void ReturnedRequest_PreservesReasonAndCanBeResubmittedWithFreshSla()
+    {
+        var request = NewRequest();
+        var actor = Guid.NewGuid();
+        var originalDate = request.RequestedAtUtc;
+        request.SetWorkStatus("Working", DateTime.UtcNow);
+        request.ReturnToSeller("El puerto de destino no corresponde al país.", actor, "Pricing", DateTime.UtcNow);
+
+        Assert.AreEqual(RateRequestStatus.Returned, request.Status);
+        Assert.IsNull(request.WorkStatus);
+        Assert.IsNull(request.LockExpiresAtUtc);
+        StringAssert.Contains(request.PayloadJson, "pricingReturnHistory");
+
+        request.UpdateSubmission(RateRequestPriority.Red, "Cliente corregido", "Vendedor",
+            "Ftl", "Alajuela", "Tegucigalpa", "{\"form\":{\"clientName\":\"Cliente corregido\"}}");
+        Assert.AreEqual(RateRequestStatus.Open, request.Status);
+        Assert.IsTrue(request.RequestedAtUtc >= originalDate);
+        Assert.AreEqual(request.RequestedAtUtc.AddHours(24), request.DueAtUtc);
+        StringAssert.Contains(request.PayloadJson, "El puerto de destino");
+        StringAssert.Contains(request.PayloadJson, "pricingReturnHistory");
+        Assert.AreEqual("Cliente corregido", request.ClientName);
+    }
+
+    [TestMethod]
+    public void ReturnedRequest_CannotBeReturnedTwiceOrAfterLinkingRate()
+    {
+        var request = NewRequest();
+        var actor = Guid.NewGuid();
+        Assert.ThrowsExactly<ArgumentException>(() =>
+            request.ReturnToSeller("corto", actor, "Pricing", DateTime.UtcNow));
+        request.ReturnToSeller("Datos de origen y destino incorrectos.", actor, "Pricing", DateTime.UtcNow);
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            request.ReturnToSeller("Motivo distinto pero todavía válido.", actor, "Pricing", DateTime.UtcNow));
+
+        var linked = NewRequest();
+        linked.AttachRate(Guid.NewGuid());
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
+            linked.ReturnToSeller("El contenedor solicitado no coincide.", actor, "Pricing", DateTime.UtcNow));
+    }
+
+    [TestMethod]
     public void UpdateSubmission_RejectsCompletedRequests()
     {
         var request = NewRequest();
