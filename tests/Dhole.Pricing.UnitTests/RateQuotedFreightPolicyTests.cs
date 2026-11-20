@@ -62,4 +62,24 @@ public sealed class RateQuotedFreightPolicyTests
             "OTHER", "CIFRA Freight"));
         Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight(null, null));
     }
+    [TestMethod]
+    [DataRow(RateOperationType.Import, "EXW", false)]
+    [DataRow(RateOperationType.Import, "FOB", false)]
+    [DataRow(RateOperationType.Import, "CIF", true)]
+    [DataRow(RateOperationType.Import, "CFR", true)]
+    [DataRow(RateOperationType.Import, "DAP", true)]
+    [DataRow(RateOperationType.Import, "DDP", true)]
+    [DataRow(RateOperationType.Export, "EXW", true)]
+    [DataRow(RateOperationType.Export, "FOB", true)]
+    [DataRow(RateOperationType.Export, "CIF", false)]
+    [DataRow(RateOperationType.Export, "DDP", false)]
+    [DataRow(RateOperationType.TransitDomestic, "CIF", false)]
+    public void FreightExclusion_UsesClientTradePerspective(
+        RateOperationType operation, string term, bool excluded)
+    {
+        Assert.AreEqual(excluded, RateQuotedFreightPolicy.ExcludesQuotedFreight(
+            operation, "INC-2026-005", term));
+    }
+
+
 }

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261120-INCOTERM-IMPORT-350",
+  "date": "2026-11-20",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.106.7",
+  "releaseType": "PATCH",
+  "component": "DholePricingService",
+  "previousVersion": "1.26.3",
+  "version": "1.26.4",
+  "affectedComponents": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "from": "1.26.3",
+      "to": "1.26.4"
+    },
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "from": "1.106.6",
+      "to": "1.106.7"
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "from": "1.106.6",
+      "to": "1.106.7",
+      "scope": "manifest-only"
+    }
+  ],
+  "changes": [
+    "Make missing-freight edit decisions depend on the quotation's Import/Export perspective",
+    "Protect explicitly quoted freight regardless of Incoterm",
+    "Preserve existing REST and SignalR contracts"
+  ],
+  "regressionTests": [
+    "RateQuotedFreightPolicyTests.FreightExclusion_UsesClientTradePerspective"
+  ],
+  "schemaMigration": false,
+  "realtime": "unchanged: existing SignalR and REST remain compatible",
+  "productionDeploymentAuthorized": false,
+  "ci": "pending",
+  "staging": "pending"
+}
