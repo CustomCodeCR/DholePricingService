@@ -1578,6 +1578,23 @@ public static class RateEndpoints
         CancellationToken cancellationToken
     )
     {
+        // A past validity date is expired even if a background status worker has
+        // not yet changed Sent to Expired. Never trust the client-side edit button.
+        var currentRate = await db.RateHeaders.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
+        if (currentRate is null) return Results.NotFound();
+        if (currentRate.Status is RateStatus.Closed or RateStatus.Cancelled)
+            return Results.Conflict(new { code = "Pricing.RateUpdateWindowClosed",
+                message = "La tarifa cerrada o cancelada no permite actualizaciones." });
+        if (ExpiredRateUpdateApprovalPolicy.RequiresApproval(currentRate, DateTimeOffset.UtcNow)
+            && !await ExpiredRateUpdateApprovalPolicy.IsApprovedAsync(
+                db, currentRate.Id, currentRate.RevisionNumber, cancellationToken))
+            return Results.Conflict(new {
+                code = "Pricing.ExpiredRateUpdateApprovalRequired",
+                message = "Esta tarifa venció. Solicite autorización a Roy o José Pablo e indique por qué se dejó vencer antes de modificarla.",
+                requiresApproval = true,
+            });
+
         // Do not edit a discarded sub-QUO after final selection.
         var selectedPrincipal = await db.Database.SqlQueryRaw<Guid>(
                 """
