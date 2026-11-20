@@ -1,0 +1,22 @@
+{
+  "releaseId": "DH-20261120-PRICING-EXPIRED-MASTER-361",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.106.18",
+  "component": "DholePricingService",
+  "versionBefore": "1.26.8",
+  "versionAfter": "1.26.9",
+  "sourceRelease": "DH-20261120-EXPIRED-ROLE-354",
+  "changeType": "PATCH",
+  "changes": [
+    "Preserve and promote existing role-based expired quote edit behavior to master",
+    "Coordinate versions and retain seller notification/approval workflow"
+  ],
+  "branches": [
+    "develop",
+    "master"
+  ],
+  "productionDeploymentAuthorized": true,
+  "ci": "pending",
+  "staging": "original release 354 automated deployment passed",
+  "rollback": "Revert master hotfix PR; no schema changes."
+}

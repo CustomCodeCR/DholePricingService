@@ -1,3 +1,8 @@
+## [1.26.9] - 2026-11-20 (DH-20261120-PRICING-EXPIRED-MASTER-361 · promote expired-quote authorization fix to master)
+
+- PATCH: role-specific expiry edit policy already present and CI/staging-validated on develop from release 354. Coordinate production hotfix without overwriting unrelated later commits. Pricing/Superadmin do not require approval; sellers retain Roy/José Pablo request.
+- DholePricingService 1.26.8 → 1.26.9, ecosystem 1.106.18; behavior already staged and tested. REST/SignalR unchanged, no database migration. Master promotion explicitly requested.
+
 ## [1.26.8] - 2026-11-20 (DH-20261120-PRICING-INLAND-STEP67-357 · coordinación de cargos e inland pantallas 6–7)
 
 - PATCH coordinado con DholeWeb 1.106.15: mantiene el contrato REST de costos y recargos existente, los CostIds y la selección de alternativas Merchant/Carrier; la corrección de interfaz ocurre en DholeWeb.
