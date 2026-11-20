@@ -1,3 +1,9 @@
+## [1.26.8] - 2026-11-20 (DH-20261120-PRICING-INLAND-STEP67-357 · coordinación de cargos e inland pantallas 6–7)
+
+- PATCH coordinado con DholeWeb 1.106.15: mantiene el contrato REST de costos y recargos existente, los CostIds y la selección de alternativas Merchant/Carrier; la corrección de interfaz ocurre en DholeWeb.
+- Incrementa los metadatos del servicio para el batch de release. No hay cambios de base de datos, endpoints, validación ni procesamiento realtime.
+- Compilación, pruebas, integración a develop y staging pendientes; producción no autorizada.
+
 ## [1.26.6] - 2026-11-20 (DH-20261120-EXPIRED-ROLE-354 · autorización solo para vendedores)
 
 - PATCH: Pricing y Superadmin editan tarifas vencidas sin autorización de jefatura; vendedores mantienen solicitud a Roy/José Pablo.
