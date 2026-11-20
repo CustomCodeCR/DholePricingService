@@ -7,79 +7,34 @@ namespace Dhole.Pricing.UnitTests;
 public sealed class RateQuotedFreightPolicyTests
 {
     [TestMethod]
-    [DataRow("CFR", "Cost and Freight")]
-    [DataRow("CIF", "Cost, Insurance and Freight")]
-    [DataRow("CPT", "Carriage Paid To")]
-    [DataRow("CIP", "Carriage and Insurance Paid To")]
-    [DataRow("DAP", "Delivered at Place")]
-    [DataRow("DPU", "Delivered at Place Unloaded")]
-    [DataRow("DDP", "Delivered Duty Paid")]
-    public void NoFreightIncoterm_DoesNotRequireFreightDistribution(string code, string name)
-    {
-        Assert.IsTrue(RateQuotedFreightPolicy.ExcludesQuotedFreight(code, name));
-    }
-
-    [TestMethod]
     [DataRow("EXW")]
     [DataRow("FCA")]
     [DataRow("FAS")]
     [DataRow("FOB")]
-    public void BuyerFreightIncoterm_RetainsDistributionValidation(string code)
+    [DataRow("CFR")]
+    [DataRow("CIF")]
+    [DataRow("CPT")]
+    [DataRow("CIP")]
+    [DataRow("DAP")]
+    [DataRow("DPU")]
+    [DataRow("DDP")]
+    public void TemporaryUnblock_AllIncotermsAllowExplicitFreight(string term)
     {
-        Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight(code, code));
+        Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight(term, term));
+        Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight("INC-2026-005", term));
+        foreach (var mode in new[] { ShipmentMode.Fcl, ShipmentMode.Lcl, ShipmentMode.Ltl,
+                     ShipmentMode.Ftl, ShipmentMode.Air, ShipmentMode.AirConsol })
+            Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight(mode, "INC-2026-005", term));
+        foreach (var operation in new[] { RateOperationType.Import, RateOperationType.Export,
+                     RateOperationType.TransitDomestic })
+            Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight(operation, "INC-2026-005", term));
     }
 
     [TestMethod]
-    [DataRow(ShipmentMode.Ltl)]
-    [DataRow(ShipmentMode.Ftl)]
-    public void DdpLandShipment_AllowsExplicitFreightPerCbmOrTruck(ShipmentMode shipmentMode)
+    public void TemporaryUnblock_NullAndUnknownIncotermsNeverSuppressFreight()
     {
-        // Incident: LTL, DDP, 33.33 CBM, quantity=0, no physical containers.
-        Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight(
-            shipmentMode, "INC-2026-011", "DDP"));
-        Assert.IsTrue(RateQuotedFreightPolicy.ExcludesQuotedFreight(
-            shipmentMode, "INC-2026-011", "CIF"));
-    }
-
-    [TestMethod]
-    public void DdpFcl_StillExcludesFreightLikeExistingMaritimeQuotes()
-    {
-        Assert.IsTrue(RateQuotedFreightPolicy.ExcludesQuotedFreight(
-            ShipmentMode.Fcl, "INC-2026-011", "DDP"));
-    }
-
-    [TestMethod]
-    public void OpaqueConfigCode_UsesCifDisplayName()
-    {
-        Assert.IsTrue(RateQuotedFreightPolicy.ExcludesQuotedFreight(
-            "incoterm-63f7ad", "CIF - Puerto Caldera"));
-    }
-
-    [TestMethod]
-    public void UnrelatedNames_DoNotMatchIncotermSubstrings()
-    {
-        Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight(
-            "OTHER", "CIFRA Freight"));
         Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight(null, null));
+        Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight(
+            RateOperationType.Import, "OTHER", "OTHER"));
     }
-    [TestMethod]
-    [DataRow(RateOperationType.Import, "EXW", false)]
-    [DataRow(RateOperationType.Import, "FOB", false)]
-    [DataRow(RateOperationType.Import, "CIF", true)]
-    [DataRow(RateOperationType.Import, "CFR", true)]
-    [DataRow(RateOperationType.Import, "DAP", true)]
-    [DataRow(RateOperationType.Import, "DDP", true)]
-    [DataRow(RateOperationType.Export, "EXW", true)]
-    [DataRow(RateOperationType.Export, "FOB", true)]
-    [DataRow(RateOperationType.Export, "CIF", false)]
-    [DataRow(RateOperationType.Export, "DDP", false)]
-    [DataRow(RateOperationType.TransitDomestic, "CIF", false)]
-    public void FreightExclusion_UsesClientTradePerspective(
-        RateOperationType operation, string term, bool excluded)
-    {
-        Assert.AreEqual(excluded, RateQuotedFreightPolicy.ExcludesQuotedFreight(
-            operation, "INC-2026-005", term));
-    }
-
-
 }

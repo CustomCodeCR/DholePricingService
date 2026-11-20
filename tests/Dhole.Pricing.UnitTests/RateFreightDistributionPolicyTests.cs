@@ -23,7 +23,7 @@ public sealed class RateFreightDistributionPolicyTests
     {
         // Regression from the quoted Panama -> Nicaragua LTL payload:
         // Freight PerChargeableCbm (1) plus a separate TI / PerContainer charge.
-        Assert.IsTrue(RateQuotedFreightPolicy.ExcludesQuotedFreight(
+        Assert.IsFalse(RateQuotedFreightPolicy.ExcludesQuotedFreight(
             ShipmentMode.Ltl, "INC-2026-007", "CPT"));
         Assert.IsTrue(RateFreightDistributionPolicy.IsValid(
             ShipmentMode.Ltl, Array.Empty<int>(), new decimal?[] { 1m }));

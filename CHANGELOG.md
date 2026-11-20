@@ -1,3 +1,9 @@
+## [1.26.7] - 2026-11-20 (DH-20261120-INCOTERM-TEMP-UNBLOCK-353 · desbloqueo temporal de Incoterms)
+
+- PATCH temporal: importación, exportación y tránsito permiten flete contratado con los 11 Incoterms sin que la política de exclusión suprima líneas por responsabilidad contractual.
+- Mantiene las validaciones estructurales de FCL, la identidad Config, la autorización y los contratos REST/SignalR. TODO: reimplantar reglas de responsabilidades sin bloquear servicios explícitos.
+- DholePricingService 1.26.6 (develop) / 1.26.4 (master) → 1.26.7; DholeWeb 1.106.11 (develop) / 1.106.9 (master) → 1.106.12; versión global 1.106.12. Integración/CI/staging pendientes.
+
 ## [1.26.5] - 2026-11-20 (DH-20261120-PRICING-VAT-TOTAL-353 · IVA agregado en USD/CRC con códigos de Config)
 
 - PATCH: RateDto.TotalTaxUsd/TotalTaxCrc reconoce la moneda real desde CurrencyName cuando CurrencyCode es un identificador opaco de Config (CUR-2026-001, etc.), con la misma resolución del PDF comercial.
