@@ -1,3 +1,9 @@
+## [1.25.3] - 2026-11-19 (DH-20261119-PRICING-EXPIRY-1D-SYSTEM-291 · aviso al vendedor 1 día antes del vencimiento)
+
+- PATCH: notificación interna (System, SignalR) al vendedor asignado a las 09:00 de Costa Rica el día anterior a ValidTo, con QUO, cliente, fecha y enlace directo. Se conserva el correo y los avisos de 5d/3d/1d/6h existentes.
+- Resolución segura del usuario desde Auth o el propietario validado de la solicitud. Sin avisos para Castro Fallas ni cotizaciones finalizadas; sin duplicados aun si ya se envió el correo.
+- Migración aditiva de marcador 1d-system, outbox transaccional e idempotencia por revisión. Pricing 1.25.2→1.25.3; ecosistema 1.103.11→1.103.12. CI y staging antes de producción.
+
 ## [1.25.2] - 2026-11-19 (DH-20261119-PRICING-LTL-DDP-FREIGHT-284 · DDP terrestre con flete explícito)
 
 - PATCH: permite flete internacional explícito en cotizaciones terrestres LTL/FTL con Incoterm DDP; no compara CBM con cantidades de contenedores. Corrige Pricing.RateInvalidFreightDistribution al crear LTL de San José a Ciudad de Guatemala (33.33 CBM).

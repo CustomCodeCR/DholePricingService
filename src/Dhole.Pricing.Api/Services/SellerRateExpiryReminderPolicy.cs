@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text;
+
 namespace Dhole.Pricing.Api.Services;
 
 /// <summary>
@@ -51,6 +54,56 @@ public static class SellerRateExpiryReminderPolicy
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Notify the assigned executive, never the quotation creator or an
+    /// unrelated request owner. Ambiguous directory matches are discarded.
+    /// </summary>
+    public static Guid? ResolveSellerUserId(
+        string? executiveName,
+        Guid? requestSellerUserId,
+        string? requestSellerName,
+        string? requestSellerEmail,
+        IEnumerable<SellerDirectoryUser> directoryUsers)
+    {
+        if (IsExcludedSeller(executiveName))
+            return null;
+
+        if (requestSellerUserId is { } requestId && requestId != Guid.Empty
+            && SameName(executiveName, requestSellerName))
+            return requestId;
+
+        var sameRequestSeller = SameName(executiveName, requestSellerName);
+        var matchingIds = directoryUsers
+            .Where(user => user.UserId != Guid.Empty
+                && (SameName(executiveName, user.DisplayName)
+                    || SameName(executiveName, user.UserName)
+                    || (sameRequestSeller && !string.IsNullOrWhiteSpace(requestSellerEmail)
+                        && string.Equals(user.Email?.Trim(), requestSellerEmail.Trim(),
+                            StringComparison.OrdinalIgnoreCase))))
+            .Select(user => user.UserId)
+            .Distinct()
+            .Take(2)
+            .ToArray();
+
+        return matchingIds.Length == 1 ? matchingIds[0] : null;
+    }
+
+    private static bool SameName(string? left, string? right)
+        => !string.IsNullOrWhiteSpace(left)
+           && !string.IsNullOrWhiteSpace(right)
+           && NormalizeName(left) == NormalizeName(right);
+
+    private static string NormalizeName(string value)
+    {
+        var decomposed = value.Trim().Normalize(NormalizationForm.FormD);
+        var letters = decomposed.Where(character =>
+            CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark);
+        return string.Join(" ", new string(letters.ToArray())
+                .Normalize(NormalizationForm.FormC)
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+            .ToUpperInvariant();
     }
 
     public static bool IsExcludedSeller(string? executiveName)
