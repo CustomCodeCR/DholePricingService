@@ -1036,32 +1036,24 @@ public sealed class CreateRateCommandHandler(
 
     private static bool HasValidFreightDistribution(CreateRateCommand command)
     {
-        if (RateQuotedFreightPolicy.ExcludesQuotedFreight(command.ShipmentMode, command.IncotermCode, command.IncotermName))
-            return !command.SourceImportFclRateId.HasValue
-                && !command.Details.Any(detail => detail.CostDetailType == CostDetailType.Freight);
-
+        // A paid service is selectable under every Incoterm. Incoterms describe
+        // contractual responsibility, not a prohibition on quoted freight.
+        // The FCL allocation check applies only to freight actually supplied.
         if (command.SourceImportFclRateId.HasValue) return true;
-        if (command.ShipmentMode != ShipmentMode.Fcl) return true;
 
         IReadOnlyCollection<RateContainerCommandItem> containers = command.Containers.Count > 0
             ? command.Containers
-            : new[]
-            {
-                new RateContainerCommandItem(
-                    command.ContainerTypeId,
-                    command.ContainerTypeName,
-                    command.ContainerTypeCode,
-                    command.ContainerQuantity
-                )
-            };
-        var freight = command.Details.Where(x => x.CostDetailType == CostDetailType.Freight).ToArray();
+            : [new RateContainerCommandItem(
+                command.ContainerTypeId, command.ContainerTypeName,
+                command.ContainerTypeCode, command.ContainerQuantity)];
 
-        if (freight.Length != containers.Count) return false;
-        if (containers.Count == 1 && freight.Length == 1 && !freight[0].Quantity.HasValue)
-            return true;
-        if (freight.Any(x => !x.Quantity.HasValue || x.Quantity.Value <= 0)) return false;
-
-        return freight.Sum(x => x.Quantity!.Value) == containers.Sum(x => x.Quantity);
+        return RateFreightDistributionPolicy.IsValid(
+            command.ShipmentMode,
+            containers.Select(item => item.Quantity).ToArray(),
+            command.Details
+                .Where(detail => detail.CostDetailType == CostDetailType.Freight)
+                .Select(detail => detail.Quantity)
+                .ToArray());
     }
 
     private static void AddImportedFreight(
