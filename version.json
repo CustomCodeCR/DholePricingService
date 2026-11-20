@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.25.2",
-  "ecosystemVersion": "1.103.8",
-  "releaseId": "DH-20261119-PRICING-LTL-DDP-FREIGHT-284",
+  "version": "1.25.3",
+  "ecosystemVersion": "1.103.12",
+  "releaseId": "DH-20261119-PRICING-EXPIRY-1D-SYSTEM-291",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261119-PRICING-LTL-DDP-FREIGHT-284"
+  "businessReleaseId": "DH-20261119-PRICING-EXPIRY-1D-SYSTEM-291"
 }
