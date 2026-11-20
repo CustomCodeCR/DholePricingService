@@ -1,3 +1,8 @@
+## [1.26.2] - 2026-11-20 (DH-20261120-EXPIRED-APPROVAL-SELLER-ACCESS-310 · enlace de autorización compatible con vendedor)
+
+- PATCH: las notificaciones de aprobación de tarifas vencidas llevan a /home?expiredApprovals=1 (Dashboard de Ventas para José Pablo) en vez de /pricing/rates, sin conceder permisos de Pricing ni cambiar la lista cerrada de usuarios autorizados a decidir.
+- REST, Email, System/SignalR, auditoría y criterios de autorización persistidos permanecen compatibles. Pricing 1.26.1 → 1.26.2; ecosistema 1.104.1 → 1.104.2.
+
 ## [1.26.1] - 2026-11-20 (DH-20261120-EXPIRED-RATE-OUTBOX-HOTFIX · correlación de notificaciones de autorización)
 
 - PATCH: el identificador idempotente del Outbox de autorizaciones para actualizar tarifas vencidas era mayor que el límite PostgreSQL correlation_id varchar(100); ahora se genera una clave determinística corta por solicitud/destinatario/canal/decisión. Evita fallos 22001 al registrar la solicitud y conserva SignalR, Email y auditoría.
