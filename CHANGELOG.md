@@ -1,3 +1,11 @@
+## [1.26.3] - 2026-11-20 (DH-20261120-INCOTERM-QUOTED-FREIGHT-344 · flete explícito para todos los Incoterms)
+
+- PATCH: la creación LTL/LCL/FTL/aérea permite cotizar el flete internacional contratado con cualquier Incoterm (incluido CPT), sin exigir contenedores FCL.
+- Creación/edición FCL mantienen la validación por equipos cuando se incluye flete explícito; las cotizaciones sólo con gastos de destino o aduana no requieren flete inexistente.
+- La edición conserva los rubros Freight seleccionados en CPT/CIF/CFR/CIP/DAP/DPU/DDP; la exclusión histórica sigue funcionando al reemplazar expresamente por un snapshot sin flete.
+- Cobertura regresiva del LTL CPT Colón–Managua, modos consolidados, FCL sin flete y distribución FCL inválida.
+- Pricing 1.26.2 → 1.26.3; ecosistema 1.106.1 → 1.106.2. Sin migración ni alteración REST/SignalR. CI y staging pendientes; producción no autorizada.
+
 ## [1.26.2] - 2026-11-20 (DH-20261120-EXPIRED-APPROVAL-SELLER-ACCESS-312 · enlace de aprobación compatible con vendedor)
 
 - PATCH: las solicitudes de autorización para actualizar tarifas vencidas notifican al dashboard general /home?expiredApprovals=1, visible para José Pablo sin acceso a Pricing. Conserva autorización por identidad Auth, auditoría, REST, SignalR y Email.
