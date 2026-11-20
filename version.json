@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.25.4",
-  "ecosystemVersion": "1.103.18",
-  "releaseId": "DH-20261119-SELLER-DASHBOARD-PARITY-295",
+  "version": "1.26.0",
+  "ecosystemVersion": "1.104.0",
+  "releaseId": "DH-20261120-EXPIRED-RATE-APPROVAL-298",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261119-SELLER-DASHBOARD-PARITY-295"
+  "businessReleaseId": "DH-20261120-EXPIRED-RATE-APPROVAL-298"
 }
