@@ -1,0 +1,22 @@
+{
+  "releaseId": "DH-20261120-PRICING-EXPIRED-MASTER-361",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.106.18",
+  "component": "DholePricingService",
+  "versionBefore": "1.26.8",
+  "versionAfter": "1.26.9",
+  "sourceRelease": "DH-20261120-EXPIRED-ROLE-354",
+  "changeType": "PATCH",
+  "changes": [
+    "Privileged Pricing/Superadmin bypass expired-rate approval on PUT and status endpoints",
+    "Retain seller manager approval and notifications"
+  ],
+  "branches": [
+    "develop",
+    "master"
+  ],
+  "productionDeploymentAuthorized": true,
+  "ci": "pending",
+  "staging": "release 354 automation succeeded",
+  "rollback": "Revert this targeted master hotfix PR; no schema changes."
+}

@@ -1,3 +1,9 @@
+## [1.26.9] - 2026-11-20 (DH-20261120-PRICING-EXPIRED-MASTER-361 · expiración requiere aprobación solo para vendedores)
+
+- PATCH: promoción selectiva del ajuste 354 validado en develop/staging. Pricing con pricing.rate.update y roles Superadmin editan tarifa vencida sin solicitud a jefatura; vendedores conservan autorización de Roy/José Pablo.
+- GET estado, elegibilidad y PUT usan política de permisos idéntica en backend; se conserva bloqueo de tarifas cerradas/canceladas, revisiones, auditoría, Email/Outbox/SignalR e idempotencia.
+- Pricing 1.26.8 → 1.26.9; ecosistema Web/System 1.106.18. Pruebas de rol añadidas y CI requerido antes de producción.
+
 ## [1.26.8] - 2026-11-20 (DH-20261120-PRICING-INLAND-STEP67-357 · coordinación de cargos e inland pantallas 6–7)
 
 - PATCH coordinado con DholeWeb 1.106.15: mantiene el contrato REST de costos y recargos existente, los CostIds y la selección de alternativas Merchant/Carrier; la corrección de interfaz ocurre en DholeWeb.
