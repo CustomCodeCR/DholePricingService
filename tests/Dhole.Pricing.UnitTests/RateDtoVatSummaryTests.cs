@@ -42,6 +42,8 @@ public sealed class RateDtoVatSummaryTests
             CostDetailType.Documentation, CostType.Fixed, ChargeBasis.PerShipment,
             Guid.NewGuid(), currencyName, catalogCode, 75m, 75m, null, 1m, null);
 
+        rate.SetAmounts(null);
+
         // RateMappings is internal; exercise the real API projection rather than
         // building a DTO by hand or simulating tax calculations in the test.
         var mappings = typeof(CreateRateCommandHandler).Assembly.GetType(
