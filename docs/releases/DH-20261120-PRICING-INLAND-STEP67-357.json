@@ -1,0 +1,22 @@
+{
+  "releaseId": "DH-20261120-PRICING-INLAND-STEP67-357",
+  "date": "2026-11-20",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.106.15",
+  "component": "DholePricingService",
+  "versionBefore": "1.26.7",
+  "versionAfter": "1.26.8",
+  "changeType": "PATCH",
+  "changes": [
+    "Coordinate release with DholeWeb 1.106.15 for Step 6/7 inland CostId handoff",
+    "REST endpoints and SignalR event semantics unchanged"
+  ],
+  "branches": [
+    "develop",
+    "master"
+  ],
+  "productionDeploymentAuthorized": false,
+  "ci": "pending",
+  "staging": "pending",
+  "rollback": "Revert coordinated release if staging regression fails; no schema changes."
+}
