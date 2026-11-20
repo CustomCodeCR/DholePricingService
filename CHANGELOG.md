@@ -1,3 +1,9 @@
+## [1.26.8] - 2026-11-20 (DH-20261120-PRICING-INLAND-STEP67-357 · coordinación de cargos e inland pantallas 6–7)
+
+- PATCH coordinado con DholeWeb 1.106.15: mantiene el contrato REST de costos y recargos existente, los CostIds y la selección de alternativas Merchant/Carrier; la corrección de interfaz ocurre en DholeWeb.
+- Incrementa los metadatos del servicio para el batch de release. No hay cambios de base de datos, endpoints, validación ni procesamiento realtime.
+- Compilación, pruebas, integración a develop y staging pendientes; producción no autorizada.
+
 ## [1.26.7] - 2026-11-20 (DH-20261120-INCOTERM-TEMP-UNBLOCK-353 · desbloqueo temporal de Incoterms)
 
 - PATCH temporal: importación, exportación y tránsito permiten flete contratado con los 11 Incoterms sin que la política de exclusión suprima líneas por responsabilidad contractual.
