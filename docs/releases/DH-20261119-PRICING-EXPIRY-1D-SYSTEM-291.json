@@ -1,0 +1,23 @@
+{
+  "releaseId": "DH-20261119-PRICING-EXPIRY-1D-SYSTEM-291",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.103.12",
+  "component": "DholePricingService",
+  "versionBefore": "1.25.2",
+  "versionAfter": "1.25.3",
+  "changeType": "PATCH",
+  "changes": [
+    "Add in-app System/SignalR reminder for assigned seller on the day before rate ValidTo, at 09:00 Costa Rica time",
+    "Keep existing 5d, 3d, 1d and 6h email reminders; in-app reminder has separate PostgreSQL idempotency marker and transactional Outbox",
+    "Avoid wrong seller through assigned executive matching; suppress corporate seller and terminal statuses"
+  ],
+  "databaseMigration": "20261119193000_AddOneDaySystemRateExpiryMarker",
+  "branches": [
+    "develop",
+    "master"
+  ],
+  "productionDeploymentAuthorized": false,
+  "ci": "pending",
+  "staging": "pending",
+  "rollback": "Revert PRs; rollback migration removes system-only marker records without affecting email markers."
+}
