@@ -322,7 +322,7 @@ public sealed class UpdateRateCommandHandler(
         var excludesQuotedFreight = command.ReplaceExtraDetails
             && !explicitlyQuotesFreight
             && RateQuotedFreightPolicy.ExcludesQuotedFreight(
-                command.ShipmentMode, command.IncotermCode, command.IncotermName);
+                command.OperationType, command.IncotermCode, command.IncotermName);
         var previousFreightDetailIds = existingDetails.Values
             .Where(detail => detail.CostDetailType == CostDetailType.Freight)
             .Select(detail => detail.Id)
@@ -358,9 +358,9 @@ public sealed class UpdateRateCommandHandler(
             .Distinct()
             .ToHashSet();
 
-        // CIF/CFR/CPT/CIP/DAP/DPU/DDP do not quote international freight.
-        // On edits, remove a historical freight detail even when the wizard sends
-        // no freight rows; preserve every unrelated destination/agent charge.
+        // Only remove historical freight when the selected Incoterm assigns
+        // carriage to the other party for this quote's import/export perspective.
+        // Explicit freight rows always win; unrelated charges are preserved.
         if (excludesQuotedFreight)
             removedIds.UnionWith(previousFreightDetailIds);
 
