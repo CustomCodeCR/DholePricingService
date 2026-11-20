@@ -1,3 +1,8 @@
+## [1.25.4] - 2026-11-19 (DH-20261119-SELLER-DASHBOARD-PARITY-295 · paridad comercial vendedores y supervisión)
+
+- PATCH: /api/pricing/seller-rates/dashboard?sellerUserId recupera la misma cartera autorizada de vendedor: solicitudes vinculadas, recibos, asignaciones manuales y últimas revisiones publicadas. Conserva autorización del supervisor, el endpoint propio y modalidad global sin selección.
+- Pricing 1.25.3 → 1.25.4, Web/System → 1.103.18. Otros 14 componentes sin cambios; no se exponen costos internos y no hay migraciones ni incompatibilidad SignalR. CI/staging antes de producción.
+
 ## [1.25.3] - 2026-11-19 (DH-20261119-PRICING-EXPIRY-1D-SYSTEM-291 · aviso al vendedor 1 día antes del vencimiento)
 
 - PATCH: notificación interna (System, SignalR) al vendedor asignado a las 09:00 de Costa Rica el día anterior a ValidTo, con QUO, cliente, fecha y enlace directo. Se conserva el correo y los avisos de 5d/3d/1d/6h existentes.
