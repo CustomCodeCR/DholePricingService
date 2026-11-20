@@ -1,3 +1,8 @@
+## [1.26.2] - 2026-11-20 (DH-20261120-EXPIRED-APPROVAL-SELLER-ACCESS-312 · enlace de aprobación compatible con vendedor)
+
+- PATCH: las solicitudes de autorización para actualizar tarifas vencidas notifican al dashboard general /home?expiredApprovals=1, visible para José Pablo sin acceso a Pricing. Conserva autorización por identidad Auth, auditoría, REST, SignalR y Email.
+- Pricing 1.26.1 → 1.26.2, ecosistema Dhole 1.104.3 → 1.104.4; no otorga permisos extra a vendedores.
+
 ## [1.26.1] - 2026-11-20 (DH-20261120-EXPIRED-RATE-OUTBOX-HOTFIX · correlación de notificaciones de autorización)
 
 - PATCH: el identificador idempotente del Outbox de autorizaciones para actualizar tarifas vencidas era mayor que el límite PostgreSQL correlation_id varchar(100); ahora se genera una clave determinística corta por solicitud/destinatario/canal/decisión. Evita fallos 22001 al registrar la solicitud y conserva SignalR, Email y auditoría.

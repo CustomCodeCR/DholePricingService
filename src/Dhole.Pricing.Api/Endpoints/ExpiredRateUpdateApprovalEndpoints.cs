@@ -161,7 +161,8 @@ public static class ExpiredRateUpdateApprovalEndpoints
             });
 
         var quote = rate.QuoNumber ?? rate.RateCode;
-        var route = "/pricing/rates?expiredApprovals=1";
+        // /home is accessible to sellers, unlike the Pricing rates management route.
+        var route = "/home?expiredApprovals=1";
         var subject = "Autorización requerida para actualizar la tarifa vencida " + quote;
         var body = "Se solicita autorización para actualizar la tarifa " + quote
             + " del cliente " + (rate.ClientName ?? "sin especificar")
