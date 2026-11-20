@@ -1,3 +1,19 @@
+## [1.26.2] - 2026-11-20 (DH-20261120-EXPIRED-APPROVAL-SELLER-ACCESS-312 · enlace de aprobación compatible con vendedor)
+
+- PATCH: las solicitudes de autorización para actualizar tarifas vencidas notifican al dashboard general /home?expiredApprovals=1, visible para José Pablo sin acceso a Pricing. Conserva autorización por identidad Auth, auditoría, REST, SignalR y Email.
+- Pricing 1.26.1 → 1.26.2, ecosistema Dhole 1.104.3 → 1.104.4; no otorga permisos extra a vendedores.
+
+## [1.26.1] - 2026-11-20 (DH-20261120-EXPIRED-RATE-OUTBOX-HOTFIX · correlación de notificaciones de autorización)
+
+- PATCH: el identificador idempotente del Outbox de autorizaciones para actualizar tarifas vencidas era mayor que el límite PostgreSQL correlation_id varchar(100); ahora se genera una clave determinística corta por solicitud/destinatario/canal/decisión. Evita fallos 22001 al registrar la solicitud y conserva SignalR, Email y auditoría.
+- Pricing 1.26.0 → 1.26.1, DholeWeb/DholeSystem 1.104.0 → 1.104.1; otros 14 componentes sin cambios. CI/staging antes de master.
+
+## [1.26.0] - 2026-11-20 (DH-20261120-EXPIRED-RATE-APPROVAL-301 · autorización de actualización de tarifas vencidas)
+
+- MINOR: solicitud y autorización explícitas por jefatura para actualizar tarifas vencidas, vinculadas a tarifa y revisión; motivo de vencimiento obligatorio, autorización/rechazo por Roy o José Pablo, trazabilidad completa y bloqueo server-side del PUT sin autorización.
+- Migración aditiva ExpiredRateUpdateApprovals; eventos System y Email en Notifications Outbox transaccional con idempotencia y distribución SignalR existente; notificación al solicitante después de la decisión.
+- Pricing 1.25.4 → 1.26.0, ecosistema Dhole 1.104.0. Compatibilidad REST existente, CI y staging obligatorios antes de producción.
+
 ## [1.25.4] - 2026-11-19 (DH-20261119-SELLER-DASHBOARD-PARITY-295 · paridad comercial vendedores y supervisión)
 
 - PATCH: /api/pricing/seller-rates/dashboard?sellerUserId recupera la misma cartera autorizada de vendedor: solicitudes vinculadas, recibos, asignaciones manuales y últimas revisiones publicadas. Conserva autorización del supervisor, el endpoint propio y modalidad global sin selección.
