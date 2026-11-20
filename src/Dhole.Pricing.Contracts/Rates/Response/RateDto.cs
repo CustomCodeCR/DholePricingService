@@ -136,6 +136,20 @@ public sealed record RateDto(
     public decimal TotalSaleWithTaxUsd => TotalSaleUsd + TotalTaxUsd;
     public decimal TotalSaleWithTaxCrc => TotalSaleCrc + TotalTaxCrc;
 
+    // Config may persist an opaque catalog code (CUR-2026-001) while its
+    // business currency name is USD/CRC. Match the PDF commercial snapshot.
+    private static string CommercialCurrencyIso(string? currencyCode, string? currencyName)
+    {
+        var code = (currencyCode ?? string.Empty).Trim().ToUpperInvariant();
+        var name = (currencyName ?? string.Empty).Trim().ToUpperInvariant();
+        if (code is "USD" or "CRC") return code;
+        if (name.Contains("USD", StringComparison.Ordinal)) return "USD";
+        if (name.Contains("CRC", StringComparison.Ordinal)
+            || name.Contains("COLON", StringComparison.Ordinal)
+            || name.Contains("COLÓN", StringComparison.Ordinal)) return "CRC";
+        return code;
+    }
+
     private (decimal TaxUsd, decimal TaxCrc) CalculateTaxTotals()
     {
         decimal taxUsd = 0m;
@@ -148,7 +162,7 @@ public sealed record RateDto(
                 ? detail.CommercialTaxAmount : detail.DestinationTaxAmount;
             if (tax <= 0m) continue;
 
-            var code = detail.CurrencyCode.Trim().ToUpperInvariant();
+            var code = CommercialCurrencyIso(detail.CurrencyCode, detail.CurrencyName);
             if (code == "USD")
             {
                 taxUsd += tax;
