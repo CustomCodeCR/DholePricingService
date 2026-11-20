@@ -98,15 +98,16 @@ public static class ExpiredRateUpdateApprovalEndpoints
         if (rate is null) return Results.NotFound();
         if (!await CanReadAsync(rate, http, access, ct)) return Results.Forbid();
 
-        var expired = ExpiredRateUpdateApprovalPolicy.RequiresApproval(rate, DateTimeOffset.UtcNow);
+        var requiresApproval = ExpiredRateUpdateApprovalPolicy.RequiresApprovalForUser(
+            rate, DateTimeOffset.UtcNow, http.User);
         var history = await HistoryAsync(db, rate.Id, ct);
         var approval = history.FirstOrDefault(x =>
             x.RevisionNumber == rate.RevisionNumber && x.Status == "Approved");
         return Results.Ok(new
         {
             rateId, rate.RevisionNumber,
-            requiresApproval = expired,
-            canUpdate = !expired || approval is not null,
+            requiresApproval,
+            canUpdate = !requiresApproval || approval is not null,
             currentApproval = history.FirstOrDefault(x => x.RevisionNumber == rate.RevisionNumber),
             history,
         });
@@ -134,9 +135,10 @@ public static class ExpiredRateUpdateApprovalEndpoints
         if (rate.Status.ToString() is "Closed" or "Cancelled")
             return Results.Conflict(new { code = "Pricing.RateClosed",
                 message = "Una cotización cerrada o cancelada no se puede reactivar." });
-        if (!ExpiredRateUpdateApprovalPolicy.RequiresApproval(rate, DateTimeOffset.UtcNow))
-            return Results.Conflict(new { code = "Pricing.RateNotExpired",
-                message = "Esta tarifa todavía está vigente y no necesita aprobación por vencimiento." });
+        if (!ExpiredRateUpdateApprovalPolicy.RequiresApprovalForUser(
+            rate, DateTimeOffset.UtcNow, http.User))
+            return Results.Conflict(new { code = "Pricing.ExpiredUpdateApprovalNotRequired",
+                message = "Esta tarifa no requiere aprobación de vencimiento para su perfil." });
 
         // Both named supervisors must be addressable on System and Email.
         var managers = await SupervisorsAsync(directory, ct);

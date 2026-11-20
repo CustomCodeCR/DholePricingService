@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.26.5",
-  "ecosystemVersion": "1.106.10",
-  "releaseId": "DH-20261120-PRICING-VAT-TOTAL-353",
+  "version": "1.26.6",
+  "ecosystemVersion": "1.106.11",
+  "releaseId": "DH-20261120-EXPIRED-ROLE-354",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261120-PRICING-VAT-TOTAL-353"
+  "businessReleaseId": "DH-20261120-EXPIRED-ROLE-354"
 }

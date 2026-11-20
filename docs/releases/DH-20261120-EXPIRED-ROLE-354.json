@@ -1,0 +1,22 @@
+{
+  "releaseId": "DH-20261120-EXPIRED-ROLE-354",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.106.11",
+  "component": "DholePricingService",
+  "versionBefore": "1.26.5",
+  "versionAfter": "1.26.6",
+  "changeType": "PATCH",
+  "changes": [
+    "Supervisor approval for expired quote only if user lacks Pricing update scope or Superadmin role",
+    "Consistent REST status, eligibility and PUT authorization",
+    "Preserve role-scoped review audit and durable realtime notifications"
+  ],
+  "branches": [
+    "develop",
+    "master"
+  ],
+  "productionDeploymentAuthorized": false,
+  "ci": "pending",
+  "staging": "pending",
+  "rollback": "Revert coordinated release branch changes; no schema changes."
+}

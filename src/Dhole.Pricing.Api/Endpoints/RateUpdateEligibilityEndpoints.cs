@@ -21,6 +21,7 @@ public static class RateUpdateEligibilityEndpoints
     private static async Task<IResult> GetAsync(
         Guid rateId,
         ServiceDbContext db,
+        HttpContext http,
         CancellationToken cancellationToken)
     {
         var rate = await db.RateHeaders
@@ -30,19 +31,19 @@ public static class RateUpdateEligibilityEndpoints
 
         var decision = Dhole.Pricing.Api.Services.RateUpdateWindowPolicy.Evaluate(
             rate.Status, hasLinkedRequest: false, requestStillOpen: false);
-        var expired = Dhole.Pricing.Api.Services.ExpiredRateUpdateApprovalPolicy.RequiresApproval(
-            rate, DateTimeOffset.UtcNow);
-        var approved = expired && await Dhole.Pricing.Api.Services.ExpiredRateUpdateApprovalPolicy.IsApprovedAsync(
+        var requiresApproval = Dhole.Pricing.Api.Services.ExpiredRateUpdateApprovalPolicy.RequiresApprovalForUser(
+            rate, DateTimeOffset.UtcNow, http.User);
+        var approved = requiresApproval && await Dhole.Pricing.Api.Services.ExpiredRateUpdateApprovalPolicy.IsApprovedAsync(
             db, rate.Id, rate.RevisionNumber, cancellationToken);
-        var canUpdate = decision.CanUpdate && (!expired || approved);
+        var canUpdate = decision.CanUpdate && (!requiresApproval || approved);
         return Results.Ok(new
         {
             canUpdate,
             requiresReason = canUpdate,
-            requiresApproval = decision.CanUpdate && expired && !approved,
+            requiresApproval = decision.CanUpdate && requiresApproval && !approved,
             rateStatus = rate.Status.ToString(),
-            updateWindow = expired ? "ExpiredManagerApproval" : decision.UpdateWindow,
-            message = expired && !approved
+            updateWindow = requiresApproval ? "ExpiredManagerApproval" : decision.UpdateWindow,
+            message = requiresApproval && !approved
                 ? "Tarifa vencida: indique por qué se dejó vencer y solicite autorización a Roy o José Pablo."
                 : decision.Message,
             requestIds = Array.Empty<Guid>(),

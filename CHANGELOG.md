@@ -1,3 +1,9 @@
+## [1.26.6] - 2026-11-20 (DH-20261120-EXPIRED-ROLE-354 · autorización solo para vendedores)
+
+- PATCH: Pricing y Superadmin editan tarifas vencidas sin autorización de jefatura; vendedores mantienen solicitud a Roy/José Pablo.
+- Alinea la consulta de estado, elegibilidad y PUT con el mismo criterio de roles/scopes servidor. Conserva revisión, historial, SignalR/Outbox y bloqueo de cerradas/canceladas.
+- Tests de roles y de expiración Costa Rica. Pricing 1.26.5 → 1.26.6, ecosistema 1.106.10 → 1.106.11. CI/staging pendientes, producción no autorizada.
+
 ## [1.26.5] - 2026-11-20 (DH-20261120-PRICING-VAT-TOTAL-353 · IVA agregado en USD/CRC con códigos de Config)
 
 - PATCH: RateDto.TotalTaxUsd/TotalTaxCrc reconoce la moneda real desde CurrencyName cuando CurrencyCode es un identificador opaco de Config (CUR-2026-001, etc.), con la misma resolución del PDF comercial.
