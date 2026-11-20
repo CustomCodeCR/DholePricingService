@@ -18,7 +18,7 @@ public sealed class RateDtoVatSummaryTests
         string currencyName, string catalogCode, double expectedTax)
     {
         var rate = RateHeader.Create(
-            rateCode: "QUO-TEST-VAT", sourceImportFclRateId: null,
+            rateCode: "QUO-00000-999999", sourceImportFclRateId: null,
             agentId: Guid.NewGuid(), agentName: "Agente", agentCode: "AG",
             carrierId: Guid.NewGuid(), carrierName: "Proveedor", carrierCode: "PR",
             polId: Guid.NewGuid(), polName: "Origen", polCode: "ORG",
