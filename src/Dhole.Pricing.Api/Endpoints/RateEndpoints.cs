@@ -1586,7 +1586,8 @@ public static class RateEndpoints
         if (currentRate.Status is RateStatus.Closed or RateStatus.Cancelled)
             return Results.Conflict(new { code = "Pricing.RateUpdateWindowClosed",
                 message = "La tarifa cerrada o cancelada no permite actualizaciones." });
-        if (ExpiredRateUpdateApprovalPolicy.RequiresApproval(currentRate, DateTimeOffset.UtcNow)
+        if (ExpiredRateUpdateApprovalPolicy.RequiresApprovalForUser(
+                currentRate, DateTimeOffset.UtcNow, httpContext.User)
             && !await ExpiredRateUpdateApprovalPolicy.IsApprovedAsync(
                 db, currentRate.Id, currentRate.RevisionNumber, cancellationToken))
             return Results.Conflict(new {

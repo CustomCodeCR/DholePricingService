@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Domain.Rates.Enums;
 
@@ -43,5 +44,48 @@ public sealed class ExpiredRateUpdateApprovalPolicyTests
         var lateCostaRica = new DateTimeOffset(2026, 11, 19, 23, 59, 0, TimeSpan.FromHours(-6));
         Assert.IsFalse(ExpiredRateUpdateApprovalPolicy.RequiresApproval(
             RateStatus.Sent, new DateTime(2026, 11, 19), lateCostaRica));
+    }
+    private static ClaimsPrincipal Principal(params Claim[] claims)
+        => new(new ClaimsIdentity(claims, authenticationType: "unit-test"));
+
+    [TestMethod]
+    public void SellerExpiredQuote_RequiresSupervisorApproval()
+    {
+        var seller = Principal(new Claim(ClaimTypes.Role, "Vendedor"),
+            new Claim("scope", "pricing.rate-request.create"));
+        Assert.IsTrue(ExpiredRateUpdateApprovalPolicy.RequiresApprovalForUser(
+            RateStatus.Expired, new DateTime(2026, 11, 18), Today, seller));
+    }
+
+    [TestMethod]
+    public void PricingOperatorExpiredQuote_DoesNotRequireApproval()
+    {
+        var pricing = Principal(new Claim("scp", "pricing.rate.view pricing.rate.update"));
+        Assert.IsFalse(ExpiredRateUpdateApprovalPolicy.RequiresApprovalForUser(
+            RateStatus.Expired, new DateTime(2026, 11, 18), Today, pricing));
+    }
+
+    [TestMethod]
+    public void SuperAdminExpiredQuote_DoesNotRequireApproval()
+    {
+        var superAdmin = Principal(new Claim("roles", "SuperUsuario"));
+        Assert.IsFalse(ExpiredRateUpdateApprovalPolicy.RequiresApprovalForUser(
+            RateStatus.Sent, new DateTime(2026, 11, 18), Today, superAdmin));
+    }
+
+    [TestMethod]
+    public void OrdinaryAdministratorCannotBypassExpiredApproval()
+    {
+        var administrator = Principal(new Claim(ClaimTypes.Role, "Administrador"));
+        Assert.IsTrue(ExpiredRateUpdateApprovalPolicy.RequiresApprovalForUser(
+            RateStatus.Expired, new DateTime(2026, 11, 18), Today, administrator));
+    }
+
+    [TestMethod]
+    public void UnauthenticatedPrincipalCannotBypassExpiredApproval()
+    {
+        Assert.IsTrue(ExpiredRateUpdateApprovalPolicy.RequiresApprovalForUser(
+            RateStatus.Expired, new DateTime(2026, 11, 18), Today,
+            new ClaimsPrincipal(new ClaimsIdentity())));
     }
 }
