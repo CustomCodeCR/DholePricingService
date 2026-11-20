@@ -1,3 +1,9 @@
+## [1.25.2] - 2026-11-19 (DH-20261119-PRICING-LTL-DDP-FREIGHT-284 · promoción selectiva de DDP terrestre a producción)
+
+- PATCH master 1.25.1→1.25.2, ecosistema 1.103.7→1.103.8. Se promueve el mismo parche CI/staging de develop sin incorporar cambios ajenos a producción.
+- Para LTL/FTL con DDP y flete internacional explícito se respeta ChargeBasis PerChargeableCbm/PerTruck y no se aplica validación de distribución FCL; corrige Pricing.RateInvalidFreightDistribution de la solicitud con 33.33 CBM.
+- Creación y edición corregidas; CIF/FCL y distribución por contenedor siguen con sus validaciones. Sin cambios REST, migraciones, ni realtime. Validación CI y despliegue de producción sujetos a los gates.
+
 ## [1.25.1] - 2026-11-19 (DH-20261119-PRICING-RETURN-PROMOTION-272 · devolución de solicitudes a producción)
 
 - MINOR funcionalidad ya validada en develop: permite devolver solicitudes abiertas sin tarifa vinculada, con motivo obligatorio, estado Returned, historial y reenvío de solicitudes corregidas.
