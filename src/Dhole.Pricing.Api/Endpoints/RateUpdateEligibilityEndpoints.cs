@@ -23,27 +23,28 @@ public static class RateUpdateEligibilityEndpoints
         ServiceDbContext db,
         CancellationToken cancellationToken)
     {
-        var rateStatus = await db.RateHeaders
+        var rate = await db.RateHeaders
             .AsNoTracking()
-            .Where(x => x.Id == rateId && !x.IsDeleted)
-            .Select(x => (RateStatus?)x.Status)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
+        if (rate is null) return Results.NotFound();
 
-        if (!rateStatus.HasValue)
-            return Results.NotFound();
-
-        // Keep the eligibility advertised to the wizard consistent with PUT
-        // /api/pricing/rates/{id}. Closed quotes are immutable; other states
-        // can create an auditable revision.
         var decision = Dhole.Pricing.Api.Services.RateUpdateWindowPolicy.Evaluate(
-            rateStatus.Value, hasLinkedRequest: false, requestStillOpen: false);
+            rate.Status, hasLinkedRequest: false, requestStillOpen: false);
+        var expired = Dhole.Pricing.Api.Services.ExpiredRateUpdateApprovalPolicy.RequiresApproval(
+            rate, DateTimeOffset.UtcNow);
+        var approved = expired && await Dhole.Pricing.Api.Services.ExpiredRateUpdateApprovalPolicy.IsApprovedAsync(
+            db, rate.Id, rate.RevisionNumber, cancellationToken);
+        var canUpdate = decision.CanUpdate && (!expired || approved);
         return Results.Ok(new
         {
-            canUpdate = decision.CanUpdate,
-            requiresReason = decision.CanUpdate,
-            rateStatus = rateStatus.Value.ToString(),
-            updateWindow = decision.UpdateWindow,
-            message = decision.Message,
+            canUpdate,
+            requiresReason = canUpdate,
+            requiresApproval = decision.CanUpdate && expired && !approved,
+            rateStatus = rate.Status.ToString(),
+            updateWindow = expired ? "ExpiredManagerApproval" : decision.UpdateWindow,
+            message = expired && !approved
+                ? "Tarifa vencida: indique por qué se dejó vencer y solicite autorización a Roy o José Pablo."
+                : decision.Message,
             requestIds = Array.Empty<Guid>(),
         });
     }
