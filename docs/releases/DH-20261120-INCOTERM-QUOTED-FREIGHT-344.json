@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261120-INCOTERM-QUOTED-FREIGHT-344",
+  "date": "2026-11-20",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.106.2",
+  "releaseType": "PATCH",
+  "component": "DholePricingService",
+  "previousVersion": "1.26.2",
+  "version": "1.26.3",
+  "changes": [
+    "Allow explicitly quoted freight for every Incoterm according to selected service, including CPT LTL Panama–Nicaragua",
+    "Validate FCL equipment distribution only when explicitly quoted FCL freight exists",
+    "Preserve explicit Freight lines across edit flows and support customs-only snapshots"
+  ],
+  "regressionTests": [
+    "RateFreightDistributionPolicyTests.ConsolidatedAndLandModes_AcceptExplicitFreightWithoutFclAllocations",
+    "RateFreightDistributionPolicyTests.CptLtl_OneCbmAndAnAdditionalTruckCharge_DoNotNeedContainers",
+    "RateFreightDistributionPolicyTests.FclWithoutFreight_AllowsOnlyDestinationOrCustomsCharges",
+    "RateFreightDistributionPolicyTests.FclWithExplicitFreight_RequiresMatchingEquipmentDistribution"
+  ],
+  "schemaMigration": false,
+  "realtime": "unchanged: existing SignalR and REST remain compatible",
+  "productionDeploymentAuthorized": false,
+  "ci": "pending",
+  "staging": "pending"
+}
