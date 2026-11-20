@@ -8,10 +8,9 @@ using Microsoft.EntityFrameworkCore;
 namespace Dhole.Pricing.Api.Services;
 
 /// <summary>
-/// Checks already-issued quotations and enqueues 5d, 3d, 1d and 6h reminders.
-/// A PostgreSQL unique marker and the Notifications Outbox event commit in
-/// the same transaction, preventing duplicated emails after restarts or
-/// concurrent API replicas. Does not send mail directly.
+/// Queues email reminders (5d, 3d, 1d, 6h) and one-day in-app reminders.
+/// Each channel has its own PostgreSQL marker committed atomically with the
+/// Notifications Outbox event. No direct email or SignalR sends.
 /// </summary>
 public sealed class SellerRateExpiryReminderWorker(
     IServiceScopeFactory scopes,
@@ -61,12 +60,12 @@ public sealed class SellerRateExpiryReminderWorker(
         var db = scope.ServiceProvider.GetRequiredService<ServiceDbContext>();
         var sentNotification = scope.ServiceProvider
             .GetRequiredService<SentRateEmailNotificationService>();
+        var authDirectory = scope.ServiceProvider
+            .GetRequiredService<AuthSellerDirectoryService>();
         var outbox = scope.ServiceProvider
             .GetRequiredService<IIntegrationEventOutboxWriter>();
 
         var now = DateTimeOffset.UtcNow;
-        var nowInCostaRica = TimeZoneInfo.ConvertTime(
-            now, SellerRateExpiryReminderPolicy.CostaRicaZone);
         // A wide UTC bound keeps the database query index-friendly; the precise
         // date-only, Costa Rica business schedule is evaluated in the policy.
         var minUtc = now.UtcDateTime.Date.AddDays(-1);
@@ -98,8 +97,32 @@ public sealed class SellerRateExpiryReminderWorker(
                 var request = await db.RateRequests.AsNoTracking()
                     .Where(x => x.RateId == rateId)
                     .OrderByDescending(x => x.RequestedAtUtc)
-                    .Select(x => new { x.SellerName, x.SellerEmail })
+                    .Select(x => new { x.SellerName, x.SellerEmail, x.SellerUserId })
                     .FirstOrDefaultAsync(cancellationToken);
+
+                // A previously queued 1-day email must never suppress the
+                // one-day in-app message, or vice versa.
+                if (milestone.Key == "1d")
+                {
+                    try
+                    {
+                        await QueueOneDaySystemReminderAsync(
+                            db, outbox, authDirectory, rate.Id, rate.RevisionNumber,
+                            rate.ValidTo, rate.ExecutiveName!,
+                            request?.SellerUserId, request?.SellerName, request?.SellerEmail,
+                            cancellationToken);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception exception)
+                    {
+                        logger.LogError(exception,
+                            "Could not queue one-day in-app reminder for rate {RateId}; email will still be attempted.",
+                            rateId);
+                    }
+                }
 
                 var emails = await sentNotification.ResolveRecipientsAsync(
                     rate.ExecutiveName!,
@@ -242,6 +265,125 @@ public sealed class SellerRateExpiryReminderWorker(
                     "Could not queue expiry reminder for rate {RateId}.", rateId);
             }
         }
+    }
+
+
+    private async Task QueueOneDaySystemReminderAsync(
+        ServiceDbContext db,
+        IIntegrationEventOutboxWriter outbox,
+        AuthSellerDirectoryService authDirectory,
+        Guid rateId,
+        int revisionNumber,
+        DateTime validTo,
+        string executiveName,
+        Guid? requestSellerUserId,
+        string? requestSellerName,
+        string? requestSellerEmail,
+        CancellationToken cancellationToken)
+    {
+        var userId = SellerRateExpiryReminderPolicy.ResolveSellerUserId(
+            executiveName, requestSellerUserId, requestSellerName, requestSellerEmail, []);
+
+        if (userId is null)
+        {
+            // The executive assigned to the rate takes precedence over the
+            // original request seller. Never notify another seller by guess.
+            var executives = await authDirectory.GetSalesExecutivesAsync(cancellationToken);
+            var sellers = await authDirectory.GetSellersAsync(cancellationToken);
+            userId = SellerRateExpiryReminderPolicy.ResolveSellerUserId(
+                executiveName, requestSellerUserId, requestSellerName, requestSellerEmail,
+                executives.Concat(sellers));
+        }
+
+        if (userId is null)
+        {
+            logger.LogWarning(
+                "One-day System reminder skipped: no unique Auth user for executive {ExecutiveName} on rate {RateId}.",
+                executiveName, rateId);
+            return;
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var current = await db.RateHeaders.AsNoTracking()
+            .SingleOrDefaultAsync(rate => rate.Id == rateId && !rate.IsDeleted, cancellationToken);
+
+        if (current is null
+            || current.Status is not (RateStatus.Sent or RateStatus.RequestedByClient)
+            || current.RevisionNumber != revisionNumber
+            || current.ValidTo.Date != validTo.Date
+            || !string.Equals(current.ExecutiveName?.Trim(), executiveName.Trim(),
+                StringComparison.OrdinalIgnoreCase)
+            || SellerRateExpiryReminderPolicy.Due(current.ValidTo, DateTimeOffset.UtcNow)?.Key != "1d")
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return;
+        }
+
+        // Independent marker: System still sends when an earlier release
+        // already inserted the original "1d" email marker.
+        const string systemMilestone = "1d-system";
+        var claimed = await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO pricing."RateExpiryReminderQueue"
+                ("RateId", "RevisionNumber", "ValidToDate", "Milestone")
+            VALUES ({current.Id}, {current.RevisionNumber},
+                    {DateOnly.FromDateTime(current.ValidTo)}, {systemMilestone})
+            ON CONFLICT DO NOTHING
+            """, cancellationToken);
+
+        if (claimed == 0)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return;
+        }
+
+        var quo = FirstNonEmpty(current.QuoNumber, current.RateCode) ?? current.Id.ToString("D");
+        var clientName = FirstNonEmpty(current.ClientName) ?? "Cliente";
+        var expirationDate = current.ValidTo.ToString("dd/MM/yyyy");
+        var route = $"/pricing/seller-rates/{current.Id:D}";
+        var correlationId = $"pricing-expiry:{current.Id:N}:r{current.RevisionNumber}:{current.ValidTo:yyyyMMdd}:system-1d";
+
+        await outbox.WriteAsync(
+            EventName, EventName,
+            new
+            {
+                notificationType = NotificationType,
+                idempotencyKey = correlationId,
+                channel = "System",
+                entityType = "RateHeader",
+                entityId = current.Id.ToString("D"),
+                subject = $"La tarifa {quo} vence mañana",
+                body = $"La tarifa {quo} del cliente {clientName} vence mañana, {expirationDate}, " +
+                       "a las 11:59 p. m. (Costa Rica). Revísela y dé seguimiento al cliente.",
+                payload = new
+                {
+                    rateId = current.Id,
+                    quoNumber = quo,
+                    clientName,
+                    sellerName = current.ExecutiveName,
+                    expiryDate = expirationDate,
+                    milestone = "1d",
+                    action = "open-rate",
+                    route,
+                },
+                maxAttempts = 5,
+                recipients = new[]
+                {
+                    new
+                    {
+                        userId = userId.Value.ToString("D"),
+                        address = userId.Value.ToString("D"),
+                        displayName = current.ExecutiveName,
+                    },
+                },
+            },
+            correlationId: correlationId,
+            cancellationToken: cancellationToken);
+
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        logger.LogInformation(
+            "Queued one-day System reminder for rate {RateId}, revision {Revision}, user {UserId}.",
+            current.Id, current.RevisionNumber, userId.Value);
     }
 
     private static string? FirstNonEmpty(params string?[] values)
