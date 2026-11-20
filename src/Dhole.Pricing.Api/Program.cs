@@ -128,6 +128,7 @@ app.MapBasicRateReportEndpoints();
 app.MapMarketPricingEndpoints();
 app.MapRateCommentEndpoints();
 app.MapRateUpdateEligibilityEndpoints();
+app.MapExpiredRateUpdateApprovalEndpoints();
 app.MapSellerRateEndpoints();
 app.MapSellerRateStatusEndpoints();
 app.MapSellerVisibilityEndpoints();

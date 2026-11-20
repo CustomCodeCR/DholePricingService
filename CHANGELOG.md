@@ -1,3 +1,9 @@
+## [1.26.0] - 2026-11-20 (DH-20261120-EXPIRED-RATE-APPROVAL-301 · autorización de actualización de tarifas vencidas)
+
+- MINOR: solicitud y autorización explícitas por jefatura para actualizar tarifas vencidas, vinculadas a tarifa y revisión; motivo de vencimiento obligatorio, autorización/rechazo por Roy o José Pablo, trazabilidad completa y bloqueo server-side del PUT sin autorización.
+- Migración aditiva ExpiredRateUpdateApprovals; eventos System y Email en Notifications Outbox transaccional con idempotencia y distribución SignalR existente; notificación al solicitante después de la decisión.
+- Pricing 1.25.4 → 1.26.0, ecosistema Dhole 1.104.0. Compatibilidad REST existente, CI y staging obligatorios antes de producción.
+
 ## [1.25.4] - 2026-11-19 (DH-20261119-SELLER-DASHBOARD-PARITY-295 · supervisión de cartera comercial equivalente)
 
 - PATCH: cuando el supervisor selecciona sellerUserId, el endpoint /api/pricing/seller-rates/dashboard usa exactamente la misma proyección publicada que /seller-rates del vendedor, incluyendo solicitudes vinculadas, recibos, asignaciones directas, alternativas de QUO y revisiones publicadas.
