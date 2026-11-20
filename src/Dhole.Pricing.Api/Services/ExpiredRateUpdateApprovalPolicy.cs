@@ -16,9 +16,16 @@ public static class ExpiredRateUpdateApprovalPolicy
         TimeZoneInfo.FindSystemTimeZoneById("America/Costa_Rica");
 
     public static bool RequiresApproval(RateHeader rate, DateTimeOffset now)
-        => rate.Status == RateStatus.Expired
-           || DateOnly.FromDateTime(rate.ValidTo) <
-              DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now, CostaRica).DateTime);
+        => RequiresApproval(rate.Status, rate.ValidTo, now);
+
+    public static bool RequiresApproval(
+        RateStatus status, DateTime validUntil, DateTimeOffset now)
+    {
+        var todayInCostaRica = DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTime(now, CostaRica).DateTime);
+        return status == RateStatus.Expired
+            || DateOnly.FromDateTime(validUntil) < todayInCostaRica;
+    }
 
     public static Task<bool> IsApprovedAsync(
         ServiceDbContext db, Guid rateId, int revision, CancellationToken ct)
