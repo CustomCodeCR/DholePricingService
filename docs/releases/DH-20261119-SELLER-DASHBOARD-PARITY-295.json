@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261119-SELLER-DASHBOARD-PARITY-295",
+  "component": "DholePricingService",
+  "previousVersion": "1.25.3",
+  "version": "1.25.4",
+  "ecosystemVersion": "1.103.18",
+  "releaseType": "PATCH",
+  "scope": "Selected supervisor seller uses exact personal seller portfolio projection",
+  "security": "admin-only selected-seller route, unchanged personal route",
+  "migration": false,
+  "staging": "pending",
+  "productionAuthorized": false
+}
