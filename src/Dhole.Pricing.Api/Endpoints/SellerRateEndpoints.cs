@@ -52,10 +52,10 @@ public static class SellerRateEndpoints
     )
     {
         var currentUserId = httpContext.GetCurrentUserId();
-        if (!currentUserId.HasValue || sellerUserId == Guid.Empty)
+        if (!currentUserId.HasValue || currentUserId.Value == Guid.Empty)
             return Results.Unauthorized();
 
-        return await GetForSellerAsync(sellerUserId, db, dispatcher,
+        return await GetForSellerAsync(currentUserId.Value, db, dispatcher,
             creatorIdentityService, sellerAccess, loggerFactory, cancellationToken);
     }
 
