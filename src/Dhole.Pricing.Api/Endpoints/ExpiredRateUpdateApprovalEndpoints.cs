@@ -294,9 +294,12 @@ public static class ExpiredRateUpdateApprovalEndpoints
                 displayName = target.DisplayName,
             }},
         },
-        correlationId: "pricing-expired-update:" + approvalId.ToString("N")
-            + ":" + notificationType + ":" + channel.ToLowerInvariant()
-            + ":" + target.UserId.ToString("N"),
+        // pricing.outbox_messages.correlation_id is varchar(100). Use a
+        // deterministic 73-character key: approval + recipient + channel + event.
+        correlationId: "pex:" + approvalId.ToString("N")
+            + ":" + target.UserId.ToString("N")
+            + ":" + (channel == "System" ? "s" : "e")
+            + ":" + (notificationType.EndsWith(".requested", StringComparison.Ordinal) ? "r" : "d"),
         cancellationToken: ct);
     }
 }
