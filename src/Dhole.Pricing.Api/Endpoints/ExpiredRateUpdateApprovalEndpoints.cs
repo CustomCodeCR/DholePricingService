@@ -275,6 +275,15 @@ public static class ExpiredRateUpdateApprovalEndpoints
         return Results.Ok(new { approvalId, status, rateId = rate.Id });
     }
 
+    // PostgreSQL Outbox correlation_id is varchar(100). Independent channel,
+    // target and event marker guarantee retries remain idempotent.
+    public static string BuildCorrelationId(Guid approvalId, Guid userId,
+        string channel, string notificationType)
+        => "pex:" + approvalId.ToString("N")
+           + ":" + userId.ToString("N")
+           + ":" + (channel == "System" ? "s" : "e")
+           + ":" + (notificationType.EndsWith(".requested", StringComparison.Ordinal) ? "r" : "d");
+
     private static Task QueueAsync(
         IIntegrationEventOutboxWriter outbox, string channel, SellerDirectoryUser target,
         Guid rateId, Guid approvalId, string notificationType, string subject, string body,
@@ -294,9 +303,7 @@ public static class ExpiredRateUpdateApprovalEndpoints
                 displayName = target.DisplayName,
             }},
         },
-        correlationId: "pricing-expired-update:" + approvalId.ToString("N")
-            + ":" + notificationType + ":" + channel.ToLowerInvariant()
-            + ":" + target.UserId.ToString("N"),
+        correlationId: BuildCorrelationId(approvalId, target.UserId, channel, notificationType),
         cancellationToken: ct);
     }
 }
