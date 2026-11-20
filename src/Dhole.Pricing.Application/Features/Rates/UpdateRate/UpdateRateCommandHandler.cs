@@ -316,13 +316,10 @@ public sealed class UpdateRateCommandHandler(
         // On a full replacement, an omitted freight line can express a customs-only
         // quote. Never delete an explicitly priced Freight line solely because the
         // Incoterm is CPT, CIF, DDP, or any other seller-paid transport term.
-        var explicitlyQuotesFreight = (command.ExtraDetails
-            ?? Array.Empty<UpsertRateExtraDetailCommandItem>())
-            .Any(detail => detail.CostDetailType == CostDetailType.Freight);
-        var excludesQuotedFreight = command.ReplaceExtraDetails
-            && !explicitlyQuotesFreight
-            && RateQuotedFreightPolicy.ExcludesQuotedFreight(
-                command.OperationType, command.IncotermCode, command.IncotermName);
+        // Incoterms assign default contractual payers, never remove a contracted
+        // rate line. Only the caller's explicit deleted IDs/full detail snapshot
+        // decide whether a freight line must be removed.
+        var excludesQuotedFreight = false;
         var previousFreightDetailIds = existingDetails.Values
             .Where(detail => detail.CostDetailType == CostDetailType.Freight)
             .Select(detail => detail.Id)
@@ -348,8 +345,9 @@ public sealed class UpdateRateCommandHandler(
         // A full LCL snapshot missing its existing freight is incomplete, not a
         // request to delete it. Fail before mutating rate details or revision.
         if (command.ReplaceExtraDetails && command.ShipmentMode == ShipmentMode.Lcl
-            && !excludesQuotedFreight && previousFreightDetailIds.Count > 0
-            && !extraDetails.Any(detail => detail.CostDetailType == CostDetailType.Freight))
+            && previousFreightDetailIds.Count > 0
+            && !extraDetails.Any(detail => detail.CostDetailType == CostDetailType.Freight)
+            && !command.RemovedExtraDetailIds.Any(id => previousFreightDetailIds.Contains(id)))
             return Result.Failure(PricingErrors.RateUpdateValidationFailed(
                 "El flete internacional de la cotización no está en el guardado. Recargue la tarifa y conserve o actualice el flete antes de guardar."));
 

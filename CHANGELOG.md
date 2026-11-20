@@ -1,3 +1,9 @@
+## [1.27.0] - 2026-11-20 (DH-20261120-INCOTERMS-2020-STAGING-352 · Política Incoterms® 2020 para staging)
+
+- MINOR: catálogo normativo de 11 Incoterms (responsabilidades comprador/vendedor, riesgo, seguro, despacho, descarga y modalidades) con recomendaciones sin prohibir cargos extraordinarios contratados.
+- El guardado de modificaciones deja de eliminar flete por el Incoterm; únicamente la eliminación expresa o el detalle completo del usuario retira líneas. En LCL, se admite eliminar el flete anterior mediante su ID explícito.
+- Pruebas unitarias de asignación, excepciones y modalidades. Pricing 1.26.4 → 1.27.0; versión global 1.106.8 → 1.107.0. Solo develop, nunca master; sin migración, endpoints REST y SignalR existentes compatibles. Validación CI/staging pendiente.
+
 ## [1.26.4] - 2026-11-20 (DH-20261120-INCOTERM-IMPORT-350 · perspectiva importación/exportación por cliente)
 
 - PATCH: el guardado de ediciones decide si corresponde omitir flete según Import/Export y el Incoterm ICC desde la perspectiva real del cliente, sin tratar al importador costarricense como exportador.
