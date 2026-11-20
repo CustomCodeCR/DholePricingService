@@ -1,3 +1,9 @@
+## [1.26.5] - 2026-11-20 (DH-20261120-PRICING-VAT-TOTAL-353 · IVA agregado en USD/CRC con códigos de Config)
+
+- PATCH: RateDto.TotalTaxUsd/TotalTaxCrc reconoce la moneda real desde CurrencyName cuando CurrencyCode es un identificador opaco de Config (CUR-2026-001, etc.), con la misma resolución del PDF comercial.
+- Agrega importes gravados por detalle comercial persistido, conserva cargos exentos y los totales con IVA (TotalSaleWithTaxUsd/Crc), sin cambiar la utilidad ni el margen previo a impuestos.
+- Prueba de regresión de tarifa con Carrusel USD 305 + IVA 13 % (USD 39,65), códigos de moneda internos y cargo no gravado. Release global Web/System 1.106.10; REST/SignalR compatibles, CI/staging pendientes y producción no autorizada.
+
 ## [1.26.4] - 2026-11-20 (DH-20261120-INCOTERM-IMPORT-350 · perspectiva importación/exportación por cliente)
 
 - PATCH: el guardado de ediciones decide si corresponde omitir flete según Import/Export y el Incoterm ICC desde la perspectiva real del cliente, sin tratar al importador costarricense como exportador.
