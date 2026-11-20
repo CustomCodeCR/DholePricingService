@@ -40,6 +40,55 @@ public sealed class SellerRateExpiryReminderPolicyTests
         Assert.IsNull(SellerRateExpiryReminderPolicy.Due(ValidTo, now));
     }
 
+    [TestMethod]
+    public void One_day_is_due_at_nine_am_Costa_Rica_and_never_the_day_after()
+    {
+        Assert.IsNull(SellerRateExpiryReminderPolicy.Due(
+            ValidTo, DateTimeOffset.Parse("2026-11-04T14:59:59Z")));
+        Assert.AreEqual("1d", SellerRateExpiryReminderPolicy.Due(
+            ValidTo, DateTimeOffset.Parse("2026-11-04T15:00:00Z"))?.Key);
+        Assert.IsNull(SellerRateExpiryReminderPolicy.Due(
+            ValidTo, DateTimeOffset.Parse("2026-11-05T06:00:00Z")));
+    }
+
+    [TestMethod]
+    public void Prefers_request_identity_only_when_request_seller_matches_executive()
+    {
+        var id = Guid.NewGuid();
+        Assert.AreEqual(id, SellerRateExpiryReminderPolicy.ResolveSellerUserId(
+            "José Pablo Mesén", id, "Jose Pablo Mesen", "seller@example.com", []));
+        Assert.IsNull(SellerRateExpiryReminderPolicy.ResolveSellerUserId(
+            "Otra Persona", id, "Jose Pablo Mesen", "seller@example.com", []));
+    }
+
+    [TestMethod]
+    public void Resolves_assigned_seller_from_auth_unambiguously()
+    {
+        var id = Guid.NewGuid();
+        var anotherId = Guid.NewGuid();
+        var people = new[]
+        {
+            new SellerDirectoryUser(id, "seller@example.com", "José Pablo Mesén", "jpmesen"),
+            new SellerDirectoryUser(anotherId, "other@example.com", "Otra Persona", "other"),
+        };
+        Assert.AreEqual(id, SellerRateExpiryReminderPolicy.ResolveSellerUserId(
+            "JOSE PABLO MESEN", anotherId, "Otra Persona", "other@example.com", people));
+        Assert.IsNull(SellerRateExpiryReminderPolicy.ResolveSellerUserId(
+            "Castro Fallas", id, "Castro Fallas", "seller@example.com", people));
+    }
+
+    [TestMethod]
+    public void Rejects_ambiguous_auth_matches()
+    {
+        var users = new[]
+        {
+            new SellerDirectoryUser(Guid.NewGuid(), "a@example.com", "Mismo Vendedor", null),
+            new SellerDirectoryUser(Guid.NewGuid(), "b@example.com", "Mismo Vendedor", null),
+        };
+        Assert.IsNull(SellerRateExpiryReminderPolicy.ResolveSellerUserId(
+            "Mismo Vendedor", null, null, null, users));
+    }
+
     [DataTestMethod]
     [DataRow("Castro Fallas", true)]
     [DataRow(" castro   fallas ", true)]
