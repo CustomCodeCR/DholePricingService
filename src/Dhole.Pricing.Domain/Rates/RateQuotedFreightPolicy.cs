@@ -20,6 +20,27 @@ public static class RateQuotedFreightPolicy
         @"(?<![A-Za-z])DDP(?![A-Za-z])",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+
+    // The person receiving the quotation determines which party would pay the
+    // main carriage. The contractual Incoterm itself never changes direction.
+    // Import: buyer pays EXW/FCA/FAS/FOB; export: seller pays CFR/CIF/etc.
+    // Transit/domestic requires an explicit commercial allocation.
+    private static readonly Regex BuyerPaysFreightIncoterm = new(
+        @"(?<![A-Za-z])(?:EXW|FCA|FAS|FOB)(?![A-Za-z])",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    public static bool ExcludesQuotedFreight(
+        RateOperationType operationType, string? incotermCode, string? incotermName)
+    {
+        var term = $"{incotermCode} {incotermName}";
+        return operationType switch
+        {
+            RateOperationType.Import => NoFreightIncoterm.IsMatch(term),
+            RateOperationType.Export => BuyerPaysFreightIncoterm.IsMatch(term),
+            _ => false,
+        };
+    }
+
     public static bool ExcludesQuotedFreight(string? incotermCode, string? incotermName) =>
         NoFreightIncoterm.IsMatch($"{incotermCode} {incotermName}");
 

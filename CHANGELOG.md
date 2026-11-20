@@ -1,3 +1,9 @@
+## [1.26.4] - 2026-11-20 (DH-20261120-INCOTERM-IMPORT-350 · perspectiva importación/exportación por cliente)
+
+- PATCH: el guardado de ediciones decide si corresponde omitir flete según Import/Export y el Incoterm ICC desde la perspectiva real del cliente, sin tratar al importador costarricense como exportador.
+- Las cotizaciones China → Costa Rica con CIF/CFR/DAP/DDP mantienen cargos de importación sin inventar flete del comprador; EXW/FOB permiten cotizar transporte del comprador. En exportación se conserva el criterio contrario. Fletes explícitamente contratados se conservan.
+- Pruebas de regresión Import/Export/TransitDomestic con códigos Incoterm opacos de Config. Pricing 1.26.3 → 1.26.4; ecosistema 1.106.6 → 1.106.7, coordinado con Web/System. REST, SignalR y datos persistidos compatibles; CI y staging pendientes, producción no autorizada.
+
 ## [1.26.3] - 2026-11-20 (DH-20261120-INCOTERM-QUOTED-FREIGHT-344 · flete explícito para todos los Incoterms)
 
 - PATCH: la creación LTL/LCL/FTL/aérea permite cotizar el flete internacional contratado con cualquier Incoterm (incluido CPT), sin exigir contenedores FCL.
