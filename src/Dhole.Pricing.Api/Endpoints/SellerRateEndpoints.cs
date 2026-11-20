@@ -52,12 +52,27 @@ public static class SellerRateEndpoints
     )
     {
         var currentUserId = httpContext.GetCurrentUserId();
-        if (!currentUserId.HasValue || currentUserId.Value == Guid.Empty)
+        if (!currentUserId.HasValue || sellerUserId == Guid.Empty)
             return Results.Unauthorized();
 
+        return await GetForSellerAsync(sellerUserId, db, dispatcher,
+            creatorIdentityService, sellerAccess, loggerFactory, cancellationToken);
+    }
+
+    // Única proyección autorizada para un vendedor, reutilizada por su sesión
+    // y por la supervisión. Nunca cambiar la identidad de quien consulta.
+    private static async Task<IResult> GetForSellerAsync(
+        Guid sellerUserId,
+        ServiceDbContext db,
+        IQueryDispatcher dispatcher,
+        RateCreatorIdentityService creatorIdentityService,
+        SellerRateAccessService sellerAccess,
+        ILoggerFactory loggerFactory,
+        CancellationToken cancellationToken)
+    {
         var linkedIds = await db.RateRequests
             .AsNoTracking()
-            .Where(x => x.SellerUserId == currentUserId.Value && x.RateId.HasValue)
+            .Where(x => x.SellerUserId == sellerUserId && x.RateId.HasValue)
             .OrderByDescending(x => x.RequestedAtUtc)
             .Select(x => x.RateId!.Value)
             .ToListAsync(cancellationToken);
@@ -66,7 +81,7 @@ public static class SellerRateEndpoints
         // even if the executive display name changes or Auth is unavailable.
         var receivedIds = await db.RateHeaders
             .AsNoTracking()
-            .Where(rate => !rate.IsDeleted && rate.SellerReceivedBy == currentUserId.Value)
+            .Where(rate => !rate.IsDeleted && rate.SellerReceivedBy == sellerUserId)
             .Select(rate => rate.Id)
             .ToArrayAsync(cancellationToken);
 
@@ -76,13 +91,13 @@ public static class SellerRateEndpoints
         IReadOnlyCollection<Guid> assignedIds;
         try
         {
-            assignedIds = await sellerAccess.AssignedRateIdsAsync(currentUserId.Value, cancellationToken);
+            assignedIds = await sellerAccess.AssignedRateIdsAsync(sellerUserId, cancellationToken);
         }
         catch (Exception error) when (!cancellationToken.IsCancellationRequested)
         {
             loggerFactory.CreateLogger("SellerRateEndpoints").LogWarning(error,
                 "No se pudieron resolver los ejecutivos de Auth para el vendedor {UserId}.",
-                currentUserId.Value);
+                sellerUserId);
 
             if (linkedIds.Count == 0 && receivedIds.Length == 0)
             {
@@ -114,7 +129,7 @@ public static class SellerRateEndpoints
             var member = await db.RateHeaders.AsNoTracking()
                 .FirstOrDefaultAsync(rate => rate.Id == siblingId && !rate.IsDeleted, cancellationToken);
             if (member is not null &&
-                await sellerAccess.CanReadAsync(member, currentUserId.Value, cancellationToken))
+                await sellerAccess.CanReadAsync(member, sellerUserId, cancellationToken))
                 allIds.Add(siblingId);
         }
 
@@ -280,13 +295,30 @@ public static class SellerRateEndpoints
     // Sólo el SuperUsuario o quien tiene permiso view-all puede consultar este resumen.
     // Se proyectan datos de cabecera, sin cargar cada tarifa por separado.
     private static async Task<IResult> GetAdminDashboardAsync(
+        Guid? sellerUserId,
         ServiceDbContext db,
+        IQueryDispatcher dispatcher,
+        RateCreatorIdentityService creatorIdentityService,
+        SellerRateAccessService sellerAccess,
+        ILoggerFactory loggerFactory,
         SellerVisibilityService visibility,
         HttpContext httpContext,
         CancellationToken cancellationToken)
     {
         if (!IsAdminViewer(httpContext.User, visibility))
             return Results.Forbid();
+
+        // Filtrar en el servidor por identidad Auth real, no por las solicitudes
+        // que casualmente tengan RateId. Esto incluye asignaciones manuales,
+        // recibos y revisiones publicadas; coincide con /seller-rates.
+        if (sellerUserId.HasValue)
+        {
+            if (sellerUserId.Value == Guid.Empty)
+                return Results.BadRequest(new { message = "Seleccione un vendedor válido." });
+
+            return await GetForSellerAsync(sellerUserId.Value, db, dispatcher,
+                creatorIdentityService, sellerAccess, loggerFactory, cancellationToken);
+        }
 
         // Global supervisory dashboard: include manual and other quotations
         // even when they were not created from a RateRequest.
