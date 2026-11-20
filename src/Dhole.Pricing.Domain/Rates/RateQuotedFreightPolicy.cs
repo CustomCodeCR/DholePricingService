@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Dhole.Pricing.Domain.Rates.Enums;
 
 namespace Dhole.Pricing.Domain.Rates;
 
@@ -13,6 +14,18 @@ public static class RateQuotedFreightPolicy
         @"(?<![A-Za-z])(?:CFR|CIF|CPT|CIP|DAP|DPU|DDP)(?![A-Za-z])",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
+    // An explicitly priced DDP land movement includes international transportation.
+    // The historical maritime exclusion (notably CIF) must remain unchanged.
+    private static readonly Regex DdpIncoterm = new(
+        @"(?<![A-Za-z])DDP(?![A-Za-z])",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     public static bool ExcludesQuotedFreight(string? incotermCode, string? incotermName) =>
         NoFreightIncoterm.IsMatch($"{incotermCode} {incotermName}");
+
+    public static bool ExcludesQuotedFreight(
+        ShipmentMode shipmentMode, string? incotermCode, string? incotermName) =>
+        !(shipmentMode is ShipmentMode.Ltl or ShipmentMode.Ftl
+            && DdpIncoterm.IsMatch($"{incotermCode} {incotermName}"))
+        && ExcludesQuotedFreight(incotermCode, incotermName);
 }

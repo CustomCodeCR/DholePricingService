@@ -1036,7 +1036,7 @@ public sealed class CreateRateCommandHandler(
 
     private static bool HasValidFreightDistribution(CreateRateCommand command)
     {
-        if (RateQuotedFreightPolicy.ExcludesQuotedFreight(command.IncotermCode, command.IncotermName))
+        if (RateQuotedFreightPolicy.ExcludesQuotedFreight(command.ShipmentMode, command.IncotermCode, command.IncotermName))
             return !command.SourceImportFclRateId.HasValue
                 && !command.Details.Any(detail => detail.CostDetailType == CostDetailType.Freight);
 

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261119-PRICING-LTL-DDP-FREIGHT-284",
+  "date": "2026-11-19",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.103.8",
+  "releaseType": "PATCH",
+  "promotion": "selective master backport from CI/staging-tested develop release",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "previousVersion": "1.25.1",
+      "version": "1.25.2"
+    },
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "previousVersion": "1.103.7",
+      "version": "1.103.8"
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "previousVersion": "1.103.7",
+      "version": "1.103.8"
+    }
+  ],
+  "productionDeploymentAuthorized": true,
+  "regressionTests": [
+    "RateQuotedFreightPolicyTests.DdpLandShipment_AllowsExplicitFreightPerCbmOrTruck",
+    "RateQuotedFreightPolicyTests.DdpFcl_StillExcludesFreightLikeExistingMaritimeQuotes"
+  ],
+  "stagingPricing": "success",
+  "stagingWeb": "pending",
+  "ci": "pending",
+  "production": "pending",
+  "schemaMigration": false,
+  "realtime": "unchanged"
+}
