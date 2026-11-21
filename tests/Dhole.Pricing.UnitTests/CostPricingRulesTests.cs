@@ -1,5 +1,7 @@
 using Dhole.Pricing.Domain.Costs.Entities;
 using System.Text.Json;
+using Dhole.Pricing.Application.Features.Costs.GetCostsForSelect;
+using Dhole.Pricing.Contracts.Costs.Response;
 
 namespace Dhole.Pricing.UnitTests;
 
@@ -126,4 +128,61 @@ public sealed class CostPricingRulesTests
         }));
         Assert.IsFalse(CostPricingRules.TryResolve(json, null, null, null, 0m, 0m, out _, out _));
     }
+    private static CostSelectDto WizardMaster(string? json) => new(
+        Id: Guid.NewGuid(), Name: "Servicio de agencia", CostType: "Fixed",
+        CostDetailType: "DestinationCharge",
+        CarrierId: null, CarrierName: null, CarrierCode: null,
+        AgentId: null, AgentName: null, AgentCode: null,
+        PortId: null, PortName: null, PortCode: null, PortRole: null,
+        CurrencyId: Guid.NewGuid(), CurrencyName: "USD", CurrencyCode: "USD",
+        CostAmount: 0m, SaleAmount: 0m, UtilityAmount: 0m,
+        Notes: null, IsAccountant: false,
+        Incoterms: Array.Empty<CostIncotermDto>(), PricingRulesJson: json);
+
+    [TestMethod]
+    public void WizardBundle_Uses40HcAmounts_AndPreservesRawCatalogSnapshot()
+    {
+        var dv20 = Guid.NewGuid();
+        var hc40 = Guid.NewGuid();
+        var master = WizardMaster(CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
+        {
+            new CostPricingRule("ContainerType", null, null, dv20, 175m, 175m),
+            new CostPricingRule("ContainerType", null, null, hc40, 350m, 350m)
+        })));
+        var actual = CostWizardTierProjection.ResolveApplicable([master], null, null, hc40, null).Single();
+        Assert.AreEqual(350m, actual.CostAmount);
+        Assert.AreEqual(350m, actual.SaleAmount);
+        Assert.AreEqual(0m, master.CostAmount);
+        Assert.AreEqual(0, CostWizardTierProjection.ResolveApplicable(
+            [master], null, null, Guid.NewGuid(), null).Count);
+        Assert.AreEqual(0m, CostWizardTierProjection.ResolveApplicable(
+            [master], null, null, null, null).Single().CostAmount);
+    }
+
+    [TestMethod]
+    public void WizardBundle_PackagesWeightAndExtraDays_ResolveFromConfiguredBands()
+    {
+        var weight = WizardMaster(CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
+        {
+            new CostPricingRule("WeightKg", 1m, 25m, null, 4m, 5m, "PerKg")
+        })));
+        var packages = WizardMaster(CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
+        {
+            new CostPricingRule("Packages", 1m, 3m, null, 20m, 30m),
+            new CostPricingRule("Packages", 4m, 12m, null, 80m, 95m)
+        })));
+        var days = WizardMaster(CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
+        {
+            new CostPricingRule("Packages", 1m, 12m, null, 8m, 12m, "PerExtraDay", 3)
+        })));
+        Assert.AreEqual(60m, CostWizardTierProjection.ResolveApplicable(
+            [weight], 15m, null, null, null).Single().CostAmount);
+        Assert.AreEqual(80m, CostWizardTierProjection.ResolveApplicable(
+            [packages], null, 4, null, null).Single().CostAmount);
+        Assert.AreEqual(32m, CostWizardTierProjection.ResolveApplicable(
+            [days], null, 3, null, 7).Single().CostAmount);
+        Assert.AreEqual(0, CostWizardTierProjection.ResolveApplicable(
+            [days], null, 3, null, 3).Count);
+    }
+
 }
