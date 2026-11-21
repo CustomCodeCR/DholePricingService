@@ -28,7 +28,7 @@ public sealed class MiamiOwnLclPricing393Tests
     {
         var valid = MiamiOwnLclPricing.TryCalculate(
             Consolidation(), request,
-            cargo.Length > 0 ? cargo : [new("Carga", 1, 10m, 1m, 0.02m, 1m)],
+            cargo.Length > 0 ? cargo : [new CargoCalculationLine("Carga", 1, 10m, 1m, 0.02m, 1m)],
             "MIAMI", "CR", request.Incoterm, out var quote, out var error);
         Assert.IsTrue(valid, error);
         Assert.IsNotNull(quote);
@@ -38,7 +38,7 @@ public sealed class MiamiOwnLclPricing393Tests
     [TestMethod]
     public void ClientD_UsesReferenceSaleMinimumAndAllFakLines()
     {
-        var quote = Calculate(Request("D"), new("Carga", 1, 10m, 1m, 0.02m, 1m));
+        var quote = Calculate(Request("D"), new CargoCalculationLine("Carga", 1, 10m, 1m, 0.02m, 1m));
         // 35.3146667 CFT × USD 2.92 = USD 103.12; the USD 292 minimum wins.
         Assert.AreEqual(292m, quote.Lines.Single(x => x.Name == "Flete internacional marítimo").SaleTotal);
         Assert.AreEqual(35m, quote.Lines.Single(x => x.Name == "SED").SaleTotal);
@@ -66,7 +66,7 @@ public sealed class MiamiOwnLclPricing393Tests
     public void NvoccA_RespectsMinimumAndInsurance()
     {
         var quote = Calculate(Request("NVOCC-A", cargoValue: 1000m),
-            new("Carga", 1, 8m, .01m, .016m, .01m));
+            new CargoCalculationLine("Carga", 1, 8m, .01m, .016m, .01m));
         Assert.AreEqual(95m, quote.Lines.Single(x => x.Name == "Flete internacional marítimo").SaleTotal);
         Assert.AreEqual(50m, quote.Lines.Single(x => x.Name == "Seguro de carga").SaleTotal);
     }
@@ -81,7 +81,7 @@ public sealed class MiamiOwnLclPricing393Tests
         Assert.IsFalse(invalid);
         StringAssert.Contains(message!, "IMO");
 
-        var quote = Calculate(Request("LITTLE"), new("Paquete", 1, 90m, .25m, .18m, .25m));
+        var quote = Calculate(Request("LITTLE"), new CargoCalculationLine("Paquete", 1, 90m, .25m, .18m, .25m));
         Assert.AreEqual(30m, quote.Lines.Single(x => x.Name == "Flete internacional marítimo").SaleTotal);
         Assert.AreEqual(0m, quote.Lines.Where(x => x.Name == "SED").Sum(x => x.SaleTotal));
     }
