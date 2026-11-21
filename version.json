@@ -3,8 +3,8 @@
   "ecosystem": "Dhole",
   "component": "DholePricingService",
   "version": "1.26.18",
-  "ecosystemVersion": "1.108.19",
-  "releaseId": "DH-20261121-WIZARD-BUNDLE-ONLY-386",
+  "ecosystemVersion": "1.108.20",
+  "releaseId": "DH-20261121-QUO-EDIT-DELTA-387",
   "releaseStatus": "candidate-master-ci-pending",
-  "businessReleaseId": "DH-20261121-WIZARD-BUNDLE-ONLY-386"
+  "businessReleaseId": "DH-20261121-QUO-EDIT-DELTA-387"
 }
