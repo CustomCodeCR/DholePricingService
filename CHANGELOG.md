@@ -1,3 +1,8 @@
+## [1.26.16] - 2026-11-21 · DH-20261121-PRICING-P7-RESTORE-384
+
+- PATCH: impedir cargos Fixed, Variable u Optional de otra naviera o agente cuando faltan los identificadores correspondientes en la consulta contextual.
+- PATCH: evita que cargos de WWL aparezcan en una cotización MSC, conserva los detalles históricos y mantiene REST.
+
 ## [1.26.15] - 2026-11-21 · DH-20261121-PRICING-P7-EDIT-SAFETY-383
 
 - PATCH: wizard-bundle Applicable sin contexto excluye tramos no calculables y plantillas 0/0, sin mutar Catalog ni RateDetails.
