@@ -1,0 +1,17 @@
+{
+  "releaseId": "DH-20261121-INCOTERMS-MODIFICATIONS-MASTER-378",
+  "releaseType": "PATCH",
+  "component": "DholePricingService",
+  "baseBranch": "master",
+  "backportOf": [
+    "DH-20261121-INCOTERMS-EDIT-P0-374",
+    "DH-20261121-INCOTERM-AUTO-COST-377"
+  ],
+  "from": "1.26.9",
+  "to": "1.26.12",
+  "ecosystemVersion": "1.108.10",
+  "target": "master",
+  "productionDeploymentAuthorized": false,
+  "checks": "pending",
+  "scope": "Explicit detail removal only, no re-sync on edit; explicit imported FCL Freight only"
+}

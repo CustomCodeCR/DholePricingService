@@ -535,7 +535,11 @@ public sealed class CreateRateCommandHandler(
                 cargoProfile.ChargeableVolumeCbm
             );
 
-            if (importedRate is not null)
+            // Linking an imported rate does NOT imply contracting the ocean freight.
+            // The selected P7 Freight line is the only authorization to quote it.
+            if (importedRate is not null
+                && ImportedFreightExplicitSelectionPolicy.ShouldInclude(
+                    command.SourceImportFclRateId, importedFreightOverride))
             {
                 AddImportedFreight(rate, importedRate, importedFreightOverride, command.CreatedBy);
             }
