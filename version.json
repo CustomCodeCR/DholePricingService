@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.26.14",
-  "ecosystemVersion": "1.108.15",
-  "releaseId": "DH-20261121-PRICING-P7-SNAPSHOT-TIERS-382",
+  "version": "1.26.15",
+  "ecosystemVersion": "1.108.16",
+  "releaseId": "DH-20261121-PRICING-P7-EDIT-SAFETY-383",
   "releaseStatus": "candidate-master-ci-pending",
-  "businessReleaseId": "DH-20261121-PRICING-P7-SNAPSHOT-TIERS-382"
+  "businessReleaseId": "DH-20261121-PRICING-P7-EDIT-SAFETY-383"
 }
