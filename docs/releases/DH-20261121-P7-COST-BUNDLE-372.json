@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261121-P7-COST-BUNDLE-372",
+  "date": "2026-11-21",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.108.5",
+  "releaseType": "PATCH",
+  "target": "develop",
+  "components": {
+    "DholePricingService": {
+      "from": "1.26.9",
+      "to": "1.26.10"
+    },
+    "DholeWeb": {
+      "from": "1.108.4",
+      "to": "1.108.5"
+    }
+  },
+  "branch": "fix/DH-20261121-P7-COST-BUNDLE-372-develop",
+  "productionAuthorized": false,
+  "changes": [
+    "One Pricing HTTP GET provides the ordered active cost catalog and applicable charges for the wizard",
+    "One backend cost repository read and shared multi-relation hydration per request",
+    "Preserve existing REST /select, CostIds and realtime events"
+  ],
+  "validation": {
+    "build": "pending-CI",
+    "tests": "pending-CI",
+    "staging": "pending-authenticated-smoke"
+  }
+}

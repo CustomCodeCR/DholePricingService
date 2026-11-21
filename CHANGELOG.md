@@ -1,3 +1,10 @@
+## [1.26.10] - 2026-11-21 (DH-20261121-P7-COST-BUNDLE-372 · catálogo y costos por contexto en una respuesta)
+
+- PATCH: nuevo GET /api/pricing/costs/wizard-bundle con permiso pricing.workspace; devuelve Catalog y Applicable ordenados y con CostId/relaciones completas desde un único snapshot activo.
+- Una consulta al repositorio de costos (o catálogo en caché) y una hidratación de relaciones; mismo filtrado estricto de naviera, agente, POL/POE/POD, servicio, Incoterm y modalidad que el /select existente. Respeta el POE real de tarifas importadas de Panamá.
+- Endpoint /select, cálculos comerciales, contratos persistidos, SignalR y outbox/inbox no cambian. Versión DholePricingService 1.26.9 → 1.26.10, ecosistema 1.108.5; únicamente develop y staging, producción no autorizada.
+- Compilación, pruebas unitarias y smoke autenticado P6→P7 aún requieren validación de CI/staging.
+
 ## [1.26.9] - 2026-11-20 (DH-20261120-PRICING-EXPIRED-MASTER-361 · promote expired-quote authorization fix to master)
 
 - PATCH: role-specific expiry edit policy already present and CI/staging-validated on develop from release 354. Coordinate production hotfix without overwriting unrelated later commits. Pricing/Superadmin do not require approval; sellers retain Roy/José Pablo request.
