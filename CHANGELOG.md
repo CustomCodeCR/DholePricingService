@@ -1,3 +1,8 @@
+## [1.26.21] - 2026-11-21 · DH-20261121-PRICING-LAST-THREE-FIXES-394 (candidate master)
+
+- PATCH: LTL CFZ/Colón Panamá → Costa Rica devuelve Flete terrestre, Bunker, Gastos y Custodia + Marchamo en wizard-bundle, aunque POL comercial y POE del maestro sean catálogos distintos. Conserva filtros reales de agente, servicios, Incoterm, modalidad y ruta.
+- Los tramos WeightKg resuelven venta/costo, incluido cero válido. Release coordinado con Web/System 1.110.2; promoción selectiva, CI y staging obligatorios.
+
 ## [1.26.20] - 2026-11-21 · DH-20261121-PRICING-TRANCHE-MIAMI-PANAMA-393 (candidato master)
 
 - PATCH: preservar costo y venta seleccionados en tramos de peso, bultos, contenedores y días al crear o modificar QUO. No restablecer el costo a cero por un catálogo Fixed con valor base cero.
