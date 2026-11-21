@@ -1,3 +1,9 @@
+## [1.26.13] - 2026-11-21 (DH-20261121-PRICING-P7-EDIT-380 · costos del wizard con una respuesta y edición conservadora)
+
+- PATCH: mantiene /api/pricing/costs/wizard-bundle como única respuesta con catálogo activo y cargos aplicables por ruta/Incoterm/servicios, sin eliminar REST /select.
+- Alinea los metadatos y la validación de release del endpoint unificado ya implementado en develop.
+- No se modifican tarifas ni importes persistidos durante una consulta de costos. Integración con DholeWeb 1.108.13; pruebas de compilación, contrato, staging y CI pendientes.
+
 ## [1.26.12] - 2026-11-21 (DH-20261121-INCOTERM-AUTO-COST-377 · source FCL no autoriza cargo oculto)
 
 - PATCH: CreateRate ya no añade automáticamente flete internacional desde SourceImportFclRateId cuando Pantalla 7 no envió un detalle Freight seleccionado. Una referencia de tarifa importada puede informar origen y costo del proveedor, pero no implica contratar el flete por parte del cliente (FOB exportación y demás responsabilidades Incoterm).
