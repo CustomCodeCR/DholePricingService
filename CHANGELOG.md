@@ -1,3 +1,10 @@
+## [1.26.12] - 2026-11-21 (DH-20261121-INCOTERM-AUTO-COST-377 · source FCL no autoriza cargo oculto)
+
+- PATCH: CreateRate ya no añade automáticamente flete internacional desde SourceImportFclRateId cuando Pantalla 7 no envió un detalle Freight seleccionado. Una referencia de tarifa importada puede informar origen y costo del proveedor, pero no implica contratar el flete por parte del cliente (FOB exportación y demás responsabilidades Incoterm).
+- Cuando el Freight esté explícitamente incluido, se conserva el flujo de cargo, precio/venta y vínculo con la importación. Las tarifas históricas, PUT de modificación y SourceImportFclRateId existentes no se migran ni pierden datos.
+- Añade política unitaria para prevenir inclusión accidental de costos en backend. REST y SignalR compatibles.
+- DholePricingService 1.26.11 → 1.26.12, versión global 1.108.10 (Web/System 1.108.10). Solo develop/staging tras CI, sin autorización master/producción.
+
 ## [1.26.11] - 2026-11-21 (DH-20261121-INCOTERMS-EDIT-P0-374 · protección de detalles existentes)
 
 - PATCH P0: ediciones con `ReplaceExtraDetails=true` rechazan la omisión de cualquier `RateDetail.Id` persistido que no se haya eliminado de forma explícita; no hay eliminación implícita por snapshot incompleto.
