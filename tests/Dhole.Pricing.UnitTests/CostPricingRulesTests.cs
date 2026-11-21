@@ -155,8 +155,10 @@ public sealed class CostPricingRulesTests
         Assert.AreEqual(0m, master.CostAmount);
         Assert.AreEqual(0, CostWizardTierProjection.ResolveApplicable(
             [master], null, null, Guid.NewGuid(), null).Count);
-        Assert.AreEqual(0m, CostWizardTierProjection.ResolveApplicable(
-            [master], null, null, null, null).Single().CostAmount);
+        Assert.AreEqual(0, CostWizardTierProjection.ResolveApplicable(
+            [master], null, null, null, null).Count);
+        // An absent cargo context is not a valid 0/0 tariff. The catalog
+        // separately retains the full unpriced definition and its bands.
     }
 
     [TestMethod]
