@@ -75,11 +75,36 @@ public sealed class GetWizardCostsQueryHandler(
             await cache.SetCostsSelectAsync(catalog, cancellationToken: cancellationToken);
         }
 
+        // On own LTL Panama -> Costa Rica the wizard uses a POL at CFZ and a
+        // Costa Rican POE (the destination warehouse). The four land masters,
+        // however, are stored against Panama POE -> Costa Rica POD. Resolve the
+        // physical leg by its port NAME in the corresponding catalog group;
+        // never reinterpret the commercial POE for unrelated shipments.
+        var originPol = context.ShipmentMode?.ToString() == "Ltl" && context.PolId.HasValue
+            ? await configCatalog.GetActiveByIdAsync(context.PolId.Value, cancellationToken)
+            : null;
+        var destinationPod = originPol is not null && context.PodId.HasValue
+            ? await configCatalog.GetActiveByIdAsync(context.PodId.Value, cancellationToken)
+            : null;
+        var usePanamaLandLeg = originPol is not null && destinationPod is not null
+            && IsPanamaOrigin(originPol.Name) && IsCostaRicaDestination(destinationPod.Name)
+            && context.PoeId.HasValue && context.AgentId.HasValue;
+
         var applicable = catalog
             .Where(cost =>
             {
                 selections.TryGetValue(cost.Id, out var selection);
-                return GetCostsForSelectQueryHandler.IsApplicableToContext(cost, context, selection);
+                if (GetCostsForSelectQueryHandler.IsApplicableToContext(cost, context, selection))
+                    return true;
+                if (!usePanamaLandLeg || !IsRequiredPanamaLtlCharge(cost.Name))
+                    return false;
+                // Resolve only this quoted land leg. The real POE/POD relations
+                // must still match agent, services, incoterm and LTL mode.
+                var mappedOrigin = cost.Poes?.FirstOrDefault(port =>
+                    SamePort(port.Name, originPol!.Name));
+                if (mappedOrigin is null) return false;
+                return GetCostsForSelectQueryHandler.IsApplicableToContext(
+                    cost, context with { PoeId = mappedOrigin.Id }, selection);
             })
             .OrderByDescending(GetCostsForSelectQueryHandler.CostSpecificity)
             .ThenBy(cost => cost.CostType)
@@ -101,6 +126,36 @@ public sealed class GetWizardCostsQueryHandler(
             applicable, request.WeightKg, request.Packages,
             request.ContainerTypeId, request.StorageDays);
         return Result.Success(new CostWizardBundleDto(orderedCatalog, priced));
+    }
+
+    internal static bool IsRequiredPanamaLtlCharge(string name)
+    {
+        var n = NormalizePort(name);
+        return (n.Contains("flete") && n.Contains("terrestre") && n.Contains("panama") && n.Contains("costa rica"))
+            || (n.Contains("bunker") && n.Contains("panama") && n.Contains("costa rica"))
+            || (n.Contains("gastos") && n.Contains("panama") && n.Contains("costa rica"))
+            || (n.Contains("custodia") && n.Contains("marchamo"));
+    }
+
+    private static bool IsPanamaOrigin(string name) =>
+        NormalizePort(name) is var n
+        && (n.Contains("panama") || n.Contains("colon") || n.Contains("balboa")
+            || n.Contains("cristobal") || n.Contains("rodman") || n.Contains("manzanillo"));
+
+    private static bool IsCostaRicaDestination(string name) =>
+        NormalizePort(name) is var n && (n.Contains("costa rica") || n.Contains("san jose"));
+
+    private static bool SamePort(string left, string right) =>
+        NormalizePort(left) == NormalizePort(right);
+
+    private static string NormalizePort(string value)
+    {
+        var decomposed = value.Normalize(System.Text.NormalizationForm.FormD);
+        return new string(decomposed
+            .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
+                != System.Globalization.UnicodeCategory.NonSpacingMark)
+            .Select(c => char.IsLetterOrDigit(c) ? char.ToLowerInvariant(c) : ' ')
+            .ToArray()).Replace("  ", " ").Trim();
     }
 }
 
