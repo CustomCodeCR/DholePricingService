@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261121-INCOTERMS-EDIT-P0-374",
+  "globalVersion": "1.108.7",
+  "component": "DholePricingService",
+  "from": "1.26.10",
+  "to": "1.26.11",
+  "releaseType": "PATCH",
+  "target": "develop",
+  "productionAuthorized": false,
+  "p0": "Reject partial snapshots on legacy ReplaceExtraDetails; no inferred freight deletion or edit catalog resync",
+  "pending": [
+    "contract delta revision/idempotency",
+    "30 edit test scenarios",
+    "authenticated staging financial reconciliation"
+  ]
+}

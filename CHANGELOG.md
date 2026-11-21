@@ -1,3 +1,10 @@
+## [1.26.11] - 2026-11-21 (DH-20261121-INCOTERMS-EDIT-P0-374 · protección de detalles existentes)
+
+- PATCH P0: ediciones con `ReplaceExtraDetails=true` rechazan la omisión de cualquier `RateDetail.Id` persistido que no se haya eliminado de forma explícita; no hay eliminación implícita por snapshot incompleto.
+- Un Incoterm (incluidos CIF/CIP/CFR/DDP) no puede eliminar automáticamente el flete existente, ni un cambio de equipo/navegación debe borrar fletes históricos sin `RemovedExtraDetailIds` explícitos.
+- Deshabilita la resincronización automática de costos de catálogo durante la edición normal, manteniéndola en creación. `ExpectedRevisionNumber` y auditoría existente permanecen vigentes.
+- No se cambia el contrato REST ni la infraestructura realtime. DholePricingService 1.26.10 → 1.26.11, ecosistema 1.108.7, staging/develop solamente. Fases 2–5 de modificación siguen pendientes de aceptación y pruebas.
+
 ## [1.26.10] - 2026-11-21 (DH-20261121-P7-COST-BUNDLE-372 · catálogo y costos por contexto en una respuesta)
 
 - PATCH: nuevo GET /api/pricing/costs/wizard-bundle con permiso pricing.workspace; devuelve Catalog y Applicable ordenados y con CostId/relaciones completas desde un único snapshot activo.
