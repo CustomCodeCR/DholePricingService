@@ -1,3 +1,9 @@
+## [1.26.18] - 2026-11-21 · DH-20261121-WIZARD-BUNDLE-ONLY-386
+
+- PATCH coordinado con DholeWeb 1.108.19: el contrato vigente GET /api/pricing/costs/wizard-bundle sigue entregando data.catalog y data.applicable, incluyendo el Freight terrestre que corresponde al contexto solicitado.
+- Documentación del contrato autoritativo para creación y actualización explícita: solo data.applicable puede originar nuevos cargos; los RateDetails persistidos siguen siendo históricos e inmutables sin instrucción del operador.
+- REST, SignalR y datos de catálogo sin cambios incompatibles. Validación CI, compilación y staging pendientes; producción no autorizada.
+
 ## [1.26.17] - 2026-11-21 · DH-20261121-PRICING-EDIT-TIERS-LAND-385
 
 - PATCH: comprueba en pruebas la proyección real del wizard para 40HC y 28000 kg en las reglas de costos por tramos, preservando los montos de catálogo sin alterarlos.
