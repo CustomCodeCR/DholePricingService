@@ -851,74 +851,10 @@ public sealed class UpdateRateCommandHandler(
                 }
             }
 
-            // Los costos fijos dependen de naviera, agente, ruta, incoterm y modo de embarque.
-            // Primero aplicamos los cambios del payload sobre los detalles existentes y después
-            // resincronizamos. De lo contrario SynchronizeAsync elimina los detalles fijos antiguos
-            // y el bucle anterior intenta actualizar sus IDs ya eliminados, produciendo
-            // "El detalle de la tarifa no existe" al cambiar, por ejemplo, la naviera.
-            // Pantalla 7 envía el snapshot definitivo con sus precios y exclusiones.
-            // Nunca reconstruir costos fijos desde el catálogo después de aplicar
-            // un snapshot completo, incluso si cambió el agente/POE/naviera.
-            if (false) // Edits never apply catalog proposals implicitly; only Create can auto-sync.
-            {
-                await fixedCostSynchronizer.SynchronizeAsync(
-                    rate,
-                    command.UpdatedBy,
-                    cancellationToken,
-                    preserveExplicitFixedDetails: command.SourceImportFclRateId.HasValue
-                );
-
-                // During an edit, the persisted detail snapshot is authoritative while the
-                // route/provider selectors remain unchanged. Synchronization may refresh existing
-                // automatic fixed rows, but it must not resurrect a catalog cost that the user
-                // removed from Pantalla 7 (for example "Retiro Vacío (Merchant)").
-                var explicitAutomaticFixedCostIds = resolvedDetails
-                    .Where(x => x.CostId.HasValue && x.CostType == CostType.Fixed)
-                    .Select(x => x.CostId!.Value)
-                    .ToHashSet();
-
-                HashSet<Guid> disallowedAutomaticFixedCostIds;
-                if (costSelectorsChanged)
-                {
-                    disallowedAutomaticFixedCostIds = explicitlyRemovedAutomaticFixedCostIds;
-                }
-                else
-                {
-                    var allowedAutomaticFixedCostIds = automaticFixedCostIdsBeforeUpdate
-                        .Concat(explicitAutomaticFixedCostIds)
-                        .ToHashSet();
-                    allowedAutomaticFixedCostIds.ExceptWith(explicitlyRemovedAutomaticFixedCostIds);
-
-                    disallowedAutomaticFixedCostIds = rate.RateDetails
-                        .Where(IsAutomaticFixed)
-                        .Select(x => x.CostId!.Value)
-                        .Where(costId => !allowedAutomaticFixedCostIds.Contains(costId))
-                        .ToHashSet();
-                }
-
-                if (disallowedAutomaticFixedCostIds.Count > 0)
-                {
-                    var resurrectedDetailIds = rate.RateDetails
-                        .Where(detail =>
-                            IsAutomaticFixed(detail)
-                            && disallowedAutomaticFixedCostIds.Contains(detail.CostId!.Value))
-                        .Select(detail => detail.Id)
-                        .ToArray();
-
-                    foreach (var detailId in resurrectedDetailIds)
-                    {
-                        rate.RemoveRateDetail(detailId, command.UpdatedBy);
-                    }
-                }
-
-                // La resincronización reemplaza detalles fijos automáticos por nuevas instancias.
-                // No publiquemos auditorías de Added/Updated para IDs que ya no forman parte
-                // de la tarifa después de la sincronización.
-                var liveDetailIds = rate.RateDetails.Select(x => x.Id).ToHashSet();
-                addedDetails.RemoveAll(x => !liveDetailIds.Contains(x.Id));
-                modifiedDetails.RemoveAll(x => !liveDetailIds.Contains(x.Id));
-            }
-
+            // No automatic fixed-cost synchronization on an existing quote.
+            // Changing carrier, POE, Incoterm or services only proposes new costs
+            // for explicit confirmation. Existing RateDetail IDs and financial
+            // amounts are authoritative; CreateRate still performs catalog sync.
             rate.SetAmounts(command.UpdatedBy);
 
             if (rate.RequiredApproval && command.CanApproveLowMargin)
