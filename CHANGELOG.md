@@ -1,3 +1,11 @@
+## [1.26.14] - 2026-11-21 · DH-20261121-PRICING-P7-SNAPSHOT-TIERS-382
+
+- PATCH: /costs/wizard-bundle acepta weightKg, packages, containerTypeId y storageDays; resuelve los importes por tramo para Applicable sin alterar Catalog ni las RateDetails guardadas.
+- PATCH: no devuelve cero ficticio cuando un tramo no coincide; incluye cálculos por contenedor, rango de peso/bultos, por kilogramo y días extra sobre los incluidos.
+- Compatibilidad REST: parámetros opcionales, petición antigua y pricingRulesJson se mantienen.
+- Pruebas de proyección de 40HC, peso por kg, bultos, días extra, tramo no coincidente y catálogo inmutable.
+- Release coordinado DholeWeb/DholeSystem 1.108.15; DholePricingService 1.26.14; sin cambios DB/realtime.
+
 ## [1.26.13] - 2026-11-21 (DH-20261121-PRICING-P7-EDIT-380 · costos del wizard con una respuesta y edición conservadora)
 
 - PATCH: mantiene /api/pricing/costs/wizard-bundle como única respuesta con catálogo activo y cargos aplicables por ruta/Incoterm/servicios, sin eliminar REST /select.
