@@ -1,3 +1,7 @@
+## 1.26.15 — DH-20261121-PRICING-P7-EDIT-SAFETY-383
+- Wizard-bundle applicable never emits raw tiered 0/0 when cargo dimension is absent; catalog retains the original master pricing rules.
+- Unconfigured zero/zero templates are not proposed as automatic quotation charges. No changes to persisted RateDetails.
+
 ## [1.26.14] - 2026-11-21 · DH-20261121-PRICING-P7-SNAPSHOT-TIERS-382
 
 - PATCH: /costs/wizard-bundle acepta weightKg, packages, containerTypeId y storageDays; resuelve los importes por tramo para Applicable sin alterar Catalog ni las RateDetails guardadas.

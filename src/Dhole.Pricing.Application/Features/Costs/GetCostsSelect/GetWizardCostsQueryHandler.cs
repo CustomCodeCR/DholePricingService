@@ -113,10 +113,12 @@ public static class CostWizardTierProjection
         IEnumerable<CostSelectDto> source,
         decimal? weightKg, int? packages, Guid? containerTypeId, int? storageDays)
     {
-        // Older callers receive the original catalog data and PricingRulesJson.
+        // A contextual projection without cargo dimensions must not masquerade
+        // as a zero-priced tier. The raw unpriced master stays in Catalog only.
         if (!weightKg.HasValue && !packages.HasValue
             && !containerTypeId.HasValue && !storageDays.HasValue)
-            return source.ToArray();
+            return source.Where(cost => string.IsNullOrWhiteSpace(cost.PricingRulesJson)
+                && (cost.CostAmount != 0m || cost.SaleAmount != 0m)).ToArray();
         var priced = new List<CostSelectDto>();
         foreach (var cost in source)
         {
@@ -128,6 +130,9 @@ public static class CostWizardTierProjection
                 cost.CostAmount, cost.SaleAmount,
                 out var amountCost, out var amountSale,
                 storageDays is > 0 ? storageDays : null))
+                continue;
+            // Zero/zero unconfigured templates are manual choices, not line items.
+            if (amountCost == 0m && amountSale == 0m)
                 continue;
             priced.Add(cost with
             {
