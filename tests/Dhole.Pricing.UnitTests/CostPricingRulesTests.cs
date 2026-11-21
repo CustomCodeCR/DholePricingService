@@ -187,4 +187,38 @@ public sealed class CostPricingRulesTests
             [days], null, 3, null, 3).Count);
     }
 
+    [TestMethod]
+    public void WizardContext_MissingAgentOrCarrier_DoesNotLeakAnotherSupplier()
+    {
+        var requestedAgent = Guid.NewGuid();
+        var requestedCarrier = Guid.NewGuid();
+        var foreignAgent = WizardMaster(null) with {
+            AgentId = Guid.NewGuid(), CostAmount = 285m, SaleAmount = 315m,
+            ShipmentMode = "Fcl"
+        };
+        var foreignCarrier = WizardMaster(null) with {
+            CarrierId = Guid.NewGuid(), CostAmount = 200m, SaleAmount = 250m,
+            ShipmentMode = "Fcl"
+        };
+        var queryWithoutProviders = new GetCostsForSelectQuery(
+            ApplicableToContext: true, ShipmentMode: Dhole.Pricing.Domain.Rates.Enums.ShipmentMode.Fcl);
+        var queryWithProviders = queryWithoutProviders with {
+            AgentId = requestedAgent, CarrierId = requestedCarrier
+        };
+        var generic = WizardMaster(null) with { CostAmount = 60m, SaleAmount = 70m, ShipmentMode = "Fcl" };
+        // Invoke the exact internal handler predicate used by /wizard-bundle.
+        var method = typeof(GetCostsForSelectQueryHandler).GetMethod(
+            "IsApplicableToContext",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.IsNotNull(method);
+        bool Matches(CostSelectDto cost, GetCostsForSelectQuery q) =>
+            (bool)method.Invoke(null, new object?[] { cost, q, null })!;
+        Assert.IsFalse(Matches(foreignAgent, queryWithoutProviders));
+        Assert.IsFalse(Matches(foreignCarrier, queryWithoutProviders));
+        Assert.IsFalse(Matches(foreignAgent, queryWithProviders));
+        Assert.IsFalse(Matches(foreignCarrier, queryWithProviders));
+        Assert.IsTrue(Matches(generic, queryWithProviders));
+        Assert.IsTrue(Matches(foreignAgent, queryWithProviders with { AgentId = foreignAgent.AgentId }));
+    }
+
 }
