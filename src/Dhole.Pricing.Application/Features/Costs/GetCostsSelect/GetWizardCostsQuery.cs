@@ -15,5 +15,9 @@ public sealed record GetWizardCostsQuery(
     Guid? IncotermId,
     ShipmentMode? ShipmentMode,
     IReadOnlyCollection<Guid>? ServiceIds,
-    Guid? ImportRateId = null
+    Guid? ImportRateId = null,
+    decimal? WeightKg = null,
+    int? Packages = null,
+    Guid? ContainerTypeId = null,
+    int? StorageDays = null
 ) : IQuery<Result<CostWizardBundleDto>>;

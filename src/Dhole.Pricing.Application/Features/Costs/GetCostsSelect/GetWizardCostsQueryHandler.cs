@@ -4,6 +4,7 @@ using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Abstractions.Services;
 using Dhole.Pricing.Contracts.Costs.Response;
+using Dhole.Pricing.Domain.Costs.Entities;
 
 namespace Dhole.Pricing.Application.Features.Costs.GetCostsForSelect;
 
@@ -94,6 +95,47 @@ public sealed class GetWizardCostsQueryHandler(
             .ThenBy(cost => cost.Id)
             .ToArray();
 
-        return Result.Success(new CostWizardBundleDto(orderedCatalog, applicable));
+        // Catalog is the raw master snapshot; applicable charges carry effective
+        // prices for the requested cargo. Never persist calculated values here.
+        var priced = CostWizardTierProjection.ResolveApplicable(
+            applicable, request.WeightKg, request.Packages,
+            request.ContainerTypeId, request.StorageDays);
+        return Result.Success(new CostWizardBundleDto(orderedCatalog, priced));
+    }
+}
+
+
+/// <summary>Resolve wizard tier amounts without mutating the master cost catalog
+/// or any saved quotation. An unmatched tier is not a zero-priced charge.</summary>
+public static class CostWizardTierProjection
+{
+    public static IReadOnlyCollection<CostSelectDto> ResolveApplicable(
+        IEnumerable<CostSelectDto> source,
+        decimal? weightKg, int? packages, Guid? containerTypeId, int? storageDays)
+    {
+        // Older callers receive the original catalog data and PricingRulesJson.
+        if (!weightKg.HasValue && !packages.HasValue
+            && !containerTypeId.HasValue && !storageDays.HasValue)
+            return source.ToArray();
+        var priced = new List<CostSelectDto>();
+        foreach (var cost in source)
+        {
+            if (!CostPricingRules.TryResolve(
+                cost.PricingRulesJson,
+                weightKg is > 0 ? weightKg : null,
+                packages is > 0 ? packages : null,
+                containerTypeId,
+                cost.CostAmount, cost.SaleAmount,
+                out var amountCost, out var amountSale,
+                storageDays is > 0 ? storageDays : null))
+                continue;
+            priced.Add(cost with
+            {
+                CostAmount = amountCost,
+                SaleAmount = amountSale,
+                UtilityAmount = amountSale - amountCost
+            });
+        }
+        return priced;
     }
 }

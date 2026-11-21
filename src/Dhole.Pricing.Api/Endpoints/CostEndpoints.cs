@@ -172,6 +172,10 @@ public static class CostEndpoints
         ShipmentMode? shipmentMode,
         string? serviceIds,
         Guid? importRateId,
+        decimal? weightKg,
+        int? packages,
+        Guid? containerTypeId,
+        int? storageDays,
         IQueryDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -180,7 +184,8 @@ public static class CostEndpoints
         var result = await dispatcher.DispatchAsync(
             new GetWizardCostsQuery(
                 carrierId, agentId, polId, poeId, podId, incotermId,
-                shipmentMode, ParseGuidList(serviceIds), importRateId
+                shipmentMode, ParseGuidList(serviceIds), importRateId,
+                weightKg, packages, containerTypeId, storageDays
             ),
             cancellationToken
         );
