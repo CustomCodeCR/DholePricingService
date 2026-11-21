@@ -1,0 +1,20 @@
+{
+  "releaseId": "DH-20261121-PRICING-P7-EDIT-380",
+  "date": "2026-11-21",
+  "releaseType": "PATCH",
+  "component": "DholePricingService",
+  "previousVersion": "1.26.12",
+  "newVersion": "1.26.13",
+  "ecosystemVersion": "1.108.13",
+  "linkedComponents": {
+    "DholeWeb": "1.108.13"
+  },
+  "status": "candidate-production-ci-pending",
+  "validation": {
+    "build": "pending",
+    "unitTests": "pending",
+    "contractTests": "pending",
+    "staging": "pending",
+    "production": "not-authorized"
+  }
+}

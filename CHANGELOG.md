@@ -1,3 +1,9 @@
+## [1.26.13] - 2026-11-21 (DH-20261121-PRICING-P7-EDIT-380 · costos del wizard con una respuesta y edición conservadora)
+
+- PATCH: mantiene /api/pricing/costs/wizard-bundle como única respuesta con catálogo activo y cargos aplicables por ruta/Incoterm/servicios, sin eliminar REST /select.
+- Backport selectivo desde develop del endpoint, contrato y handler del catálogo unificado para DholeWeb 1.108.13.
+- No se modifican tarifas ni importes persistidos durante una consulta de costos. Integración con DholeWeb 1.108.13; pruebas de compilación, contrato, staging y CI pendientes.
+
 ## [1.26.12] - 2026-11-21 (DH-20261121-INCOTERMS-MODIFICATIONS-MASTER-378 · backport selectivo Incoterms/modificaciones a master)
 
 - Se incorporan únicamente correcciones solicitadas ya integradas en develop: UpdateRate rechaza snapshots incompletos en vez de borrar cargos silenciosamente, y elimina la resincronización automática del catálogo sobre cotizaciones existentes.
