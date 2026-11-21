@@ -29,9 +29,10 @@ public static class RateDetailUpdateInputNormalizer
     }
 
     /// <summary>
-    /// When a caller explicitly submits a complete detail snapshot, any saved row
-    /// absent from the final normalized list must be deleted. Use persisted detail
-    /// IDs rather than CostIds: two legitimate rows may reference the same cost.
+    /// Detect IDs missing from a submitted edit snapshot. Missing rows are NOT
+    /// deletions: the handler rejects them unless they are also present in the
+    /// explicit RemovedExtraDetailIds list. Identity is always RateDetail.Id,
+    /// never CostId or name, because distinct legitimate details may share these.
     /// </summary>
     public static IReadOnlyCollection<Guid> MissingPersistedDetailIds(
         IReadOnlyCollection<UpsertRateExtraDetailCommandItem> normalizedDetails,

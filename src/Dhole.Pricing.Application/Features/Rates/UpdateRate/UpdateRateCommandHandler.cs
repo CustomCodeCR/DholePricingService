@@ -313,29 +313,17 @@ public sealed class UpdateRateCommandHandler(
         }
 
         var existingDetails = rate.RateDetails.ToDictionary(x => x.Id);
-        // On a full replacement, an omitted freight line can express a customs-only
-        // quote. Never delete an explicitly priced Freight line solely because the
-        // Incoterm is CPT, CIF, DDP, or any other seller-paid transport term.
-        var explicitlyQuotesFreight = (command.ExtraDetails
-            ?? Array.Empty<UpsertRateExtraDetailCommandItem>())
-            .Any(detail => detail.CostDetailType == CostDetailType.Freight);
-        var excludesQuotedFreight = command.ReplaceExtraDetails
-            && !explicitlyQuotesFreight
-            && RateQuotedFreightPolicy.ExcludesQuotedFreight(
-                command.OperationType, command.IncotermCode, command.IncotermName);
+        // Editing an existing quote must NEVER interpret the Incoterm as an
+        // instruction to delete its already contracted Freight or other details.
+        // The catalog/responsibility rules may suggest changes for a new quote,
+        // but an existing quotation is an immutable base plus explicit user edits.
         var previousFreightDetailIds = existingDetails.Values
             .Where(detail => detail.CostDetailType == CostDetailType.Freight)
             .Select(detail => detail.Id)
             .ToHashSet();
 
-        // A historical CIF edit can still send its old Freight detail ID. First
-        // remove Freight rows from the update payload; then schedule the old
-        // persisted Freight rows for deletion. Non-freight charges stay intact.
         IReadOnlyCollection<UpsertRateExtraDetailCommandItem> requestedDetails =
             command.ExtraDetails ?? Array.Empty<UpsertRateExtraDetailCommandItem>();
-        if (excludesQuotedFreight)
-            requestedDetails = RateDetailUpdateInputNormalizer.WithoutQuotedFreight(
-                requestedDetails, previousFreightDetailIds);
 
         // El wizard puede reusar el mismo Id persistido para dos cargos de catálogos
         // distintos (por ejemplo dos HBL). Cada detalle persistido se actualiza una
@@ -348,7 +336,7 @@ public sealed class UpdateRateCommandHandler(
         // A full LCL snapshot missing its existing freight is incomplete, not a
         // request to delete it. Fail before mutating rate details or revision.
         if (command.ReplaceExtraDetails && command.ShipmentMode == ShipmentMode.Lcl
-            && !excludesQuotedFreight && previousFreightDetailIds.Count > 0
+            && previousFreightDetailIds.Count > 0
             && !extraDetails.Any(detail => detail.CostDetailType == CostDetailType.Freight))
             return Result.Failure(PricingErrors.RateUpdateValidationFailed(
                 "El flete internacional de la cotización no está en el guardado. Recargue la tarifa y conserve o actualice el flete antes de guardar."));
@@ -358,33 +346,9 @@ public sealed class UpdateRateCommandHandler(
             .Distinct()
             .ToHashSet();
 
-        // Only remove historical freight when the selected Incoterm assigns
-        // carriage to the other party for this quote's import/export perspective.
-        // Explicit freight rows always win; unrelated charges are preserved.
-        if (excludesQuotedFreight)
-            removedIds.UnionWith(previousFreightDetailIds);
-
-        // An FCL update sends the complete freight distribution for its current
-        // equipment. Older equipment freight must never survive a replacement
-        // just because the route, carrier and other costs stayed unchanged.
-        // This is intentionally limited to Freight: other persisted charges
-        // still follow the explicit removal/synchronization rules.
-        if (!excludesQuotedFreight && command.ShipmentMode == ShipmentMode.Fcl
-            && extraDetails.Any(detail => detail.CostDetailType == CostDetailType.Freight))
-        {
-            var retainedFreightIds = extraDetails
-                .Where(detail => detail.CostDetailType == CostDetailType.Freight
-                    && detail.Id.HasValue)
-                .Select(detail => detail.Id!.Value)
-                .ToHashSet();
-
-            foreach (var staleFreight in existingDetails.Values.Where(detail =>
-                detail.CostDetailType == CostDetailType.Freight
-                && !retainedFreightIds.Contains(detail.Id)))
-            {
-                removedIds.Add(staleFreight.Id);
-            }
-        }
+        // Freight/equipment and carrier/merchant choices are retained until an
+        // explicit detail ID is submitted in RemovedExtraDetailIds. Omitted
+        // details in an edit snapshot are never a delete operation.
 
         // An incomplete own-LCL wizard edit must not silently erase an already
         // billed Insurance or Manejos detail. Explicit user removal remains valid.
@@ -400,13 +364,22 @@ public sealed class UpdateRateCommandHandler(
                     "El guardado no incluye Seguro de carga o Manejos previamente registrados. Recargue la cotización y compruebe ambos cargos antes de guardar."));
         }
 
-        // A complete edit snapshot is authoritative. Older clients can continue
-        // sending partial updates (ReplaceExtraDetails=false), while the wizard
-        // deletes saved rows absent from its FINAL normalized payload. This also
-        // removes invisible duplicates left behind by catalog/name rehydration.
+        // Fail closed on an incomplete full snapshot. Legacy clients may send
+        // ReplaceExtraDetails=true but a missing row is not proof of user intent.
+        // Explicit IDs in RemovedExtraDetailIds are the ONLY permitted deletions.
+        // This guard runs before applying ANY financial mutations or rate revision.
         if (command.ReplaceExtraDetails)
-            removedIds.UnionWith(RateDetailUpdateInputNormalizer.MissingPersistedDetailIds(
-                extraDetails, existingDetails.Keys));
+        {
+            var unexpectedMissingIds = RateDetailUpdateInputNormalizer
+                .MissingPersistedDetailIds(extraDetails, existingDetails.Keys)
+                .Where(id => !removedIds.Contains(id))
+                .ToArray();
+            if (unexpectedMissingIds.Length > 0)
+                return Result.Failure(PricingErrors.RateUpdateValidationFailed(
+                    $"El guardado no contiene {unexpectedMissingIds.Length} cargo(s) persistido(s). " +
+                    "Recargue la cotización, verifique las líneas de Pantalla 7 " +
+                    "y elimine únicamente cargos seleccionados expresamente."));
+        }
 
         // Pantalla 7 is authoritative for persisted rate details during an edit.
         // Keep the original fixed-cost snapshot so the synchronizer can distinguish between
@@ -886,7 +859,7 @@ public sealed class UpdateRateCommandHandler(
             // Pantalla 7 envía el snapshot definitivo con sus precios y exclusiones.
             // Nunca reconstruir costos fijos desde el catálogo después de aplicar
             // un snapshot completo, incluso si cambió el agente/POE/naviera.
-            if (!command.ReplaceExtraDetails && (costSelectorsChanged || command.ShipmentMode is ShipmentMode.Lcl or ShipmentMode.Ltl))
+            if (false) // Edits never apply catalog proposals implicitly; only Create can auto-sync.
             {
                 await fixedCostSynchronizer.SynchronizeAsync(
                     rate,
