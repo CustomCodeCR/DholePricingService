@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.26.12",
-  "ecosystemVersion": "1.108.10",
-  "releaseId": "DH-20261121-INCOTERM-AUTO-COST-377",
+  "version": "1.26.13",
+  "ecosystemVersion": "1.108.13",
+  "releaseId": "DH-20261121-PRICING-P7-EDIT-380",
   "releaseStatus": "candidate-ci-staging-pending",
-  "businessReleaseId": "DH-20261121-INCOTERM-AUTO-COST-377"
+  "businessReleaseId": "DH-20261121-PRICING-P7-EDIT-380"
 }
