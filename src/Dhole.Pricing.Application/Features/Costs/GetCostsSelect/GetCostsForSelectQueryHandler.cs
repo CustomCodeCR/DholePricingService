@@ -193,7 +193,10 @@ public sealed class GetCostsForSelectQueryHandler(
         if (!contextPartyId.HasValue)
         {
             var hasRestriction = selectedPartyIds is { Count: > 0 } || legacyPartyId.HasValue;
-            return !requireConfiguredContext || !hasRestriction;
+            // The absence of a selected agent/carrier is NOT a wildcard.
+            // Otherwise WWL/Ningbo fixed charges leak into MSC/Shanghai quotes.
+            // This applies to Fixed and Variable just as to Optional charges.
+            return !hasRestriction;
         }
 
         if (selectedPartyIds is { Count: > 0 })
