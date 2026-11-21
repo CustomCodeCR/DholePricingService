@@ -301,6 +301,8 @@ public sealed class CreateRateCommandHandler(
                 : officialExchangeRate.Source;
 
         var resolvedDetails = new List<ResolvedRateExtraDetail>();
+        // A source import rate does not authorize an extra line by itself.
+        // Only an explicitly included Pantalla 7 Freight detail may be priced.
         var importedFreightOverride = command.SourceImportFclRateId.HasValue
             ? command.Details.FirstOrDefault(x => x.CostDetailType == CostDetailType.Freight)
             : null;
@@ -535,7 +537,12 @@ public sealed class CreateRateCommandHandler(
                 cargoProfile.ChargeableVolumeCbm
             );
 
-            if (importedRate is not null)
+            // FOB export or another counterparty-paid context may link an
+            // imported source without actually contracting ocean freight.
+            // Never manufacture an excluded Freight line after Web omitted it.
+            if (importedRate is not null
+                && ImportedFreightExplicitSelectionPolicy.ShouldInclude(
+                    command.SourceImportFclRateId, importedFreightOverride))
             {
                 AddImportedFreight(rate, importedRate, importedFreightOverride, command.CreatedBy);
             }

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261121-INCOTERM-AUTO-COST-377",
+  "component": "DholePricingService",
+  "from": "1.26.11",
+  "to": "1.26.12",
+  "globalVersion": "1.108.10",
+  "target": "develop",
+  "productionAuthorized": false,
+  "change": "CreateRate ignores linked imported ocean Freight unless Freight detail explicitly included in quote",
+  "tests": [
+    "ImportedFreightExplicitSelection377Tests"
+  ],
+  "ci": "pending",
+  "staging": "pending"
+}
