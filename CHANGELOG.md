@@ -1,3 +1,8 @@
+## [1.26.16] - 2026-11-21 · DH-20261121-PRICING-P7-RESTORE-384
+
+- PATCH: ningún cargo Fixed/Variable/Optional de agente o naviera configurados puede aplicar si la consulta contextual carece de proveedor seleccionado; evita cargos WWL en rutas MSC.
+- PATCH: prueba de filtrado de proveedor del mismo predicado usado por wizard-bundle; APIs REST y datos persistidos conservados.
+
 ## [1.26.15] - 2026-11-21 · DH-20261121-PRICING-P7-EDIT-SAFETY-383
 - Wizard-bundle applicable never emits raw tiered 0/0 when cargo dimension is absent; catalog retains the original master pricing rules.
 - Unconfigured zero/zero templates are not proposed as automatic quotation charges. No changes to persisted RateDetails.
