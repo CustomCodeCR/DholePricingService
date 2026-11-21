@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.26.18",
-  "ecosystemVersion": "1.108.20",
-  "releaseId": "DH-20261121-QUO-EDIT-DELTA-387",
+  "version": "1.26.19",
+  "ecosystemVersion": "1.109.2",
+  "releaseId": "DH-20261121-WIZARD-COSTS-390",
   "releaseStatus": "candidate-master-ci-pending",
-  "businessReleaseId": "DH-20261121-QUO-EDIT-DELTA-387"
+  "businessReleaseId": "DH-20261121-WIZARD-COSTS-390"
 }

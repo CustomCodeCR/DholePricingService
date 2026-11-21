@@ -118,7 +118,8 @@ public static class CostWizardTierProjection
         if (!weightKg.HasValue && !packages.HasValue
             && !containerTypeId.HasValue && !storageDays.HasValue)
             return source.Where(cost => string.IsNullOrWhiteSpace(cost.PricingRulesJson)
-                && (cost.CostAmount != 0m || cost.SaleAmount != 0m)).ToArray();
+                && (cost.CostAmount != 0m || cost.SaleAmount != 0m
+                    || string.Equals(cost.CostType, "Variable", StringComparison.OrdinalIgnoreCase))).ToArray();
         var priced = new List<CostSelectDto>();
         foreach (var cost in source)
         {
@@ -131,8 +132,12 @@ public static class CostWizardTierProjection
                 out var amountCost, out var amountSale,
                 storageDays is > 0 ? storageDays : null))
                 continue;
-            // Zero/zero unconfigured templates are manual choices, not line items.
-            if (amountCost == 0m && amountSale == 0m)
+            // A zero-value variable is an editable offer; a matching zero-value tier
+            // is valid (e.g., Panama LTL gastos up to 500 kg). Do not collapse
+            // an absent WeightKg band to zero or import unpriced Fixed charges.
+            if (amountCost == 0m && amountSale == 0m
+                && string.IsNullOrWhiteSpace(cost.PricingRulesJson)
+                && !string.Equals(cost.CostType, "Variable", StringComparison.OrdinalIgnoreCase))
                 continue;
             priced.Add(cost with
             {

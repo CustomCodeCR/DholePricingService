@@ -258,4 +258,50 @@ public sealed class CostPricingRulesTests
             [cost], null, null, null, null).Count);
     }
 
+    [TestMethod]
+    public void WizardBundle_ZeroVariablePickupAndDeliveryAreEditableCatalogCharges()
+    {
+        var pickup = WizardMaster(null) with
+        {
+            Name = "Recolecta", CostType = "Variable", CostDetailType = "OriginCharge"
+        };
+        var delivery = WizardMaster(null) with
+        {
+            Name = "Entrega", CostType = "Variable", CostDetailType = "DestinationCharge"
+        };
+        var blankFixed = WizardMaster(null);
+        var available = CostWizardTierProjection.ResolveApplicable(
+            [pickup, delivery, blankFixed], null, null, null, null).ToArray();
+
+        Assert.AreEqual(2, available.Length);
+        CollectionAssert.AreEquivalent(
+            new[] { pickup.Id, delivery.Id }, available.Select(item => item.Id).ToArray());
+        Assert.IsTrue(available.All(item => item.CostAmount == 0m && item.SaleAmount == 0m));
+    }
+
+    [TestMethod]
+    public void WizardBundle_ZeroPricedPanamaExpensesBandIsStillAnApplicableCharge()
+    {
+        var expenses = WizardMaster(CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
+        {
+            new CostPricingRule("WeightKg", 1m, 500m, null, 0m, 0m),
+            new CostPricingRule("WeightKg", 501m, null, null, 165m, 165m)
+        }))) with { Name = "Gastos Panama a Costa Rica", CostType = "Optional" };
+
+        var first = CostWizardTierProjection.ResolveApplicable(
+            [expenses], 100m, null, null, null).Single();
+        Assert.AreEqual(0m, first.CostAmount);
+        Assert.AreEqual(0m, first.SaleAmount);
+        Assert.AreEqual(expenses.Id, first.Id);
+
+        var second = CostWizardTierProjection.ResolveApplicable(
+            [expenses], 600m, null, null, null).Single();
+        Assert.AreEqual(165m, second.CostAmount);
+        Assert.AreEqual(165m, second.SaleAmount);
+
+        // A missing weight is not a zero tier; keep that row catalog-only.
+        Assert.AreEqual(0, CostWizardTierProjection.ResolveApplicable(
+            [expenses], null, null, null, null).Count);
+    }
+
 }

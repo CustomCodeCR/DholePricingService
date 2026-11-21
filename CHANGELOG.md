@@ -1,3 +1,10 @@
+## [1.26.19] - 2026-11-21 · DH-20261121-WIZARD-COSTS-390 (candidato master)
+
+- PATCH: /api/pricing/costs/wizard-bundle conserva plantillas Variable 0/0 editables (Recolecta, Entrega) sin precios inventados.
+- PATCH: un tramo explícitamente coincidente cuyo costo/venta es 0/0 sigue siendo aplicable (Gastos Panamá en el rango 1-500 kg); un tramo ausente nunca se convierte en cero.
+- Tests unitarios cubren tramos cero, importes por peso, exclusión de Fixed/Optional sin tarifa y catálogo inmutable. Contrato REST y SignalR sin cambios incompatibles.
+- Release conjunto DholeWeb 1.109.2, DholeSystem 1.109.2; CI, staging y promoción a master pendientes; producción sin autorización de despliegue.
+
 ## [1.26.18] - 2026-11-21 · DH-20261121-QUO-EDIT-DELTA-387 (release coordinado)
 
 - Alineación del manifiesto de PricingService 1.26.18 con DholeWeb y DholeSystem 1.108.20 para el release conjunto DH-386 + DH-387.
