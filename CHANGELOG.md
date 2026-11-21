@@ -1,3 +1,9 @@
+## [1.26.18] - 2026-11-21 · DH-20261121-QUO-EDIT-DELTA-387 (release coordinado)
+
+- Alineación del manifiesto de PricingService 1.26.18 con DholeWeb y DholeSystem 1.108.20 para el release conjunto DH-386 + DH-387.
+- GET /api/pricing/costs/wizard-bundle continúa siendo la fuente única de costos aplicables a nuevas líneas; catalog solo proporciona referencias; no altera RateDetails de cotizaciones existentes.
+- Sin cambios adicionales de API ni de base de datos con respecto al candidato DH-386; todas las correcciones se integran mediante ramas intermedias.
+
 ## [1.26.18] - 2026-11-21 · DH-20261121-WIZARD-BUNDLE-ONLY-386
 
 - PATCH coordinado con DholeWeb 1.108.19: el contrato vigente GET /api/pricing/costs/wizard-bundle sigue entregando data.catalog y data.applicable, incluyendo el Freight terrestre que corresponde al contexto solicitado.
