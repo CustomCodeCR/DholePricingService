@@ -149,12 +149,22 @@ public sealed class RateExtraDetailResolver(
             // An operator-priced EXW origin pickup has an explicit marker in
             // its quoted notes. Preserve its negotiated amount on INSERT too;
             // ordinary fixed catalog costs still use the master amount.
-            var costAmount = ExwPickupPricePolicy.ResolveFixedCostAmount(
-                input.CostAmount,
-                cost.CostAmount,
-                input.Id.HasValue,
-                selectedCurrencyDiffers,
-                input.Notes);
+            // The catalog's base amount is commonly zero for a tiered master.
+            // When Screen 7 has already resolved a WeightKg/Packages/ContainerType/
+            // extra-days band, its quoted snapshot is authoritative on CREATE too.
+            // This also prevents destroying a tiered charge when modifying a quote.
+            var hasConditionalPricing = !string.IsNullOrWhiteSpace(cost.PricingRulesJson);
+            var costAmount = hasConditionalPricing
+                ? input.CostAmount
+                : ExwPickupPricePolicy.ResolveFixedCostAmount(
+                    input.CostAmount,
+                    cost.CostAmount,
+                    input.Id.HasValue,
+                    selectedCurrencyDiffers,
+                    input.Notes);
+            var chargeBasis = hasConditionalPricing
+                ? input.ChargeBasis ?? cost.ChargeBasis
+                : cost.ChargeBasis;
 
             // Un costo puede pertenecer a un agente y aun así ser un OriginCharge vendible.
             // Solo los AgentCharge son costos internos del agente y conservan venta en cero.
@@ -177,7 +187,7 @@ public sealed class RateExtraDetailResolver(
                     Normalize(input.Notes) ?? cost.Notes,
                     cost.IsAccountant,
                     input.Quantity,
-                    cost.ChargeBasis,
+                    chargeBasis,
                     input.ApplyDestinationTax,
                     input.DestinationTaxRate,
                     Normalize(input.BillToClient)

@@ -1,3 +1,10 @@
+## [1.26.20] - 2026-11-21 · DH-20261121-PRICING-TRANCHE-MIAMI-PANAMA-393 (candidato develop)
+
+- PATCH: al crear o modificar una QUO, los cargos Fixed con PricingRulesJson conservan los importes negociados y su base de cobro resuelta por tramos (peso, bultos, contenedor o días); no se sustituyen por el monto base cero del catálogo.
+- PATCH: Miami LCL resuelve el plan comercial A/B/C/D/NVOCC-A/NVOCC-B/LITTLE sobre CFT físico y equivalente total por peso, mínimo comercial, SED, FAK y seguro; respeta el cotizador_miami.html, incluyendo D a USD 2,92/CFT y mínimo USD 292.
+- Compatibilidad de endpoints REST y SignalR; cotizaciones previas no se reprecian automáticamente. CI y staging pendientes. Sin despliegue productivo autorizado.
+- Release coordinado con DholeWeb 1.110.1; versión global Dhole 1.110.1.
+
 ## [1.26.19] - 2026-11-21 · DH-20261121-WIZARD-COSTS-390 (candidato develop)
 
 - PATCH: /api/pricing/costs/wizard-bundle conserva plantillas Variable 0/0 editables (Recolecta, Entrega) sin precios inventados.

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261121-PRICING-TRANCHE-MIAMI-PANAMA-393",
+  "date": "2026-11-21",
+  "ecosystem": "Dhole",
+  "type": "PATCH",
+  "globalVersion": "1.110.1",
+  "components": [
+    {
+      "component": "DholeWeb",
+      "previous": "1.110.0",
+      "next": "1.110.1"
+    },
+    {
+      "component": "DholePricingService",
+      "previous": "1.26.19",
+      "next": "1.26.20"
+    }
+  ],
+  "relatedComponentsUnchanged": [
+    "DholeApiGateway",
+    "DholeSystem",
+    "DholeAuthService",
+    "DholeConfigService",
+    "DholeAuditLogsService",
+    "DholeNotificationsService",
+    "DholeStorageService",
+    "DholeCRMService",
+    "DholeSRMService",
+    "DholeDataExtractionService",
+    "DholeAIService"
+  ],
+  "changes": [
+    "Persist fixed cost tier snapshots on create and modification",
+    "Calculate Miami own LCL commercial CFT plans from cotizador_miami.html",
+    "Reconcile Panama-Costa Rica own LTL freight, bunker, expenses and custody-marchamo",
+    "Restore multimodal FCL international land freight independently from ocean freight"
+  ],
+  "verification": {
+    "unitTests": "pending",
+    "webBuild": "pending",
+    "dotnetBuild": "pending",
+    "staging": "pending",
+    "developIntegration": "pending",
+    "masterIntegration": "pending"
+  },
+  "productionAuthorized": false,
+  "stagingVerified": false,
+  "rollback": "Revert coordinated release branches/PRs prior to deployment; persisted historical quote details unchanged."
+}

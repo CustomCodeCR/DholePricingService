@@ -280,8 +280,13 @@ public static class OwnLclConsolidationEndpoints
             return Results.BadRequest(new { code = "Pricing.OwnLclDestinationInvalid", message = "El destino debe ser CR, PA, NI, HN, GT o SV." });
 
         var incoterm = NormalizeCode(request.Incoterm);
-        if (incoterm is not ("FOB" or "FCA" or "EXW"))
-            return Results.BadRequest(new { code = "Pricing.OwnLclIncotermInvalid", message = "El Incoterm debe ser FOB, FCA o EXW." });
+        var isMiami = consolidation.Id == MiamiSystemConsolidationId;
+        if (isMiami
+            ? incoterm is not ("EXW" or "FCA" or "FOB" or "CFR" or "CIF" or "DAP" or "DDP")
+            : incoterm is not ("FOB" or "FCA" or "EXW"))
+            return Results.BadRequest(new { code = "Pricing.OwnLclIncotermInvalid", message = isMiami
+                ? "El Incoterm Miami debe ser EXW, FCA, FOB, CFR, CIF, DAP o DDP."
+                : "El Incoterm debe ser FOB, FCA o EXW." });
 
         var cargo = request.CargoLines.Select(CalculateCargoLine).ToArray();
         var chargeableCbm = cargo.Sum(x => x.ChargeableCbm);
@@ -313,6 +318,21 @@ public static class OwnLclConsolidationEndpoints
             commercialPol = OwnLclOriginScope.Normalize(request.PolCode) ?? originPort;
             originSurcharge = 0m;
         }
+        // Miami uses commercial CFT plans and TOTAL weight/volume, not the China
+        // per-CBM matrix. Resolve it before adding generic destination/origin lines.
+        if (isMiami)
+        {
+            if (!MiamiOwnLclPricing.TryCalculate(
+                    consolidation, request, cargo, commercialPol, destination, incoterm,
+                    out var miamiQuote, out var miamiError))
+                return Results.BadRequest(new {
+                    code = "Pricing.MiamiCommercialPricingInvalid",
+                    message = miamiError
+                });
+
+            return Results.Ok(miamiQuote);
+        }
+
         var oceanCostWithOrigin = baseOceanCost + originSurcharge;
         var destinationCostPerCbm = consolidation.CarrierDestinationCostTotal / maximumCbm;
         var consolidationPricingLines = await LoadConsolidationPricingLinesAsync(id, destinationCostPerCbm, db, ct);
@@ -769,7 +789,7 @@ public static class OwnLclConsolidationEndpoints
                     '{"finalRatePointName":"San José, Costa Rica","finalRatePointCode":"CRSJO"}'::jsonb,
                     0, 50, 0,
                     0, 0, 50,
-                    5.69, 'MIA-SYSTEM-v1', 'Open', TRUE,
+                    5.69, 'MIA-SYSTEM-v2', 'Open', TRUE,
                     now(), now()
                 FROM next_number
                 WHERE NOT EXISTS (
@@ -799,7 +819,7 @@ public static class OwnLclConsolidationEndpoints
                     pod_code='CRSJO',
                     destination_charge_snapshot_json='{"finalRatePointName":"San José, Costa Rica","finalRatePointCode":"CRSJO"}'::jsonb,
                     maximum_cbm=CASE WHEN maximum_cbm <= 0 THEN 50 ELSE maximum_cbm END,
-                    matrix_version='MIA-SYSTEM-v1',
+                    matrix_version='MIA-SYSTEM-v2',
                     status='Open',
                     is_active=TRUE,
                     updated_at_utc=now()
