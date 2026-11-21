@@ -1,3 +1,10 @@
+## [1.26.12] - 2026-11-21 (DH-20261121-INCOTERMS-MODIFICATIONS-MASTER-378 · backport selectivo Incoterms/modificaciones a master)
+
+- Se incorporan únicamente correcciones solicitadas ya integradas en develop: UpdateRate rechaza snapshots incompletos en vez de borrar cargos silenciosamente, y elimina la resincronización automática del catálogo sobre cotizaciones existentes.
+- Modificar Incoterm, equipo o transportista jamás autoriza eliminar fletes o cargos históricos por inferencia; solo RemovedExtraDetailIds explícitos permiten eliminaciones. Conserva ExpectedRevisionNumber, historial y precios.
+- CreateRate solo adjunta flete desde SourceImportFclRateId cuando la pantalla 7 envía un detalle Freight seleccionado.
+- Master 1.26.9 → 1.26.12 (misma versión de release validada en develop); global 1.107.5 → 1.108.10; sin merge masivo de develop. CI, pruebas de cotizaciones y autorización de producción independientes obligatorias.
+
 ## [1.26.9] - 2026-11-20 (DH-20261120-PRICING-EXPIRED-MASTER-361 · expiración requiere aprobación solo para vendedores)
 
 - PATCH: promoción selectiva del ajuste 354 validado en develop/staging. Pricing con pricing.rate.update y roles Superadmin editan tarifa vencida sin solicitud a jefatura; vendedores conservan autorización de Roy/José Pablo.
