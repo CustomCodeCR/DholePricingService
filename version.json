@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.26.17",
-  "ecosystemVersion": "1.108.18",
-  "releaseId": "DH-20261121-PRICING-EDIT-TIERS-LAND-385",
+  "version": "1.26.18",
+  "ecosystemVersion": "1.108.19",
+  "releaseId": "DH-20261121-WIZARD-BUNDLE-ONLY-386",
   "releaseStatus": "candidate-develop-ci-pending",
-  "businessReleaseId": "DH-20261121-PRICING-EDIT-TIERS-LAND-385"
+  "businessReleaseId": "DH-20261121-WIZARD-BUNDLE-ONLY-386"
 }
