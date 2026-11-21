@@ -39,6 +39,12 @@ public static class CostEndpoints
             .MapGet("/select", GetCostsForSelectAsync)
             .RequireScope(PricingConstants.Scopes.WorkspaceAccess);
 
+        // One HTTP response contains the active catalog plus the route-specific costs.
+        // The backend hydrates relations once and applies the same strict matcher as /select.
+        group
+            .MapGet("/wizard-bundle", GetWizardCostsAsync)
+            .RequireScope(PricingConstants.Scopes.WorkspaceAccess);
+
         group
             .MapGet("/export.xlsx", ExportActiveCostsAsync)
             .RequireScope(PricingConstants.Scopes.CostView);
@@ -156,6 +162,31 @@ public static class CostEndpoints
             cancellationToken
         );
 
+        return EndpointResults.FromResult(result, httpContext);
+    }
+
+    private static async Task<IResult> GetWizardCostsAsync(
+        Guid? carrierId,
+        Guid? agentId,
+        Guid? polId,
+        Guid? poeId,
+        Guid? podId,
+        Guid? incotermId,
+        ShipmentMode? shipmentMode,
+        string? serviceIds,
+        Guid? importRateId,
+        IQueryDispatcher dispatcher,
+        HttpContext httpContext,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await dispatcher.DispatchAsync(
+            new GetWizardCostsQuery(
+                carrierId, agentId, polId, poeId, podId, incotermId,
+                shipmentMode, ParseGuidList(serviceIds), importRateId
+            ),
+            cancellationToken
+        );
         return EndpointResults.FromResult(result, httpContext);
     }
 

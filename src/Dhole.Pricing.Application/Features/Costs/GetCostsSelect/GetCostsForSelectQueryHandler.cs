@@ -122,7 +122,7 @@ public sealed class GetCostsForSelectQueryHandler(
         return Result.Success(items);
     }
 
-    private static bool IsApplicableToContext(
+    internal static bool IsApplicableToContext(
         CostSelectDto cost,
         GetCostsForSelectQuery query,
         CostRoutePortSelectionSet? selection
@@ -259,7 +259,7 @@ public sealed class GetCostsForSelectQueryHandler(
         };
     }
 
-    private static int CostSpecificity(CostSelectDto cost)
+    internal static int CostSpecificity(CostSelectDto cost)
     {
         var score = 0;
         if (ConfiguredShipmentModes(cost).Count > 0) score += 2;
@@ -276,7 +276,7 @@ public sealed class GetCostsForSelectQueryHandler(
         return score;
     }
 
-    private static async Task<IReadOnlyCollection<CostSelectDto>> HydrateRelationListsAsync(
+    internal static async Task<IReadOnlyCollection<CostSelectDto>> HydrateRelationListsAsync(
         IReadOnlyCollection<CostSelectDto> items,
         IReadOnlyDictionary<Guid, CostRoutePortSelectionSet> selections,
         IPricingConfigCatalogClient configCatalog,
