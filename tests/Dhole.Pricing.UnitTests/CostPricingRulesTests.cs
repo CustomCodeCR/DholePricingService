@@ -221,4 +221,41 @@ public sealed class CostPricingRulesTests
         Assert.IsTrue(Matches(foreignAgent, queryWithProviders with { AgentId = foreignAgent.AgentId }));
     }
 
+    [TestMethod]
+    public void WizardBundle_RealQuote40HcAnd28000Kg_ResolveTierPricesWithoutMutatingMaster()
+    {
+        var highCube40 = Guid.Parse("c1300000-0000-4000-8000-000000000003");
+        var agencyCost = WizardMaster(CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
+        {
+            new CostPricingRule("ContainerType", null, null,
+                Guid.Parse("c1300000-0000-4000-8000-000000000001"), 275m, 275m),
+            new CostPricingRule("ContainerType", null, null, highCube40, 350m, 350m)
+        })));
+        var landCost = WizardMaster(CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
+        {
+            new CostPricingRule("WeightKg", 1m, 500m, null, 180m, 180m),
+            new CostPricingRule("WeightKg", 501m, 3000m, null, 0.20m, 0.20m, "PerKg"),
+            new CostPricingRule("WeightKg", 3001m, null, null, 0.18m, 0.18m, "PerKg")
+        })));
+
+        var priced = CostWizardTierProjection.ResolveApplicable(
+            [agencyCost, landCost], 28000m, null, highCube40, null).ToArray();
+        Assert.AreEqual(2, priced.Length);
+        Assert.AreEqual(350m, priced.Single(x => x.Id == agencyCost.Id).CostAmount);
+        Assert.AreEqual(5040m, priced.Single(x => x.Id == landCost.Id).CostAmount);
+        Assert.AreEqual(0m, agencyCost.CostAmount, "Do not change master 0/0 tier template.");
+        Assert.AreEqual(0m, landCost.SaleAmount, "Do not mutate master sales prices.");
+    }
+
+    [TestMethod]
+    public void WizardBundle_AbsentTierInputs_NeverReturnsZeroTemplates()
+    {
+        var cost = WizardMaster(CostPricingRules.Normalize(JsonSerializer.Serialize(new[]
+        {
+            new CostPricingRule("WeightKg", 1m, null, null, 0.18m, 0.18m, "PerKg")
+        })));
+        Assert.AreEqual(0, CostWizardTierProjection.ResolveApplicable(
+            [cost], null, null, null, null).Count);
+    }
+
 }
