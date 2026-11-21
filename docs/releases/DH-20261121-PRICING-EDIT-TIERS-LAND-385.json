@@ -1,0 +1,20 @@
+{
+  "releaseId": "DH-20261121-PRICING-EDIT-TIERS-LAND-385",
+  "type": "PATCH",
+  "date": "2026-11-21",
+  "ecosystemVersion": "1.108.18",
+  "branch": "fix/DH-20261121-PRICING-EDIT-TIERS-LAND-385-develop",
+  "changes": [
+    "Do not silently reinsert removed quote charges",
+    "Resolve contextual cost tiers from cargo dimensions",
+    "Preserve terrestrial freight in multimodal operations"
+  ],
+  "validation": {
+    "ci": "pending",
+    "staging": "pending",
+    "production": "not-authorized"
+  },
+  "component": "DholePricingService",
+  "versionFrom": "1.26.16",
+  "versionTo": "1.26.17"
+}
