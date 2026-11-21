@@ -1,3 +1,9 @@
+## [1.26.17] - 2026-11-21 · DH-20261121-PRICING-EDIT-TIERS-LAND-385
+
+- PATCH: comprueba en pruebas la proyección real del wizard para 40HC y 28000 kg en las reglas de costos por tramos, preservando los montos de catálogo sin alterarlos.
+- PATCH: mantiene /api/pricing/costs/wizard-bundle, SignalR, contratos y snapshot RateDetails sin modificaciones incompatibles. El frontend debe proporcionar las dimensiones del contexto.
+- Release coordinado DholeWeb/DholeSystem 1.108.18. Validación CI, staging y smoke pendiente; producción no autorizada.
+
 ## [1.26.16] - 2026-11-21 · DH-20261121-PRICING-P7-RESTORE-384
 
 - PATCH: ningún cargo Fixed/Variable/Optional de agente o naviera configurados puede aplicar si la consulta contextual carece de proveedor seleccionado; evita cargos WWL en rutas MSC.
