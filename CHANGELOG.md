@@ -1,3 +1,9 @@
+## [1.26.20] - 2026-11-21 · DH-20261121-PRICING-TRANCHE-MIAMI-PANAMA-393 (candidato master)
+
+- PATCH: preservar costo y venta seleccionados en tramos de peso, bultos, contenedores y días al crear o modificar QUO. No restablecer el costo a cero por un catálogo Fixed con valor base cero.
+- PATCH: el cálculo LCL Miami a Costa Rica usa tarifas comerciales CFT A/B/C/D/NVOCC/LITTLE, mínimos, SED, seguro y controles de elegibilidad; las cotizaciones históricas mantienen sus snapshots.
+- Release de promoción aislada DH-393 junto a DholeWeb 1.110.1 y DholeSystem 1.110.1; se omite merge global de develop por divergencia histórica. Validación de staging y gates antes de master.
+
 ## [1.26.19] - 2026-11-21 · DH-20261121-WIZARD-COSTS-390 (candidato master)
 
 - PATCH: /api/pricing/costs/wizard-bundle conserva plantillas Variable 0/0 editables (Recolecta, Entrega) sin precios inventados.
