@@ -1,3 +1,8 @@
+## [1.26.15] - 2026-11-21 · DH-20261121-PRICING-P7-EDIT-SAFETY-383
+
+- PATCH: wizard-bundle Applicable sin contexto excluye tramos no calculables y plantillas 0/0, sin mutar Catalog ni RateDetails.
+- PATCH: compatibilidad con APIs y cálculos por peso, bultos, contenedor y días extras.
+
 ## [1.26.14] - 2026-11-21 · DH-20261121-PRICING-P7-SNAPSHOT-TIERS-382
 
 - PATCH: /costs/wizard-bundle acepta weightKg, packages, containerTypeId y storageDays; resuelve los importes por tramo para Applicable sin alterar Catalog ni las RateDetails guardadas.
