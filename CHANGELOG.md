@@ -1,3 +1,7 @@
+## [1.26.22] - 2026-11-21 · DH-20261121-PRICING-FINAL-POLISH-395 (candidate master)
+
+- PATCH coordinado de metadatos de versión API, sin cambios de contrato REST ni repricing de tarifas históricas. Dhole global 1.110.3; Web resuelve Miami VGM, FCL Freight vs Bunker, y LTL transitDays.
+
 ## [1.26.21] - 2026-11-21 · DH-20261121-PRICING-LAST-THREE-FIXES-394 (candidate master)
 
 - PATCH: LTL CFZ/Colón Panamá → Costa Rica devuelve Flete terrestre, Bunker, Gastos y Custodia + Marchamo en wizard-bundle, aunque POL comercial y POE del maestro sean catálogos distintos. Conserva filtros reales de agente, servicios, Incoterm, modalidad y ruta.
