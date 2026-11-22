@@ -1,3 +1,8 @@
+## [1.26.23] - 2026-11-21 · DH-20261121-PRICING-MISSING-LINES-396 (candidate develop)
+
+- PATCH de metadatos para release global 1.110.4. Sin cambios de contrato REST ni recálculos de tarifas históricas: la recuperación VGM Miami y Freight terrestre FCL se realiza en la serialización del wizard Web.
+- Entrega coordinada System/Web 1.110.4; validaciones de build, changelog, manifiesto y staging obligatorias.
+
 ## [1.26.22] - 2026-11-21 · DH-20261121-PRICING-FINAL-POLISH-395 (candidate develop)
 
 - PATCH coordinado: alinear metadata y versión de Pricing API con Web 1.110.3 y System 1.110.3, sin modificar contratos REST, cálculos del backend ni datos guardados.
