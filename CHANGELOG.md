@@ -1,3 +1,9 @@
+## [1.26.21] - 2026-11-21 · DH-20261121-PRICING-LAST-THREE-FIXES-394 (candidate develop)
+
+- PATCH: El endpoint wizard-bundle reconoce los cargos de transporte terrestre LTL Panamá → Costa Rica cuando el POL comercial es Colón Free Zone y el POE comercial está en Costa Rica; relaciona el POE físico por nombre exacto de catálogo y conserva agente, servicios, Incoterm y POD.
+- Incluye Flete terrestre, Bunker, Gastos y Custodia + Marchamo, con reglas WeightKg y tramos de costo/venta cero válidos; sin reconfigurar ni modificar costos maestros.
+- DholeWeb 1.110.2 y DholeSystem 1.110.2; build, tests, staging pendientes; sin promoción hasta comprobación.
+
 ## [1.26.20] - 2026-11-21 · DH-20261121-PRICING-TRANCHE-MIAMI-PANAMA-393 (candidato develop)
 
 - PATCH: al crear o modificar una QUO, los cargos Fixed con PricingRulesJson conservan los importes negociados y su base de cobro resuelta por tramos (peso, bultos, contenedor o días); no se sustituyen por el monto base cero del catálogo.
