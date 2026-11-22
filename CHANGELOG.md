@@ -1,4 +1,9 @@
-## [1.26.22] - 2026-11-21 · DH-20261121-PRICING-FINAL-POLISH-395 (candidate master)
+## [1.26.23] - 2026-11-21 · DH-20261121-PRICING-MISSING-LINES-396 (candidate master)
+
+- PATCH de metadatos para release global 1.110.4. Sin cambios de contrato REST ni recálculos de tarifas históricas: la recuperación VGM Miami y Freight terrestre FCL se realiza en la serialización del wizard Web.
+- Entrega coordinada System/Web 1.110.4; validaciones de build, changelog, manifiesto y staging obligatorias.
+
+\n## [1.26.22] - 2026-11-21 · DH-20261121-PRICING-FINAL-POLISH-395 (candidate master)
 
 - PATCH coordinado de metadatos de versión API, sin cambios de contrato REST ni repricing de tarifas históricas. Dhole global 1.110.3; Web resuelve Miami VGM, FCL Freight vs Bunker, y LTL transitDays.
 
