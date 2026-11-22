@@ -1,3 +1,8 @@
+## [1.26.22] - 2026-11-21 · DH-20261121-PRICING-FINAL-POLISH-395 (candidate develop)
+
+- PATCH coordinado: alinear metadata y versión de Pricing API con Web 1.110.3 y System 1.110.3, sin modificar contratos REST, cálculos del backend ni datos guardados.
+- Web conserva VGM Miami, separa Bunker/Freight FCL Panamá y permite editar el tránsito LTL. CI y staging deben aprobar antes de promover.
+
 ## [1.26.21] - 2026-11-21 · DH-20261121-PRICING-LAST-THREE-FIXES-394 (candidate develop)
 
 - PATCH: El endpoint wizard-bundle reconoce los cargos de transporte terrestre LTL Panamá → Costa Rica cuando el POL comercial es Colón Free Zone y el POE comercial está en Costa Rica; relaciona el POE físico por nombre exacto de catálogo y conserva agente, servicios, Incoterm y POD.
