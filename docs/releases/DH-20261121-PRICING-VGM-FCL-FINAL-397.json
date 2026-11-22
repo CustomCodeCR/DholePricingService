@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261121-PRICING-VGM-FCL-FINAL-397",
+  "date": "2026-11-21",
+  "type": "PATCH",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.110.5",
+  "components": [
+    {
+      "component": "DholeSystem",
+      "repository": "CustomCodeCR/DholeSystem",
+      "previous": "1.110.4",
+      "version": "1.110.5"
+    },
+    {
+      "component": "DholeWeb",
+      "repository": "CustomCodeCR/DholeWeb",
+      "previous": "1.110.4",
+      "version": "1.110.5"
+    },
+    {
+      "component": "DholePricingService",
+      "repository": "CustomCodeCR/DholePricingService",
+      "previous": "1.26.23",
+      "version": "1.26.24"
+    }
+  ],
+  "unchangedComponentVersions": "See centralized DholeSystem release-manifest.json",
+  "fixes": [
+    "Reconcile Miami VGM after automatic Incoterm exclusions and before POST",
+    "Reconcile FCL Panama land freight independently of Bunker after Incoterm exclusions and before POST"
+  ],
+  "previousRelease": "DH-20261121-PRICING-MISSING-LINES-396",
+  "branches": {
+    "developCandidate": "fix/DH-396b-incoterm-guard",
+    "masterCandidate": "release/dh-396-master"
+  },
+  "productionDeploymentAuthorized": false,
+  "verification": {
+    "build": "pending",
+    "tests": "pending",
+    "staging": "pending",
+    "develop": "pending",
+    "master": "pending"
+  }
+}

@@ -1,3 +1,7 @@
+## [1.26.24] - 2026-11-21 · DH-20261121-PRICING-VGM-FCL-FINAL-397 (candidate develop)
+
+- PATCH coordinado de metadata de versión con System/Web 1.110.5. La validación final del wizard salva VGM Miami y Freight terrestre FCL después de reglas de Incoterm; sin cambios REST ni de precios históricos.
+
 ## [1.26.23] - 2026-11-21 · DH-20261121-PRICING-MISSING-LINES-396 (candidate develop)
 
 - PATCH de metadatos para release global 1.110.4. Sin cambios de contrato REST ni recálculos de tarifas históricas: la recuperación VGM Miami y Freight terrestre FCL se realiza en la serialización del wizard Web.
