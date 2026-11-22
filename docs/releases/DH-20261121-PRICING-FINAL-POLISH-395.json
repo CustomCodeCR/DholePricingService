@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261121-PRICING-FINAL-POLISH-395",
+  "date": "2026-11-21",
+  "type": "PATCH",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.110.3",
+  "components": [
+    {
+      "component": "DholeSystem",
+      "repository": "CustomCodeCR/DholeSystem",
+      "previous": "1.110.2",
+      "version": "1.110.3"
+    },
+    {
+      "component": "DholeWeb",
+      "repository": "CustomCodeCR/DholeWeb",
+      "previous": "1.110.2",
+      "version": "1.110.3"
+    },
+    {
+      "component": "DholePricingService",
+      "repository": "CustomCodeCR/DholePricingService",
+      "previous": "1.26.21",
+      "version": "1.26.22"
+    }
+  ],
+  "unchangedComponentVersions": "Refer to centralized DholeSystem release-manifest.json",
+  "fixes": [
+    "Own LCL Miami: VGM plan charge survives matrix restoration",
+    "FCL Multimodal Balboa Panama to San Jose: Bunker does not shadow road Freight, USD 2140 fallback when needed",
+    "LTL: editable transitDays in cargo and P7 with persisted transitTime"
+  ],
+  "branches": {
+    "developCandidate": "fix/DH-395-vgm-fcl-land-ltl-transit",
+    "masterCandidate": "release/dh-395-master"
+  },
+  "productionDeploymentAuthorized": false,
+  "verification": {
+    "build": "pending",
+    "tests": "pending",
+    "staging": "pending",
+    "develop": "pending",
+    "master": "pending"
+  }
+}
