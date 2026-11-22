@@ -469,7 +469,8 @@ public static class RateRequestEndpoints
 
     private static async Task<IResult> ReturnToSellerAsync(
         Guid id, ReturnRateRequestRequest request, ServiceDbContext db,
-        HttpContext context, IIntegrationEventOutboxWriter outbox, CancellationToken ct)
+        HttpContext context, IIntegrationEventOutboxWriter outbox,
+        IConfiguration configuration, CancellationToken ct)
     {
         var actor = context.GetCurrentUserId();
         if (!actor.HasValue || actor.Value == Guid.Empty) return Results.Unauthorized();
@@ -514,13 +515,8 @@ public static class RateRequestEndpoints
             action = "edit-returned-rate-request",
             route = $"/pricing/request-rate/{entity.Id}/edit",
         };
-        // Include the immutable request ID so the seller can identify exactly which
-        // request needs correction, even when multiple requests share a client.
-        var requestReference = entity.Id.ToString("D");
-        var subject = $"Solicitud de tarifa {requestReference} devuelta por Pricing · {entity.ClientName ?? "Cliente"}";
-        var body = $"La solicitud de tarifa {requestReference} para {entity.ClientName ?? "su cliente"} fue devuelta por Pricing.\n"
-            + $"Motivo: {reason}\n"
-            + "Corrija la información y reenvíe la misma solicitud desde Ventas.";
+        var returnEmail = RateRequestReturnEmail.Compose(
+            entity, reason, configuration["Pricing:SellerPortalBaseUrl"]);
         foreach (var channel in new[] { "System", "Email" })
         {
             var message = new
@@ -530,8 +526,8 @@ public static class RateRequestEndpoints
                 channel,
                 entityType = "RateRequest",
                 entityId = entity.Id.ToString(),
-                subject,
-                body,
+                subject = returnEmail.Subject,
+                body = channel == "Email" ? returnEmail.HtmlBody : returnEmail.SystemBody,
                 payload = notificationPayload,
                 maxAttempts = 3,
                 recipients = new[]
