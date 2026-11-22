@@ -1,3 +1,9 @@
+## [1.26.25] - 2026-11-22 · DH-20261122-PRICING-RETURN-407
+
+- PATCH: los correos automáticos de devolución identifican explícitamente la solicitud original mediante su ID persistente y detallan el motivo de Pricing y la acción de corregir/reenviar.
+- Cobertura del historial completo de devoluciones y reenvío con el mismo ID, conservando actor y fecha. Continúa el contrato REST existente, estado Returned/Open, notificaciones System/Email y Redis Outbox/Inbox.
+- Versión global 1.115.1, coordinada con DholeWeb 1.115.1 y DholeSystem 1.115.1. CI, staging y validaciones obligatorios antes de master.
+
 ## [1.26.24] - 2026-11-21 · DH-20261121-PRICING-VGM-FCL-FINAL-397 (candidate master)
 
 - PATCH coordinado de metadata de versión con System/Web 1.110.5. La validación final del wizard salva VGM Miami y Freight terrestre FCL después de reglas de Incoterm; sin cambios REST ni de precios históricos.
