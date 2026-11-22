@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261121-PRICING-LAST-THREE-FIXES-394",
+  "date": "2026-11-21",
+  "type": "PATCH",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.110.2",
+  "components": [
+    {
+      "component": "DholeSystem",
+      "repository": "CustomCodeCR/DholeSystem",
+      "previous": "1.110.1",
+      "version": "1.110.2"
+    },
+    {
+      "component": "DholeWeb",
+      "repository": "CustomCodeCR/DholeWeb",
+      "previous": "1.110.1",
+      "version": "1.110.2"
+    },
+    {
+      "component": "DholePricingService",
+      "repository": "CustomCodeCR/DholePricingService",
+      "previous": "1.26.20",
+      "version": "1.26.21"
+    }
+  ],
+  "unchangedComponentVersions": "See centralized DholeSystem release-manifest.json",
+  "fixes": [
+    "LTL CFZ Panama to Costa Rica: four tiered cost rows and commercial/physical port mapping",
+    "FCL multimodal: second maritime-independent terrestrial freight row",
+    "Miami own LCL: complete commercial plan charges, no duplicate or historical repricing"
+  ],
+  "branches": {
+    "developCandidate": "fix/DH-394-pricing-final-three-cases",
+    "masterCandidate": "release/dh-394-master"
+  },
+  "productionDeploymentAuthorized": false,
+  "verification": {
+    "build": "pending",
+    "tests": "pending",
+    "staging": "pending",
+    "develop": "pending",
+    "master": "pending"
+  }
+}
