@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "DH-20261121-PRICING-MISSING-LINES-396",
+  "date": "2026-11-21",
+  "type": "PATCH",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.110.4",
+  "components": [
+    {
+      "component": "DholeSystem",
+      "repository": "CustomCodeCR/DholeSystem",
+      "previousVersion": "1.110.3",
+      "version": "1.110.4"
+    },
+    {
+      "component": "DholeWeb",
+      "repository": "CustomCodeCR/DholeWeb",
+      "previousVersion": "1.110.3",
+      "version": "1.110.4"
+    },
+    {
+      "component": "DholePricingService",
+      "repository": "CustomCodeCR/DholePricingService",
+      "previousVersion": "1.26.22",
+      "version": "1.26.23"
+    }
+  ],
+  "unchangedComponentVersions": "See centralized DholeSystem release-manifest.json",
+  "fixes": [
+    "Miami own-LCL VGM commercial plan sale recovered from zero/hidden matrix row in P7 rebuild and pre-save",
+    "Multimodal FCL independent Panama/GAM land freight recovered on P7 rebuild and pre-save, distinct from Bunker and ocean Freight"
+  ],
+  "branches": {
+    "developCandidate": "fix/DH-396-pricing-real-line-persistence",
+    "masterCandidate": "release/dh-396-master"
+  },
+  "productionDeploymentAuthorized": false,
+  "verification": {
+    "build": "pending",
+    "tests": "pending",
+    "staging": "pending",
+    "develop": "pending",
+    "master": "pending"
+  }
+}
