@@ -59,4 +59,44 @@ public sealed class RateRequestHistorySerializationTests
         Assert.AreEqual("Caldera", payload.GetProperty("modification")
             .GetProperty("changes")[0].GetProperty("requested").GetString());
     }
+    [TestMethod]
+    public void ReturnedRequest_ReusesIdentityAndPreservesEveryReviewInAuditHistory()
+    {
+        var sellerId = Guid.NewGuid();
+        var pricingActorId = Guid.NewGuid();
+        var request = RateRequest.Create(
+            RateRequestPriority.Green,
+            sellerUserId: sellerId,
+            sellerName: "Ventas",
+            sellerEmail: "ventas@example.com",
+            clientName: "Cliente",
+            executiveName: "Ejecutivo",
+            shipmentMode: "Lcl",
+            originName: "Shanghai",
+            destinationName: "San José",
+            payloadJson: "{\"form\":{\"cargo\":\"inicial\"}}");
+        var originalId = request.Id;
+
+        request.ReturnToSeller("Falta detallar el tipo de carga.", pricingActorId, "Pricing Uno", DateTime.UtcNow);
+        Assert.AreEqual(RateRequestStatus.Returned, request.Status);
+
+        request.UpdateSubmission(
+            RateRequestPriority.Green, "Cliente", "Ejecutivo", "Lcl",
+            "Shanghai", "San José", "{\"form\":{\"cargo\":\"corregida\"}}");
+        Assert.AreEqual(originalId, request.Id, "A resubmission must never create a new request.");
+        Assert.AreEqual(RateRequestStatus.Open, request.Status);
+
+        request.ReturnToSeller("La documentación aún está incompleta.", pricingActorId, "Pricing Dos", DateTime.UtcNow);
+        using var historyDocument = JsonDocument.Parse(request.PayloadJson);
+        var root = historyDocument.RootElement;
+        var history = root.GetProperty("pricingReturnHistory");
+        Assert.AreEqual(2, history.GetArrayLength());
+        Assert.AreEqual("Falta detallar el tipo de carga.", history[0].GetProperty("reason").GetString());
+        Assert.AreEqual("La documentación aún está incompleta.", history[1].GetProperty("reason").GetString());
+        Assert.AreEqual("Pricing Uno", history[0].GetProperty("returnedByName").GetString());
+        Assert.AreEqual("Pricing Dos", history[1].GetProperty("returnedByName").GetString());
+        Assert.AreEqual(pricingActorId.ToString(), history[0].GetProperty("returnedByUserId").GetString());
+        Assert.IsTrue(history[1].TryGetProperty("returnedAtUtc", out _));
+    }
+
 }

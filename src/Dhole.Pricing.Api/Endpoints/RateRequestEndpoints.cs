@@ -514,9 +514,13 @@ public static class RateRequestEndpoints
             action = "edit-returned-rate-request",
             route = $"/pricing/request-rate/{entity.Id}/edit",
         };
-        var subject = $"Solicitud de tarifa devuelta para corrección · {entity.ClientName ?? "Cliente"}";
-        var body = $"Pricing devolvió su solicitud de tarifa para {entity.ClientName ?? "su cliente"}. "
-            + $"Motivo: {reason} Revise la información, corrija y vuelva a enviar la solicitud.";
+        // Include the immutable request ID so the seller can identify exactly which
+        // request needs correction, even when multiple requests share a client.
+        var requestReference = entity.Id.ToString("D");
+        var subject = $"Solicitud de tarifa {requestReference} devuelta por Pricing · {entity.ClientName ?? "Cliente"}";
+        var body = $"La solicitud de tarifa {requestReference} para {entity.ClientName ?? "su cliente"} fue devuelta por Pricing.\n"
+            + $"Motivo: {reason}\n"
+            + "Corrija la información y reenvíe la misma solicitud desde Ventas.";
         foreach (var channel in new[] { "System", "Email" })
         {
             var message = new
