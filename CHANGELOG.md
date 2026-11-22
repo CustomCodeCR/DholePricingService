@@ -1,3 +1,10 @@
+## [1.26.26] - 2026-11-22 · DH-20261122-PRICING-RETURN-EMAIL-409
+
+- PATCH: correo de devolución de tarifa estructurado en HTML compatible con Outlook; asunto y cuerpo sin UUID visible, con cliente, ruta, modalidad y motivo destacados. CTA a «Corregir y reenviar solicitud» con UUID solo dentro de la URL técnica. Motivo, cliente y ejecutivo codificados contra HTML injection.
+- Notificación interna continúa en texto legible con el motivo, sin UUID visible. URLs de portal configuradas por ambiente: staging/production. Si URL no es HTTPS válido, se muestran instrucciones sin enlace.
+- Contratos REST, SignalR, Redis Outbox/Inbox, persistencia, bitácora y reenvíos sin nuevas solicitudes permanecen compatibles. Tests de estructura, no filtración visible de UUID, encoding y fallback de enlaces.
+- Release global 1.116.1, Pricing 1.26.25 → 1.26.26, coordinado con DholeSystem/DholeWeb 1.115.1 → 1.116.1 en master. Validaciones CI y staging antes de producción.
+
 ## [1.26.25] - 2026-11-22 · DH-20261122-PRICING-RETURN-407
 
 - PATCH: los correos automáticos de devolución identifican explícitamente la solicitud original mediante su ID persistente y detallan el motivo de Pricing y la acción de corregir/reenviar.
