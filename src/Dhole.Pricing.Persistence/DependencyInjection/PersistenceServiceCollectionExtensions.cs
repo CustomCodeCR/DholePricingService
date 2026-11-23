@@ -37,6 +37,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<IImportedRateChangeNotificationService, ImportedRateChangeNotificationService>();
 
         services.AddScoped<IIntegrationEventOutboxWriter, IntegrationEventOutboxWriter>();
+        services.AddScoped<IAcceptedQuoteEventWriter, AcceptedQuoteEventWriter>();
         services.AddScoped<IPricingAuditService, PricingAuditService>();
 
         return services;

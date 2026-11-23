@@ -52,6 +52,8 @@ public sealed class ServiceDbContext(
 
     public DbSet<RateHeader> RateHeaders => Set<RateHeader>();
 
+    public DbSet<PricingOperationsServiceReview> OperationsServiceReviews => Set<PricingOperationsServiceReview>();
+
     public DbSet<RateDetail> RateDetails => Set<RateDetail>();
 
     public DbSet<RateContainerAllocation> RateContainerAllocations => Set<RateContainerAllocation>();
@@ -202,6 +204,17 @@ public sealed class ServiceDbContext(
         modelBuilder.HasDefaultSchema("pricing");
 
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<PricingOperationsServiceReview>(entity =>
+        {
+            entity.ToTable("operations_service_reviews");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ServiceCode).HasMaxLength(80);
+            entity.Property(x => x.ServiceName).HasMaxLength(255);
+            entity.Property(x => x.Status).HasMaxLength(35);
+            entity.HasIndex(x => new { x.Status, x.RequestedAtUtc });
+            entity.HasIndex(x => new { x.QuoteId, x.RequestedAtUtc });
+        });
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ServiceDbContext).Assembly);
 

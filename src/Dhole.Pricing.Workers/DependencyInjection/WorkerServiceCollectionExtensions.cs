@@ -99,6 +99,7 @@ public static class WorkerServiceCollectionExtensions
         services.AddRateHeaderCacheStreamHandlers();
         services.AddCustomCodeRedisStreamHandler<PricingImportFromExtractionRequestedStreamHandler>();
         services.AddCustomCodeRedisStreamHandler<AgentOceanFreightRatesExtractedStreamHandler>();
+        services.AddCustomCodeRedisStreamHandler<OperationsPricingReviewRequestedStreamHandler>();
         return services;
     }
 

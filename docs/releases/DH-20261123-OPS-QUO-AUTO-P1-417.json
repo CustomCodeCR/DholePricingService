@@ -1,0 +1,23 @@
+{
+  "releaseId": "DH-20261123-OPS-QUO-AUTO-P1-417",
+  "ecosystemVersion": "1.121.0",
+  "component": "DholePricingService",
+  "componentVersion": "1.27.0",
+  "sourceBranch": "feature/DH-20261123-OPS-QUO-AUTO-P1-417",
+  "targetBranch": "develop",
+  "productionAuthorized": false,
+  "stagingValidation": "pending",
+  "features": [
+    "Aceptación comercial seleccionada A/B publica Outbox",
+    "Inbox Operations idempotente crea un solo IDTRA",
+    "Snapshot comercial histórico y líneas cotizadas",
+    "Borradores PostgreSQL incompletos sin consumir IDTRA"
+  ],
+  "dependencies": [
+    "DholePricingService",
+    "DholeOperationsService",
+    "DholeWeb",
+    "DholeSystem"
+  ],
+  "tests": "GitHub Actions CI pending"
+}
