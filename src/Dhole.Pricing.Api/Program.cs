@@ -121,6 +121,7 @@ app.MapImportRateInactivationEndpoints();
 app.MapImportRateReviewQueueEndpoints();
 app.MapCabysEndpoints();
 app.MapRateEndpoints();
+app.MapOperationsServiceReviewEndpoints();
 app.MapRateIdtraEndpoints();
 app.MapDynamicsQuoteDiagnosticsEndpoints();
 app.MapCommercialRateReportEndpoints();
