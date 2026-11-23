@@ -1,3 +1,9 @@
+## [1.27.0] - 2026-11-23 · DH-20261123-OPS-P1-COMPLETE-431
+
+- MINOR: aceptar por primera vez una QUO prepara en la misma transacción de Pricing un evento Outbox versionado con la alternativa A/B seleccionada, costos, servicios, equipos, ruta y condiciones comerciales sin alterar el original.
+- Stream dedicado dhole.operations.openings.v1, con identidad de negocio por grupo QUO; aceptación repetida no genera un segundo evento.
+- Staging e integración end-to-end pendientes de aprobación de CI; producción no autorizada.
+
 ## [1.26.26] - 2026-11-22 · DH-20261122-PRICING-RETURN-EMAIL-409
 
 - PATCH: correo de devolución de tarifa estructurado en HTML compatible con Outlook; asunto y cuerpo sin UUID visible, con cliente, ruta, modalidad y motivo destacados. CTA a «Corregir y reenviar solicitud» con UUID solo dentro de la URL técnica. Motivo, cliente y ejecutivo codificados contra HTML injection.

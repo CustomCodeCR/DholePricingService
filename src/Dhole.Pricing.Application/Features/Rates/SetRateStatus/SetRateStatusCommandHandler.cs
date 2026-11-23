@@ -3,6 +3,7 @@ using CustomCodeFramework.Cqrs.Commands;
 using CustomCodeFramework.Persistence.Abstractions;
 using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Abstractions.Cache;
+using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -16,6 +17,7 @@ public sealed class SetRateStatusCommandHandler(
     IPricingAuditService audit,
     IRateHeaderCacheService cache,
     IUnitOfWork unitOfWork,
+    IIntegrationEventOutboxWriter outbox,
     ILogger<SetRateStatusCommandHandler> logger
 ) : ICommandHandler<SetRateStatusCommand, Result>
 {
@@ -77,6 +79,7 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateClosureReasonIsRequired);
         }
 
+        var previouslyAccepted = rate.Status == RateStatus.AcceptedByClient;
         var before = PricingAuditSnapshots.From(rate);
 
         try
@@ -127,6 +130,21 @@ public sealed class SetRateStatusCommandHandler(
             ),
             cancellationToken
         );
+
+        // Persist acceptance and durable Outbox in the SAME Pricing unit of work.
+        // Status retries never generate a second opening intent.
+        if (command.Status == RateStatus.AcceptedByClient && !previouslyAccepted)
+        {
+            var opening = AcceptedQuoteApertureEvent.Capture(
+                rate, command.UpdatedBy, command.AcceptanceObservations);
+            var number = string.IsNullOrWhiteSpace(rate.QuoNumber) ? rate.RateCode : rate.QuoNumber;
+            await outbox.WriteAsync(
+                AcceptedQuoteApertureEvent.EventName,
+                AcceptedQuoteApertureEvent.EventName,
+                opening,
+                $"operations-opening:{AcceptedQuoteApertureEvent.GroupNumber(number)}",
+                cancellationToken);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
