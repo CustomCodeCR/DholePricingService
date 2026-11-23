@@ -185,6 +185,7 @@ public sealed class SetRateStatusCommandHandler(
                         description = x.Name,
                         supplierName = rate.AgentName ?? rate.CarrierName,
                         x.CurrencyCode,
+                        x.CurrencyName,
                         costAmount = snapshot.For(x).CostSubtotal,
                         saleAmount = snapshot.For(x).SaleSubtotal,
                         x.Quantity,
