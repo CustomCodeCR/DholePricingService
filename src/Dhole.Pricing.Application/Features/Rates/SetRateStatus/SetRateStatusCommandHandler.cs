@@ -3,6 +3,8 @@ using CustomCodeFramework.Cqrs.Commands;
 using CustomCodeFramework.Persistence.Abstractions;
 using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Abstractions.Cache;
+using Dhole.Pricing.Application.Abstractions.Messaging;
+using Dhole.Pricing.Application.Features.Rates;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -16,6 +18,7 @@ public sealed class SetRateStatusCommandHandler(
     IPricingAuditService audit,
     IRateHeaderCacheService cache,
     IUnitOfWork unitOfWork,
+    IAcceptedQuoteEventWriter acceptedQuoteEvents,
     ILogger<SetRateStatusCommandHandler> logger
 ) : ICommandHandler<SetRateStatusCommand, Result>
 {
@@ -77,6 +80,7 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateClosureReasonIsRequired);
         }
 
+        var wasStatus = rate.Status;
         var before = PricingAuditSnapshots.From(rate);
 
         try
@@ -127,6 +131,14 @@ public sealed class SetRateStatusCommandHandler(
             ),
             cancellationToken
         );
+
+        // One SaveChanges writes the commercial acceptance and its durable event.
+        // Repeated Accepted->Accepted calls never create another event.
+        if (wasStatus != RateStatus.AcceptedByClient &&
+            rate.Status == RateStatus.AcceptedByClient)
+            await acceptedQuoteEvents.QueueAsync(rate, wasStatus,
+                RateRevisionSnapshotFactory.Capture(rate).Json,
+                command.UpdatedBy, command.AcceptanceObservations, cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
