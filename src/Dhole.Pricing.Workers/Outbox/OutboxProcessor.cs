@@ -116,6 +116,9 @@ internal sealed class OutboxProcessor(
 
     private string ResolveStreamName(string eventName)
     {
+        // Cross-service quote acceptance uses an isolated durable consumer group.
+        if (eventName == "pricing.quote.accepted.for-opening.v1")
+            return "dhole.operations.openings.v1";
         // Isolate F6 invalidations from Pricing's existing commerce/cache streams.
         // The owner REST endpoint remains authoritative on every delivery.
         if (eventName is "pricing.rate.created.v1" or "pricing.rate.updated.v1"
