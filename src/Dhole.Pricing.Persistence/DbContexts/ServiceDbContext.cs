@@ -51,6 +51,7 @@ public sealed class ServiceDbContext(
         Set<PricingImportFromExtractionJob>();
 
     public DbSet<RateHeader> RateHeaders => Set<RateHeader>();
+    public DbSet<PricingOperationsServiceReview> OperationsServiceReviews => Set<PricingOperationsServiceReview>();
 
     public DbSet<RateDetail> RateDetails => Set<RateDetail>();
 
@@ -204,6 +205,19 @@ public sealed class ServiceDbContext(
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ServiceDbContext).Assembly);
+
+        modelBuilder.Entity<PricingOperationsServiceReview>(entity =>
+        {
+            entity.ToTable("operations_service_reviews");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Status, x.RequestedAtUtc });
+            entity.Property(x => x.Idtra).HasMaxLength(100);
+            entity.Property(x => x.ServiceCode).HasMaxLength(80);
+            entity.Property(x => x.ServiceName).HasMaxLength(300);
+            entity.Property(x => x.Reason).HasMaxLength(2000);
+            entity.Property(x => x.Status).HasMaxLength(16);
+            entity.Property(x => x.ResolutionNotes).HasMaxLength(2000);
+        });
 
         modelBuilder.Entity<DynamicsQuoteSyncJob>(entity =>
         {
