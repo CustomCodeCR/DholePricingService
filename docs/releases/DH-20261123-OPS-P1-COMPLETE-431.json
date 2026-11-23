@@ -1,0 +1,30 @@
+{
+  "releaseId": "DH-20261123-OPS-P1-COMPLETE-431",
+  "ecosystem": "Dhole",
+  "component": "DholePricingService",
+  "version": "1.27.0",
+  "ecosystemVersion": "1.120.10",
+  "branch": "feature/DH-20261123-OPS-P1-COMPLETE-431",
+  "targets": [
+    "develop",
+    "staging"
+  ],
+  "productionAuthorized": false,
+  "validation": "pending",
+  "scope": "Priority 1 apertures, accepted QUO→IDTRA durable Outbox/Inbox and server draft persistence",
+  "components": {
+    "DholePricingService": "1.27.0",
+    "DholeOperationsService": "0.19.0",
+    "DholeWeb": "1.120.10",
+    "DholeSystem": "1.120.10"
+  },
+  "notImplementedYet": [
+    "Unquoted service alerts",
+    "Pricing commercial-review workflow"
+  ],
+  "requires": [
+    "CI",
+    "staging replay tests",
+    "A/B acceptance E2E"
+  ]
+}
