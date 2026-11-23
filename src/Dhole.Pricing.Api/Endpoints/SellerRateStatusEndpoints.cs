@@ -369,7 +369,8 @@ public static class SellerRateStatusEndpoints
                     status == RateStatus.AcceptedByClient ? request.IdtraNumber : null,
                     currentUserId,
                     AllowDirectClientDecision: isOpenDecision,
-                    AcceptanceObservations: acceptanceObservations
+                    AcceptanceObservations: acceptanceObservations,
+                    ExecutiveUserId: currentUserId
                 ),
                 cancellationToken
             );
