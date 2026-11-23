@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261123-EMAIL-TEMPLATES-432",
+  "releaseType": "MINOR",
+  "ecosystemVersion": "1.121.0",
+  "createdAt": "2026-11-23",
+  "sourceBranch": "feat/openings-email-agent-carrier-20261123",
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "component": "DholePricingService",
+      "previous": "1.26.26",
+      "next": "1.27.0"
+    },
+    {
+      "repository": "CustomCodeCR/DholeNotificationsService",
+      "component": "DholeNotificationsService",
+      "previous": "1.8.0",
+      "next": "1.9.0"
+    }
+  ],
+  "changes": [
+    "Common branded email layout in DholeNotificationsService",
+    "Accepted quotation opening email includes agent and shipping line from accepted rate snapshot"
+  ],
+  "validation": {
+    "ci": "pending",
+    "staging": "pending",
+    "production": "not-authorized"
+  },
+  "productionDeploymentAuthorized": false
+}
