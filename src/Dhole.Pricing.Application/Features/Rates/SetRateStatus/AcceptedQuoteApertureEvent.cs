@@ -43,9 +43,8 @@ public static class AcceptedQuoteApertureEvent
             executiveName = rate.ExecutiveName,
             modalityCode = rate.ShipmentMode switch
             {
-                ShipmentMode.Ftl or ShipmentMode.Ltl => "TERRESTRE",
-                ShipmentMode.Air or ShipmentMode.AirConsol => "AEREO",
-                _ => "MARITIMO"
+                ShipmentMode.Air or ShipmentMode.AirConsol => "AIR",
+                _ => rate.ShipmentMode.ToString().ToUpperInvariant()
             },
             shipmentMode = rate.ShipmentMode.ToString().ToUpperInvariant(),
             operationType = rate.OperationType.ToString().ToUpperInvariant(),
