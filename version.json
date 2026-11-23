@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.26.26",
-  "ecosystemVersion": "1.116.1",
-  "releaseId": "DH-20261122-PRICING-RETURN-EMAIL-409",
+  "version": "1.27.0",
+  "ecosystemVersion": "1.121.0",
+  "releaseId": "DH-20261123-OPS-AUTO-419",
   "releaseStatus": "candidate-develop-ci-pending",
-  "businessReleaseId": "DH-20261122-PRICING-RETURN-EMAIL-409"
+  "businessReleaseId": "DH-20261123-OPS-AUTO-419"
 }
