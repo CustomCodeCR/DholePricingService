@@ -1,5 +1,9 @@
 ## [1.27.0] - 2026-11-23
 
+- Aceptación comercial QUO con snapshot histórico y evento transaccional Pricing → Operations mediante Redis Streams Outbox.
+
+## [1.27.0] - 2026-11-23
+
 - Publicación transaccional Outbox del evento de aceptación comercial de la QUO seleccionada con instantánea histórica y trazabilidad.
 
 ## [1.26.26] - 2026-11-22 · DH-20261122-PRICING-RETURN-EMAIL-409
