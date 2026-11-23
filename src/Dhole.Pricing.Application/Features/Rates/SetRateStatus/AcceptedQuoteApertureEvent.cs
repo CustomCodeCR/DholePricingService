@@ -34,6 +34,7 @@ public static class AcceptedQuoteApertureEvent
             quoteId = rate.Id,
             quoteOptionId = isAlternative ? rate.Id : (Guid?)null,
             quoteNumber = number,
+            existingIdtraNumber = rate.IdtraNumber,
             groupQuoteNumber = groupNumber,
             revisionNumber = rate.RevisionNumber,
             acceptedAtUtc = rate.AcceptedAtUtc,
