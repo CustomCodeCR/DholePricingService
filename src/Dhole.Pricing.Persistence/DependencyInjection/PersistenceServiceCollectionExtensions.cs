@@ -32,6 +32,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<IAutoPricingConfigurationRepository, AutoPricingConfigurationRepository>();
         services.AddScoped<IRateHeaderRepository, RateHeaderRepository>();
         services.AddScoped<IAcceptedQuoteExecutiveReader, AcceptedQuoteExecutiveReader>();
+        services.AddScoped<IAcceptedQuoteCostProviderReader, AcceptedQuoteCostProviderReader>();
         services.AddScoped<IRateCommentStore, RateCommentStore>();
         services.AddScoped<IRateRevisionRepository, RateRevisionRepository>();
         services.AddScoped<IRateCodeGenerator, RateCodeGenerator>();
