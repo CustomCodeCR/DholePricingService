@@ -119,6 +119,7 @@ app.MapPanamaContinuationRateEndpoints();
 app.MapManualOceanFreightEndpoints();
 app.MapImportRateInactivationEndpoints();
 app.MapImportRateReviewQueueEndpoints();
+app.MapOperationsServiceReviewEndpoints();
 app.MapCabysEndpoints();
 app.MapRateEndpoints();
 app.MapRateIdtraEndpoints();
