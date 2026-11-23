@@ -152,6 +152,7 @@ public sealed class SetRateStatusCommandHandler(
                     clientLeadId = rate.ClientLeadId,
                     clientName = rate.ClientName,
                     executiveName = rate.ExecutiveName,
+                    executiveUserId = command.ExecutiveUserId,
                     modalityCode = rate.ShipmentMode.ToString().ToUpperInvariant(),
                     operationType = rate.OperationType.ToString(),
                     incoterm = rate.IncotermCode,
