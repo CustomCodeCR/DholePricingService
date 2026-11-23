@@ -28,6 +28,7 @@ public static class WorkerServiceCollectionExtensions
 
         services.AddPricingMessaging(configuration);
         services.AddPricingStreamHandlers();
+        services.AddHostedService<OperationsServiceReviewConsumer>();
         services
             .AddHealthChecks()
             .AddCheck<ExtractionImportJobsHealthCheck>(
