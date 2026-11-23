@@ -72,6 +72,26 @@ public sealed class AcceptedRateOpeningsNotificationService(
             .ToArray();
     }
 
+    /// <summary>
+    /// Use the agent and carrier persisted on the accepted quotation, never
+    /// the latest request or an unselected A/B alternative.
+    /// </summary>
+    public static (string Agent, string ShippingLine) ResolveOpeningPartners(
+        string? agentName, string? lclGroupAgentName, string? carrierName, string? transportType)
+    {
+        static string? Valid(string? value)
+            => string.IsNullOrWhiteSpace(value) || value.Trim() == "—" ? null : value.Trim();
+
+        var agent = Valid(agentName) ?? Valid(lclGroupAgentName) ?? "Pendiente de confirmar";
+        var maritime = (transportType ?? string.Empty).Contains("marítim", StringComparison.OrdinalIgnoreCase)
+            || (transportType ?? string.Empty).Contains("maritim", StringComparison.OrdinalIgnoreCase)
+            || (transportType ?? string.Empty).Contains("multimodal", StringComparison.OrdinalIgnoreCase);
+        var shippingLine = maritime
+            ? Valid(carrierName) ?? "Pendiente de confirmar"
+            : "No aplica";
+        return (agent, shippingLine);
+    }
+
     public static bool HasPendingIdtra(
         RateStatus status,
         string? idtraNumber,
@@ -229,6 +249,8 @@ public sealed class AcceptedRateOpeningsNotificationService(
 
             var cargoTypeText = ShipmentLabel(cargoTypeSource);
             var transportTypeText = ResolveTransportType(payload.Modality, cargoTypeText);
+            var (agentText, shippingLineText) = ResolveOpeningPartners(
+                rate.AgentName, rate.LclGroupAgentName, rate.CarrierName, transportTypeText);
 
             var equipmentLines = rate.RateContainers.Count == 0
                 ? new[]
@@ -329,8 +351,10 @@ public sealed class AcceptedRateOpeningsNotificationService(
                   <tr><td style="padding:5px 10px"><strong>Aceptada por</strong></td><td style="padding:5px 10px">{Html(acceptanceOrigin)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Vendedor</strong></td><td style="padding:5px 10px">{Html(sellerText)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Cliente</strong></td><td style="padding:5px 10px">{Html(clientText)}</td></tr>
+                   <tr><td style="padding:5px 10px"><strong>Agente de carga</strong></td><td style="padding:5px 10px">{Html(agentText)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Ruta (POL → POE → POD)</strong></td><td style="padding:5px 10px">{Html(routeText)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Tipo de transporte</strong></td><td style="padding:5px 10px">{Html(transportTypeText)}</td></tr>
+                   <tr><td style="padding:5px 10px"><strong>Naviera</strong></td><td style="padding:5px 10px">{Html(shippingLineText)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Tipo de carga</strong></td><td style="padding:5px 10px">{Html(cargoTypeText)}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Equipo</strong></td><td style="padding:5px 10px">{equipmentHtml}</td></tr>
                   <tr><td style="padding:5px 10px"><strong>Incoterm</strong></td><td style="padding:5px 10px">{Html(incotermText)}</td></tr>
@@ -391,6 +415,8 @@ public sealed class AcceptedRateOpeningsNotificationService(
                             poe = poeText,
                             pod = podText,
                         },
+                        agentName = agentText,
+                        shippingLineName = shippingLineText,
                         transportType = transportTypeText,
                         cargoType = cargoTypeText,
                         equipment = equipmentLines,

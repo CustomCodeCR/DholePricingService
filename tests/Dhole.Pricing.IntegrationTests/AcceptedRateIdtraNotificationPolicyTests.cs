@@ -74,4 +74,31 @@ public sealed class AcceptedRateIdtraNotificationPolicyTests
         Assert.IsFalse(AcceptedRateOpeningsNotificationService.HasPendingIdtra(
             RateStatus.Sent, null));
     }
+
+    [TestMethod]
+    public void OpeningPartnersUseTheAcceptedRateAgentAndCarrier()
+    {
+        var (agent, shippingLine) = AcceptedRateOpeningsNotificationService.ResolveOpeningPartners(
+            " Agente Internacional ", "Agente Alternativo", " Naviera de la QUO ", "Marítimo");
+        Assert.AreEqual("Agente Internacional", agent);
+        Assert.AreEqual("Naviera de la QUO", shippingLine);
+    }
+
+    [TestMethod]
+    public void OpeningPartnersDoNotInventShippingLineForLandTransport()
+    {
+        var (agent, shippingLine) = AcceptedRateOpeningsNotificationService.ResolveOpeningPartners(
+            null, "Agente LCL", "Transportista Terrestre", "Terrestre");
+        Assert.AreEqual("Agente LCL", agent);
+        Assert.AreEqual("No aplica", shippingLine);
+    }
+
+    [TestMethod]
+    public void OpeningPartnersShowPendingForMissingMaritimeDetails()
+    {
+        var (agent, shippingLine) = AcceptedRateOpeningsNotificationService.ResolveOpeningPartners(
+            " — ", null, null, "Multimodal");
+        Assert.AreEqual("Pendiente de confirmar", agent);
+        Assert.AreEqual("Pendiente de confirmar", shippingLine);
+    }
 }
