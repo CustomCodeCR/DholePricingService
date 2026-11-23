@@ -51,6 +51,7 @@ public sealed class ServiceDbContext(
         Set<PricingImportFromExtractionJob>();
 
     public DbSet<RateHeader> RateHeaders => Set<RateHeader>();
+    public DbSet<PricingOperationsServiceReview> OperationsServiceReviews => Set<PricingOperationsServiceReview>();
 
     public DbSet<RateDetail> RateDetails => Set<RateDetail>();
 
@@ -204,6 +205,26 @@ public sealed class ServiceDbContext(
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ServiceDbContext).Assembly);
+
+        modelBuilder.Entity<PricingOperationsServiceReview>(entity =>
+        {
+            entity.ToTable("operations_service_reviews", "pricing");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.Status, x.RequestedAtUtc });
+            entity.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(x => x.QuoteId).HasColumnName("quote_id");
+            entity.Property(x => x.CaseId).HasColumnName("case_id");
+            entity.Property(x => x.Idtra).HasColumnName("idtra").HasMaxLength(100);
+            entity.Property(x => x.ServiceCode).HasColumnName("service_code").HasMaxLength(80);
+            entity.Property(x => x.ServiceName).HasColumnName("service_name").HasMaxLength(300);
+            entity.Property(x => x.Reason).HasColumnName("reason").HasMaxLength(2000);
+            entity.Property(x => x.RequestedBy).HasColumnName("requested_by");
+            entity.Property(x => x.RequestedAtUtc).HasColumnName("requested_at_utc");
+            entity.Property(x => x.Status).HasColumnName("status").HasMaxLength(16);
+            entity.Property(x => x.ResolvedBy).HasColumnName("resolved_by");
+            entity.Property(x => x.ResolvedAtUtc).HasColumnName("resolved_at_utc");
+            entity.Property(x => x.ResolutionNotes).HasColumnName("resolution_notes").HasMaxLength(2000);
+        });
 
         modelBuilder.Entity<DynamicsQuoteSyncJob>(entity =>
         {

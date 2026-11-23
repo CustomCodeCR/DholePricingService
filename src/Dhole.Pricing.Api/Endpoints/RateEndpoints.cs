@@ -2290,6 +2290,14 @@ public static class RateEndpoints
         var acceptanceObservations = status == RateStatus.AcceptedByClient
             ? request.Observations?.Trim() : null;
 
+        var verifiedExecutive = status == RateStatus.AcceptedByClient
+            ? await db.RateRequests.AsNoTracking()
+                .Where(x => x.RateId == rateId)
+                .OrderByDescending(x => x.RequestedAtUtc)
+                .Select(x => (Guid?)x.SellerUserId)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
         var result = await dispatcher.DispatchAsync(
             new SetRateStatusCommand(
                 rateId,
@@ -2300,7 +2308,8 @@ public static class RateEndpoints
                 canApproveLowMargin,
                 request.OtherReferences,
                 acceptanceObservations,
-                request.LinkedAcceptedRateId
+                request.LinkedAcceptedRateId,
+                verifiedExecutive
             ),
             cancellationToken
         );

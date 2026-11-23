@@ -1,0 +1,22 @@
+{
+  "releaseId": "DH-20261123-OPS-AUTO-419",
+  "status": "candidate-develop-ci-pending",
+  "branch": "feature/DH-20261123-OPS-AUTO-419",
+  "ecosystemVersion": "1.121.0",
+  "repo": "CustomCodeCR/DholePricingService",
+  "scope": "Pricing accepted QUO -> Operations idempotent IDTRA + durable aperture draft",
+  "componentVersions": {
+    "DholePricingService": "1.27.0",
+    "DholeOperationsService": "0.19.0",
+    "DholeWeb": "1.121.0",
+    "DholeSystem": "1.121.0"
+  },
+  "requires": [
+    "CI",
+    "PostgreSQL integration",
+    "staging E2E A/B",
+    "replay dedup",
+    "draft recovery"
+  ],
+  "productionAuthorized": false
+}
