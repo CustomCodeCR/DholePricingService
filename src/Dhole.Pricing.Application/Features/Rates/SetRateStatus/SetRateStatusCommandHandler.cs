@@ -3,6 +3,7 @@ using CustomCodeFramework.Cqrs.Commands;
 using CustomCodeFramework.Persistence.Abstractions;
 using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Abstractions.Cache;
+using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Application.Abstractions.Repositories;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -16,6 +17,7 @@ public sealed class SetRateStatusCommandHandler(
     IPricingAuditService audit,
     IRateHeaderCacheService cache,
     IUnitOfWork unitOfWork,
+    IIntegrationEventOutboxWriter outbox,
     ILogger<SetRateStatusCommandHandler> logger
 ) : ICommandHandler<SetRateStatusCommand, Result>
 {
@@ -77,6 +79,7 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateClosureReasonIsRequired);
         }
 
+        var previouslyAccepted = rate.Status == RateStatus.AcceptedByClient;
         var before = PricingAuditSnapshots.From(rate);
 
         try
@@ -127,6 +130,80 @@ public sealed class SetRateStatusCommandHandler(
             ),
             cancellationToken
         );
+
+        // Persist the definitive accepted commercial snapshot in the SAME database
+        // transaction as the status change. Redis publication is asynchronous.
+        if (command.Status == RateStatus.AcceptedByClient && !previouslyAccepted
+            && rate.RateType != RateType.Tariff)
+        {
+            await outbox.WriteAsync(
+                "pricing.quote.accepted.v1",
+                "pricing.quote.accepted.v1",
+                new
+                {
+                    schemaVersion = 1,
+                    quoteId = rate.Id,
+                    selectedQuoteOptionId = rate.Id,
+                    quoteNumber = rate.QuoNumber ?? rate.RateCode,
+                    revisionNumber = rate.RevisionNumber,
+                    acceptedAtUtc = rate.AcceptedAtUtc,
+                    acceptedBy = command.UpdatedBy,
+                    accountId = rate.ClientAccountId,
+                    clientLeadId = rate.ClientLeadId,
+                    clientName = rate.ClientName,
+                    executiveName = rate.ExecutiveName,
+                    modalityCode = rate.ShipmentMode.ToString().ToUpperInvariant(),
+                    operationType = rate.OperationType.ToString(),
+                    incoterm = rate.IncotermCode,
+                    pol = new { id = rate.PolId, name = rate.PolName, code = rate.PolCode },
+                    poe = new { id = rate.PoeId, name = rate.PoeName, code = rate.PoeCode },
+                    pod = new { id = rate.PodId, name = rate.PodName, code = rate.PodCode },
+                    carrier = new { id = rate.CarrierId, name = rate.CarrierName, code = rate.CarrierCode },
+                    agent = new { id = rate.AgentId, name = rate.AgentName, code = rate.AgentCode },
+                    equipment = rate.RateContainers.Select(x => new
+                    {
+                        equipmentType = x.ContainerTypeCode,
+                        equipmentName = x.ContainerTypeName,
+                        quantity = x.Quantity
+                    }).ToArray(),
+                    quotedWeightKg = rate.TotalWeightKg,
+                    quotedVolumeCbm = rate.TotalVolumeCbm,
+                    packages = rate.TotalPackages,
+                    cargoLinesJson = rate.CargoLinesJson,
+                    currency = rate.CurrencyCode,
+                    includes = rate.Includes,
+                    excludes = rate.Excludes,
+                    subjectTo = rate.SubjectTo,
+                    pickupAddress = rate.PickupAddress,
+                    pickupLocationsJson = rate.PickupLocationsJson,
+                    inlandServiceLocationsJson = rate.InlandServiceLocationsJson,
+                    transitTime = rate.TransitTime,
+                    totalCost = rate.TotalCostAmount,
+                    totalSale = rate.TotalSaleAmount,
+                    services = rate.RateServices.Select(x => new
+                    {
+                        id = x.ServiceId, code = x.ServiceCode, name = x.ServiceName
+                    }).ToArray(),
+                    costs = rate.RateDetails.Select(x => new
+                    {
+                        sourceCostId = x.Id,
+                        catalogCostId = x.CostId,
+                        code = x.CostDetailType.ToString(),
+                        description = x.Name,
+                        currency = x.CurrencyCode,
+                        unitCost = x.CostAmount,
+                        unitSale = x.SaleAmount,
+                        quantity = x.Quantity,
+                        cost = x.CostAmount * x.Quantity,
+                        sale = x.SaleAmount * x.Quantity,
+                        notes = x.Notes,
+                        billToClient = x.BillToClient,
+                        chargeBasis = x.ChargeBasis.ToString()
+                    }).ToArray()
+                },
+                $"operations-opening:{rate.Id:N}",
+                cancellationToken);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
