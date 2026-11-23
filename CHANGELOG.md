@@ -1,3 +1,8 @@
+## [1.27.0] - 2026-11-23 · DH-20261123-OPS-AUTO-419
+
+- MINOR: Transactional accepted QUO event and immutable commercial snapshot, selected A/B only, preserving published Pricing information.
+- Global 1.121.0, Pricing 1.26.26 → 1.27.0, Operations 0.18.0 → 0.19.0, Web/System 1.120.2 → 1.121.0; master/production not authorized, CI and staging validation required.
+
 ## [1.26.26] - 2026-11-22 · DH-20261122-PRICING-RETURN-EMAIL-409
 
 - PATCH: correo de devolución de tarifa estructurado en HTML compatible con Outlook; asunto y cuerpo sin UUID visible, con cliente, ruta, modalidad y motivo destacados. CTA a «Corregir y reenviar solicitud» con UUID solo dentro de la URL técnica. Motivo, cliente y ejecutivo codificados contra HTML injection.
