@@ -121,6 +121,8 @@ internal sealed class OutboxProcessor(
         if (eventName is "pricing.rate.created.v1" or "pricing.rate.updated.v1"
             or "pricing.rate.deleted.v1")
             return "dhole.pricing.realtime.v1";
+        if (eventName == "pricing.operations.review.resolved.v1")
+            return "dhole.operations.pricing.reviews";
         if (eventName == "pricing.quote.accepted.v1")
             return "dhole.operations.pricing.accepted";
         return configuration[$"Redis:Streams:Destinations:{eventName}"]
