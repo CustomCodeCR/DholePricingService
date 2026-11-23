@@ -18,6 +18,7 @@ public sealed class SetRateStatusCommandHandler(
     IPricingAuditService audit,
     IRateHeaderCacheService cache,
     IIntegrationEventOutboxWriter outbox,
+    IAcceptedQuoteExecutiveReader executiveReader,
     IUnitOfWork unitOfWork,
     ILogger<SetRateStatusCommandHandler> logger
 ) : ICommandHandler<SetRateStatusCommand, Result>
@@ -136,6 +137,7 @@ public sealed class SetRateStatusCommandHandler(
         if (!wasAccepted && rate.Status == RateStatus.AcceptedByClient)
         {
             var snapshot = RateCommercialQuoteSnapshot.Create(rate);
+            var executiveUserId = await executiveReader.ResolveAsync(rate.Id, cancellationToken);
             await outbox.WriteAsync(
                 "pricing.quote.accepted.v1",
                 "pricing.quote.accepted.v1",
@@ -151,6 +153,7 @@ public sealed class SetRateStatusCommandHandler(
                     leadId = rate.ClientLeadId,
                     clientName = rate.ClientName,
                     executiveName = rate.ExecutiveName,
+                    executiveUserId,
                     modalityCode = rate.ShipmentMode.ToString().ToUpperInvariant(),
                     operationType = rate.OperationType.ToString(),
                     polId = rate.PolId, polName = rate.PolName, polCode = rate.PolCode,
