@@ -4,6 +4,8 @@ using CustomCodeFramework.Persistence.Abstractions;
 using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
+using Dhole.Pricing.Application.Abstractions.Messaging;
+using Dhole.Pricing.Domain.Rates;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
@@ -15,6 +17,7 @@ public sealed class SetRateStatusCommandHandler(
     IRateHeaderRepository rateHeaders,
     IPricingAuditService audit,
     IRateHeaderCacheService cache,
+    IIntegrationEventOutboxWriter outbox,
     IUnitOfWork unitOfWork,
     ILogger<SetRateStatusCommandHandler> logger
 ) : ICommandHandler<SetRateStatusCommand, Result>
@@ -77,6 +80,7 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateClosureReasonIsRequired);
         }
 
+        var wasAccepted = rate.Status == RateStatus.AcceptedByClient;
         var before = PricingAuditSnapshots.From(rate);
 
         try
@@ -127,6 +131,76 @@ public sealed class SetRateStatusCommandHandler(
             ),
             cancellationToken
         );
+
+        // Atomic business event: duplicate status PATCH requests do not produce new intents.
+        if (!wasAccepted && rate.Status == RateStatus.AcceptedByClient)
+        {
+            var snapshot = RateCommercialQuoteSnapshot.Create(rate);
+            await outbox.WriteAsync(
+                "pricing.quote.accepted.v1",
+                "pricing.quote.accepted.v1",
+                new
+                {
+                    schemaVersion = 1,
+                    quoteId = rate.Id,
+                    selectedQuoteOptionId = rate.Id,
+                    quoteNumber = rate.QuoNumber ?? rate.RateCode,
+                    acceptedAtUtc = rate.AcceptedAtUtc,
+                    acceptedBy = command.UpdatedBy,
+                    accountId = rate.ClientAccountId,
+                    leadId = rate.ClientLeadId,
+                    clientName = rate.ClientName,
+                    executiveName = rate.ExecutiveName,
+                    modalityCode = rate.ShipmentMode.ToString().ToUpperInvariant(),
+                    operationType = rate.OperationType.ToString(),
+                    polId = rate.PolId, polName = rate.PolName, polCode = rate.PolCode,
+                    poeId = rate.PoeId, poeName = rate.PoeName, poeCode = rate.PoeCode,
+                    podId = rate.PodId, podName = rate.PodName, podCode = rate.PodCode,
+                    incotermCode = rate.IncotermCode,
+                    incotermName = rate.IncotermName,
+                    pickupAddress = rate.PickupAddress,
+                    cargoLinesJson = rate.CargoLinesJson,
+                    totalPackages = rate.TotalPackages,
+                    quotedWeightKg = rate.TotalWeightKg,
+                    quotedVolumeCbm = rate.TotalVolumeCbm,
+                    carrierId = rate.CarrierId, carrierName = rate.CarrierName,
+                    agentId = rate.AgentId, agentName = rate.AgentName,
+                    currencyCode = rate.CurrencyCode,
+                    includedServices = rate.RateServices.Select(x => new
+                    {
+                        x.ServiceId, x.ServiceCode, x.ServiceName
+                    }).ToArray(),
+                    equipment = rate.RateContainers.Select(x => new
+                    {
+                        x.ContainerTypeId, x.ContainerTypeCode, x.ContainerTypeName, x.Quantity
+                    }).ToArray(),
+                    costs = rate.RateDetails.Select(x => new
+                    {
+                        sourceCostId = x.Id,
+                        x.CostId,
+                        costCode = x.CostDetailType.ToString(),
+                        description = x.Name,
+                        supplierName = rate.AgentName ?? rate.CarrierName,
+                        x.CurrencyCode,
+                        costAmount = snapshot.For(x).CostSubtotal,
+                        saleAmount = snapshot.For(x).SaleSubtotal,
+                        x.Quantity,
+                        chargeBasis = x.ChargeBasis.ToString(),
+                        x.ApplyDestinationTax,
+                        x.DestinationTaxRate,
+                        x.Notes
+                    }).ToArray(),
+                    conditions = new
+                    {
+                        rate.Includes, rate.Excludes, rate.SubjectTo,
+                        rate.TransitTime, rate.FreeDays,
+                        rate.ValidFrom, rate.ValidTo,
+                        rate.AcceptedAtUtc
+                    }
+                },
+                $"ops-accepted:{rate.Id:N}",
+                cancellationToken);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
