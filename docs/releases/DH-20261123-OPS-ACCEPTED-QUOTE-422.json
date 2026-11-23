@@ -1,0 +1,25 @@
+{
+  "releaseId": "DH-20261123-OPS-ACCEPTED-QUOTE-422",
+  "ecosystem": "Dhole",
+  "ecosystemVersion": "1.121.0",
+  "component": "DholePricingService",
+  "previousVersion": "1.26.26",
+  "version": "1.27.0",
+  "stage": "feature-branch-ci-pending",
+  "targetBranch": "develop",
+  "productionAuthorized": false,
+  "dependencies": [
+    "DholePricingService",
+    "DholeOperationsService",
+    "DholeWeb",
+    "DholeSystem"
+  ],
+  "checks": [
+    "dotnet tests where applicable",
+    "PostgreSQL integration and migrations",
+    "TypeScript build",
+    "SemVer policy",
+    "staging E2E accepted quote A/B and no-duplicate",
+    "staging autosave recovery"
+  ]
+}

@@ -1,3 +1,9 @@
+## [1.27.0] - 2026-11-23
+
+- Aperturas: evento de aceptación definitiva de QUO persistido en Outbox junto con el estado comercial.
+- Instantánea transaccional de servicios, costos, equipo, ruta e Incoterm; vendedor resuelto desde solicitud de Pricing.
+- Distribución al stream dedicado de Operations, con correlación de negocio estable por QUO y control de duplicados.
+
 ## [1.26.26] - 2026-11-22 · DH-20261122-PRICING-RETURN-EMAIL-409
 
 - PATCH: correo de devolución de tarifa estructurado en HTML compatible con Outlook; asunto y cuerpo sin UUID visible, con cliente, ruta, modalidad y motivo destacados. CTA a «Corregir y reenviar solicitud» con UUID solo dentro de la URL técnica. Motivo, cliente y ejecutivo codificados contra HTML injection.
