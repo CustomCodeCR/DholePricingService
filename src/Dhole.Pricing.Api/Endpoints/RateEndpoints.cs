@@ -2287,6 +2287,21 @@ public static class RateEndpoints
             }
         }
 
+        Guid? acceptedQuoteGroupId = null;
+        if (status == RateStatus.AcceptedByClient)
+        {
+            // Use the server-owned selected alternative relation. The client
+            // cannot supply a parent ID or spoof the accepted A/B option.
+            var parents = await db.Database.SqlQueryRaw<Guid>(
+                """
+                SELECT parent_rate_id AS "Value"
+                FROM pricing.rate_quote_alternatives
+                WHERE rate_id = {0} LIMIT 1
+                """, rateId).ToArrayAsync(cancellationToken);
+            if (parents.Length > 0 && parents[0] != Guid.Empty)
+                acceptedQuoteGroupId = parents[0];
+        }
+
         var acceptanceObservations = status == RateStatus.AcceptedByClient
             ? request.Observations?.Trim() : null;
 
@@ -2300,7 +2315,8 @@ public static class RateEndpoints
                 canApproveLowMargin,
                 request.OtherReferences,
                 acceptanceObservations,
-                request.LinkedAcceptedRateId
+                request.LinkedAcceptedRateId,
+                acceptedQuoteGroupId
             ),
             cancellationToken
         );
