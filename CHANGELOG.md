@@ -1,5 +1,10 @@
 ## [1.29.8] - 2026-11-24 · DH-20261124-GLOBAL-COMMERCIAL-ACTIONS
 
+## [1.29.9] - 2026-11-24
+
+- DH-20261124-EXPIRED-APPROVAL-ACCESS: allow only GET/POST expiry approval routes to reach their own ownership/permission checks instead of generic Pricing seller visibility. Preserve revision-bound history and atomic supervisor System/Email Outbox; explicit denial messages and regression tests.
+
+
 - Permite solicitar modificación, actualización vencida y aceptar/rechazar alternativas de cotizaciones ajenas con scopes view-all y create. Conserva las restricciones de estado y la recepción/cancelación del titular; registra el solicitante delegado sin convertirlo en propietario. REST y realtime existentes; CI/staging pendientes.
 
 ## [1.29.6] - 2026-11-24 · DH-20261124-OPENINGS-IDTRA-GUARD

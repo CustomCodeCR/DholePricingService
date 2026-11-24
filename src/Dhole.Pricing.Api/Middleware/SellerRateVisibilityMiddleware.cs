@@ -29,6 +29,16 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
             return;
         }
 
+        // The expiry approval endpoints enforce quote ownership using the same
+        // linked-request / assigned-executive / global-action checks as seller
+        // modifications. The generic rates guard only knows the latest linked
+        // request and otherwise rejects legitimate assigned sellers.
+        if (IsExpiredApprovalRequest(context.Request))
+        {
+            await next(context);
+            return;
+        }
+
         // The CRM account quote delivery endpoint performs its own account,
         // contact and assigned-seller verification. A seller may therefore send
         // a quotation linked to their CRM account even if Pricing originally
@@ -76,6 +86,19 @@ public sealed class SellerRateVisibilityMiddleware(RequestDelegate next)
         }
 
         await next(context);
+    }
+
+    private static bool IsExpiredApprovalRequest(HttpRequest request)
+    {
+        if (!HttpMethods.IsGet(request.Method) && !HttpMethods.IsPost(request.Method))
+            return false;
+        var segments = (request.Path.Value ?? string.Empty).Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return segments.Length == 5
+            && segments[0].Equals("api", StringComparison.OrdinalIgnoreCase)
+            && segments[1].Equals("pricing", StringComparison.OrdinalIgnoreCase)
+            && segments[2].Equals("rates", StringComparison.OrdinalIgnoreCase)
+            && Guid.TryParse(segments[3], out var rateId) && rateId != Guid.Empty
+            && segments[4].Equals("expired-update-approval", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsRestrictedSeller(
