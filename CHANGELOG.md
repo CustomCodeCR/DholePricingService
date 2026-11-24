@@ -1,3 +1,10 @@
+## [1.28.0] - 2026-11-23 · DH-20261123-OPS-AUTOSAVE-434
+
+- MINOR candidato P1: al cambiar una QUO por primera vez a AcceptedByClient, Pricing registra en su Outbox transaccional pricing.quote.accepted.v1 con identidad de la opción comercial y snapshot de rutas, agente/naviera, servicios, equipos/cantidades, carga, costos, ventas, impuestos y referencias Storage.
+- La aprobación interna de margen, envío, borrador y reintento del mismo estado no emiten aceptación comercial. Las líneas originales no se modifican.
+- La suscripción Inbox de Operations y la creación automática IDTRA aún no están integradas ni validadas; NO declarar que el evento ya crea un trámite.
+- DholePricingService 1.27.1 → 1.28.0; versión global candidata 1.122.0. Sin cambios en master/producción.
+
 ## [1.27.1] - 2026-11-23 (DH-20261123-EMAIL-BRAND-433 · correo de devolución con identidad Castro Fallas)
 
 - PATCH: unifica correo HTML de devoluciones de Pricing con el rojo corporativo #A80E18 de Notifications e incluye el logo blanco CID embebido por Notifications.
