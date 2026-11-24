@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.29.3",
-  "ecosystemVersion": "1.124.1",
-  "releaseId": "DH-20261124-SELLER-ACCEPTANCE-FIX",
+  "version": "1.29.5",
+  "ecosystemVersion": "1.124.3",
+  "releaseId": "DH-20261124-PRICING-SENT-CRM-FIX",
   "releaseStatus": "candidate-ci-staging-pending",
-  "businessReleaseId": "DH-20261124-SELLER-ACCEPTANCE-FIX"
+  "businessReleaseId": "DH-20261124-PRICING-SENT-CRM-FIX"
 }
