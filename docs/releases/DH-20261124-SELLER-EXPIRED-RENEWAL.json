@@ -1,0 +1,14 @@
+{
+  "releaseId": "DH-20261124-SELLER-EXPIRED-RENEWAL",
+  "component": "DholePricingService",
+  "previousVersion": "1.29.6",
+  "version": "1.29.7",
+  "ecosystemVersion": "1.124.5",
+  "status": "candidate-ci-staging-pending",
+  "validation": [
+    "GET and POST require current-revision approval for expired seller quote",
+    "Approved renewal may contain no cargo changes",
+    "Existing Outbox email and System reminders preserved",
+    "CI and staging pending"
+  ]
+}

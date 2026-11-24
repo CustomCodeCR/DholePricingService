@@ -1,5 +1,14 @@
 ## [1.29.6] - 2026-11-24 · DH-20261124-OPENINGS-IDTRA-GUARD
 
+## [1.29.7] - 2026-11-24
+
+- DH-20261124-SELLER-EXPIRED-RENEWAL: exigir aprobación de jefatura por revisión al cargar y enviar una modificación de vendedor vencida; permitir renovación sin cambios de carga, conservar motivo e historial y notificar la decisión por el sistema existente. Recordatorios de correo y sistema de 1 día existentes se conservan.
+- Candidato pendiente de CI y staging.
+
+- PATCH: omite correos de Apertura y avisos sin PDF si existe IDTRA actual o histórico; no confunde omisión con fallo de aceptación. Verifica nuevamente antes de Outbox y antes de publicar eventos pendientes; conserva reenvío comercial de QUO y eventos operativos.
+- Pruebas de política y selección del evento; CI, entrega y staging pendientes. Versión global candidata 1.124.4.
+
+
 - PATCH: omite correos de Apertura y avisos sin PDF si existe IDTRA actual o histórico; no confunde omisión con fallo de aceptación. Verifica nuevamente antes de Outbox y antes de publicar eventos pendientes; conserva reenvío comercial de QUO y eventos operativos.
 - Pruebas de política y selección del evento; CI, entrega y staging pendientes. Versión global candidata 1.124.4.
 

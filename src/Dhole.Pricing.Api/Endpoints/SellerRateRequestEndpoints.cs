@@ -75,6 +75,12 @@ public static class SellerRateRequestEndpoints
             });
         if (!RateModificationWizardSnapshot.IsEligible(rate))
             return Results.Conflict(new { message = "Esta tarifa no admite solicitudes de modificación." });
+        var expiryRenewal = ExpiredRateUpdateApprovalPolicy.RequiresApproval(rate, DateTimeOffset.UtcNow);
+        if (expiryRenewal && !await ExpiredRateUpdateApprovalPolicy.IsApprovedAsync(db, rate.Id, rate.RevisionNumber, ct))
+            return Results.Conflict(new {
+                code = "Pricing.ExpiredUpdateApprovalRequired",
+                message = "Solicite autorización a jefatura y justifique el vencimiento antes de actualizar la tarifa."
+            });
 
         // Original seller request owns the wizard 1–4 values. Pricing's generated
         // RateHeader is still the authoritative baseline for the later difference.
@@ -125,6 +131,7 @@ public static class SellerRateRequestEndpoints
             rateId = rate.Id,
             reference = rate.QuoNumber ?? rate.RateCode,
             revisionNumber = rate.RevisionNumber,
+            expiryRenewal,
             priority = priority ?? "Green",
             form = sourceForm,
             pickupLocations = (object)(PayloadField("pickupLocations") ??
@@ -159,6 +166,12 @@ public static class SellerRateRequestEndpoints
             });
         if (!RateModificationWizardSnapshot.IsEligible(rate))
             return Results.Conflict(new { message = "Esta tarifa no admite solicitudes de modificación." });
+        var expiryRenewal = ExpiredRateUpdateApprovalPolicy.RequiresApproval(rate, DateTimeOffset.UtcNow);
+        if (expiryRenewal && !await ExpiredRateUpdateApprovalPolicy.IsApprovedAsync(db, rate.Id, rate.RevisionNumber, cancellationToken))
+            return Results.Conflict(new {
+                code = "Pricing.ExpiredUpdateApprovalRequired",
+                message = "Solicite autorización a jefatura y justifique el vencimiento antes de actualizar la tarifa."
+            });
         if (!Enum.TryParse<RateRequestPriority>(request.Priority, true, out var priority) || !Enum.IsDefined(priority))
             return Results.BadRequest(new { message = "Seleccione una prioridad válida." });
         if (request.Payload.ValueKind != JsonValueKind.Object
@@ -202,6 +215,9 @@ public static class SellerRateRequestEndpoints
         // Serialised in the same row as the existing RateRequest. The original tariff is unchanged.
         var comparison = RateModificationWizardSnapshot.Compare(
             rate, request.Payload, originalSellerContext);
+        if (expiryRenewal)
+            comparison.Add(new RateModificationWizardSnapshot.Change("Vigencia", "Actualizar",
+                rate.ValidTo.ToString("dd/MM/yyyy"), "Renovación autorizada por jefatura; Pricing debe confirmar la nueva vigencia."));
         if (comparison.Count == 0)
             return Results.BadRequest(new { message = "No hay diferencias entre la tarifa original y los cambios del wizard." });
 
@@ -240,6 +256,7 @@ public static class SellerRateRequestEndpoints
             kind = "Modification",
             modification = new {
                 sourceRevisionNumber = rate.RevisionNumber,
+                expiryRenewal,
                 quote = rate.QuoNumber ?? rate.RateCode,
                 // Explicit camelCase also inside PayloadJson (JsonElement is returned
                 // without applying ASP.NET's response naming policy).
