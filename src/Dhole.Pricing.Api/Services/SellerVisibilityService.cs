@@ -2,6 +2,8 @@ using System.Data;
 using System.Security.Claims;
 using Dhole.Pricing.Api.Extensions;
 using Dhole.Pricing.Domain.Shared;
+using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -43,6 +45,14 @@ public sealed class SellerVisibilityService(ServiceDbContext db)
             scope.EndsWith(".*", StringComparison.Ordinal)
             && normalized.StartsWith(scope[..^1], StringComparison.Ordinal));
     }
+
+    // Global visibility alone remains read-only; commercial actions also require create.
+    public bool CanManageAllCommercialRates(ClaimsPrincipal user, RateHeader rate)
+        => HasScope(user, PricingConstants.Scopes.RateRequestViewAll)
+            && HasScope(user, PricingConstants.Scopes.RateRequestCreate)
+            && !rate.IsDeleted
+            && !(rate.RateType == RateType.Tariff && rate.ClientName != null
+                && rate.ClientName.Contains("tarifario", StringComparison.OrdinalIgnoreCase));
 
     public async Task<SellerVisibilityContext?> ResolveAsync(
         HttpContext context,
