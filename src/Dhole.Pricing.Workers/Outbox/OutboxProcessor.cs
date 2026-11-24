@@ -118,6 +118,9 @@ internal sealed class OutboxProcessor(
     {
         // Isolate F6 invalidations from Pricing's existing commerce/cache streams.
         // The owner REST endpoint remains authoritative on every delivery.
+        if (eventName == "pricing.operations-review.resolved.v1")
+            return configuration["Redis:Streams:OperationsStreamName"]
+                ?? "dhole.operations.events";
         if (eventName is "pricing.rate.created.v1" or "pricing.rate.updated.v1"
             or "pricing.rate.deleted.v1")
             return "dhole.pricing.realtime.v1";

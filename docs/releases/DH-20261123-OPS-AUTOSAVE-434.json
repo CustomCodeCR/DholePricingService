@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "ecosystem": "Dhole",
+  "releaseId": "DH-20261123-OPS-AUTOSAVE-434",
+  "releaseType": "MINOR",
+  "ecosystemVersion": "1.122.0",
+  "targetBranches": [
+    "develop"
+  ],
+  "status": "candidate-feature-branch-ci-pending",
+  "productionDeploymentAuthorized": false,
+  "components": [
+    {
+      "repository": "CustomCodeCR/DholePricingService",
+      "previousVersion": "1.27.1",
+      "version": "1.28.0",
+      "candidateBranch": "feature/DH-20261123-OPS-AUTOSAVE-434",
+      "changed": true
+    },
+    {
+      "repository": "CustomCodeCR/DholeSystem",
+      "previousVersion": "1.120.11",
+      "version": "1.122.0",
+      "candidateBranch": "feature/DH-20261123-OPS-AUTOSAVE-434",
+      "changed": true
+    },
+    {
+      "repository": "CustomCodeCR/DholeWeb",
+      "previousVersion": "1.120.11",
+      "version": "1.122.0",
+      "candidateBranch": "feature/DH-20261123-OPS-AUTOSAVE-434",
+      "changed": true
+    },
+    {
+      "repository": "CustomCodeCR/DholeOperationsService",
+      "previousVersion": "0.18.0",
+      "version": "0.19.0",
+      "candidateBranch": "feat/operations-apertures-p1-20261123",
+      "changed": true
+    },
+    {
+      "repository": "CustomCodeCR/DholeCRMService",
+      "previousVersion": "1.43.1",
+      "version": "1.44.0",
+      "candidateBranch": "feature/DH-20261123-OPS-AUTOSAVE-434",
+      "changed": true
+    }
+  ],
+  "changes": [
+    "Publish pricing.quote.accepted.v1 only on first definitive AcceptedByClient transition",
+    "Snapshot accepted option route, services, cost lines, equipment, suppliers, cargo and Storage reference in Pricing durable EF Outbox",
+    "CRM Auth-verified internal account/executive projection for Operations consumer"
+  ],
+  "pending": [
+    "Operations Pricing Inbox consumer and idempotent auto IDTRA",
+    "CRM executive identity verification",
+    "End-to-end integration/UAT"
+  ],
+  "checks": {
+    "build": "pending",
+    "unit": "pending",
+    "ci": "pending",
+    "staging": "pending"
+  }
+}
