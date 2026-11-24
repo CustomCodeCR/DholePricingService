@@ -2369,6 +2369,8 @@ public static class RateEndpoints
         // correlación de tarifa/revisión y el mismo actor de la ruta Pricing.
         var queued = await openingsNotificationService.QueueDetailedAsync(
             rateId, RateAcceptanceActor.Pricing, cancellationToken);
+        if (queued.Suppressed)
+            return Results.Ok(new { code = queued.Code, message = queued.Message, rateId, notificationQueued = false });
         if (!queued.Queued)
             return Results.Problem(
                 title: "No se pudo preparar el correo de aceptación",
@@ -2480,6 +2482,9 @@ public static class RateEndpoints
             manualResendCorrelationId: correlationId,
             includePdf: selectedType == "opening");
 
+        if (queued.Suppressed)
+            return Results.Ok(new { code = queued.Code, message = queued.Message, notificationType = selectedType,
+                rateId, requestId = request.RequestId, notificationQueued = false });
         if (!queued.Queued)
             return Results.Problem(
                 title: "No se pudo preparar el correo",

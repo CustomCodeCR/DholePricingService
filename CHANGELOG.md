@@ -1,3 +1,8 @@
+## [1.29.6] - 2026-11-24 · DH-20261124-OPENINGS-IDTRA-GUARD
+
+- PATCH: omite correos de Apertura y avisos sin PDF si existe IDTRA actual o histórico; no confunde omisión con fallo de aceptación. Verifica nuevamente antes de Outbox y antes de publicar eventos pendientes; conserva reenvío comercial de QUO y eventos operativos.
+- Pruebas de política y selección del evento; CI, entrega y staging pendientes. Versión global candidata 1.124.4.
+
 ## [1.29.5] - 2026-11-24 · DH-20261124-PRICING-SENT-CRM-FIX
 
 - PATCH: el permiso CRM adicional no obliga a vincular una cuenta para el envío estándar autorizado por Pricing. Se conserva la verificación CRM de cuentas vinculadas y destinos explícitos; los usuarios con permisos exclusivamente CRM siguen sujetos a la verificación de cuenta. Sin cambio REST, Outbox ni schema.
