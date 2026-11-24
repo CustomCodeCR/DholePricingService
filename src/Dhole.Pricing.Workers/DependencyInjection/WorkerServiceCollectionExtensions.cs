@@ -34,6 +34,7 @@ public static class WorkerServiceCollectionExtensions
                 "pricing-extraction-import-jobs"
             );
         services.AddPricingPeriodicWorkers(configuration);
+        services.AddCustomCodePeriodicWorker<PricingHistoricalIdtraWorker>();
 
         return services;
     }
