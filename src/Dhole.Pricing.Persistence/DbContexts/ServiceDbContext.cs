@@ -216,6 +216,7 @@ public sealed class ServiceDbContext(
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Reason).HasColumnType("text").IsRequired();
             entity.Property(x => x.DecisionReason).HasColumnType("text");
+            entity.Property(x => x.Version).IsConcurrencyToken();
             entity.HasIndex(x => x.OperationsRequestId).IsUnique();
             entity.HasIndex(x => new { x.Status, x.RequestedAtUtc });
             entity.HasIndex(x => x.CaseId);
