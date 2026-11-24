@@ -1,3 +1,7 @@
+## [1.29.2] - 2026-11-24
+
+- PATCH: incluir nombres de Incoterm y moneda, dirección de recolecta, referencias, vigencia, días libres y tránsito en snapshot de aceptación sin modificar la QUO.
+
 ## [1.29.1] - 2026-11-24
 
 - PATCH: ejecutar transacciones del importador IDTRA dentro de Npgsql execution strategy, conservar idempotencia Outbox y aislar fallos por QUO para que un registro no reinicie el worker.
