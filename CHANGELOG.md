@@ -1,9 +1,11 @@
 ## [1.28.0] - 2026-11-23 · DH-20261123-OPS-AUTOSAVE-434
 
-- MINOR candidato P1: al cambiar una QUO por primera vez a AcceptedByClient, Pricing registra en su Outbox transaccional pricing.quote.accepted.v1 con identidad de la opción comercial y snapshot de rutas, agente/naviera, servicios, equipos/cantidades, carga, costos, ventas, impuestos y referencias Storage.
-- La aprobación interna de margen, envío, borrador y reintento del mismo estado no emiten aceptación comercial. Las líneas originales no se modifican.
-- Operations incorpora un consumidor Pricing con creación IDTRA y snapshot (CI/UAT pendientes); el código no está desplegado. Pricing recibe solicitudes de revisión de servicios agregados en Operations mediante Redis Streams y las persiste de forma idempotente. Añade bandeja paginada y decisiones autorizadas que publican resultado por Outbox a Operations, sin cambiar tarifas ni ventas.
-- DholePricingService 1.27.1 → 1.28.0; versión global candidata 1.122.0. Sin cambios en master/producción.
+- MINOR candidato: Outbox transaccional pricing.quote.accepted.v1 solo tras aceptación definitiva del cliente, opción A/B identificada desde la propia BD y snapshot comercial completo; aprobación de margen o reintentos no crean aceptación.
+- Pricing recibe y persiste solicitudes de servicios no cotizados desde Operations en Redis, expone bandeja autorizada y decisiones idempotentes con versión que regresan a Operations vía Outbox.
+- No modifica costos/ventas/márgenes/QUO original automáticamente. Pruebas compilación .NET y flujo multiselección aprobadas.
+- CI Validate Average Import Recovery BLOQUEADO: deriva preexistente EF en RateRequest y DynamicsQuoteSyncJob; diagnóstico registra diferencias sin permitir merge. No introducir migración masiva destructiva.
+- Pricing 1.27.1 → 1.28.0; release global Web/System 1.122.0; operaciones 0.19.0 y CRM 1.44.0.
+- PR borrador develop, sin despliegue o aprobación de master.
 
 ## [1.27.1] - 2026-11-23 (DH-20261123-EMAIL-BRAND-433 · correo de devolución con identidad Castro Fallas)
 
