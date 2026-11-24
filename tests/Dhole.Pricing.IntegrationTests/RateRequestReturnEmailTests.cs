@@ -69,4 +69,16 @@ public sealed class RateRequestReturnEmailTests
             Assert.IsFalse(result.HtmlBody.Contains("href=", StringComparison.OrdinalIgnoreCase));
         }
     }
+    [TestMethod]
+    public void Email_UsesCastroFallasBrandingWithoutGreenPalette()
+    {
+        var result = RateRequestReturnEmail.Compose(Request(), "Completar documentación.", "https://sistema.logisticacastrofallas.com");
+
+        StringAssert.Contains(result.HtmlBody, "background-color:#a80e18");
+        StringAssert.Contains(result.HtmlBody, "cid:dhole-castro-fallas-logo");
+        StringAssert.Contains(result.HtmlBody, "alt=\"Castro Fallas\"");
+        Assert.IsFalse(result.HtmlBody.Contains("#123f34", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(result.HtmlBody.Contains("#14765c", StringComparison.OrdinalIgnoreCase));
+    }
+
 }
