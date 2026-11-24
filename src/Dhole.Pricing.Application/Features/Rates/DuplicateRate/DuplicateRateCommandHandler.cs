@@ -123,10 +123,7 @@ public sealed class DuplicateRateCommandHandler(
                 // The authenticated API has verified these IDs and canonical owner
                 // against CRM. Link the derived QUO so CRM history and followups
                 // show it under the selected account or prospect.
-                if (command.ApplyTariff && command.ClientAccountId is Guid accountId)
-                    appliedRate.ConfigureClientAccount(accountId);
-                if (command.ApplyTariff && command.ClientLeadId is Guid leadId)
-                    appliedRate.ConfigureClientLead(leadId);
+                DuplicateRateCrmIdentity.Copy(source, appliedRate, command);
                 appliedRate.ConfigurePickupLocation(
                     source.WarehouseId,
                     source.PickupAddress,
@@ -426,6 +423,7 @@ public sealed class DuplicateRateCommandHandler(
             );
             duplicate.ConfigureLclGroupAgent(source.LclGroupAgentId, source.LclGroupAgentName, source.LclGroupAgentCode);
             duplicate.ConfigureExecutive(source.ExecutiveName);
+            DuplicateRateCrmIdentity.Copy(source, duplicate, command);
             var duplicateAppliedExchangeRate = currentExchangeRate?.Sale ?? source.ExchangeRateApplied;
             if (duplicateAppliedExchangeRate is > 0m)
             {
