@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.29.2",
-  "ecosystemVersion": "1.123.2",
-  "releaseId": "DH-20261124-IDTRA-DESC",
-  "releaseStatus": "candidate-develop-ci-pending",
-  "businessReleaseId": "DH-20261124-IDTRA-DESC"
+  "version": "1.29.3",
+  "ecosystemVersion": "1.124.1",
+  "releaseId": "DH-20261124-SELLER-ACCEPTANCE-FIX",
+  "releaseStatus": "candidate-ci-staging-pending",
+  "businessReleaseId": "DH-20261124-SELLER-ACCEPTANCE-FIX"
 }
