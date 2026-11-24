@@ -130,7 +130,8 @@ public sealed class SellerVisibilityService(ServiceDbContext db)
 
         var sellerUserId = await db.RateRequests
             .AsNoTracking()
-            .Where(request => request.RateId == rateId)
+            .Where(request => request.RateId == rateId
+                && !EF.Functions.JsonContains(request.PayloadJson, SellerRateAccessService.DelegatedGlobalMarker))
             .OrderByDescending(request => request.RequestedAtUtc)
             .Select(request => (Guid?)request.SellerUserId)
             .FirstOrDefaultAsync(cancellationToken);
