@@ -203,6 +203,20 @@ public sealed class CrmQuoteDeliveryRecipientResolverTests
         Assert.AreEqual(0, ids.Length);
         Assert.IsNotNull(error);
     }
+    [TestMethod]
+    [DataRow(true, true, null, false)]
+    [DataRow(true, false, null, false)]
+    [DataRow(false, true, null, true)]
+    [DataRow(true, true, "client", true)]
+    [DataRow(true, false, "seller", true)]
+    [DataRow(false, true, "seller", true)]
+    public void SentStatus_RequiresAccountOnlyForCrmOnlyPermissionOrExplicitDestination(
+        bool pricingPermission, bool crmPermission, string? target, bool expected)
+    {
+        Assert.AreEqual(expected, SentRateEmailNotificationService.RequiresAccountVerification(
+            pricingPermission, crmPermission, target));
+    }
+
     private sealed class LocalCrmHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
         : HttpMessageHandler
     {
