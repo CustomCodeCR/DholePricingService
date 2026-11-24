@@ -2271,7 +2271,8 @@ public static class RateEndpoints
                             deliveryTarget: request.DeliveryTarget,
                             contactId: request.ContactId,
                             authorization: httpContext.Request.Headers["Authorization"].ToString(),
-                            requireAccountVerification: canSendFromAccount || request.DeliveryTarget is not null);
+                            requireAccountVerification: SentRateEmailNotificationService.RequiresAccountVerification(
+                                canUpdateRateStatus, canSendFromAccount, request.DeliveryTarget));
                 }
                 catch (Exception exception) when (exception is not OperationCanceledException)
                 {
