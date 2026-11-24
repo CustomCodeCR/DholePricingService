@@ -59,7 +59,7 @@ public static class SellerRateRequestEndpoints
     }
 
     private static async Task<IResult> GetModificationSourceAsync(
-        Guid rateId, ServiceDbContext db, SellerRateAccessService access,
+        Guid rateId, ServiceDbContext db, SellerRateAccessService access, SellerVisibilityService visibility,
         HttpContext context, CancellationToken ct)
     {
         var userId = context.GetCurrentUserId();
@@ -67,7 +67,8 @@ public static class SellerRateRequestEndpoints
         var rate = await db.RateHeaders.AsNoTracking().Include(x => x.RateServices)
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, ct);
         if (rate is null) return Results.NotFound();
-        if (!await access.CanReadAsync(rate, userId.Value, ct)) return Results.Forbid();
+        if (!visibility.CanManageAllCommercialRates(context.User, rate)
+            && !await access.CanReadAsync(rate, userId.Value, ct)) return Results.Forbid();
         if (SellerRateModificationPolicy.RequiresPricing(rate.Status, rate.AcceptedAtUtc.HasValue))
             return Results.Conflict(new {
                 code = "Pricing.SellerModificationRequiresPricing",
@@ -146,7 +147,7 @@ public static class SellerRateRequestEndpoints
 
     private static async Task<IResult> CreateModificationAsync(
         Guid rateId, CreateSellerRateModificationRequest request,
-        ServiceDbContext db, SellerRateAccessService sellerAccess,
+        ServiceDbContext db, SellerRateAccessService sellerAccess, SellerVisibilityService visibility,
         AuthSellerDirectoryService sellerDirectory,
         IPricingNotificationRecipientProvider recipientProvider,
         IIntegrationEventOutboxWriter outbox, ILoggerFactory loggerFactory,
@@ -157,7 +158,8 @@ public static class SellerRateRequestEndpoints
         var rate = await db.RateHeaders.Include(x => x.RateServices)
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
         if (rate is null) return Results.NotFound();
-        if (!await sellerAccess.CanReadAsync(rate, sellerId.Value, cancellationToken))
+        var ownsRate = await sellerAccess.CanReadAsync(rate, sellerId.Value, cancellationToken);
+        if (!ownsRate && !visibility.CanManageAllCommercialRates(httpContext.User, rate))
             return Results.Forbid();
         if (SellerRateModificationPolicy.RequiresPricing(rate.Status, rate.AcceptedAtUtc.HasValue))
             return Results.Conflict(new {
@@ -254,6 +256,7 @@ public static class SellerRateRequestEndpoints
 
         var payload = JsonSerializer.Serialize(new {
             kind = "Modification",
+            delegatedGlobal = !ownsRate,
             modification = new {
                 sourceRevisionNumber = rate.RevisionNumber,
                 expiryRenewal,
