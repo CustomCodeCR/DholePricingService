@@ -191,6 +191,50 @@ public sealed class RateCommercialQuoteSnapshotTests
         }
     }
 
+    [DataTestMethod]
+    [DataRow(false, false)]
+    [DataRow(false, true)]
+    [DataRow(true, false)]
+    [DataRow(true, true)]
+    public void DuplicatedQuote_PreservesCrmIdentity(bool isLead, bool identical)
+    {
+        var source = CreateRate();
+        var target = CreateRate();
+        var id = Guid.NewGuid();
+        if (isLead) source.ConfigureClientLead(id);
+        else source.ConfigureClientAccount(id);
+        var command = new Dhole.Pricing.Application.Features.Rates.DuplicateRate.DuplicateRateCommand(
+            source.Id, null, null, null, IdenticalCopy: identical);
+        Dhole.Pricing.Application.Features.Rates.DuplicateRate.DuplicateRateCrmIdentity.Copy(source, target, command);
+        Assert.AreEqual(isLead ? (Guid?)null : id, target.ClientAccountId);
+        Assert.AreEqual(isLead ? id : (Guid?)null, target.ClientLeadId);
+    }
+
+    [TestMethod]
+    public void AppliedTariff_UsesSelectedClientInsteadOfMasterIdentity()
+    {
+        var source = CreateRate();
+        var target = CreateRate();
+        source.ConfigureClientAccount(Guid.NewGuid());
+        var lead = Guid.NewGuid();
+        var command = new Dhole.Pricing.Application.Features.Rates.DuplicateRate.DuplicateRateCommand(
+            source.Id, null, null, null, ApplyTariff: true) { ClientLeadId = lead };
+        Dhole.Pricing.Application.Features.Rates.DuplicateRate.DuplicateRateCrmIdentity.Copy(source, target, command);
+        Assert.IsNull(target.ClientAccountId);
+        Assert.AreEqual((Guid?)lead, target.ClientLeadId);
+    }
+
+    [TestMethod]
+    public void DuplicatedUnlinkedQuote_DoesNotInventCrmIdentity()
+    {
+        var source = CreateRate();
+        var target = CreateRate();
+        var command = new Dhole.Pricing.Application.Features.Rates.DuplicateRate.DuplicateRateCommand(source.Id, null, null, null);
+        Dhole.Pricing.Application.Features.Rates.DuplicateRate.DuplicateRateCrmIdentity.Copy(source, target, command);
+        Assert.IsNull(target.ClientAccountId);
+        Assert.IsNull(target.ClientLeadId);
+    }
+
     private static RateHeader CreateRate() => RateHeader.Create(
         rateCode: "QUO-TEST1-PARITY", sourceImportFclRateId: null,
         agentId: Guid.NewGuid(), agentName: "Agente", agentCode: "AG",
