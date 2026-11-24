@@ -55,10 +55,7 @@ jobs:
               --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
               --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
               --output-dir Migrations/PendingModelDiagnostic
-            git diff -- src/Dhole.Pricing.Persistence/Migrations/ServiceDbContextModelSnapshot.cs
-            echo "GENERATED-MIGRATION-START"
-            find src/Dhole.Pricing.Persistence/Migrations/PendingModelDiagnostic -maxdepth 1 -name "*.cs" ! -name "*.Designer.cs" -exec cat {} \;
-            echo "GENERATED-MIGRATION-END"
+            git diff -- src/Dhole.Pricing.Persistence/Migrations/ServiceDbContextModelSnapshot.cs | tail -n 250
             echo "Diagnostic files are NOT committed. Migration gate remains failed."
             exit 1
           fi
