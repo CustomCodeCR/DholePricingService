@@ -285,7 +285,7 @@ public static class SellerRateStatusEndpoints
         // The seller can decide on a PREVIOUSLY ISSUED quote even if Pricing
         // reopened the current header. Do not grant this to a brand-new unsent
         // draft, low-margin pending approval, or active seller modification.
-        var isOpenDecision = status != RateStatus.Cancelled && currentRate.Status == RateStatus.Open;
+        var isOpenDecision = SellerRateDecisionPolicy.RequiresPublishedRevision(currentRate.Status, status);
         var decisionOnOlderPublishedRevision = false;
         if (isOpenDecision)
         {
@@ -319,13 +319,12 @@ public static class SellerRateStatusEndpoints
 
             decisionOnOlderPublishedRevision = currentRate.RevisionNumber > published.RevisionNumber;
         }
-        else if (currentRate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient or RateStatus.Expired)
-            && !(status == RateStatus.Cancelled && currentRate.Status == RateStatus.AcceptedByClient))
+        else if (!SellerRateDecisionPolicy.CanDecideWithoutPublishedRevision(currentRate.Status, status))
         {
             return Results.Conflict(new
             {
                 code = "Pricing.SellerRateNotAwaitingClient",
-                message = "La tarifa no permite esa transición comercial: solo las cotizaciones aceptadas pueden cancelarse.",
+                message = "No se puede registrar la decisión del cliente desde el estado actual de la cotización. Actualice la información y verifique que la cotización esté enviada o tenga una revisión publicada.",
             });
         }
 
