@@ -1,3 +1,9 @@
+## [1.27.1] - 2026-11-23 (DH-20261123-EMAIL-BRAND-433 · correo de devolución con identidad Castro Fallas)
+
+- PATCH: unifica correo HTML de devoluciones de Pricing con el rojo corporativo #A80E18 de Notifications e incluye el logo blanco CID embebido por Notifications.
+- Mantiene información, motivo, URL segura y conservación del UUID interno fuera del contenido visible.
+- Añade prueba de colores y logotipo para evitar regresión de branding. Global 1.121.1; CI/staging pendientes.
+
 ## [1.27.0] - 2026-11-23 (DH-20261123-EMAIL-TEMPLATES-432 · Apertura: agente y naviera)
 
 - MINOR: aviso de QUO aceptada dirigido a Aperturas incluye agente y naviera desde RateHeader de la cotización aceptada, sin mezclar alternativas A/B.
@@ -10,7 +16,7 @@
 - PATCH: correo de devolución de tarifa estructurado en HTML compatible con Outlook; asunto y cuerpo sin UUID visible, con cliente, ruta, modalidad y motivo destacados. CTA a «Corregir y reenviar solicitud» con UUID solo dentro de la URL técnica. Motivo, cliente y ejecutivo codificados contra HTML injection.
 - Notificación interna continúa en texto legible con el motivo, sin UUID visible. URLs de portal configuradas por ambiente: staging/production. Si URL no es HTTPS válido, se muestran instrucciones sin enlace.
 - Contratos REST, SignalR, Redis Outbox/Inbox, persistencia, bitácora y reenvíos sin nuevas solicitudes permanecen compatibles. Tests de estructura, no filtración visible de UUID, encoding y fallback de enlaces.
-- Release global 1.116.1, Pricing 1.26.25 → 1.26.26, coordinado con DholeSystem/DholeWeb 1.115.1 → 1.116.1 en master. Validaciones CI y staging antes de producción.
+- Release global 1.116.1, Pricing 1.26.25 → 1.26.26, coordinado con DholeSystem/DholeWeb 1.116.0 → 1.116.1. Validaciones CI y staging antes de master.
 
 ## [1.26.25] - 2026-11-22 · DH-20261122-PRICING-RETURN-407
 
@@ -18,49 +24,45 @@
 - Cobertura del historial completo de devoluciones y reenvío con el mismo ID, conservando actor y fecha. Continúa el contrato REST existente, estado Returned/Open, notificaciones System/Email y Redis Outbox/Inbox.
 - Versión global 1.115.1, coordinada con DholeWeb 1.115.1 y DholeSystem 1.115.1. CI, staging y validaciones obligatorios antes de master.
 
-## [1.26.24] - 2026-11-21 · DH-20261121-PRICING-VGM-FCL-FINAL-397 (candidate master)
+## [1.26.24] - 2026-11-21 · DH-20261121-PRICING-VGM-FCL-FINAL-397 (candidate develop)
 
 - PATCH coordinado de metadata de versión con System/Web 1.110.5. La validación final del wizard salva VGM Miami y Freight terrestre FCL después de reglas de Incoterm; sin cambios REST ni de precios históricos.
 
-
-## [1.26.23] - 2026-11-21 · DH-20261121-PRICING-MISSING-LINES-396 (candidate master)
+## [1.26.23] - 2026-11-21 · DH-20261121-PRICING-MISSING-LINES-396 (candidate develop)
 
 - PATCH de metadatos para release global 1.110.4. Sin cambios de contrato REST ni recálculos de tarifas históricas: la recuperación VGM Miami y Freight terrestre FCL se realiza en la serialización del wizard Web.
 - Entrega coordinada System/Web 1.110.4; validaciones de build, changelog, manifiesto y staging obligatorias.
 
-\n## [1.26.22] - 2026-11-21 · DH-20261121-PRICING-FINAL-POLISH-395 (candidate master)
+## [1.26.22] - 2026-11-21 · DH-20261121-PRICING-FINAL-POLISH-395 (candidate develop)
 
-- PATCH coordinado de metadatos de versión API, sin cambios de contrato REST ni repricing de tarifas históricas. Dhole global 1.110.3; Web resuelve Miami VGM, FCL Freight vs Bunker, y LTL transitDays.
+- PATCH coordinado: alinear metadata y versión de Pricing API con Web 1.110.3 y System 1.110.3, sin modificar contratos REST, cálculos del backend ni datos guardados.
+- Web conserva VGM Miami, separa Bunker/Freight FCL Panamá y permite editar el tránsito LTL. CI y staging deben aprobar antes de promover.
 
-## [1.26.21] - 2026-11-21 · DH-20261121-PRICING-LAST-THREE-FIXES-394 (candidate master)
+## [1.26.21] - 2026-11-21 · DH-20261121-PRICING-LAST-THREE-FIXES-394 (candidate develop)
 
-- PATCH: LTL CFZ/Colón Panamá → Costa Rica devuelve Flete terrestre, Bunker, Gastos y Custodia + Marchamo en wizard-bundle, aunque POL comercial y POE del maestro sean catálogos distintos. Conserva filtros reales de agente, servicios, Incoterm, modalidad y ruta.
-- Los tramos WeightKg resuelven venta/costo, incluido cero válido. Release coordinado con Web/System 1.110.2; promoción selectiva, CI y staging obligatorios.
+- PATCH: El endpoint wizard-bundle reconoce los cargos de transporte terrestre LTL Panamá → Costa Rica cuando el POL comercial es Colón Free Zone y el POE comercial está en Costa Rica; relaciona el POE físico por nombre exacto de catálogo y conserva agente, servicios, Incoterm y POD.
+- Incluye Flete terrestre, Bunker, Gastos y Custodia + Marchamo, con reglas WeightKg y tramos de costo/venta cero válidos; sin reconfigurar ni modificar costos maestros.
+- DholeWeb 1.110.2 y DholeSystem 1.110.2; build, tests, staging pendientes; sin promoción hasta comprobación.
 
-## [1.26.20] - 2026-11-21 · DH-20261121-PRICING-TRANCHE-MIAMI-PANAMA-393 (candidato master)
+## [1.26.20] - 2026-11-21 · DH-20261121-PRICING-TRANCHE-MIAMI-PANAMA-393 (candidato develop)
 
-- PATCH: preservar costo y venta seleccionados en tramos de peso, bultos, contenedores y días al crear o modificar QUO. No restablecer el costo a cero por un catálogo Fixed con valor base cero.
-- PATCH: el cálculo LCL Miami a Costa Rica usa tarifas comerciales CFT A/B/C/D/NVOCC/LITTLE, mínimos, SED, seguro y controles de elegibilidad; las cotizaciones históricas mantienen sus snapshots.
-- Release de promoción aislada DH-393 junto a DholeWeb 1.110.1 y DholeSystem 1.110.1; se omite merge global de develop por divergencia histórica. Validación de staging y gates antes de master.
+- PATCH: al crear o modificar una QUO, los cargos Fixed con PricingRulesJson conservan los importes negociados y su base de cobro resuelta por tramos (peso, bultos, contenedor o días); no se sustituyen por el monto base cero del catálogo.
+- PATCH: Miami LCL resuelve el plan comercial A/B/C/D/NVOCC-A/NVOCC-B/LITTLE sobre CFT físico y equivalente total por peso, mínimo comercial, SED, FAK y seguro; respeta el cotizador_miami.html, incluyendo D a USD 2,92/CFT y mínimo USD 292.
+- Compatibilidad de endpoints REST y SignalR; cotizaciones previas no se reprecian automáticamente. CI y staging pendientes. Sin despliegue productivo autorizado.
+- Release coordinado con DholeWeb 1.110.1; versión global Dhole 1.110.1.
 
-## [1.26.19] - 2026-11-21 · DH-20261121-WIZARD-COSTS-390 (candidato master)
+## [1.26.19] - 2026-11-21 · DH-20261121-WIZARD-COSTS-390 (candidato develop)
 
 - PATCH: /api/pricing/costs/wizard-bundle conserva plantillas Variable 0/0 editables (Recolecta, Entrega) sin precios inventados.
 - PATCH: un tramo explícitamente coincidente cuyo costo/venta es 0/0 sigue siendo aplicable (Gastos Panamá en el rango 1-500 kg); un tramo ausente nunca se convierte en cero.
 - Tests unitarios cubren tramos cero, importes por peso, exclusión de Fixed/Optional sin tarifa y catálogo inmutable. Contrato REST y SignalR sin cambios incompatibles.
 - Release conjunto DholeWeb 1.109.2, DholeSystem 1.109.2; CI, staging y promoción a master pendientes; producción sin autorización de despliegue.
 
-## [1.26.18] - 2026-11-21 · DH-20261121-QUO-EDIT-DELTA-387 (release coordinado)
-
-- Alineación del manifiesto de PricingService 1.26.18 con DholeWeb y DholeSystem 1.108.20 para el release conjunto DH-386 + DH-387.
-- GET /api/pricing/costs/wizard-bundle continúa siendo la fuente única de costos aplicables a nuevas líneas; catalog solo proporciona referencias; no altera RateDetails de cotizaciones existentes.
-- Sin cambios adicionales de API ni de base de datos con respecto al candidato DH-386; todas las correcciones se integran mediante ramas intermedias.
-
 ## [1.26.18] - 2026-11-21 · DH-20261121-WIZARD-BUNDLE-ONLY-386
 
 - PATCH coordinado con DholeWeb 1.108.19: el contrato vigente GET /api/pricing/costs/wizard-bundle sigue entregando data.catalog y data.applicable, incluyendo el Freight terrestre que corresponde al contexto solicitado.
 - Documentación del contrato autoritativo para creación y actualización explícita: solo data.applicable puede originar nuevos cargos; los RateDetails persistidos siguen siendo históricos e inmutables sin instrucción del operador.
-- REST, SignalR y datos de catálogo sin cambios incompatibles. Validación CI y staging aprobadas; producción sujeta a autorización y verificaciones de despliegue.
+- REST, SignalR y datos de catálogo sin cambios incompatibles. Validación CI, compilación y staging pendientes; producción no autorizada.
 
 ## [1.26.17] - 2026-11-21 · DH-20261121-PRICING-EDIT-TIERS-LAND-385
 
@@ -70,13 +72,12 @@
 
 ## [1.26.16] - 2026-11-21 · DH-20261121-PRICING-P7-RESTORE-384
 
-- PATCH: impedir cargos Fixed, Variable u Optional de otra naviera o agente cuando faltan los identificadores correspondientes en la consulta contextual.
-- PATCH: evita que cargos de WWL aparezcan en una cotización MSC, conserva los detalles históricos y mantiene REST.
+- PATCH: ningún cargo Fixed/Variable/Optional de agente o naviera configurados puede aplicar si la consulta contextual carece de proveedor seleccionado; evita cargos WWL en rutas MSC.
+- PATCH: prueba de filtrado de proveedor del mismo predicado usado por wizard-bundle; APIs REST y datos persistidos conservados.
 
 ## [1.26.15] - 2026-11-21 · DH-20261121-PRICING-P7-EDIT-SAFETY-383
-
-- PATCH: wizard-bundle Applicable sin contexto excluye tramos no calculables y plantillas 0/0, sin mutar Catalog ni RateDetails.
-- PATCH: compatibilidad con APIs y cálculos por peso, bultos, contenedor y días extras.
+- Wizard-bundle applicable never emits raw tiered 0/0 when cargo dimension is absent; catalog retains the original master pricing rules.
+- Unconfigured zero/zero templates are not proposed as automatic quotation charges. No changes to persisted RateDetails.
 
 ## [1.26.14] - 2026-11-21 · DH-20261121-PRICING-P7-SNAPSHOT-TIERS-382
 
@@ -89,21 +90,34 @@
 ## [1.26.13] - 2026-11-21 (DH-20261121-PRICING-P7-EDIT-380 · costos del wizard con una respuesta y edición conservadora)
 
 - PATCH: mantiene /api/pricing/costs/wizard-bundle como única respuesta con catálogo activo y cargos aplicables por ruta/Incoterm/servicios, sin eliminar REST /select.
-- Backport selectivo desde develop del endpoint, contrato y handler del catálogo unificado para DholeWeb 1.108.13.
+- Alinea los metadatos y la validación de release del endpoint unificado ya implementado en develop.
 - No se modifican tarifas ni importes persistidos durante una consulta de costos. Integración con DholeWeb 1.108.13; pruebas de compilación, contrato, staging y CI pendientes.
 
-## [1.26.12] - 2026-11-21 (DH-20261121-INCOTERMS-MODIFICATIONS-MASTER-378 · backport selectivo Incoterms/modificaciones a master)
+## [1.26.12] - 2026-11-21 (DH-20261121-INCOTERM-AUTO-COST-377 · source FCL no autoriza cargo oculto)
 
-- Se incorporan únicamente correcciones solicitadas ya integradas en develop: UpdateRate rechaza snapshots incompletos en vez de borrar cargos silenciosamente, y elimina la resincronización automática del catálogo sobre cotizaciones existentes.
-- Modificar Incoterm, equipo o transportista jamás autoriza eliminar fletes o cargos históricos por inferencia; solo RemovedExtraDetailIds explícitos permiten eliminaciones. Conserva ExpectedRevisionNumber, historial y precios.
-- CreateRate solo adjunta flete desde SourceImportFclRateId cuando la pantalla 7 envía un detalle Freight seleccionado.
-- Master 1.26.9 → 1.26.12 (misma versión de release validada en develop); global 1.107.5 → 1.108.10; sin merge masivo de develop. CI, pruebas de cotizaciones y autorización de producción independientes obligatorias.
+- PATCH: CreateRate ya no añade automáticamente flete internacional desde SourceImportFclRateId cuando Pantalla 7 no envió un detalle Freight seleccionado. Una referencia de tarifa importada puede informar origen y costo del proveedor, pero no implica contratar el flete por parte del cliente (FOB exportación y demás responsabilidades Incoterm).
+- Cuando el Freight esté explícitamente incluido, se conserva el flujo de cargo, precio/venta y vínculo con la importación. Las tarifas históricas, PUT de modificación y SourceImportFclRateId existentes no se migran ni pierden datos.
+- Añade política unitaria para prevenir inclusión accidental de costos en backend. REST y SignalR compatibles.
+- DholePricingService 1.26.11 → 1.26.12, versión global 1.108.10 (Web/System 1.108.10). Solo develop/staging tras CI, sin autorización master/producción.
 
-## [1.26.9] - 2026-11-20 (DH-20261120-PRICING-EXPIRED-MASTER-361 · expiración requiere aprobación solo para vendedores)
+## [1.26.11] - 2026-11-21 (DH-20261121-INCOTERMS-EDIT-P0-374 · protección de detalles existentes)
 
-- PATCH: promoción selectiva del ajuste 354 validado en develop/staging. Pricing con pricing.rate.update y roles Superadmin editan tarifa vencida sin solicitud a jefatura; vendedores conservan autorización de Roy/José Pablo.
-- GET estado, elegibilidad y PUT usan política de permisos idéntica en backend; se conserva bloqueo de tarifas cerradas/canceladas, revisiones, auditoría, Email/Outbox/SignalR e idempotencia.
-- Pricing 1.26.8 → 1.26.9; ecosistema Web/System 1.106.18. Pruebas de rol añadidas y CI requerido antes de producción.
+- PATCH P0: ediciones con `ReplaceExtraDetails=true` rechazan la omisión de cualquier `RateDetail.Id` persistido que no se haya eliminado de forma explícita; no hay eliminación implícita por snapshot incompleto.
+- Un Incoterm (incluidos CIF/CIP/CFR/DDP) no puede eliminar automáticamente el flete existente, ni un cambio de equipo/navegación debe borrar fletes históricos sin `RemovedExtraDetailIds` explícitos.
+- Deshabilita la resincronización automática de costos de catálogo durante la edición normal, manteniéndola en creación. `ExpectedRevisionNumber` y auditoría existente permanecen vigentes.
+- No se cambia el contrato REST ni la infraestructura realtime. DholePricingService 1.26.10 → 1.26.11, ecosistema 1.108.7, staging/develop solamente. Fases 2–5 de modificación siguen pendientes de aceptación y pruebas.
+
+## [1.26.10] - 2026-11-21 (DH-20261121-P7-COST-BUNDLE-372 · catálogo y costos por contexto en una respuesta)
+
+- PATCH: nuevo GET /api/pricing/costs/wizard-bundle con permiso pricing.workspace; devuelve Catalog y Applicable ordenados y con CostId/relaciones completas desde un único snapshot activo.
+- Una consulta al repositorio de costos (o catálogo en caché) y una hidratación de relaciones; mismo filtrado estricto de naviera, agente, POL/POE/POD, servicio, Incoterm y modalidad que el /select existente. Respeta el POE real de tarifas importadas de Panamá.
+- Endpoint /select, cálculos comerciales, contratos persistidos, SignalR y outbox/inbox no cambian. Versión DholePricingService 1.26.9 → 1.26.10, ecosistema 1.108.5; únicamente develop y staging, producción no autorizada.
+- Compilación, pruebas unitarias y smoke autenticado P6→P7 aún requieren validación de CI/staging.
+
+## [1.26.9] - 2026-11-20 (DH-20261120-PRICING-EXPIRED-MASTER-361 · promote expired-quote authorization fix to master)
+
+- PATCH: role-specific expiry edit policy already present and CI/staging-validated on develop from release 354. Coordinate production hotfix without overwriting unrelated later commits. Pricing/Superadmin do not require approval; sellers retain Roy/José Pablo request.
+- DholePricingService 1.26.8 → 1.26.9, ecosystem 1.106.18; behavior already staged and tested. REST/SignalR unchanged, no database migration. Master promotion explicitly requested.
 
 ## [1.26.8] - 2026-11-20 (DH-20261120-PRICING-INLAND-STEP67-357 · coordinación de cargos e inland pantallas 6–7)
 
@@ -111,11 +125,11 @@
 - Incrementa los metadatos del servicio para el batch de release. No hay cambios de base de datos, endpoints, validación ni procesamiento realtime.
 - Compilación, pruebas, integración a develop y staging pendientes; producción no autorizada.
 
-## [1.26.7] - 2026-11-20 (DH-20261120-INCOTERM-TEMP-UNBLOCK-353 · desbloqueo temporal de Incoterms)
+## [1.26.6] - 2026-11-20 (DH-20261120-EXPIRED-ROLE-354 · autorización solo para vendedores)
 
-- PATCH temporal: importación, exportación y tránsito permiten flete contratado con los 11 Incoterms sin que la política de exclusión suprima líneas por responsabilidad contractual.
-- Mantiene las validaciones estructurales de FCL, la identidad Config, la autorización y los contratos REST/SignalR. TODO: reimplantar reglas de responsabilidades sin bloquear servicios explícitos.
-- DholePricingService 1.26.6 (develop) / 1.26.4 (master) → 1.26.7; DholeWeb 1.106.11 (develop) / 1.106.9 (master) → 1.106.12; versión global 1.106.12. Integración/CI/staging pendientes.
+- PATCH: Pricing y Superadmin editan tarifas vencidas sin autorización de jefatura; vendedores mantienen solicitud a Roy/José Pablo.
+- Alinea la consulta de estado, elegibilidad y PUT con el mismo criterio de roles/scopes servidor. Conserva revisión, historial, SignalR/Outbox y bloqueo de cerradas/canceladas.
+- Tests de roles y de expiración Costa Rica. Pricing 1.26.5 → 1.26.6, ecosistema 1.106.10 → 1.106.11. CI/staging pendientes, producción no autorizada.
 
 ## [1.26.5] - 2026-11-20 (DH-20261120-PRICING-VAT-TOTAL-353 · IVA agregado en USD/CRC con códigos de Config)
 
@@ -153,10 +167,11 @@
 - Migración aditiva ExpiredRateUpdateApprovals; eventos System y Email en Notifications Outbox transaccional con idempotencia y distribución SignalR existente; notificación al solicitante después de la decisión.
 - Pricing 1.25.4 → 1.26.0, ecosistema Dhole 1.104.0. Compatibilidad REST existente, CI y staging obligatorios antes de producción.
 
-## [1.25.4] - 2026-11-19 (DH-20261119-SELLER-DASHBOARD-PARITY-295 · paridad comercial vendedores y supervisión)
+## [1.25.4] - 2026-11-19 (DH-20261119-SELLER-DASHBOARD-PARITY-295 · supervisión de cartera comercial equivalente)
 
-- PATCH: /api/pricing/seller-rates/dashboard?sellerUserId recupera la misma cartera autorizada de vendedor: solicitudes vinculadas, recibos, asignaciones manuales y últimas revisiones publicadas. Conserva autorización del supervisor, el endpoint propio y modalidad global sin selección.
-- Pricing 1.25.3 → 1.25.4, Web/System → 1.103.18. Otros 14 componentes sin cambios; no se exponen costos internos y no hay migraciones ni incompatibilidad SignalR. CI/staging antes de producción.
+- PATCH: cuando el supervisor selecciona sellerUserId, el endpoint /api/pricing/seller-rates/dashboard usa exactamente la misma proyección publicada que /seller-rates del vendedor, incluyendo solicitudes vinculadas, recibos, asignaciones directas, alternativas de QUO y revisiones publicadas.
+- Conserva el modo global sin filtro, los permisos de SuperUsuario/view-all, el aislamiento del endpoint /seller-rates y los importes comerciales sin costos internos. No suplanta la sesión ni autoriza decisiones ajenas.
+- Pricing 1.25.3 → 1.25.4; ecosistema Web/System 1.103.17 → 1.103.18. Sin migraciones, cambios de eventos SignalR u otros 14 servicios. Pruebas y staging antes de master.
 
 ## [1.25.3] - 2026-11-19 (DH-20261119-PRICING-EXPIRY-1D-SYSTEM-291 · aviso al vendedor 1 día antes del vencimiento)
 
@@ -164,17 +179,24 @@
 - Resolución segura del usuario desde Auth o el propietario validado de la solicitud. Sin avisos para Castro Fallas ni cotizaciones finalizadas; sin duplicados aun si ya se envió el correo.
 - Migración aditiva de marcador 1d-system, outbox transaccional e idempotencia por revisión. Pricing 1.25.2→1.25.3; ecosistema 1.103.11→1.103.12. CI y staging antes de producción.
 
-## [1.25.2] - 2026-11-19 (DH-20261119-PRICING-LTL-DDP-FREIGHT-284 · promoción selectiva de DDP terrestre a producción)
+## [1.25.2] - 2026-11-19 (DH-20261119-PRICING-LTL-DDP-FREIGHT-284 · DDP terrestre con flete explícito)
 
-- PATCH master 1.25.1→1.25.2, ecosistema 1.103.7→1.103.8. Se promueve el mismo parche CI/staging de develop sin incorporar cambios ajenos a producción.
-- Para LTL/FTL con DDP y flete internacional explícito se respeta ChargeBasis PerChargeableCbm/PerTruck y no se aplica validación de distribución FCL; corrige Pricing.RateInvalidFreightDistribution de la solicitud con 33.33 CBM.
-- Creación y edición corregidas; CIF/FCL y distribución por contenedor siguen con sus validaciones. Sin cambios REST, migraciones, ni realtime. Validación CI y despliegue de producción sujetos a los gates.
+- PATCH: permite flete internacional explícito en cotizaciones terrestres LTL/FTL con Incoterm DDP; no compara CBM con cantidades de contenedores. Corrige Pricing.RateInvalidFreightDistribution al crear LTL de San José a Ciudad de Guatemala (33.33 CBM).
+- Creación y edición usan la misma regla. Se mantiene exclusión histórica de CIF/FCL y control de distribución de FCL; sin migración, cambios de contrato REST, ni modificaciones a realtime.
+- DholePricingService 1.25.1 → 1.25.2; ecosistema 1.103.7 → 1.103.8. Validaciones CI/staging obligatorias antes de producción.
 
-## [1.25.1] - 2026-11-19 (DH-20261119-PRICING-RETURN-PROMOTION-272 · devolución de solicitudes a producción)
+## [1.25.1] - 2026-11-19 (DH-20261119-PRICING-RETURN-PROMOTION-272 · promover devolución de solicitudes a producción)
+ 
+- PATCH de versión coordinado 1.25.1, ecosistema 1.103.0. Se promueve a master la funcionalidad de devolución de solicitudes con motivo obligatorio, notificaciones por sistema/correo, historial y corrección/reenvío, validada en staging desde Pricing 1.25.0.
+- Sin cambios de esquema: el estado Returned usa el texto existente, el historial se conserva en payload_json y el evento se envía por outbox.
+- Validación obligatoria de compilación, pruebas y gates antes de promover a producción. Contiene la misma funcionalidad que develop 1.25.0.
+ 
+## [1.25.0] - 2026-11-19 (Devolución de solicitudes de Ventas para corrección)
 
-- MINOR funcionalidad ya validada en develop: permite devolver solicitudes abiertas sin tarifa vinculada, con motivo obligatorio, estado Returned, historial y reenvío de solicitudes corregidas.
-- Las notificaciones de System y Email se entregan a Notifications por outbox, conservando los endpoints REST existentes y la reserva exclusiva.
-- Promoción aislada de los archivos de funcionalidad; versión Pricing 1.24.9→1.25.1 y ecosistema 1.102.0→1.103.0. Sin migración. Pruebas de CI y staging antes de producción.
+- MINOR DH-20261119-PRICING-RETURN-REQUEST-271: Pricing puede devolver solicitudes abiertas sin tarifa vinculada, con motivo obligatorio (10–1000 caracteres), validación de autorización y reserva vigente.
+- Nuevo estado Returned y motivo/historial preservados en payload_json; sin migración. El vendedor puede corregir y reenviar la misma solicitud, restableciendo el SLA y notificando a Pricing.
+- Notificación individual al vendedor por sistema/SignalR y correo mediante outbox persistente. Contratos REST existentes conservados; pruebas unitarias de devolución y reenvío.
+- DholePricingService 1.24.9→1.25.0; ecosistema 1.100.0→1.101.0. Staging/CI obligatorios antes de master.
 
 ## [1.24.9] - 2026-11-18 (Fix 500 guardando QUO con múltiples IDTRA)
 
@@ -183,23 +205,28 @@
 - Pruebas de regresión sobre mapping EF, equivalencia de máximos e integridad de IDTRA largos. REST, realtime, scopes y auditoría conservados.
 - Pricing 1.24.8→1.24.9; ecosistema 1.87.2→1.87.3. Staging y CI antes de master.
 
-## [1.24.8] - 2026-11-18 (Pricing: corregir guardado 500 por fechas sin UTC · master)
+## [1.24.8] - 2026-11-18 (Pricing: corregir guardado 500 por fechas sin UTC)
 
-- PATCH DH-20261118-PRICING-SAVE-500-230: backport exacto de la normalización de fechas comerciales YYYY-MM-DD a medianoche UTC para evitar escritura de DateTimeKind.Unspecified en columnas PostgreSQL timestamptz.
-- Tres regresiones de fechas sin offset, local y UTC; no altera contrato REST, audit logs, scopes ni SignalR/Outbox. Sin migración de base de datos.
-- Pricing 1.24.7→1.24.8, ecosistema 1.86.1→1.86.2. Build y staging obligatorios antes de integrar a master. Producción no autorizada.
+- PATCH DH-20261118-PRICING-SAVE-500-230: crear y editar tarifas convierte fechas comerciales YYYY-MM-DD a medianoche UTC antes de persistir en PostgreSQL timestamptz; conserva el día comercial sin desplazamientos por zona horaria.
+- Regresiones para entrada JSON sin offset, DateTime local y UTC. No requiere migraciones; contratos REST, scopes, auditoría y Outbox/SignalR sin cambios.
+- Pricing 1.24.7 → 1.24.8, ecosistema 1.86.1 → 1.86.2. CI y staging obligatorios antes de master; no se autoriza despliegue productivo.
 
-## [1.24.7] - 2026-11-18 (Release coordinado: peso por unidad LCL/LTL · master)
+## [1.24.7] - 2026-11-18 (Release coordinado: peso unitario LCL/LTL)
 
-- PATCH DH-20261118-CARGO-WEIGHT-PER-UNIT-229: promover en master el contrato de peso agregado LCL/LTL validado en develop y staging. DholeWeb multiplica el peso por unidad × cantidad antes de guardar; Pricing sigue recibiendo peso total por línea, sin cambios de esquema, scopes, eventos, REST ni lógica backend.
-- DholePricingService master 1.24.5 → 1.24.7 (salto monotónico a la versión del release coordinado develop), DholeWeb 1.82.1 y DholeSystem/ecosistema 1.86.1. Validación de CI master y prueba funcional autenticada pendientes; producción requiere autorización expresa.
+- PATCH DH-20261118-CARGO-WEIGHT-PER-UNIT-229: versión coordinada con DholeWeb 1.82.1. Los consumidores convierten peso por unidad × cantidad en peso total por línea antes de invocar Pricing. Se conserva el contrato REST y la semántica existente del peso agregado en cargoLines[].weightKg y totalWeightKg, sin migraciones ni alteraciones en el cálculo backend.
+- Ecosistema 1.86.0 → 1.86.1. Pruebas y validación staging pendientes. Sin autorización de producción.
+
+## [1.24.6] - 2026-11-18 (EXW LCL propio: preservar costo manual del catálogo fijo)
+
+- PATCH DH-20261118-EXW-LCL-PICKUP-ROUNDTRIP-227: si el costo de recolecta EXW fijo está marcado explícitamente como autorizado por Pricing, conservar costo manual solicitado incluso al crear el RateDetail. Resto de fijos mantiene costo maestro; sin cambios de API, scopes, auditoría ni SignalR.
+- Las líneas con CostId nulo ya conservan monto por contrato; se incorpora regresión unitaria para precio EXW autorizado, fijo ordinario y detalle existente con moneda distinta.
+- Release conjunto Web 1.81.2 y DholeSystem/ecosistema 1.85.2; Pricing 1.24.5 → 1.24.6. CI, staging y smoke autenticado pendiente.
 
 ## [1.24.5] - 2026-11-18 (Pricing: compatibilidad de recolecta EXW / LCL propio)
 
-- PATCH DH-20261118-PRICING-EXW-PICKUP-226: backport master del release EXW own-LCL de develop; preserva el contrato de detalle con costo, venta y cantidad de recolecta ingresados desde Web.
-- No cambia lógica REST, base de datos, scopes, AuditLogs ni eventos SignalR del backend; incremento sincronizado con Web 1.80.4 y System 1.84.4 para la promoción coordinada.
-- Staging develop aprobado en build/health; CI del backport y smoke autenticado pendientes.
-- Staging comprobado: Pricing https://github.com/CustomCodeCR/DholePricingService/actions/runs/44381748194 y Web https://github.com/CustomCodeCR/DholeWeb/actions/runs/44381755824 (ambos success). CI de backport debe superar controles propios de master antes de integrar.
+- PATCH DH-20261118-PRICING-EXW-PICKUP-226: release coordinado con DholeWeb 1.81.1. Se mantiene el contrato de RateDetails para rubros manuales de recolección, costo y venta, sin alterar REST, scopes, AuditLogs ni SignalR.
+- No se modifica lógica del servidor ni base de datos; el cambio funcional está en la persistencia y reconstrucción del wizard Web. Versión de Pricing sincronizada para la liberación conjunta.
+- DholePricingService 1.24.4 → 1.24.5; DholeWeb 1.81.0 → 1.81.1; ecosistema 1.85.0 → 1.85.1. CI/staging pendientes; producción sin autorización.
 
 ## [1.24.4] - 2026-11-18 (Pricing: flete DDP exportación terrestre LTL/FTL)
 
@@ -208,29 +235,23 @@
 - Regresiones de tipos de operación y flujo de cotización; sin migraciones, nuevos scopes ni cambios de contrato REST o eventos SignalR.
 - DholeWeb 1.80.2 → 1.80.3; DholePricingService 1.24.3 → 1.24.4; ecosistema 1.84.2 → 1.84.3. CI y staging requeridos antes de master.
 
+## [1.24.3] - 2026-11-18 (Pricing: transacciones de reservas compatibles con Npgsql)
+
+- PATCH DH-20261118-PRICING-LEASE-TX-222: corrige la causa real del HTTP 503. Claim, heartbeat y release-own ahora ejecutan BEGIN/COMMIT dentro de Database.CreateExecutionStrategy().ExecuteAsync.
+- Evidencia de logs TraceId 0HNQ5JP78QTL4:00000009: InvalidOperationException de NpgsqlRetryingExecutionStrategy por transacción iniciada fuera de la estrategia.
+- Mantiene advisory lock, concurrencia, auditoría, scopes, SignalR y compatibilidad REST. Prueba de protección de transacciones integrada al CI. Pricing 1.24.2 → 1.24.3; ecosistema 1.84.1 → 1.84.2.
+
+## [1.24.2] - 2026-11-18 (MultiQUO: una QUO comercial, alternativas dentro)
+
+- PATCH DH-20261118-MULTIQUO-SINGLE-221: unifica listado y dashboard por grupo comercial y selecciona una opción A/B sin reportar la otra como cotización no aceptada; permite decisiones de vendedor con validación de pertenencia y mantiene auditoría, REST, SignalR y Outbox.
+- Preserva Pricing multipunto 1.24.0 y corrección de reservas 1.24.1. Pricing 1.24.1 → 1.24.2, Web 1.80.1 → 1.80.2, ecosistema 1.83.4 → 1.84.1. Requiere CI y staging antes de master.
+
 ## [1.24.0] - 2026-11-18 (Pricing: múltiples puntos y perspectiva comercial)
 
 - MINOR DH-20261118-INLAND-MULTIPOINT-219: recolección y entrega registran múltiples paradas con tipo de carga y responsable de costos por punto. Se conservan coordenadas opcionales y soporte a solicitudes históricas de un solo punto.
 - Incoterms EXW y DDP mantienen significado ICC; importación/exportación cambian la perspectiva de quién contrata/paga y tránsito doméstico permite responsable híbrido por tramo.
 - API REST retrocompatible, outbox/inbox/SignalR y scopes existentes sin cambios; CI/staging pendientes, sin despliegue a producción.
 - DholeWeb 1.79.2 → 1.80.0; DholePricingService 1.23.6 → 1.24.0; ecosistema 1.83.2 → 1.84.0.
-
-## [1.23.10] - 2026-11-18 (MultiQUO: una sola cotización comercial)
-
-- PATCH DH-20261118-MULTIQUO-SINGLE-223: integra de develop la lógica MultiQUO con una fila QUO base, alternativas A/B internas, selección de una ganadora y conteos/estados comerciales consolidados.
-- Conserva correcciones posteriores de reservas Pricing 1.23.9, autorización de vendedores, auditoría, REST, Outbox/SignalR y alternativas PDF.
-- Pricing 1.23.9 → 1.23.10; Web 1.79.4 → 1.79.5; DholeSystem 1.83.5 → 1.83.6. Staging/CI obligatorios antes de integración a master.
-
-## [1.23.9] - 2026-11-18 (Pricing: corregir HTTP 503 en reservas)
-
-- PATCH DH-20261118-PRICING-LEASE-TX-222: causa confirmada mediante TraceId 0HNQ5JP78QTL4:00000009. NpgsqlRetryingExecutionStrategy no admite transacciones externas; claim, heartbeat y release-own ejecutan el BEGIN/COMMIT dentro de CreateExecutionStrategy().ExecuteAsync.
-- Preserva bloqueo por operador, tokens, auditoría, scopes, APIs REST y SignalR. Regresión estructural de CI obligatoria.
-- Pricing 1.23.8 → 1.23.9; ecosistema 1.83.4 → 1.83.5; Web y servicios no afectados sin cambios.
-
-## [1.23.8] - 2026-11-18 (Pricing: error de reserva en wizard)
-
-- PATCH DH-20261118-PRICING-LEASE-220: adquisición tipada de pg_try_advisory_xact_lock en transacción, 409 de concurrencia y 503 con TraceId ante excepción SQL, y predicado de inactividad con corte precalculado EF. Preserva un lease por operador, scopes, auditoría, REST y SignalR.
-- Pruebas de claim, bloqueo ajeno y liberación inactiva; CI/staging pendientes. Pricing 1.23.7→1.23.8; Web 1.79.3→1.79.4; ecosistema 1.83.3→1.83.4.
 
 ## [1.23.7] - 2026-11-18 (Pricing: liberar reservas huérfanas sin reclamarlas)
 
