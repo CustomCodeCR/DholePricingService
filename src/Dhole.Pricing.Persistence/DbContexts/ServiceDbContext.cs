@@ -60,6 +60,8 @@ public sealed class ServiceDbContext(
 
     public DbSet<RateRequest> RateRequests => Set<RateRequest>();
 
+    public DbSet<PricingOperationsReviewRequest> OperationsReviewRequests => Set<PricingOperationsReviewRequest>();
+
     public DbSet<RateComparison> RateComparisons => Set<RateComparison>();
 
     public DbSet<RateComparisonDetail> RateComparisonDetails => Set<RateComparisonDetail>();
@@ -204,6 +206,20 @@ public sealed class ServiceDbContext(
         base.OnModelCreating(modelBuilder);
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ServiceDbContext).Assembly);
+
+        modelBuilder.Entity<PricingOperationsReviewRequest>(entity =>
+        {
+            entity.ToTable("pricing_operations_review_requests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Idtra).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.ServiceCode).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Reason).HasColumnType("text").IsRequired();
+            entity.Property(x => x.DecisionReason).HasColumnType("text");
+            entity.HasIndex(x => x.OperationsRequestId).IsUnique();
+            entity.HasIndex(x => new { x.Status, x.RequestedAtUtc });
+            entity.HasIndex(x => x.CaseId);
+        });
 
         modelBuilder.Entity<DynamicsQuoteSyncJob>(entity =>
         {
