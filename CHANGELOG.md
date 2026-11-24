@@ -1,3 +1,9 @@
+## [1.27.1] - 2026-11-23 (DH-20261123-EMAIL-BRAND-433 · correo de devolución con identidad Castro Fallas)
+
+- PATCH: unifica correo HTML de devoluciones de Pricing con el rojo corporativo #A80E18 de Notifications e incluye el logo blanco CID embebido por Notifications.
+- Mantiene información, motivo, URL segura y conservación del UUID interno fuera del contenido visible.
+- Añade prueba de colores y logotipo para evitar regresión de branding. Global 1.121.1; CI/staging pendientes.
+
 ## [1.27.0] - 2026-11-23 (DH-20261123-EMAIL-TEMPLATES-432 · Apertura: agente y naviera)
 
 - MINOR: aviso de QUO aceptada dirigido a Aperturas incluye agente y naviera desde RateHeader de la cotización aceptada, sin mezclar alternativas A/B.
