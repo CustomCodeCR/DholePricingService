@@ -3146,6 +3146,97 @@ namespace Dhole.Pricing.Persistence.Migrations
                     b.ToTable("RateHeaders", "pricing");
                 });
 
+            modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.PricingOperationsReviewRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("AcceptedOptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("accepted_option_id");
+
+                    b.Property<Guid>("CaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("case_id");
+
+                    b.Property<Guid>("CompanyId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("company_id");
+
+                    b.Property<DateTimeOffset?>("DecidedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_at_utc");
+
+                    b.Property<Guid?>("DecidedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("decided_by");
+
+                    b.Property<string>("DecisionReason")
+                        .HasColumnType("text")
+                        .HasColumnName("decision_reason");
+
+                    b.Property<string>("Idtra")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("idtra");
+
+                    b.Property<Guid>("OperationsRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("operations_request_id");
+
+                    b.Property<Guid?>("QuoteId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("quote_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTimeOffset>("RequestedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at_utc");
+
+                    b.Property<Guid>("RequestedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by");
+
+                    b.Property<string>("ServiceCode")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("service_code");
+
+                    b.Property<Guid>("ServiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("service_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("status");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CaseId");
+
+                    b.HasIndex("OperationsRequestId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "RequestedAtUtc");
+
+                    b.ToTable("pricing_operations_review_requests", "pricing");
+                });
+
             modelBuilder.Entity("Dhole.Pricing.Domain.Rates.Entities.RateRequest", b =>
                 {
                     b.Property<Guid>("Id")
