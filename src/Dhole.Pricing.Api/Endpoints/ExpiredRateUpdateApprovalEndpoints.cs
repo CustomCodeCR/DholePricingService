@@ -3,6 +3,7 @@ using Dhole.Pricing.Api.Extensions;
 using Dhole.Pricing.Api.Services;
 using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Shared;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -97,7 +98,10 @@ public static class ExpiredRateUpdateApprovalEndpoints
         var rate = await db.RateHeaders.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, ct);
         if (rate is null) return Results.NotFound();
-        if (!await CanReadAsync(rate, http, access, visibility, ct)) return Results.Forbid();
+        if (!await CanReadAsync(rate, http, access, visibility, ct))
+            return Results.Json(new { code = "Pricing.ExpiredApprovalRateNotAccessible",
+                message = "No tiene acceso comercial a esta cotización." },
+                statusCode: StatusCodes.Status403Forbidden);
 
         var requiresApproval = ExpiredRateUpdateApprovalPolicy.RequiresApprovalForUser(
             rate, DateTimeOffset.UtcNow, http.User);
@@ -122,6 +126,10 @@ public static class ExpiredRateUpdateApprovalEndpoints
     {
         var requesterId = http.GetCurrentUserId();
         if (requesterId is null || requesterId == Guid.Empty) return Results.Unauthorized();
+        if (!visibility.HasScope(http.User, PricingConstants.Scopes.RateRequestCreate))
+            return Results.Json(new { code = "Pricing.ExpiredApprovalRequestNotAllowed",
+                message = "No tiene permiso para solicitar actualizaciones comerciales." },
+                statusCode: StatusCodes.Status403Forbidden);
         var reason = request.Reason?.Trim();
         if (reason is null || reason.Length < 15 || reason.Length > 4000)
             return Results.BadRequest(new {
@@ -132,7 +140,10 @@ public static class ExpiredRateUpdateApprovalEndpoints
         var rate = await db.RateHeaders.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, ct);
         if (rate is null) return Results.NotFound();
-        if (!await CanReadAsync(rate, http, access, visibility, ct)) return Results.Forbid();
+        if (!await CanReadAsync(rate, http, access, visibility, ct))
+            return Results.Json(new { code = "Pricing.ExpiredApprovalRateNotAccessible",
+                message = "No tiene acceso comercial a esta cotización." },
+                statusCode: StatusCodes.Status403Forbidden);
         if (SellerRateModificationPolicy.RequiresPricing(rate.Status, rate.AcceptedAtUtc.HasValue))
             return Results.Conflict(new { code = "Pricing.SellerModificationRequiresPricing",
                 message = "Una cotización aceptada solo puede ser modificada por Pricing." });
