@@ -22,4 +22,5 @@ public sealed class PricingOperationsReviewRequest
     public Guid? DecidedBy { get; set; }
     public DateTimeOffset? DecidedAtUtc { get; set; }
     public string? DecisionReason { get; set; }
+    public long Version { get; set; } = 1;
 }
