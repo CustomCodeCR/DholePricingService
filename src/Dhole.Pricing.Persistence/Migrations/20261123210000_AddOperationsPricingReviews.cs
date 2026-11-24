@@ -29,6 +29,7 @@ public sealed class AddOperationsPricingReviews : Migration
                 decided_by uuid NULL,
                 decided_at_utc timestamptz NULL,
                 decision_reason text NULL,
+                version bigint NOT NULL DEFAULT 1,
                 CONSTRAINT ck_pricing_operations_review_status CHECK (status IN
                     ('PENDING_REVIEW','REVISION_REQUIRED','NO_PRICE_CHANGE_REQUIRED','REJECTED'))
             );
