@@ -1,3 +1,7 @@
+## [1.29.8] - 2026-11-24 · DH-20261124-GLOBAL-COMMERCIAL-ACTIONS
+
+- Permite solicitar modificación, actualización vencida y aceptar/rechazar alternativas de cotizaciones ajenas con scopes view-all y create. Conserva las restricciones de estado y la recepción/cancelación del titular; registra el solicitante delegado sin convertirlo en propietario. REST y realtime existentes; CI/staging pendientes.
+
 ## [1.29.6] - 2026-11-24 · DH-20261124-OPENINGS-IDTRA-GUARD
 
 ## [1.29.7] - 2026-11-24
