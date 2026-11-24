@@ -47,38 +47,55 @@ internal sealed class PricingHistoricalIdtraWorker(
                     logger.LogWarning("Historical IDTRA review required for Pricing rate {RateId}: ambiguous identifier or missing definitive acceptance/source identity.", rate.Id);
                     continue;
                 }
-                await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
-                var key = "historical-idtra:" + rate.Id.ToString("N");
-                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0));", ct);
-                if (await db.OutboxMessages.AnyAsync(x => x.EventName == "pricing.quote.accepted.v1" && x.CorrelationId == key, ct))
+                try
                 {
-                    alreadyQueued++;
-                    await transaction.CommitAsync(ct);
-                    continue;
+                    var result = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+                    {
+                        db.ChangeTracker.Clear();
+                        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+                        var key = "historical-idtra:" + rate.Id.ToString("N");
+                        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0));", ct);
+                        if (await db.OutboxMessages.AnyAsync(x => x.EventName == "pricing.quote.accepted.v1" && x.CorrelationId == key, ct))
+                        {
+                            await transaction.CommitAsync(ct);
+                            return 0;
+                        }
+                        var alternatives = await db.Database.SqlQueryRaw<Guid>(
+                            """
+                            SELECT parent_rate_id AS "Value" FROM pricing.rate_quote_alternatives
+                            WHERE rate_id = {0} AND status = 'Selected'
+                            """, rate.Id).ToArrayAsync(ct);
+                        var groupMembership = await db.Database.SqlQueryRaw<Guid>(
+                            """
+                            SELECT parent_rate_id AS "Value" FROM pricing.rate_quote_alternatives WHERE rate_id = {0}
+                            """, rate.Id).ToArrayAsync(ct);
+                        if (groupMembership.Length > 0 && alternatives.Length != 1)
+                        {
+                            await transaction.CommitAsync(ct);
+                            return -1;
+                        }
+                        var parent = alternatives.Length == 1 ? alternatives[0] : rate.Id;
+                        await outbox.WriteAsync("pricing.quote.accepted.v1", "pricing.quote.accepted.v1",
+                            AcceptedQuoteSnapshot.Build(rate, parent, null, actor, historical), key, ct);
+                        await db.SaveChangesAsync(ct);
+                        await transaction.CommitAsync(ct);
+                        return 1;
+                    });
+                    if (result == 1) queued++;
+                    else if (result == 0) alreadyQueued++;
+                    else
+                    {
+                        skipped++;
+                        logger.LogWarning("Historical IDTRA review required for unselected or ambiguous alternative {RateId}", rate.Id);
+                    }
                 }
-                var alternatives = await db.Database.SqlQueryRaw<Guid>(
-                    """
-                    SELECT parent_rate_id AS "Value" FROM pricing.rate_quote_alternatives
-                    WHERE rate_id = {0} AND status = 'Selected'
-                    """, rate.Id).ToArrayAsync(ct);
-                var groupMembership = await db.Database.SqlQueryRaw<Guid>(
-                    """
-                    SELECT parent_rate_id AS "Value" FROM pricing.rate_quote_alternatives WHERE rate_id = {0}
-                    """, rate.Id).ToArrayAsync(ct);
-                if (groupMembership.Length > 0 && alternatives.Length != 1)
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception error)
                 {
                     skipped++;
-                    logger.LogWarning("Historical IDTRA review required for unselected or ambiguous alternative {RateId}", rate.Id);
-                    await transaction.CommitAsync(ct);
-                    continue;
+                    logger.LogError(error, "Historical IDTRA enqueue failed for rate {RateId}; next scan will retry", rate.Id);
                 }
-                var parent = alternatives.Length == 1 ? alternatives[0] : rate.Id;
-                await outbox.WriteAsync("pricing.quote.accepted.v1", "pricing.quote.accepted.v1",
-                    AcceptedQuoteSnapshot.Build(rate, parent, null, actor, historical), key, ct);
-                await db.SaveChangesAsync(ct);
-                await transaction.CommitAsync(ct);
-                db.ChangeTracker.Clear();
-                queued++;
+                finally { db.ChangeTracker.Clear(); }
             }
             if (rates.Count < batch) break;
         }

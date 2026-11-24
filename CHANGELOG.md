@@ -1,3 +1,7 @@
+## [1.29.1] - 2026-11-24
+
+- PATCH: ejecutar transacciones del importador IDTRA dentro de Npgsql execution strategy, conservar idempotencia Outbox y aislar fallos por QUO para que un registro no reinicie el worker.
+
 ## [1.29.0] - 2026-11-24 · DH-20261124-OPS-HISTORICAL-IDTRA
 
 - MINOR candidato: worker opt-in para reemitir snapshots de QUO históricas definitivamente aceptadas con IDTRA numérico único; identifica la alternativa seleccionada, conserva datos Pricing y utiliza Outbox idempotente. Casos ambiguos, sin aceptación verificable o identidad se registran para conciliación; no inventa números ni fechas.
