@@ -13,7 +13,7 @@ public sealed class AddOperationsPricingReviews : Migration
     {
         migrationBuilder.Sql("""
             CREATE TABLE IF NOT EXISTS pricing.pricing_operations_review_requests (
-                id uuid PRIMARY KEY,
+                id uuid NOT NULL CONSTRAINT p_k_operations_review_requests PRIMARY KEY,
                 operations_request_id uuid NOT NULL UNIQUE,
                 case_id uuid NOT NULL,
                 company_id uuid NOT NULL,
