@@ -72,7 +72,8 @@ public static class SellerRateEndpoints
     {
         var linkedIds = await db.RateRequests
             .AsNoTracking()
-            .Where(x => x.SellerUserId == sellerUserId && x.RateId.HasValue)
+            .Where(x => x.SellerUserId == sellerUserId && x.RateId.HasValue
+                && !EF.Functions.JsonContains(x.PayloadJson, SellerRateAccessService.DelegatedGlobalMarker))
             .OrderByDescending(x => x.RequestedAtUtc)
             .Select(x => x.RateId!.Value)
             .ToListAsync(cancellationToken);
