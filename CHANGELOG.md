@@ -1,3 +1,8 @@
+## [1.29.5] - 2026-11-24 · DH-20261124-PRICING-SENT-CRM-FIX
+
+- PATCH: el permiso CRM adicional no obliga a vincular una cuenta para el envío estándar autorizado por Pricing. Se conserva la verificación CRM de cuentas vinculadas y destinos explícitos; los usuarios con permisos exclusivamente CRM siguen sujetos a la verificación de cuenta. Sin cambio REST, Outbox ni schema.
+- Pruebas de regresión de matriz de permisos; CI/staging pendientes. Versión global candidata 1.124.3.
+
 ## [1.29.4] - 2026-11-24 · DH-20261124-SELLER-ACCEPTANCE-FIX
 
 - PATCH: separa las reglas de aceptación/rechazo y cancelación del vendedor; corrige el mensaje de conflicto. Backport del flujo de decisión sobre revisión publicada para master, manteniendo autorización, aprobación de margen, alternativa seleccionada e idempotencia. IDTRA opcional. No se envía el PDF de un borrador posterior en el flujo de aceptación directa.

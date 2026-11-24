@@ -38,6 +38,12 @@ public sealed class SentRateEmailNotificationService(
         "cquiros@castrofallas.com",
     ];
 
+    // Only the CRM-only permission path requires an account up front.
+    // An existing account is always verified below, regardless of these scopes.
+    public static bool RequiresAccountVerification(
+        bool canUpdateRateStatus, bool canSendFromAccount, string? deliveryTarget)
+        => (canSendFromAccount && !canUpdateRateStatus) || deliveryTarget is not null;
+
     /// <returns>Null cuando el correo quedó preparado en el Outbox; de lo contrario, el motivo.</returns>
     public async Task<string?> QueueBeforeStatusTransitionAsync(
         Guid rateId,
