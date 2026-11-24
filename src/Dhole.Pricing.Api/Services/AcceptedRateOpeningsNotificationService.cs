@@ -7,13 +7,22 @@ using Dhole.Pricing.Application.Features.Rates.GenerateRateDocument;
 using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Persistence.DbContexts;
+using Dhole.Pricing.Persistence.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhole.Pricing.Api.Services;
 
 public enum RateAcceptanceActor { Seller, Pricing }
 
-public sealed record AcceptedOpeningQueueResult(bool Queued, string Code, string Message);
+public sealed record AcceptedOpeningQueueResult(bool Queued, string Code, string Message)
+{
+    public bool Suppressed => Code == "Pricing.OpeningNotificationIdtraAssigned";
+    public bool Handled => Queued || Suppressed;
+
+    public static AcceptedOpeningQueueResult IdtraAssigned() => new(false,
+        "Pricing.OpeningNotificationIdtraAssigned",
+        "No se envió la notificación de Apertura porque la cotización ya tiene o tuvo un IDTRA asignado.");
+}
 public static class AcceptedRateResendPolicy
 {
     public static string NormalizeNotificationType(string? value)
@@ -107,7 +116,7 @@ public sealed class AcceptedRateOpeningsNotificationService(
         string? acceptanceObservations = null,
         string? manualResendCorrelationId = null)
         => (await QueueDetailedAsync(rateId, actor, cancellationToken,
-            acceptanceObservations, manualResendCorrelationId)).Queued;
+            acceptanceObservations, manualResendCorrelationId)).Handled;
 
     // Supports an explicit no-PDF emergency notice without changing the normal opening mail.
     public async Task<AcceptedOpeningQueueResult> QueueDetailedAsync(
@@ -136,10 +145,16 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 return new(false, "Pricing.AcceptanceRateNotFound", "No se encontró la cotización.");
             }
 
-            // Every accepted commercial quote goes to Apertura, with or without IDTRA.
-            // An assigned IDTRA must never be announced as pending.
+            // Opening mail is only applicable while no IDTRA has ever been assigned.
             if (rate.Status != RateStatus.AcceptedByClient)
                 return new(false, "Pricing.AcceptanceRequiresAcceptedQuote", "Solo se pueden reenviar avisos de una QUO aceptada.");
+            if (!HasPendingIdtra(rate.Status, rate.IdtraNumber)
+                || await OpeningNotificationIdtraGuard.HasAssignedIdtraAsync(db, rateId, cancellationToken))
+            {
+                logger.LogInformation("Opening notification suppressed for RateId={RateId}: IDTRA assigned.", rateId);
+                return AcceptedOpeningQueueResult.IdtraAssigned();
+            }
+
             var idtraPending = string.IsNullOrWhiteSpace(rate.IdtraNumber);
             var idtraLabel = idtraPending ? "PENDIENTE DE ASIGNAR" : rate.IdtraNumber!.Trim();
 
@@ -373,6 +388,10 @@ public sealed class AcceptedRateOpeningsNotificationService(
                 <p><strong>Adjuntos:</strong> {(includePdf ? $"PDF comercial y {storedDocuments.Documents.Count} documento(s) del expediente." : "Aviso preliminar sin PDF ni respaldos adjuntos.")}</p>
                 {unavailableDocumentsHtml}
                 """;
+
+            // PDF and attachment preparation may take time; read the persisted IDTRA again.
+            if (await OpeningNotificationIdtraGuard.HasAssignedIdtraAsync(db, rateId, cancellationToken))
+                return AcceptedOpeningQueueResult.IdtraAssigned();
 
             stage = "write-outbox";
             await outbox.WriteAsync(
