@@ -1,0 +1,25 @@
+{
+  "releaseId": "DH-20261124-GLOBAL-COMMERCIAL-ACTIONS",
+  "ecosystemVersion": "1.124.9",
+  "component": "DholePricingService",
+  "previousVersion": "1.29.7",
+  "version": "1.29.8",
+  "releaseType": "PATCH",
+  "targetBranch": "master",
+  "targetBranches": [
+    "develop",
+    "master"
+  ],
+  "changes": [
+    "Authorized global commercial users may request modifications and expiry renewal, accept or reject foreign quotations, including A/B selection",
+    "Existing ownership restrictions for receipt and cancellation, historical acceptance and expiry approval remain; delegated requests preserve actor and do not grant permanent ownership"
+  ],
+  "validation": {
+    "ci": "pending",
+    "staging": "pending",
+    "production": "not-deployed"
+  },
+  "realtimeContractChanged": false,
+  "restContractChanged": false,
+  "schemaMigration": false
+}
