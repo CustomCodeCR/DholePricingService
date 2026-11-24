@@ -1,4 +1,6 @@
 using Dhole.Pricing.Api.Services;
+using Dhole.Pricing.Persistence.Messaging;
+using System.Text.Json;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -73,6 +75,34 @@ public sealed class AcceptedRateIdtraNotificationPolicyTests
             RateStatus.AcceptedByClient, null, " "));
         Assert.IsFalse(AcceptedRateOpeningsNotificationService.HasPendingIdtra(
             RateStatus.Sent, null));
+    }
+
+    [TestMethod]
+    public void AssignedIdtraIsHandledWithoutClaimingEmailWasQueued()
+    {
+        var result = AcceptedOpeningQueueResult.IdtraAssigned();
+        Assert.IsFalse(result.Queued);
+        Assert.IsTrue(result.Suppressed);
+        Assert.IsTrue(result.Handled);
+        Assert.IsFalse(new AcceptedOpeningQueueResult(false, "failure", "failure").Handled);
+        Assert.IsFalse(AcceptedRateOpeningsNotificationService.HasPendingIdtra(
+            RateStatus.AcceptedByClient, "IDTRA999.12933"));
+    }
+
+    [DataTestMethod]
+    [DataRow("pricing.rate.accepted.idtra-pending", true)]
+    [DataRow("pricing.rate.accepted.opening", true)]
+    [DataRow("pricing.rate.accepted.notice", true)]
+    [DataRow("pricing.rate.sent", false)]
+    public void OutboxGuardTargetsOnlyOpeningEmails(string notificationType, bool expected)
+    {
+        var id = Guid.NewGuid();
+        var payload = JsonSerializer.Serialize(new { notificationType, entityId = id.ToString() });
+        Assert.AreEqual(expected, OpeningNotificationIdtraGuard.TryGetOpeningRateId(
+            "notifications.notification.requested", payload, out var parsed));
+        if (expected) Assert.AreEqual(id, parsed);
+        Assert.IsFalse(OpeningNotificationIdtraGuard.TryGetOpeningRateId(
+            "pricing.rate.accepted.v1", payload, out _));
     }
 
     [TestMethod]
