@@ -76,6 +76,7 @@ public static class OperationsPricingReviewEndpoints
                 "pricing.operations-review.resolved.v1",
                 "pricing.operations-review.resolved.v1",
                 new {
+                    pricingReviewId = review.Id,
                     review.OperationsRequestId, review.CaseId, review.CompanyId,
                     review.ServiceId, review.QuoteId, review.AcceptedOptionId,
                     review.Status, review.DecidedBy, review.DecidedAtUtc,
