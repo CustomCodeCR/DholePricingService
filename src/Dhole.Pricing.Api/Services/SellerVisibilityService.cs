@@ -2,6 +2,8 @@ using System.Data;
 using System.Security.Claims;
 using Dhole.Pricing.Api.Extensions;
 using Dhole.Pricing.Domain.Shared;
+using Dhole.Pricing.Domain.Rates.Entities;
+using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -43,6 +45,17 @@ public sealed class SellerVisibilityService(ServiceDbContext db)
             scope.EndsWith(".*", StringComparison.Ordinal)
             && normalized.StartsWith(scope[..^1], StringComparison.Ordinal));
     }
+
+    // Global visibility alone remains read-only; commercial actions also require create.
+    public bool HasGlobalCommercialScopes(ClaimsPrincipal user)
+        => HasScope(user, PricingConstants.Scopes.RateRequestViewAll)
+            && HasScope(user, PricingConstants.Scopes.RateRequestCreate);
+
+    public bool CanManageAllCommercialRates(ClaimsPrincipal user, RateHeader rate)
+        => HasGlobalCommercialScopes(user)
+            && !rate.IsDeleted
+            && !(rate.RateType == RateType.Tariff && rate.ClientName != null
+                && rate.ClientName.Contains("tarifario", StringComparison.OrdinalIgnoreCase));
 
     public async Task<SellerVisibilityContext?> ResolveAsync(
         HttpContext context,
@@ -117,7 +130,8 @@ public sealed class SellerVisibilityService(ServiceDbContext db)
 
         var sellerUserId = await db.RateRequests
             .AsNoTracking()
-            .Where(request => request.RateId == rateId)
+            .Where(request => request.RateId == rateId
+                && !EF.Functions.JsonContains(request.PayloadJson, SellerRateAccessService.DelegatedGlobalMarker))
             .OrderByDescending(request => request.RequestedAtUtc)
             .Select(request => (Guid?)request.SellerUserId)
             .FirstOrDefaultAsync(cancellationToken);

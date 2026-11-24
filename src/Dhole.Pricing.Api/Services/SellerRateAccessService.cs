@@ -15,6 +15,8 @@ public sealed class SellerRateAccessService(
     ServiceDbContext db,
     AuthSellerDirectoryService directory)
 {
+    public const string DelegatedGlobalMarker = "{\"delegatedGlobal\":true}";
+
     public async Task<IReadOnlyList<string>> AssignedNamesAsync(Guid userId, CancellationToken ct)
     {
         // Do not depend on the exact "Vendedor" role: commercial requests
@@ -91,7 +93,8 @@ public sealed class SellerRateAccessService(
     public async Task<bool> CanReadAsync(RateHeader rate, Guid userId, CancellationToken ct)
     {
         var linked = await db.RateRequests.AsNoTracking()
-            .AnyAsync(r => r.RateId == rate.Id && r.SellerUserId == userId, ct);
+            .AnyAsync(r => r.RateId == rate.Id && r.SellerUserId == userId
+                && !EF.Functions.JsonContains(r.PayloadJson, DelegatedGlobalMarker), ct);
         return linked || await IsAssignedExecutiveAsync(rate, userId, ct);
     }
 

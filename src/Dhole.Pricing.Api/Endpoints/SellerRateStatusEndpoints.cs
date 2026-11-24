@@ -90,7 +90,7 @@ public static class SellerRateStatusEndpoints
 
 
     private static async Task<IResult> GetGroupOptionsAsync(
-        Guid rateId, ServiceDbContext db, SellerRateAccessService sellerAccess,
+        Guid rateId, ServiceDbContext db, SellerRateAccessService sellerAccess, SellerVisibilityService visibility,
         HttpContext httpContext, CancellationToken cancellationToken)
     {
         var userId = httpContext.GetCurrentUserId();
@@ -98,7 +98,8 @@ public static class SellerRateStatusEndpoints
         var requested = await db.RateHeaders.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
         if (requested is null) return Results.NotFound();
-        if (!await sellerAccess.CanReadAsync(requested, userId.Value, cancellationToken))
+        if (!visibility.CanManageAllCommercialRates(httpContext.User, requested)
+            && !await sellerAccess.CanReadAsync(requested, userId.Value, cancellationToken))
             return Results.Forbid();
 
         var connection = db.Database.GetDbConnection();
@@ -143,7 +144,8 @@ public static class SellerRateStatusEndpoints
         {
             var member = await db.RateHeaders.AsNoTracking()
                 .FirstOrDefaultAsync(rate => rate.Id == option.Id && !rate.IsDeleted, cancellationToken);
-            if (member is null || !await sellerAccess.CanReadAsync(member, userId.Value, cancellationToken))
+            if (member is null || (!visibility.CanManageAllCommercialRates(httpContext.User, member)
+                && !await sellerAccess.CanReadAsync(member, userId.Value, cancellationToken)))
                 continue;
             // Never expose prices or unpublished supplier costs from a draft to Sales.
             available.Add(new
@@ -163,7 +165,7 @@ public static class SellerRateStatusEndpoints
     }
 
     private static async Task<IResult> SelectSellerGroupOptionAsync(
-        Guid rateId, ServiceDbContext db, SellerRateAccessService sellerAccess,
+        Guid rateId, ServiceDbContext db, SellerRateAccessService sellerAccess, SellerVisibilityService visibility,
         HttpContext httpContext, CancellationToken cancellationToken)
     {
         var userId = httpContext.GetCurrentUserId();
@@ -171,7 +173,8 @@ public static class SellerRateStatusEndpoints
         var rate = await db.RateHeaders.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, cancellationToken);
         if (rate is null) return Results.NotFound();
-        if (!await sellerAccess.CanReadAsync(rate, userId.Value, cancellationToken))
+        if (!visibility.CanManageAllCommercialRates(httpContext.User, rate)
+            && !await sellerAccess.CanReadAsync(rate, userId.Value, cancellationToken))
             return Results.Forbid();
         if (rate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient or RateStatus.Expired))
             return Results.Conflict(new { code = "Pricing.SellerAlternativeNotSent",
@@ -186,6 +189,7 @@ public static class SellerRateStatusEndpoints
         ICommandDispatcher dispatcher,
         AcceptedRateOpeningsNotificationService openingsNotificationService,
         SellerRateAccessService sellerAccess,
+        SellerVisibilityService visibility,
         ILoggerFactory loggerFactory,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -207,7 +211,8 @@ public static class SellerRateStatusEndpoints
 
         var rateRequest = await db.RateRequests
             .AsNoTracking()
-            .Where(x => x.SellerUserId == currentUserId.Value && x.RateId == rateId)
+            .Where(x => x.SellerUserId == currentUserId.Value && x.RateId == rateId
+                && !EF.Functions.JsonContains(x.PayloadJson, SellerRateAccessService.DelegatedGlobalMarker))
             .OrderByDescending(x => x.RequestedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -218,6 +223,7 @@ public static class SellerRateStatusEndpoints
             return Results.NotFound();
 
         if (rateRequest is null
+            && !(status != RateStatus.Cancelled && visibility.CanManageAllCommercialRates(httpContext.User, currentRate))
             && !await sellerAccess.IsAssignedExecutiveAsync(currentRate, currentUserId.Value, cancellationToken))
             return Results.Forbid();
 
