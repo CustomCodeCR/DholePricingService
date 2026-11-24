@@ -57,10 +57,11 @@ public static class ExpiredRateUpdateApprovalEndpoints
             .Any(value => value.Equals("pricing.rate.update", StringComparison.OrdinalIgnoreCase));
 
     private static async Task<bool> CanReadAsync(
-        RateHeader rate, HttpContext http, SellerRateAccessService access, CancellationToken ct)
+        RateHeader rate, HttpContext http, SellerRateAccessService access, SellerVisibilityService visibility, CancellationToken ct)
     {
         var userId = http.GetCurrentUserId();
         return userId.HasValue && (HasPricingUpdateScope(http)
+            || visibility.CanManageAllCommercialRates(http.User, rate)
             || await access.CanReadAsync(rate, userId.Value, ct));
     }
 
@@ -90,13 +91,13 @@ public static class ExpiredRateUpdateApprovalEndpoints
     }
 
     private static async Task<IResult> GetAsync(
-        Guid rateId, ServiceDbContext db, SellerRateAccessService access,
+        Guid rateId, ServiceDbContext db, SellerRateAccessService access, SellerVisibilityService visibility,
         HttpContext http, CancellationToken ct)
     {
         var rate = await db.RateHeaders.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, ct);
         if (rate is null) return Results.NotFound();
-        if (!await CanReadAsync(rate, http, access, ct)) return Results.Forbid();
+        if (!await CanReadAsync(rate, http, access, visibility, ct)) return Results.Forbid();
 
         var requiresApproval = ExpiredRateUpdateApprovalPolicy.RequiresApprovalForUser(
             rate, DateTimeOffset.UtcNow, http.User);
@@ -115,7 +116,7 @@ public static class ExpiredRateUpdateApprovalEndpoints
 
     private static async Task<IResult> RequestAsync(
         Guid rateId, RequestApproval request, ServiceDbContext db,
-        SellerRateAccessService access, AuthSellerDirectoryService directory,
+        SellerRateAccessService access, SellerVisibilityService visibility, AuthSellerDirectoryService directory,
         IIntegrationEventOutboxWriter outbox, IConfiguration configuration,
         HttpContext http, CancellationToken ct)
     {
@@ -131,7 +132,7 @@ public static class ExpiredRateUpdateApprovalEndpoints
         var rate = await db.RateHeaders.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, ct);
         if (rate is null) return Results.NotFound();
-        if (!await CanReadAsync(rate, http, access, ct)) return Results.Forbid();
+        if (!await CanReadAsync(rate, http, access, visibility, ct)) return Results.Forbid();
         if (SellerRateModificationPolicy.RequiresPricing(rate.Status, rate.AcceptedAtUtc.HasValue))
             return Results.Conflict(new { code = "Pricing.SellerModificationRequiresPricing",
                 message = "Una cotización aceptada solo puede ser modificada por Pricing." });
