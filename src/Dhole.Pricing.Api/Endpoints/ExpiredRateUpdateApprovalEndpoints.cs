@@ -132,6 +132,9 @@ public static class ExpiredRateUpdateApprovalEndpoints
             .FirstOrDefaultAsync(x => x.Id == rateId && !x.IsDeleted, ct);
         if (rate is null) return Results.NotFound();
         if (!await CanReadAsync(rate, http, access, ct)) return Results.Forbid();
+        if (SellerRateModificationPolicy.RequiresPricing(rate.Status, rate.AcceptedAtUtc.HasValue))
+            return Results.Conflict(new { code = "Pricing.SellerModificationRequiresPricing",
+                message = "Una cotización aceptada solo puede ser modificada por Pricing." });
         if (rate.Status.ToString() is "Closed" or "Cancelled")
             return Results.Conflict(new { code = "Pricing.RateClosed",
                 message = "Una cotización cerrada o cancelada no se puede reactivar." });
@@ -265,7 +268,7 @@ public static class ExpiredRateUpdateApprovalEndpoints
             + (request.Approve ? "aprobada" : "rechazada")
             + " por " + (reviewer.DisplayName ?? reviewer.Email) + "."
             + (string.IsNullOrWhiteSpace(decisionReason) ? "" : " Observación: " + decisionReason);
-        var route = "/pricing/rates?status=Expired";
+        var route = $"/pricing/seller-rates/{rate.Id:D}";
         await QueueAsync(outbox, "System", requester, rate.Id, approvalId,
             "pricing.rate.expired-update.decided", subject, body, route, ct);
         if (!string.IsNullOrWhiteSpace(requester.Email))
@@ -273,6 +276,12 @@ public static class ExpiredRateUpdateApprovalEndpoints
                 "pricing.rate.expired-update.decided", subject,
                 "<p>" + WebUtility.HtmlEncode(body) + "</p>", route, ct);
 
+        foreach (var manager in await SupervisorsAsync(directory, ct))
+        {
+            if (manager.UserId == reviewer.UserId || manager.UserId == requester.UserId) continue;
+            await QueueAsync(outbox, "System", manager, rate.Id, approvalId,
+                "pricing.rate.expired-update.decided", subject, body, "/home?expiredApprovals=1", ct);
+        }
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return Results.Ok(new { approvalId, status, rateId = rate.Id });
