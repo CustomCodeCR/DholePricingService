@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using Dhole.Pricing.Api.Middleware;
-using Dhole.Pricing.Api.Services;
 using Microsoft.AspNetCore.Http;
 
 namespace Dhole.Pricing.IntegrationTests;
@@ -22,7 +21,7 @@ public sealed class ExpiredRateApprovalVisibilityMiddlewareTests
             return Task.CompletedTask;
         });
         var context = SellerContext(method, $"/api/pricing/rates/{Guid.NewGuid():D}/expired-update-approval");
-        await middleware.InvokeAsync(context, new SellerVisibilityService(null!));
+        await middleware.InvokeAsync(context, null!);
         Assert.IsTrue(called);
     }
 
@@ -36,7 +35,7 @@ public sealed class ExpiredRateApprovalVisibilityMiddlewareTests
             return Task.CompletedTask;
         });
         var context = SellerContext("GET", "/api/pricing/rates");
-        await middleware.InvokeAsync(context, new SellerVisibilityService(null!));
+        await middleware.InvokeAsync(context, null!);
         Assert.IsFalse(called);
         Assert.AreEqual(StatusCodes.Status403Forbidden, context.Response.StatusCode);
     }
