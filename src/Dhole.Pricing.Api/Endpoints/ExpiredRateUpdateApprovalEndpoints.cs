@@ -162,8 +162,21 @@ public static class ExpiredRateUpdateApprovalEndpoints
                 title: "No se pudieron identificar ambos jefes en Auth para las notificaciones.",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
 
+        // Stable across retry attempts, including an ambiguous commit result.
         var approvalId = Guid.NewGuid();
+        return await ExecuteApprovalTransactionAsync(db, async isRetry =>
+        {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        if (isRetry)
+        {
+            var committed = await db.Database.SqlQueryRaw<bool>(
+                """
+                SELECT EXISTS(SELECT 1 FROM pricing."ExpiredRateUpdateApprovals"
+                    WHERE "Id" = {0}) AS "Value"
+                """, approvalId).SingleAsync(ct);
+            if (committed)
+                return Results.Ok(new { approvalId, status = "Pending", rateId, rate.RevisionNumber });
+        }
         var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO pricing."ExpiredRateUpdateApprovals"
               ("Id","RateId","RevisionNumber","Reason","RequestedByUserId","Status")
@@ -197,6 +210,7 @@ public static class ExpiredRateUpdateApprovalEndpoints
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return Results.Ok(new { approvalId, status = "Pending", rateId, rate.RevisionNumber });
+        });
     }
 
     private static async Task<IResult> PendingAsync(
@@ -256,8 +270,21 @@ public static class ExpiredRateUpdateApprovalEndpoints
                 message = "Debe justificar el rechazo de la solicitud." });
         if (decisionReason?.Length > 4000) return Results.BadRequest();
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        // Resolve external Auth directory before the transaction/retry boundary.
+        var users = await directory.GetPricingUsersAsync(ct);
+        var managers = await SupervisorsAsync(directory, ct);
         var status = request.Approve ? "Approved" : "Rejected";
+        return await ExecuteApprovalTransactionAsync(db, async isRetry =>
+        {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        if (isRetry)
+        {
+            var committed = (await HistoryAsync(db, rate.Id, ct)).Any(x =>
+                x.Id == approvalId && x.Status == status && x.DecidedByUserId == reviewer.UserId
+                && x.DecisionReason == decisionReason);
+            if (committed)
+                return Results.Ok(new { approvalId, status, rateId = rate.Id });
+        }
         var updated = await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE pricing."ExpiredRateUpdateApprovals"
                SET "Status" = {status}, "DecidedByUserId" = {reviewer.UserId},
@@ -270,7 +297,6 @@ public static class ExpiredRateUpdateApprovalEndpoints
             message = "Esta solicitud ya fue atendida."
         });
 
-        var users = await directory.GetPricingUsersAsync(ct);
         var requester = users.FirstOrDefault(u => u.UserId == row.RequestedByUserId)
             ?? new SellerDirectoryUser(row.RequestedByUserId, null, null, null);
         var quote = rate.QuoNumber ?? rate.RateCode;
@@ -288,7 +314,7 @@ public static class ExpiredRateUpdateApprovalEndpoints
                 "pricing.rate.expired-update.decided", subject,
                 "<p>" + WebUtility.HtmlEncode(body) + "</p>", route, ct);
 
-        foreach (var manager in await SupervisorsAsync(directory, ct))
+        foreach (var manager in managers)
         {
             if (manager.UserId == reviewer.UserId || manager.UserId == requester.UserId) continue;
             await QueueAsync(outbox, "System", manager, rate.Id, approvalId,
@@ -297,6 +323,22 @@ public static class ExpiredRateUpdateApprovalEndpoints
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
         return Results.Ok(new { approvalId, status, rateId = rate.Id });
+        });
+    }
+
+    // The configured Npgsql retrying strategy rejects manually opened transactions
+    // unless the complete transaction runs within ExecuteAsync. On replay discard
+    // tracked outbox messages from the rolled-back attempt before rebuilding them.
+    private static Task<IResult> ExecuteApprovalTransactionAsync(
+        ServiceDbContext db, Func<bool, Task<IResult>> operation)
+    {
+        var attempt = 0;
+        return db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            var isRetry = attempt++ > 0;
+            if (isRetry) db.ChangeTracker.Clear();
+            return await operation(isRetry);
+        });
     }
 
     // PostgreSQL Outbox correlation_id is varchar(100). Independent channel,

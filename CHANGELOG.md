@@ -1,5 +1,10 @@
 ## [1.29.8] - 2026-11-24 · DH-20261124-GLOBAL-COMMERCIAL-ACTIONS
 
+## [1.29.10] - 2026-11-24
+
+- DH-20261124-EXPIRED-APPROVAL-TRANSACTION: execute both expiry approval writes inside the configured EF/Npgsql execution strategy, preserving atomic reason/history and notification outbox. Reconcile ambiguous commits and reset tracked outbox state before retry. Extend existing CI transaction regression guard.
+
+
 ## [1.29.9] - 2026-11-24
 
 - DH-20261124-EXPIRED-APPROVAL-ACCESS: allow only GET/POST expiry approval routes to reach their own ownership/permission checks instead of generic Pricing seller visibility. Preserve revision-bound history and atomic supervisor System/Email Outbox; explicit denial messages and regression tests.
