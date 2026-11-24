@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.29.9",
-  "ecosystemVersion": "1.124.13",
-  "releaseId": "DH-20261124-EXPIRED-APPROVAL-ACCESS",
+  "version": "1.29.10",
+  "ecosystemVersion": "1.124.14",
+  "releaseId": "DH-20261124-EXPIRED-APPROVAL-TRANSACTION",
   "releaseStatus": "candidate-ci-staging-pending",
-  "businessReleaseId": "DH-20261124-EXPIRED-APPROVAL-ACCESS"
+  "businessReleaseId": "DH-20261124-EXPIRED-APPROVAL-TRANSACTION"
 }

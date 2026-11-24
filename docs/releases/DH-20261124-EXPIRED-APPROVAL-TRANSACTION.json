@@ -1,0 +1,9 @@
+{
+  "releaseId": "DH-20261124-EXPIRED-APPROVAL-TRANSACTION",
+  "component": "DholePricingService",
+  "previousVersion": "1.29.9",
+  "version": "1.29.10",
+  "ecosystemVersion": "1.124.14",
+  "target": "develop",
+  "validation": "CI and staging pending"
+}
