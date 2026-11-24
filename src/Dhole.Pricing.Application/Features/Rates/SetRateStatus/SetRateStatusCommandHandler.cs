@@ -4,6 +4,7 @@ using CustomCodeFramework.Persistence.Abstractions;
 using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Abstractions.Repositories;
+using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Domain.Shared;
@@ -14,6 +15,7 @@ namespace Dhole.Pricing.Application.Features.Rates.SetRateStatus;
 public sealed class SetRateStatusCommandHandler(
     IRateHeaderRepository rateHeaders,
     IPricingAuditService audit,
+    IIntegrationEventOutboxWriter integrationEvents,
     IRateHeaderCacheService cache,
     IUnitOfWork unitOfWork,
     ILogger<SetRateStatusCommandHandler> logger
@@ -77,6 +79,7 @@ public sealed class SetRateStatusCommandHandler(
             return Result.Failure(PricingErrors.RateClosureReasonIsRequired);
         }
 
+        var wasAcceptedByClient = rate.Status == RateStatus.AcceptedByClient;
         var before = PricingAuditSnapshots.From(rate);
 
         try
@@ -127,6 +130,78 @@ public sealed class SetRateStatusCommandHandler(
             ),
             cancellationToken
         );
+
+        // Only the definitive first transition to client acceptance creates
+        // the durable cross-service acceptance event. Internal margin approval,
+        // drafts, Sent, and duplicate HTTP status retries must never generate IDTRA.
+        // Write to the SAME EF unit of work as Pricing's commercial state.
+        if (command.Status == RateStatus.AcceptedByClient && !wasAcceptedByClient)
+        {
+            await integrationEvents.WriteAsync(
+                "pricing.quote.accepted.v1",
+                "pricing.quote.accepted.v1",
+                new
+                {
+                    schemaVersion = 1,
+                    rateId = rate.Id,
+                    acceptedOptionId = rate.Id,
+                    quoteNumber = rate.QuoNumber,
+                    commercialRevision = rate.RevisionNumber,
+                    acceptedAtUtc = rate.AcceptedAtUtc,
+                    crmAccountId = rate.ClientAccountId,
+                    crmLeadId = rate.ClientLeadId,
+                    clientName = rate.ClientName,
+                    commercialExecutiveName = rate.ExecutiveName,
+                    shipmentMode = rate.ShipmentMode.ToString(),
+                    operationType = rate.OperationType.ToString(),
+                    incoterm = rate.IncotermCode,
+                    route = new {
+                        polId = rate.PolId, polName = rate.PolName,
+                        poeId = rate.PoeId, poeName = rate.PoeName,
+                        podId = rate.PodId, podName = rate.PodName
+                    },
+                    cargo = new {
+                        weightKg = rate.TotalWeightKg,
+                        volumeCbm = rate.TotalVolumeCbm,
+                        packages = rate.TotalPackages,
+                        cargoLinesJson = rate.CargoLinesJson
+                    },
+                    providers = new {
+                        carrierId = rate.CarrierId, carrierName = rate.CarrierName,
+                        agentId = rate.AgentId, agentName = rate.AgentName
+                    },
+                    services = rate.RateServices.Select(service => new {
+                        serviceId = service.ServiceId,
+                        serviceCode = service.ServiceCode,
+                        serviceName = service.ServiceName
+                    }).ToArray(),
+                    equipment = rate.RateContainers.Select(item => new {
+                        equipmentId = item.ContainerTypeId,
+                        equipmentCode = item.ContainerTypeCode,
+                        equipmentName = item.ContainerTypeName,
+                        quantity = item.Quantity,
+                        unitWeightsKg = item.UnitWeightsKg
+                    }).ToArray(),
+                    costLines = rate.RateDetails.Select(item => new {
+                        rateDetailId = item.Id,
+                        sourceCostId = item.CostId,
+                        description = item.Name,
+                        costType = item.CostType.ToString(),
+                        costDetailType = item.CostDetailType.ToString(),
+                        chargeBasis = item.ChargeBasis.ToString(),
+                        quantity = item.Quantity,
+                        currencyCode = item.CurrencyCode,
+                        unitCost = item.CostAmount,
+                        unitSale = item.SaleAmount,
+                        applyDestinationTax = item.ApplyDestinationTax,
+                        destinationTaxRate = item.DestinationTaxRate,
+                        notes = item.Notes
+                    }).ToArray(),
+                    documentStorageIds = rate.FinalBackupStorageIds
+                },
+                correlationId: $"quote-accepted:{rate.Id:D}:{rate.RevisionNumber}",
+                cancellationToken: cancellationToken);
+        }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
