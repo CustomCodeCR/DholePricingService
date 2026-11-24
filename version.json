@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.27.1",
-  "ecosystemVersion": "1.121.1",
-  "releaseId": "DH-20261123-EMAIL-BRAND-433",
+  "version": "1.28.0",
+  "ecosystemVersion": "1.122.0",
+  "releaseId": "DH-20261123-OPS-AUTOSAVE-434",
   "releaseStatus": "candidate-ci-and-staging-pending",
-  "businessReleaseId": "DH-20261123-EMAIL-BRAND-433"
+  "businessReleaseId": "DH-20261123-OPS-AUTOSAVE-434"
 }
