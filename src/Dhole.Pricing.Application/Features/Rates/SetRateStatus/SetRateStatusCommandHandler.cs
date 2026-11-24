@@ -144,7 +144,9 @@ public sealed class SetRateStatusCommandHandler(
                 {
                     schemaVersion = 1,
                     rateId = rate.Id,
+                    quoteId = command.QuoteGroupId ?? rate.Id,
                     acceptedOptionId = rate.Id,
+                    acceptedByUserId = command.UpdatedBy,
                     quoteNumber = rate.QuoNumber,
                     commercialRevision = rate.RevisionNumber,
                     acceptedAtUtc = rate.AcceptedAtUtc,
