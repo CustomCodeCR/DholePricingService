@@ -49,15 +49,15 @@ public static class RateRequestReturnEmail
         var editUrl = BuildEditUrl(sellerPortalBaseUrl, request.Id);
         var action = editUrl is null
             ? """
-              <p style="margin:20px 0 0;font-size:14px;line-height:22px;color:#29413a;">
+              <p style="margin:20px 0 0;font-size:14px;line-height:22px;color:#343a40;">
                 Ingresá al módulo <strong>Ventas</strong>, buscá la solicitud devuelta y seleccioná <strong>Corregir y reenviar</strong>.
               </p>
               """
             : $"""
               <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0 8px;">
                 <tr>
-                  <td bgcolor="#14765c" style="border-radius:9px;text-align:center;">
-                    <a href="{WebUtility.HtmlEncode(editUrl)}" style="background-color:#14765c;border:1px solid #14765c;border-radius:9px;color:#ffffff;display:inline-block;font-size:14px;font-weight:bold;line-height:20px;padding:13px 22px;text-align:center;text-decoration:none;">
+                  <td bgcolor="#a80e18" style="border-radius:9px;text-align:center;">
+                    <a href="{WebUtility.HtmlEncode(editUrl)}" style="background-color:#a80e18;border:1px solid #a80e18;border-radius:9px;color:#ffffff;display:inline-block;font-size:14px;font-weight:bold;line-height:20px;padding:13px 22px;text-align:center;text-decoration:none;">
                       Corregir y reenviar solicitud
                     </a>
                   </td>
@@ -73,31 +73,40 @@ public static class RateRequestReturnEmail
               <meta name="viewport" content="width=device-width, initial-scale=1" />
               <title>Solicitud de tarifa devuelta</title>
             </head>
-            <body style="margin:0;padding:0;background-color:#f3f6f5;font-family:Arial,Helvetica,sans-serif;color:#18352d;">
-              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color:#f3f6f5;">
+            <body style="margin:0;padding:0;background-color:#f7f7f8;font-family:Arial,Helvetica,sans-serif;color:#30343b;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color:#f7f7f8;">
                 <tr>
                   <td align="center" style="padding:32px 12px;">
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="width:100%;max-width:600px;background-color:#ffffff;border:1px solid #e1e9e5;border-radius:14px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="width:100%;max-width:600px;background-color:#ffffff;border:1px solid #e5e7eb;border-radius:14px;">
                       <tr>
-                        <td style="padding:23px 30px;background-color:#123f34;border-radius:13px 13px 0 0;">
-                          <p style="margin:0;font-size:12px;font-weight:bold;letter-spacing:1px;color:#b5e1d2;">GRUPO CASTRO FALLAS</p>
-                          <p style="margin:5px 0 0;font-size:15px;font-weight:bold;color:#ffffff;">Departamento de Pricing</p>
+                        <td style="padding:23px 30px;background-color:#a80e18;border-radius:13px 13px 0 0;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">
+                            <tr>
+                              <td width="125" valign="middle" style="width:125px;padding:0 20px 0 0;">
+                                <img src="cid:dhole-castro-fallas-logo" alt="Castro Fallas" width="120" style="display:block;width:120px;height:auto;border:0;outline:0;text-decoration:none;" />
+                              </td>
+                              <td valign="middle" style="vertical-align:middle;">
+                                <p style="margin:0;font-size:12px;font-weight:bold;letter-spacing:1px;color:#ffe1e4;">GRUPO CASTRO FALLAS</p>
+                                <p style="margin:5px 0 0;font-size:15px;font-weight:bold;color:#ffffff;">Departamento de Pricing</p>
+                              </td>
+                            </tr>
+                          </table>
                         </td>
                       </tr>
                       <tr>
                         <td style="padding:30px;">
                           <p style="margin:0 0 12px;color:#9a661c;font-size:12px;letter-spacing:.8px;font-weight:bold;">ACCIÓN REQUERIDA · CORRECCIÓN PENDIENTE</p>
-                          <h1 style="font-size:25px;line-height:32px;margin:0 0 20px;color:#123f34;">Tu solicitud de tarifa fue devuelta</h1>
-                          <p style="margin:0 0 16px;font-size:15px;line-height:24px;color:#29413a;">Hola, {safeSeller}:</p>
-                          <p style="margin:0 0 22px;font-size:15px;line-height:24px;color:#29413a;">
+                          <h1 style="font-size:25px;line-height:32px;margin:0 0 20px;color:#a80e18;">Tu solicitud de tarifa fue devuelta</h1>
+                          <p style="margin:0 0 16px;font-size:15px;line-height:24px;color:#343a40;">Hola, {safeSeller}:</p>
+                          <p style="margin:0 0 22px;font-size:15px;line-height:24px;color:#343a40;">
                             El equipo de Pricing revisó tu solicitud y necesita que corrijás algunos datos antes de continuar.
                           </p>
-                          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color:#f6f8f7;border:1px solid #e3eae7;border-radius:10px;">
+                          <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color:#f8f9fa;border:1px solid #e5e7eb;border-radius:10px;">
                             <tr>
                               <td style="padding:18px 20px;">
-                                <p style="margin:0 0 12px;font-size:13px;color:#52665f;"><strong style="color:#18352d;">Cliente:</strong> {safeClient}</p>
-                                <p style="margin:0 0 12px;font-size:13px;line-height:21px;color:#52665f;"><strong style="color:#18352d;">Ruta:</strong> {safeRoute}</p>
-                                <p style="margin:0;font-size:13px;color:#52665f;"><strong style="color:#18352d;">Modalidad:</strong> {safeMode}</p>
+                                <p style="margin:0 0 12px;font-size:13px;color:#61666d;"><strong style="color:#30343b;">Cliente:</strong> {safeClient}</p>
+                                <p style="margin:0 0 12px;font-size:13px;line-height:21px;color:#61666d;"><strong style="color:#30343b;">Ruta:</strong> {safeRoute}</p>
+                                <p style="margin:0;font-size:13px;color:#61666d;"><strong style="color:#30343b;">Modalidad:</strong> {safeMode}</p>
                               </td>
                             </tr>
                           </table>
@@ -110,14 +119,14 @@ public static class RateRequestReturnEmail
                             </tr>
                           </table>
                           {action}
-                          <p style="margin:18px 0 0;font-size:13px;line-height:21px;color:#52665f;">
+                          <p style="margin:18px 0 0;font-size:13px;line-height:21px;color:#61666d;">
                             Una vez corregida, podés reenviar <strong>la misma solicitud</strong>; no hace falta crear otra y se conserva su historial.
                           </p>
                         </td>
                       </tr>
                       <tr>
-                        <td style="border-top:1px solid #e3eae7;padding:18px 30px;">
-                          <p style="margin:0;font-size:12px;line-height:18px;color:#687c74;">Notificación automática del sistema Dhole · Grupo Castro Fallas</p>
+                        <td style="border-top:1px solid #e5e7eb;padding:18px 30px;">
+                          <p style="margin:0;font-size:12px;line-height:18px;color:#6b7280;">Notificación automática del sistema Dhole · Grupo Castro Fallas</p>
                         </td>
                       </tr>
                     </table>
