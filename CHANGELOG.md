@@ -1,3 +1,8 @@
+## [1.29.4] - 2026-11-24 · DH-20261124-SELLER-ACCEPTANCE-FIX
+
+- PATCH: separa las reglas de aceptación/rechazo y cancelación del vendedor; corrige el mensaje de conflicto. Backport del flujo de decisión sobre revisión publicada para master, manteniendo autorización, aprobación de margen, alternativa seleccionada e idempotencia. IDTRA opcional. No se envía el PDF de un borrador posterior en el flujo de aceptación directa.
+- Pruebas de matriz de transiciones; CI y staging pendientes. Versión global candidata 1.124.2.
+
 ## [1.27.1] - 2026-11-23 (DH-20261123-EMAIL-BRAND-433 · correo de devolución con identidad Castro Fallas)
 
 - PATCH: unifica correo HTML de devoluciones de Pricing con el rojo corporativo #A80E18 de Notifications e incluye el logo blanco CID embebido por Notifications.

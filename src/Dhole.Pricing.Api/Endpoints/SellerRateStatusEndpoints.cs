@@ -6,6 +6,7 @@ using Dhole.Pricing.Application.Abstractions.Auditing;
 using Dhole.Pricing.Application.Abstractions.Cache;
 using Dhole.Pricing.Application.Auditing;
 using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
+using Dhole.Pricing.Domain.Rates.Entities;
 using Dhole.Pricing.Domain.Rates.Enums;
 using Dhole.Pricing.Persistence.DbContexts;
 using Microsoft.EntityFrameworkCore;
@@ -247,9 +248,25 @@ public static class SellerRateStatusEndpoints
         // QueueAsync utiliza una clave estable para no duplicar correos de Apertura.
         if (currentRate.Status == status)
         {
-            if (status == RateStatus.AcceptedByClient &&
-                !await openingsNotificationService.QueueAsync(rateId, RateAcceptanceActor.Seller, cancellationToken))
-                return AcceptanceEmailPending(rateId);
+            if (status == RateStatus.AcceptedByClient)
+            {
+                // A duplicate PATCH must not send the unpublished newer revision
+                // to Apertura after a prior successful direct Open decision.
+                var unpublishedNewer = await db.Set<RateRevision>().AsNoTracking()
+                    .AnyAsync(x => x.RateHeaderId == rateId
+                        && x.RevisionNumber < currentRate.RevisionNumber
+                        && (x.Status == "Sent" || x.Status == "RequestedByClient" || x.Status == "Expired"),
+                        cancellationToken);
+                if (unpublishedNewer)
+                    return Results.Ok(new {
+                        status = status.ToString(),
+                        openingNotificationDeferred = true,
+                    });
+
+                if (!await openingsNotificationService.QueueAsync(
+                    rateId, RateAcceptanceActor.Seller, cancellationToken))
+                    return AcceptanceEmailPending(rateId);
+            }
             return Results.NoContent();
         }
 
@@ -265,13 +282,49 @@ public static class SellerRateStatusEndpoints
             });
         }
 
-        if (currentRate.Status is not (RateStatus.Sent or RateStatus.RequestedByClient or RateStatus.Expired)
-            && !(status == RateStatus.Cancelled && currentRate.Status == RateStatus.AcceptedByClient))
+        // The seller can decide on a PREVIOUSLY ISSUED quote even if Pricing
+        // reopened the current header. Do not grant this to a brand-new unsent
+        // draft, low-margin pending approval, or active seller modification.
+        var isOpenDecision = SellerRateDecisionPolicy.RequiresPublishedRevision(currentRate.Status, status);
+        var decisionOnOlderPublishedRevision = false;
+        if (isOpenDecision)
+        {
+            if (currentRate.RequiredApproval)
+                return Results.Conflict(new {
+                    code = "Pricing.SellerDecisionRequiresApproval",
+                    message = "La tarifa requiere aprobación antes de registrar una decisión comercial.",
+                });
+
+            var published = await db.Set<RateRevision>().AsNoTracking()
+                .Where(x => x.RateHeaderId == rateId
+                    && (x.Status == "Sent" || x.Status == "RequestedByClient" || x.Status == "Expired"))
+                .OrderByDescending(x => x.RevisionNumber)
+                .Select(x => new { x.RevisionNumber, x.Status })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (published is null || published.RevisionNumber > currentRate.RevisionNumber)
+                return Results.Conflict(new {
+                    code = "Pricing.SellerDecisionRequiresPublishedRevision",
+                    message = "La tarifa Abierta necesita una revisión previamente enviada para aceptarse o rechazarse.",
+                });
+
+            var openWork = await db.RateRequests.AsNoTracking()
+                .Where(x => x.RateId == rateId && x.Status == RateRequestStatus.Open)
+                .Select(x => x.PayloadJson)
+                .ToListAsync(cancellationToken);
+            if (openWork.Any(RateModificationRequestPayload.IsModification))
+                return Results.Conflict(new {
+                    code = "Pricing.SellerModificationStillOpen",
+                    message = "Pricing todavía está procesando la modificación. Espere a que termine antes de registrar la decisión.",
+                });
+
+            decisionOnOlderPublishedRevision = currentRate.RevisionNumber > published.RevisionNumber;
+        }
+        else if (!SellerRateDecisionPolicy.CanDecideWithoutPublishedRevision(currentRate.Status, status))
         {
             return Results.Conflict(new
             {
                 code = "Pricing.SellerRateNotAwaitingClient",
-                message = "La tarifa no permite esa transición comercial: solo las cotizaciones aceptadas pueden cancelarse.",
+                message = "No se puede registrar la decisión del cliente desde el estado actual de la cotización. Actualice la información y verifique que la cotización esté enviada o tenga una revisión publicada.",
             });
         }
 
@@ -314,6 +367,7 @@ public static class SellerRateStatusEndpoints
                     request.Reason,
                     status == RateStatus.AcceptedByClient ? request.IdtraNumber : null,
                     currentUserId,
+                    AllowDirectClientDecision: isOpenDecision,
                     AcceptanceObservations: acceptanceObservations
                 ),
                 cancellationToken
@@ -321,15 +375,35 @@ public static class SellerRateStatusEndpoints
 
             if (result.IsSuccess && status == RateStatus.AcceptedByClient)
             {
-                var queued = await openingsNotificationService.QueueAsync(
-                    rateId,
-                    RateAcceptanceActor.Seller,
-                    cancellationToken,
-                    acceptanceObservations
-                );
-                if (!queued)
-                    return AcceptanceEmailPending(rateId);
+                if (decisionOnOlderPublishedRevision)
+                {
+                    // The opening-email generator reads the live header and would
+                    // attach an UNPUBLISHED PDF. Never send that draft to Apertura.
+                    // Keep the decision committed; Pricing must publish/reconcile
+                    // the accepted revision before an opening PDF can be sent.
+                    loggerFactory.CreateLogger(nameof(SellerRateStatusEndpoints)).LogWarning(
+                        "Seller accepted a previously published revision with an unpublished newer draft. " +
+                        "Opening document deferred. RateId={RateId} PublishedDecisionStatus={Status}",
+                        rateId, status);
+                }
+                else
+                {
+                    if (!await openingsNotificationService.QueueAsync(
+                        rateId,
+                        RateAcceptanceActor.Seller,
+                        cancellationToken,
+                        acceptanceObservations))
+                        return AcceptanceEmailPending(rateId);
+                }
             }
+
+            if (result.IsSuccess && decisionOnOlderPublishedRevision)
+                return Results.Ok(new {
+                    status = status.ToString(),
+                    openingNotificationDeferred = status == RateStatus.AcceptedByClient,
+                    message = "Decisión guardada sobre la última revisión publicada. " +
+                              "El envío del PDF a Apertura queda pendiente de validación por Pricing.",
+                });
 
             return EndpointResults.FromResult(result, httpContext);
         }
