@@ -4,6 +4,7 @@ using CustomCodeFramework.Messaging.Outbox.Processing;
 using CustomCodeFramework.Redis.Streams.Abstractions;
 using CustomCodeFramework.Redis.Streams.Messages;
 using Dhole.Pricing.Persistence.DbContexts;
+using Dhole.Pricing.Persistence.Messaging;
 using Microsoft.EntityFrameworkCore;
 
 namespace Dhole.Pricing.Worker.Outbox;
@@ -42,6 +43,18 @@ internal sealed class OutboxProcessor(
         {
             try
             {
+                if (OpeningNotificationIdtraGuard.TryGetOpeningRateId(message.EventName, message.PayloadJson, out var rateId)
+                    && await OpeningNotificationIdtraGuard.HasAssignedIdtraAsync(dbContext, rateId, cancellationToken))
+                {
+                    logger.LogInformation("Opening outbox event {EventId} suppressed: RateId={RateId} already has an IDTRA.",
+                        message.EventId, rateId);
+                    message.Status = OutboxMessageStatus.Processed;
+                    message.ProcessedAtUtc = DateTime.UtcNow;
+                    message.ErrorMessage = null;
+                    processedCount++;
+                    continue;
+                }
+
                 var payload = JsonSerializer.Deserialize<object>(message.PayloadJson);
                 var streamName = ResolveStreamName(message.EventName);
 
