@@ -1,3 +1,8 @@
+## [1.29.0] - 2026-11-24 · DH-20261124-OPS-HISTORICAL-IDTRA
+
+- MINOR candidato: worker opt-in para reemitir snapshots de QUO históricas definitivamente aceptadas con IDTRA numérico único; identifica la alternativa seleccionada, conserva datos Pricing y utiliza Outbox idempotente. Casos ambiguos, sin aceptación verificable o identidad se registran para conciliación; no inventa números ni fechas.
+- Refactor del mismo constructor de snapshot para aceptación nueva e histórica. CI y staging pendientes; producción deshabilitada por defecto.
+
 ## [1.28.0] - 2026-11-23 · DH-20261123-OPS-AUTOSAVE-434
 
 - MINOR candidato: Outbox transaccional pricing.quote.accepted.v1 solo tras aceptación definitiva del cliente, opción A/B identificada desde la propia BD y snapshot comercial completo; aprobación de margen o reintentos no crean aceptación.
