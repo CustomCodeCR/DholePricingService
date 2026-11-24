@@ -47,9 +47,12 @@ public sealed class SellerVisibilityService(ServiceDbContext db)
     }
 
     // Global visibility alone remains read-only; commercial actions also require create.
-    public bool CanManageAllCommercialRates(ClaimsPrincipal user, RateHeader rate)
+    public bool HasGlobalCommercialScopes(ClaimsPrincipal user)
         => HasScope(user, PricingConstants.Scopes.RateRequestViewAll)
-            && HasScope(user, PricingConstants.Scopes.RateRequestCreate)
+            && HasScope(user, PricingConstants.Scopes.RateRequestCreate);
+
+    public bool CanManageAllCommercialRates(ClaimsPrincipal user, RateHeader rate)
+        => HasGlobalCommercialScopes(user)
             && !rate.IsDeleted
             && !(rate.RateType == RateType.Tariff && rate.ClientName != null
                 && rate.ClientName.Contains("tarifario", StringComparison.OrdinalIgnoreCase));
