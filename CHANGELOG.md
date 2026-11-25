@@ -1,3 +1,8 @@
+## [1.30.0] - 2026-11-24
+
+- Publish one durable accepted-quote event per explicit IDTRA in comma-separated historical and newly accepted quotations. Preserve identifiers and revision; reject ambiguity.
+- CI and staging verification pending.
+
 ## [1.29.11] - 2026-11-24
 
 - DH-20261124-PRICING-HISTORICAL-EDIT: conservar ClientAccountId/ClientLeadId al duplicar tarifas editables o idénticas. Aplicar tarifario conserva la selección CRM explícita; no inventa vínculos para una fuente sin CRM. Pruebas de regresión añadidas; CI y staging pendientes.

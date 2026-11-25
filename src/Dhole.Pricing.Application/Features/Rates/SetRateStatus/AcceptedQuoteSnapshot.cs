@@ -5,7 +5,34 @@ namespace Dhole.Pricing.Application.Features.Rates.SetRateStatus;
 /// <summary>Same persisted commercial data for live acceptance and historical recovery.</summary>
 public static class AcceptedQuoteSnapshot
 {
-    public static object Build(RateHeader rate, Guid quoteId, Guid? acceptedActor, Guid? historicalActor = null, string? historicalIdtra = null) =>
+    public static bool TryReadHistoricalIdtras(string? source, out string[] identifiers)
+    {
+        identifiers = [];
+        if (string.IsNullOrWhiteSpace(source)) return false;
+        var values = source.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (values.Length == 0) return false;
+        var result = new List<string>();
+        var numbers = new Dictionary<long, string>();
+        foreach (var value in values)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(value, @"^IDTRA(?:999\.)?([0-9]+)$",
+                System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+            if (value.Length > 32 || !match.Success ||
+                !long.TryParse(match.Groups[1].Value, out var number) || number is < 1 or > 999999999999L)
+                return false;
+            if (numbers.TryGetValue(number, out var previous))
+            {
+                if (previous != value) return false;
+                continue;
+            }
+            numbers.Add(number, value);
+            result.Add(value);
+        }
+        identifiers = result.ToArray();
+        return true;
+    }
+
+    public static object Build(RateHeader rate, Guid quoteId, Guid? acceptedActor, Guid? historicalActor = null, string? historicalIdtra = null, IReadOnlyList<string>? historicalIdtras = null) =>
         new
                 {
                     schemaVersion = 1,
@@ -15,6 +42,7 @@ public static class AcceptedQuoteSnapshot
                     acceptedByUserId = acceptedActor,
                     historicalSourceActorId = historicalActor,
                     historicalIdtra = historicalIdtra,
+                    historicalIdtras = historicalIdtras,
                     quoteNumber = rate.QuoNumber,
                     commercialRevision = rate.RevisionNumber,
                     acceptedAtUtc = rate.AcceptedAtUtc,

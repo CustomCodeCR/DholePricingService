@@ -137,12 +137,25 @@ public sealed class SetRateStatusCommandHandler(
         // Write to the SAME EF unit of work as Pricing's commercial state.
         if (command.Status == RateStatus.AcceptedByClient && !wasAcceptedByClient)
         {
-            await integrationEvents.WriteAsync(
-                "pricing.quote.accepted.v1",
-                "pricing.quote.accepted.v1",
-                AcceptedQuoteSnapshot.Build(rate, command.QuoteGroupId ?? rate.Id, command.UpdatedBy),
-                correlationId: $"quote-accepted:{rate.Id:D}:{rate.RevisionNumber}",
-                cancellationToken: cancellationToken);
+            if (rate.IdtraNumber?.Contains(',') == true)
+            {
+                if (!AcceptedQuoteSnapshot.TryReadHistoricalIdtras(rate.IdtraNumber, out var idtras))
+                    return Result.Failure(PricingErrors.RateInvalidStatus);
+                foreach (var idtra in idtras)
+                    await integrationEvents.WriteAsync("pricing.quote.accepted.v1", "pricing.quote.accepted.v1",
+                        AcceptedQuoteSnapshot.Build(rate, command.QuoteGroupId ?? rate.Id, command.UpdatedBy,
+                            historicalIdtra: idtra, historicalIdtras: idtras),
+                        correlationId: $"quote-accepted:{rate.Id:D}:{rate.RevisionNumber}:{idtra}",
+                        cancellationToken: cancellationToken);
+            }
+            else
+            {
+                await integrationEvents.WriteAsync(
+                    "pricing.quote.accepted.v1", "pricing.quote.accepted.v1",
+                    AcceptedQuoteSnapshot.Build(rate, command.QuoteGroupId ?? rate.Id, command.UpdatedBy),
+                    correlationId: $"quote-accepted:{rate.Id:D}:{rate.RevisionNumber}",
+                    cancellationToken: cancellationToken);
+            }
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
