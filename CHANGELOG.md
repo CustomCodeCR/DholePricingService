@@ -1,3 +1,8 @@
+## [1.29.11] - 2026-11-24
+
+- DH-20261124-PRICING-HISTORICAL-EDIT: conservar ClientAccountId/ClientLeadId al duplicar tarifas editables o idénticas. Aplicar tarifario conserva la selección CRM explícita; no inventa vínculos para una fuente sin CRM. Pruebas de regresión añadidas; CI y staging pendientes.
+
+
 ## [1.29.8] - 2026-11-24 · DH-20261124-GLOBAL-COMMERCIAL-ACTIONS
 
 ## [1.29.10] - 2026-11-24
