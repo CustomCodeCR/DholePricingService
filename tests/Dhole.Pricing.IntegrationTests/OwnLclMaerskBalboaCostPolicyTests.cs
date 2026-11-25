@@ -30,6 +30,30 @@ public sealed class OwnLclMaerskBalboaCostPolicyTests
     }
 
     [TestMethod]
+    public void RecreatedRows_RequireAllFourUniqueApprovedCharges()
+    {
+        var charges = new (Guid Id, string Name, decimal Amount)[]
+        {
+            (Guid.NewGuid(), "Cargos en destino de la Línea Naviera", 342m),
+            (Guid.NewGuid(), "Pase Vacío", 80m),
+            (Guid.NewGuid(), "Doc Fee Balboa, Panamá", 90m),
+            (Guid.NewGuid(), "Inland Balboa -> Colón Free Zone", 400m),
+            (Guid.NewGuid(), "Port Charges", 342m),
+        };
+        var selected = OwnLclDestinationCostPolicy.ResolveMaerskBalboaCharges(
+            charges, x => x.Id, x => x.Name, x => x.Amount);
+        Assert.AreEqual(4, selected.Length);
+        Assert.AreEqual(912m, selected.Sum(x => x.Amount));
+        Assert.AreEqual(0, OwnLclDestinationCostPolicy.ResolveMaerskBalboaCharges(
+            charges.Skip(1), x => x.Id, x => x.Name, x => x.Amount).Length);
+        Assert.AreEqual(0, OwnLclDestinationCostPolicy.ResolveMaerskBalboaCharges(
+            charges.Append((Guid.NewGuid(), "Pase Vacío", 80m)),
+            x => x.Id, x => x.Name, x => x.Amount).Length);
+        Assert.IsTrue(OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(
+            new[] { "NAV-2026-001" }, "Balboa, Panamá"));
+    }
+
+    [TestMethod]
     public void Scope_OnlyAppliesToMaerskAndBalboa()
     {
         Assert.IsTrue(OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(

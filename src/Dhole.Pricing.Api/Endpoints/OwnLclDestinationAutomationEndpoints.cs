@@ -557,7 +557,7 @@ public static class OwnLclDestinationAutomationEndpoints
                 cost.IsActive
                 // Own-LCL accepts only rows configured for every mode (NULL) or explicitly LCL.
                 // FCL, FTL and LTL rows are intentionally excluded.
-                && (!cost.ShipmentMode.HasValue || cost.ShipmentMode.Value == ShipmentMode.Lcl)
+                // The current domain model supports multiple selected modes.
                 && cost.PolId == null
                 && cost.PodId == null
                 && (cost.CurrencyName == "USD" || cost.CurrencyCode == "USD")
@@ -565,6 +565,8 @@ public static class OwnLclDestinationAutomationEndpoints
                 && cost.CostDetailType != CostDetailType.OriginCharge
                 && cost.CostDetailType != CostDetailType.Insurance)
             .ToListAsync(ct);
+
+        var isMaerskBalboa = OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(carrierCandidates, portCandidate);
 
         bool CarrierMatches(Dhole.Pricing.Domain.Costs.Entities.Cost cost)
         {
@@ -576,7 +578,9 @@ public static class OwnLclDestinationAutomationEndpoints
             return new[] { cost.CarrierCode, cost.CarrierName }
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Select(NormalizeMatch)
-                .Any(carrierCandidates.Contains);
+                .Any(value => carrierCandidates.Contains(value)
+                    || (isMaerskBalboa && OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(
+                        new[] { value }, portCandidate)));
         }
 
         bool PortMatches(Dhole.Pricing.Domain.Costs.Entities.Cost cost)
@@ -584,25 +588,27 @@ public static class OwnLclDestinationAutomationEndpoints
             var structured = new[] { cost.PoeCode, cost.PoeName }
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Select(NormalizeMatch)
-                .Any(value => value == portCandidate);
+                .Any(value => value == portCandidate
+                    || (isMaerskBalboa && OwnLclDestinationCostPolicy.IsBalboaPort(value)));
             if (structured) return true;
 
             if (cost.PortRole != CostPortRole.Poe) return false;
             return new[] { cost.PortCode, cost.PortName }
                 .Where(value => !string.IsNullOrWhiteSpace(value))
                 .Select(NormalizeMatch)
-                .Any(value => value == portCandidate);
+                .Any(value => value == portCandidate
+                    || (isMaerskBalboa && OwnLclDestinationCostPolicy.IsBalboaPort(value)));
         }
 
         var matchingCosts = candidates
-            .Where(cost => CarrierMatches(cost) && PortMatches(cost))
+            .Where(cost => cost.AppliesToShipmentMode(ShipmentMode.Lcl) && CarrierMatches(cost) && PortMatches(cost))
             .ToArray();
 
         // MAERSK / Balboa LCL has exactly four approved cost-matrix entries.
         // Do not inherit generic handling, LCL W/M, Other Incomes, Port Charges or TI.
-        var isMaerskBalboa = OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(carrierCandidates, portCandidate);
         var matches = (isMaerskBalboa
-                ? OwnLclDestinationCostPolicy.SelectMaerskBalboaCharges(matchingCosts, cost => cost.Id)
+                ? OwnLclDestinationCostPolicy.ResolveMaerskBalboaCharges(
+                    matchingCosts, cost => cost.Id, cost => cost.Name, cost => cost.CostAmount)
                 : matchingCosts)
             .OrderBy(cost => cost.Name)
             .ToArray();
