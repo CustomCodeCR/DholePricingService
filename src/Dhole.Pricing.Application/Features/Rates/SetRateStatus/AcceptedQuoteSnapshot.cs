@@ -1,3 +1,4 @@
+using Dhole.Pricing.Domain.Rates;
 using Dhole.Pricing.Domain.Rates.Entities;
 
 namespace Dhole.Pricing.Application.Features.Rates.SetRateStatus;
@@ -32,8 +33,10 @@ public static class AcceptedQuoteSnapshot
         return true;
     }
 
-    public static object Build(RateHeader rate, Guid quoteId, Guid? acceptedActor, Guid? historicalActor = null, string? historicalIdtra = null, IReadOnlyList<string>? historicalIdtras = null) =>
-        new
+    public static object Build(RateHeader rate, Guid quoteId, Guid? acceptedActor, Guid? historicalActor = null, string? historicalIdtra = null, IReadOnlyList<string>? historicalIdtras = null)
+    {
+        var commercial = RateCommercialQuoteSnapshot.Create(rate);
+        return new
                 {
                     schemaVersion = 1,
                     rateId = rate.Id,
@@ -55,25 +58,39 @@ public static class AcceptedQuoteSnapshot
                     incoterm = rate.IncotermCode,
                     incotermName = rate.IncotermName,
                     pickupAddress = rate.PickupAddress,
+                    warehouseId = rate.WarehouseId,
+                    pickupLocationsJson = rate.PickupLocationsJson,
+                    inlandServiceLocationsJson = rate.InlandServiceLocationsJson,
+                    includes = rate.Includes,
+                    excludes = rate.Excludes,
+                    subjectTo = rate.SubjectTo,
+                    carrierRoute = rate.CarrierRoute,
+                    carrierComments = rate.CarrierComments,
                     otherReferences = rate.OtherReferences,
                     transitTime = rate.TransitTime,
                     validFrom = rate.ValidFrom,
                     validTo = rate.ValidTo,
                     freeDays = rate.FreeDays,
                     route = new {
-                        polId = rate.PolId, polName = rate.PolName,
-                        poeId = rate.PoeId, poeName = rate.PoeName,
-                        podId = rate.PodId, podName = rate.PodName
+                        polId = rate.PolId, polName = rate.PolName, polCode = rate.PolCode,
+                        poeId = rate.PoeId, poeName = rate.PoeName, poeCode = rate.PoeCode,
+                        podId = rate.PodId, podName = rate.PodName, podCode = rate.PodCode
                     },
                     cargo = new {
                         weightKg = rate.TotalWeightKg,
                         volumeCbm = rate.TotalVolumeCbm,
                         packages = rate.TotalPackages,
+                        pallets = rate.TotalPallets,
+                        chargeableQuantity = rate.ChargeableQuantity,
+                        cargoValue = rate.CargoValue,
                         cargoLinesJson = rate.CargoLinesJson
                     },
                     providers = new {
                         carrierId = rate.CarrierId, carrierName = rate.CarrierName,
-                        agentId = rate.AgentId, agentName = rate.AgentName
+                        agentId = rate.AgentId, agentName = rate.AgentName,
+                        carrierCode = rate.CarrierCode, agentCode = rate.AgentCode,
+                        lclGroupAgentId = rate.LclGroupAgentId, lclGroupAgentName = rate.LclGroupAgentName,
+                        lclGroupAgentCode = rate.LclGroupAgentCode
                     },
                     services = rate.RateServices.Select(service => new {
                         serviceId = service.ServiceId,
@@ -87,7 +104,9 @@ public static class AcceptedQuoteSnapshot
                         quantity = item.Quantity,
                         unitWeightsKg = item.UnitWeightsKg
                     }).ToArray(),
-                    costLines = rate.RateDetails.Select(item => new {
+                    costLines = rate.RateDetails.Select(item => {
+                        var line = commercial.For(item);
+                        return new {
                         rateDetailId = item.Id,
                         sourceCostId = item.CostId,
                         description = item.Name,
@@ -101,8 +120,17 @@ public static class AcceptedQuoteSnapshot
                         unitSale = item.SaleAmount,
                         applyDestinationTax = item.ApplyDestinationTax,
                         destinationTaxRate = item.DestinationTaxRate,
-                        notes = item.Notes
+                        notes = item.Notes,
+                        commercialQuantity = line.Quantity,
+                        commercialUnitCost = line.UnitCost,
+                        commercialUnitSale = line.UnitSale,
+                        commercialCostSubtotal = line.CostSubtotal,
+                        commercialSaleSubtotal = line.SaleSubtotal,
+                        commercialTaxAmount = line.TaxAmount,
+                        commercialSaleTotal = line.SaleTotal
+                        };
                     }).ToArray(),
                     documentStorageIds = rate.FinalBackupStorageIds
                 };
+    }
 }

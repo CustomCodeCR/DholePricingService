@@ -60,6 +60,26 @@ public sealed class RateCommercialQuoteSnapshotTests
     }
 
     [TestMethod]
+    public void AcceptedOperationsSnapshotKeepsOriginalAndCanonicalCommercialAmounts()
+    {
+        var rate = CreateRate();
+        rate.ConfigureShipment(ShipmentMode.Lcl, 1, 1, 20m, 0.118m, 500m, null, null);
+        var detail = rate.AddRateDetail(rate.Id, null, "CFS",
+            CostDetailType.OriginCharge, CostType.Fixed, ChargeBasis.PerCbm,
+            rate.CurrencyId, "USD", "USD", 8m, 8m,
+            "LCL PROPIO · Consolidado: #56", 0.118m, null);
+        var canonical = RateCommercialQuoteSnapshot.Create(rate).For(detail);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(
+            Dhole.Pricing.Application.Features.Rates.SetRateStatus.AcceptedQuoteSnapshot.Build(rate, rate.Id, Guid.NewGuid())));
+        var row = json.RootElement.GetProperty("costLines")[0];
+        Assert.AreEqual(0.118m, row.GetProperty("quantity").GetDecimal());
+        Assert.AreEqual(canonical.Quantity, row.GetProperty("commercialQuantity").GetDecimal());
+        Assert.AreEqual(canonical.CostSubtotal, row.GetProperty("commercialCostSubtotal").GetDecimal());
+        Assert.AreEqual(canonical.SaleSubtotal, row.GetProperty("commercialSaleSubtotal").GetDecimal());
+        Assert.AreEqual(detail.Quantity, 0.118m);
+    }
+
+    [TestMethod]
     public void ZeroSale_CannotAppearInPdf_ButRemainsInPersistedExcelProjection()
     {
         var rate = CreateRate();
