@@ -47,8 +47,8 @@ public sealed class OwnLclMaerskBalboaCostPolicyTests
         Assert.AreEqual(0, OwnLclDestinationCostPolicy.ResolveMaerskBalboaCharges(
             charges.Skip(1), x => x.Id, x => x.Name, x => x.Amount).Length);
         Assert.AreEqual(0, OwnLclDestinationCostPolicy.ResolveMaerskBalboaCharges(
-            charges.Append((Guid.NewGuid(), "Pase Vacío", 80m)),
-            x => x.Id, x => x.Name, x => x.Amount).Length);
+            charges.Append((Id: Guid.NewGuid(), Name: "Pase Vacío", Amount: 80m)),
+            x => x.Item1, x => x.Item2, x => x.Item3).Length);
         Assert.IsTrue(OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(
             new[] { "NAV-2026-001" }, "Balboa, Panamá"));
     }
