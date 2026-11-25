@@ -1,3 +1,7 @@
+## [1.32.0] - 2026-11-25
+
+- MINOR: exportación comercial de todos los estados, selección múltiple y autofiltro Excel; conserva los reportes predeterminados y básico. CI y staging pendientes.
+
 ## [1.31.3] - 2026-11-25
 
 - DH-20261125-OWN-LCL-WIZARD-BUNDLE: load own LCL destination costs via the same hydrated wizard bundle query for preview/create/update. Add optional compatible destination projection to wizard-bundle. Keep approved four-charge scope and explicit fallback provenance. CI and staging pending.
