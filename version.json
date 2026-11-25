@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.29.13",
-  "ecosystemVersion": "1.124.34",
-  "releaseId": "DH-20261125-OWN-LCL-WIZARD-BUNDLE",
-  "releaseStatus": "master-candidate-ci-staging-pending",
-  "businessReleaseId": "DH-20261125-OWN-LCL-WIZARD-BUNDLE"
+  "version": "1.32.0",
+  "ecosystemVersion": "1.130.0",
+  "releaseId": "DH-20261125-ALL-STATUS-QUOTATION-EXPORT",
+  "releaseStatus": "master-candidate-ci-pending",
+  "businessReleaseId": "DH-20261125-ALL-STATUS-QUOTATION-EXPORT"
 }

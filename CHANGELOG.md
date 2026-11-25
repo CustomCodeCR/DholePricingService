@@ -1,3 +1,7 @@
+## [1.32.0] - 2026-11-25
+
+- Promote the staged all-status quotation export and regression tests to production without unrelated develop changes. Preserve the existing basic report and commercial defaults.
+
 ## [1.29.13] - 2026-11-25
 
 - DH-20261125-OWN-LCL-WIZARD-BUNDLE: own LCL uses hydrated wizard bundle for preview/create/update; scoped approved reference for incomplete matrix and explicit provenance. CI/staging pending.
