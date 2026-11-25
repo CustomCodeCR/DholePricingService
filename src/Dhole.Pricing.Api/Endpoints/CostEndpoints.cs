@@ -179,6 +179,14 @@ public static class CostEndpoints
         int? packages,
         Guid? containerTypeId,
         int? storageDays,
+        bool? ownLclDestinationPreview,
+        string? carrierCode,
+        string? carrierName,
+        string? arrivalPortCode,
+        decimal? maximumCbm,
+        bool? includeEmptyReturn,
+        string? containerCode,
+        decimal? bunkerCost,
         IQueryDispatcher dispatcher,
         HttpContext httpContext,
         CancellationToken cancellationToken
@@ -192,6 +200,20 @@ public static class CostEndpoints
             ),
             cancellationToken
         );
+        if (ownLclDestinationPreview == true && result.IsSuccess)
+        {
+            var bundle = result.Value;
+            var profile = OwnLclDestinationAutomationEndpoints.ResolveWizardDestination(
+                bundle, carrierCode, carrierName, arrivalPortCode,
+                maximumCbm is > 0 ? maximumCbm.Value : 50m, includeEmptyReturn,
+                containerCode, bunkerCost, carrierId, poeId);
+            return EndpointResults.Ok(new
+            {
+                catalog = bundle.Catalog,
+                applicable = bundle.Applicable,
+                ownLclDestinationProfile = profile,
+            });
+        }
         return EndpointResults.FromResult(result, httpContext);
     }
 

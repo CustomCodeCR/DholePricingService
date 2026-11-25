@@ -72,6 +72,21 @@ public sealed class OwnLclMaerskBalboaCostPolicyTests
     }
 
     [TestMethod]
+    public void WizardBundle_PreservesApprovedFallbackWhenActiveCatalogEmpty()
+    {
+        // The public destination preview uses the same bundle projection as save.
+        var bundle = new Dhole.Pricing.Contracts.Costs.Response.CostWizardBundleDto([], []);
+        var method = typeof(OwnLclDestinationAutomationEndpoints).GetMethod(
+            "ResolveWizardDestination", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.IsNotNull(method);
+        var profile = (AutomaticDestinationProfileDto?)method.Invoke(null,
+            [bundle, "NAV-2026-001", "MAERSK", "POE-2026-003", 50m, true, null, 476m, null, null]);
+        Assert.IsNotNull(profile);
+        Assert.AreEqual(912m, profile.TotalCost);
+        Assert.AreEqual(18.24m, profile.CostPerCbm);
+    }
+
+    [TestMethod]
     public void Scope_OnlyAppliesToMaerskAndBalboa()
     {
         Assert.IsTrue(OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(
