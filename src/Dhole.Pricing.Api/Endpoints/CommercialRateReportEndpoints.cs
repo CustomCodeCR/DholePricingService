@@ -80,6 +80,7 @@ public static class CommercialRateReportEndpoints
     }
 
     private static async Task<IResult> ExportAsync(
+        bool? includeAllStatuses,
         string? status,
         string? search,
         string? month,
@@ -96,7 +97,7 @@ public static class CommercialRateReportEndpoints
         if (!visibility.HasScope(context.User, PricingConstants.Scopes.RateRequestViewAll))
             return Results.Forbid();
 
-        if (!ValidStatus(status))
+        if (!(includeAllStatuses == true ? ValidExportStatuses(status) : ValidStatus(status)))
             return Results.BadRequest(new { message = "El estado indicado no es válido." });
 
         if (!TryParseMonth(month, out var monthStart))
@@ -114,7 +115,7 @@ public static class CommercialRateReportEndpoints
         if (!ValidDateType(dateType))
             return Results.BadRequest(new { message = "El tipo de fecha debe ser created o approved." });
 
-        var rows = await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, from, to, dateType, ct);
+        var rows = await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, from, to, dateType, ct, includeAllStatuses == true);
         return Results.File(
             BuildWorkbook(rows),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -126,6 +127,42 @@ public static class CommercialRateReportEndpoints
         status.Equals("Sent", StringComparison.OrdinalIgnoreCase) ||
         status.Equals("AcceptedByClient", StringComparison.OrdinalIgnoreCase) ||
         status.Equals("RejectedByClient", StringComparison.OrdinalIgnoreCase);
+
+    private static readonly HashSet<string> ExportStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PendingApproval", "ApprovedByManagement", "RejectedByManagement", "Open", "Sent",
+        "AcceptedByClient", "RejectedByClient", "Expired", "Cancelled", "QUOVinculada", "PendingReapproval"
+    };
+
+    private static string[] ParseExportStatuses(string? value) =>
+        (value ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static bool ValidExportStatuses(string? value) =>
+        ParseExportStatuses(value).All(ExportStatuses.Contains);
+
+    private static string ExportStatus(RateStatus status, bool pendingReapproval) =>
+        pendingReapproval ? "PendingReapproval" : status switch
+        {
+            RateStatus.RequestedByClient => "Sent",
+            RateStatus.Closed => "RejectedByClient",
+            _ => status.ToString()
+        };
+
+    private static string StatusLabel(string status) => status switch
+    {
+        "PendingApproval" => "Pendiente de aprobación",
+        "ApprovedByManagement" => "Aprobada por gerencia",
+        "RejectedByManagement" => "Rechazada por gerencia",
+        "Open" => "Abierta",
+        "Sent" => "Enviada",
+        "AcceptedByClient" => "Aceptada",
+        "RejectedByClient" => "No aceptada",
+        "Expired" => "Vencida",
+        "Cancelled" => "Cancelada",
+        "QUOVinculada" => "Cliente aceptó otra QUO",
+        "PendingReapproval" => "Aprobada pendiente de re-aprobación",
+        _ => status
+    };
 
     private static bool ValidDateType(string? value) =>
         string.IsNullOrWhiteSpace(value) ||
@@ -164,24 +201,26 @@ public static class CommercialRateReportEndpoints
     private static async Task<List<CommercialQuote>> ReadRowsAsync(
         ServiceDbContext db, IPricingConfigCatalogClient configCatalog,
         string? status, string? search, string? seller, DateTime? monthStart,
-        DateTime? fromDate, DateTime? toDate, string? dateType, CancellationToken ct)
+        DateTime? fromDate, DateTime? toDate, string? dateType, CancellationToken ct, bool includeAllStatuses = false)
     {
         var query = db.RateHeaders.AsNoTracking()
             .Where(rate => !rate.IsDeleted &&
                 !(rate.RateType == RateType.Tariff &&
-                  rate.ClientName != null && rate.ClientName.ToLower().Contains("tarifario")))
-            .Where(rate =>
+                  rate.ClientName != null && rate.ClientName.ToLower().Contains("tarifario")));
+
+        if (!includeAllStatuses)
+            query = query.Where(rate =>
                 rate.Status == RateStatus.Sent ||
                 rate.Status == RateStatus.RequestedByClient ||
                 rate.Status == RateStatus.AcceptedByClient ||
                 rate.Status == RateStatus.RejectedByClient ||
                 rate.Status == RateStatus.Closed);
 
-        if (status?.Equals("Sent", StringComparison.OrdinalIgnoreCase) == true)
+        if (!includeAllStatuses && status?.Equals("Sent", StringComparison.OrdinalIgnoreCase) == true)
             query = query.Where(rate => rate.Status == RateStatus.Sent || rate.Status == RateStatus.RequestedByClient);
-        else if (status?.Equals("AcceptedByClient", StringComparison.OrdinalIgnoreCase) == true)
+        else if (!includeAllStatuses && status?.Equals("AcceptedByClient", StringComparison.OrdinalIgnoreCase) == true)
             query = query.Where(rate => rate.Status == RateStatus.AcceptedByClient);
-        else if (status?.Equals("RejectedByClient", StringComparison.OrdinalIgnoreCase) == true)
+        else if (!includeAllStatuses && status?.Equals("RejectedByClient", StringComparison.OrdinalIgnoreCase) == true)
             query = query.Where(rate => rate.Status == RateStatus.RejectedByClient || rate.Status == RateStatus.Closed);
 
         var filterByApprovedDate = dateType?.Equals("approved", StringComparison.OrdinalIgnoreCase) == true;
@@ -263,6 +302,7 @@ public static class CommercialRateReportEndpoints
                 rate.ClosedAtUtc,
                 rate.ClosedReason,
                 rate.Status,
+                rate.PendingReapproval,
             })
             .ToListAsync(ct);
 
@@ -340,9 +380,17 @@ public static class CommercialRateReportEndpoints
             rate.ValidTo,
             rate.ClosedAtUtc,
             rate.ClosedReason,
+            includeAllStatuses ? ExportStatus(rate.Status, rate.PendingReapproval) :
             rate.Status == RateStatus.AcceptedByClient ? "AcceptedByClient" :
             rate.Status is RateStatus.RejectedByClient or RateStatus.Closed ? "RejectedByClient" : "Sent"
         )).ToList();
+
+        if (includeAllStatuses)
+        {
+            var selectedStatuses = ParseExportStatuses(status);
+            if (selectedStatuses.Length > 0)
+                result = result.Where(rate => selectedStatuses.Contains(rate.Status, StringComparer.OrdinalIgnoreCase)).ToList();
+        }
 
         if (!filterByApprovedDate ||
             (!monthStart.HasValue && !fromDate.HasValue && !toDate.HasValue))
@@ -470,7 +518,7 @@ public static class CommercialRateReportEndpoints
                     rate.TotalCostAmount.ToString(CultureInfo.InvariantCulture),
                     rate.TotalUtilityAmount.ToString(CultureInfo.InvariantCulture),
                     rate.MarginPercentage.ToString(CultureInfo.InvariantCulture),
-                    rate.Status == "Sent" ? "Enviada" : rate.Status == "AcceptedByClient" ? "Aceptada" : "No aceptada",
+                    StatusLabel(rate.Status),
                     BusinessDate(rate.CreatedAtUtc),
                     BusinessDate(rate.AcceptedAtUtc),
                     rate.ValidFrom.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
@@ -479,7 +527,7 @@ public static class CommercialRateReportEndpoints
                     rate.ClosedReason ?? ""
                 }, true);
             }
-            xml.Append("</sheetData></worksheet>");
+            xml.Append("</sheetData><autoFilter ref=\"A1:W").Append(rowNumber - 1).Append("\"/></worksheet>");
             Add(archive, "xl/worksheets/sheet1.xml", xml.ToString());
         }
 
