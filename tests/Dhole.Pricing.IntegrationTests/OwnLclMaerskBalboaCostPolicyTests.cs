@@ -54,6 +54,24 @@ public sealed class OwnLclMaerskBalboaCostPolicyTests
     }
 
     [TestMethod]
+    public void IncompleteMatrix_ApprovedReferenceIsScopedAndNeverZero()
+    {
+        var profile = OwnLclDestinationCostPolicy.BuildApprovedMaerskBalboaReference(
+            new[] { "NAV-2026-001", "MAERSK" }, "POE-2026-003", 50m, true, 476m);
+        Assert.IsNotNull(profile);
+        Assert.AreEqual(4, profile.Charges.Count);
+        Assert.AreEqual(912m, profile.TotalCost);
+        Assert.AreEqual(18.24m, profile.CostPerCbm);
+        Assert.AreEqual("MATRIX-APPROVED-REFERENCE", profile.Version);
+        Assert.AreEqual(476m, profile.CostaRicaTransfer.Bunker);
+        Assert.AreEqual(2140m, profile.CostaRicaTransfer.PanamaToCostaRica);
+        Assert.IsNull(OwnLclDestinationCostPolicy.BuildApprovedMaerskBalboaReference(
+            new[] { "MSC" }, "POE-2026-003", 50m, true, 476m));
+        Assert.IsNull(OwnLclDestinationCostPolicy.BuildApprovedMaerskBalboaReference(
+            new[] { "MAERSK" }, "CRCAL", 50m, true, 476m));
+    }
+
+    [TestMethod]
     public void Scope_OnlyAppliesToMaerskAndBalboa()
     {
         Assert.IsTrue(OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(
