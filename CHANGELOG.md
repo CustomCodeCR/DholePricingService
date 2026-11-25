@@ -1,3 +1,7 @@
+## [1.29.12] - 2026-11-25
+
+- DH-20261125-OWN-LCL-MAERSK-BALBOA: isolated backport of approved cost matching and draft pricing line preview; no Operations staging changes. CI and authenticated staging pending.
+
 ## [1.29.11] - 2026-11-24
 
 - DH-20261124-PRICING-HISTORICAL-EDIT: conservar ClientAccountId/ClientLeadId al duplicar tarifas editables o idénticas. Aplicar tarifario conserva la selección CRM explícita; no inventa vínculos para una fuente sin CRM. Pruebas de regresión añadidas; CI y staging pendientes.
