@@ -1,3 +1,7 @@
+## [1.29.13] - 2026-11-25
+
+- DH-20261125-OWN-LCL-APPROVED-REFERENCE: use the existing approved USD 912 four-charge reference for Maersk/Balboa only when the live matrix cannot resolve all four. Preserve live matrix priority, editable project totals and other routes. Explicit source/version; regression test; no database writes or schema changes.
+
 ## [1.29.12] - 2026-11-25
 
 - DH-20261125-OWN-LCL-MAERSK-BALBOA: isolated backport of approved cost matching and draft pricing line preview; no Operations staging changes. CI and authenticated staging pending.

@@ -547,10 +547,11 @@ public static class OwnLclDestinationAutomationEndpoints
             ct);
         if (matrixProfile is not null) return matrixProfile;
         
-        // Never replace a partially configured Maersk/Balboa USD 912 profile
-        // with a silently cheaper zero-cost destination reference.
-        if (OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(carrierCandidates, portCandidate))
-            return null;
+        // Preserve the approved four-charge reference when the live matrix
+        // cannot resolve all four rows. Never return zero for this scope.
+        var approvedReference = OwnLclDestinationCostPolicy.BuildApprovedMaerskBalboaReference(
+            carrierCandidates, arrivalPortCode, maximumCbm, includeEmptyReturn, bunkerCost);
+        if (approvedReference is not null) return approvedReference;
 
         // Missing matrix rows must never block an own-LCL project. Keep the destination
         // amount at zero and preserve the Panama -> Costa Rica operational baseline.
