@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.31.0",
-  "ecosystemVersion": "1.126.0",
-  "releaseId": "DH-20261124-OPS-COMMERCIAL-COMPLETENESS",
+  "version": "1.31.1",
+  "ecosystemVersion": "1.126.1",
+  "releaseId": "DH-20261125-OWN-LCL-MAERSK-BALBOA",
   "releaseStatus": "candidate-ci-staging-pending",
-  "businessReleaseId": "DH-20261124-OPS-COMMERCIAL-COMPLETENESS"
+  "businessReleaseId": "DH-20261125-OWN-LCL-MAERSK-BALBOA"
 }
