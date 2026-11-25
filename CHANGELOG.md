@@ -1,3 +1,7 @@
+## [1.31.3] - 2026-11-25
+
+- DH-20261125-OWN-LCL-WIZARD-BUNDLE: load own LCL destination costs via the same hydrated wizard bundle query for preview/create/update. Add optional compatible destination projection to wizard-bundle. Keep approved four-charge scope and explicit fallback provenance. CI and staging pending.
+
 ## [1.31.2] - 2026-11-25
 
 - DH-20261125-OWN-LCL-APPROVED-REFERENCE: use the existing approved USD 912 four-charge reference for Maersk/Balboa only when the live matrix cannot resolve all four. Preserve live matrix priority, editable project totals and other routes. Explicit source/version; regression test; no database writes or schema changes.

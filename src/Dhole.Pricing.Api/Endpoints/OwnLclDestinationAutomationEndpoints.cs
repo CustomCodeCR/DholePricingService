@@ -1,6 +1,9 @@
 using System.Data;
 using System.Data.Common;
 using System.Text.Json;
+using CustomCodeFramework.Cqrs.Dispatching;
+using Dhole.Pricing.Application.Features.Costs.GetCostsForSelect;
+using Dhole.Pricing.Contracts.Costs.Response;
 using Dhole.Pricing.Api.Authorization;
 using Dhole.Pricing.Domain.Costs.Enums;
 using Dhole.Pricing.Domain.Rates.Enums;
@@ -68,7 +71,11 @@ public static class OwnLclDestinationAutomationEndpoints
         bool? includeEmptyReturn,
         string? containerCode,
         decimal? bunkerCost,
-        ServiceDbContext db,
+        Guid? carrierId,
+        Guid? polId,
+        Guid? poeId,
+        Guid? containerTypeId,
+        IQueryDispatcher dispatcher,
         CancellationToken ct)
     {
         var result = await ResolveAsync(
@@ -79,8 +86,8 @@ public static class OwnLclDestinationAutomationEndpoints
             includeEmptyReturn,
             containerCode,
             bunkerCost,
-            db,
-            ct);
+            carrierId, polId, poeId, containerTypeId,
+            dispatcher, ct);
 
         return result is null
             ? MissingMatrixOrSelectionResult(carrierCode, carrierName, arrivalPortCode, "Seleccione naviera y POE para calcular los cargos de destino.")
@@ -90,6 +97,7 @@ public static class OwnLclDestinationAutomationEndpoints
     private static async Task<IResult> CreateAsync(
         AutomaticOwnLclConsolidationRequest request,
         ServiceDbContext db,
+        IQueryDispatcher dispatcher,
         CancellationToken ct)
     {
         var validation = Validate(request);
@@ -107,8 +115,8 @@ public static class OwnLclDestinationAutomationEndpoints
                 request.IncludeEmptyReturn,
                 request.ContainerCode,
                 request.BunkerCost,
-                db,
-                ct);
+                request.CarrierId, request.PolId, request.PanamaArrivalPortId, request.ContainerId,
+                dispatcher, ct);
 
         if (profile is null)
             return MissingMatrixOrSelectionResult(
@@ -226,6 +234,7 @@ public static class OwnLclDestinationAutomationEndpoints
         Guid id,
         AutomaticOwnLclConsolidationRequest request,
         ServiceDbContext db,
+        IQueryDispatcher dispatcher,
         CancellationToken ct)
     {
         var validation = Validate(request);
@@ -243,8 +252,8 @@ public static class OwnLclDestinationAutomationEndpoints
                 request.IncludeEmptyReturn,
                 request.ContainerCode,
                 request.BunkerCost,
-                db,
-                ct);
+                request.CarrierId, request.PolId, request.PanamaArrivalPortId, request.ContainerId,
+                dispatcher, ct);
 
         if (profile is null)
             return MissingMatrixOrSelectionResult(
@@ -515,133 +524,85 @@ public static class OwnLclDestinationAutomationEndpoints
     }
 
     private static async Task<AutomaticDestinationProfileDto?> ResolveAsync(
-        string? carrierCode,
-        string? carrierName,
-        string? arrivalPortCode,
-        decimal maximumCbm,
-        bool? includeEmptyReturn,
-        string? containerCode,
-        decimal? bunkerCost,
-        ServiceDbContext db,
-        CancellationToken ct)
+        string? carrierCode, string? carrierName, string? arrivalPortCode,
+        decimal maximumCbm, bool? includeEmptyReturn, string? containerCode, decimal? bunkerCost,
+        Guid? carrierId, Guid? polId, Guid? poeId, Guid? containerTypeId,
+        IQueryDispatcher dispatcher, CancellationToken ct)
+    {
+        var result = await dispatcher.DispatchAsync(new GetWizardCostsQuery(
+            carrierId, null, polId, poeId, null, null, ShipmentMode.Lcl, null,
+            ContainerTypeId: containerTypeId), ct);
+        if (result.IsFailure) return null;
+        return ResolveWizardDestination(result.Value, carrierCode, carrierName, arrivalPortCode,
+            maximumCbm, includeEmptyReturn, containerCode, bunkerCost, carrierId, poeId);
+    }
+
+    // Both wizard-bundle and the persistence endpoints use this exact projection.
+    // Catalog relations are hydrated by the same CQRS query as ordinary quotations.
+    internal static AutomaticDestinationProfileDto? ResolveWizardDestination(
+        CostWizardBundleDto bundle, string? carrierCode, string? carrierName, string? arrivalPortCode,
+        decimal maximumCbm, bool? includeEmptyReturn, string? containerCode, decimal? bunkerCost,
+        Guid? carrierId, Guid? poeId)
     {
         var carrierCandidates = new[] { carrierCode, carrierName }
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Select(NormalizeMatch)
-            .Where(value => value.Length > 0)
+            .Select(NormalizeMatch).Where(value => value.Length > 0)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var portCandidate = NormalizeMatch(arrivalPortCode);
         if (carrierCandidates.Count == 0 || portCandidate.Length == 0) return null;
 
-        // The Pricing Cost Matrix is the only source of own-LCL destination charges.
-        // There is deliberately no Config profile requirement or fallback here.
-        var matrixProfile = await ResolveFromCostMatrixAsync(
-            carrierCandidates,
-            portCandidate,
-            arrivalPortCode,
-            maximumCbm,
-            includeEmptyReturn,
-            containerCode,
-            bunkerCost,
-            db,
-            ct);
-        if (matrixProfile is not null) return matrixProfile;
-        
-        // Preserve the approved four-charge reference when the live matrix
-        // cannot resolve all four rows. Never return zero for this scope.
-        var approvedReference = OwnLclDestinationCostPolicy.BuildApprovedMaerskBalboaReference(
-            carrierCandidates, arrivalPortCode, maximumCbm, includeEmptyReturn, bunkerCost);
-        if (approvedReference is not null) return approvedReference;
-
-        // Missing matrix rows must never block an own-LCL project. Keep the destination
-        // amount at zero and preserve the Panama -> Costa Rica operational baseline.
-        return BuildEmptyMatrixProfile(
-            carrierCode,
-            carrierName,
-            arrivalPortCode,
-            portCandidate,
-            maximumCbm,
-            includeEmptyReturn,
-            bunkerCost);
-    }
-
-    private static async Task<AutomaticDestinationProfileDto?> ResolveFromCostMatrixAsync(
-        IReadOnlySet<string> carrierCandidates,
-        string portCandidate,
-        string? arrivalPortCode,
-        decimal maximumCbm,
-        bool? includeEmptyReturn,
-        string? containerCode,
-        decimal? bunkerCost,
-        ServiceDbContext db,
-        CancellationToken ct)
-    {
-        var candidates = await db.Costs
-            .AsNoTracking()
-            .Where(cost =>
-                cost.IsActive
-                // Own-LCL accepts only rows configured for every mode (NULL) or explicitly LCL.
-                // FCL, FTL and LTL rows are intentionally excluded.
-                // The current domain model supports multiple selected modes.
-                && cost.PolId == null
-                && cost.PodId == null
-                && (cost.CurrencyName == "USD" || cost.CurrencyCode == "USD")
-                && cost.CostDetailType != CostDetailType.Freight
-                && cost.CostDetailType != CostDetailType.OriginCharge
-                && cost.CostDetailType != CostDetailType.Insurance)
-            .ToListAsync(ct);
-
         var isMaerskBalboa = OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(carrierCandidates, portCandidate);
+        bool MatchCarrierValue(string? value) => carrierCandidates.Contains(NormalizeMatch(value))
+            || (isMaerskBalboa && OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(new[] { value }, arrivalPortCode));
+        bool MatchPortValue(string? value) => NormalizeMatch(value) == portCandidate
+            || (isMaerskBalboa && OwnLclDestinationCostPolicy.IsBalboaPort(value));
 
-        bool CarrierMatches(Dhole.Pricing.Domain.Costs.Entities.Cost cost)
+        bool CarrierMatches(CostSelectDto cost)
         {
-            var hasCarrierRestriction = cost.CarrierId.HasValue
-                || !string.IsNullOrWhiteSpace(cost.CarrierCode)
-                || !string.IsNullOrWhiteSpace(cost.CarrierName);
-            if (!hasCarrierRestriction) return true;
-
-            return new[] { cost.CarrierCode, cost.CarrierName }
-                .Where(value => !string.IsNullOrWhiteSpace(value))
-                .Select(NormalizeMatch)
-                .Any(value => carrierCandidates.Contains(value)
-                    || (isMaerskBalboa && OwnLclDestinationCostPolicy.IsMaerskBalboaSelection(
-                        new[] { value }, portCandidate)));
+            if (cost.Carriers is { Count: > 0 })
+                return cost.Carriers.Any(x => x.Id == carrierId || MatchCarrierValue(x.Code) || MatchCarrierValue(x.Name));
+            return !cost.CarrierId.HasValue && string.IsNullOrWhiteSpace(cost.CarrierCode) && string.IsNullOrWhiteSpace(cost.CarrierName)
+                || (carrierId.HasValue && cost.CarrierId == carrierId)
+                || MatchCarrierValue(cost.CarrierCode) || MatchCarrierValue(cost.CarrierName);
         }
 
-        bool PortMatches(Dhole.Pricing.Domain.Costs.Entities.Cost cost)
+        bool PortMatches(CostSelectDto cost)
         {
-            var structured = new[] { cost.PoeCode, cost.PoeName }
-                .Where(value => !string.IsNullOrWhiteSpace(value))
-                .Select(NormalizeMatch)
-                .Any(value => value == portCandidate
-                    || (isMaerskBalboa && OwnLclDestinationCostPolicy.IsBalboaPort(value)));
-            if (structured) return true;
-
-            if (cost.PortRole != CostPortRole.Poe) return false;
-            return new[] { cost.PortCode, cost.PortName }
-                .Where(value => !string.IsNullOrWhiteSpace(value))
-                .Select(NormalizeMatch)
-                .Any(value => value == portCandidate
-                    || (isMaerskBalboa && OwnLclDestinationCostPolicy.IsBalboaPort(value)));
+            if (cost.Poes is { Count: > 0 })
+                return cost.Poes.Any(x => x.Id == poeId || MatchPortValue(x.Code) || MatchPortValue(x.Name));
+            return (poeId.HasValue && cost.PoeId == poeId)
+                || MatchPortValue(cost.PoeCode) || MatchPortValue(cost.PoeName)
+                || (string.Equals(cost.PortRole, "Poe", StringComparison.OrdinalIgnoreCase)
+                    && ((poeId.HasValue && cost.PortId == poeId) || MatchPortValue(cost.PortCode) || MatchPortValue(cost.PortName)));
         }
 
-        var matchingCosts = candidates
-            .Where(cost => cost.AppliesToShipmentMode(ShipmentMode.Lcl) && CarrierMatches(cost) && PortMatches(cost))
-            .ToArray();
+        bool IsDestination(CostSelectDto cost) =>
+            (string.Equals(cost.CurrencyCode, "USD", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(cost.CurrencyName, "USD", StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(cost.CostDetailType, "Freight", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(cost.CostDetailType, "OriginCharge", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(cost.CostDetailType, "Insurance", StringComparison.OrdinalIgnoreCase)
+            && CarrierMatches(cost) && PortMatches(cost);
 
-        // MAERSK / Balboa LCL has exactly four approved cost-matrix entries.
-        // Do not inherit generic handling, LCL W/M, Other Incomes, Port Charges or TI.
-        var matches = (isMaerskBalboa
-                ? OwnLclDestinationCostPolicy.ResolveMaerskBalboaCharges(
-                    matchingCosts, cost => cost.Id, cost => cost.Name, cost => cost.CostAmount)
-                : matchingCosts)
-            .OrderBy(cost => cost.Name)
-            .ToArray();
-
-        if (isMaerskBalboa && matches.Length != OwnLclDestinationCostPolicy.RequiredMaerskBalboaChargeCount)
-            return null;
-
-        if (matches.Length == 0) return null;
+        var applicable = bundle.Applicable.Where(IsDestination).ToArray();
+        var matches = applicable;
+        if (isMaerskBalboa)
+        {
+            matches = OwnLclDestinationCostPolicy.ResolveMaerskBalboaCharges(
+                applicable, cost => cost.Id, cost => cost.Name, cost => cost.CostAmount);
+            // These four explicitly approved charges describe the physical
+            // container. The live catalog also includes masters configured as FCL.
+            // Do not admit any other FCL or generic line into an own LCL project.
+            if (matches.Length != OwnLclDestinationCostPolicy.RequiredMaerskBalboaChargeCount)
+                matches = OwnLclDestinationCostPolicy.ResolveMaerskBalboaCharges(
+                    bundle.Catalog.Where(IsDestination), cost => cost.Id, cost => cost.Name, cost => cost.CostAmount);
+            if (matches.Length != OwnLclDestinationCostPolicy.RequiredMaerskBalboaChargeCount)
+                return OwnLclDestinationCostPolicy.BuildApprovedMaerskBalboaReference(
+                    carrierCandidates, arrivalPortCode, maximumCbm, includeEmptyReturn, bunkerCost);
+        }
+        if (matches.Length == 0)
+            return BuildEmptyMatrixProfile(carrierCode, carrierName, arrivalPortCode, portCandidate,
+                maximumCbm, includeEmptyReturn, bunkerCost);
+        matches = matches.OrderBy(cost => cost.Name).ToArray();
 
         var useEmptyReturn = includeEmptyReturn ?? true;
         var compactContainer = NormalizeMatch(containerCode);
@@ -653,18 +614,18 @@ public static class OwnLclDestinationAutomationEndpoints
                 ? 2m
                 : 1m;
 
-        decimal ProjectAmount(Dhole.Pricing.Domain.Costs.Entities.Cost cost)
+        decimal ProjectAmount(CostSelectDto cost)
         {
             var projected = cost.ChargeBasis switch
             {
-                ChargeBasis.PerCbm or ChargeBasis.PerChargeableCbm => cost.CostAmount * maximumCbm,
-                ChargeBasis.PerTeu => cost.CostAmount * teuMultiplier,
+                "PerCbm" or "PerChargeableCbm" => cost.CostAmount * maximumCbm,
+                "PerTeu" => cost.CostAmount * teuMultiplier,
                 _ => cost.CostAmount,
             };
             return Math.Max(projected, cost.MinimumCostAmount ?? 0m);
         }
 
-        bool IsEmptyReturn(Dhole.Pricing.Domain.Costs.Entities.Cost cost)
+        bool IsEmptyReturn(CostSelectDto cost)
         {
             var name = NormalizeMatch(cost.Name);
             return name.Contains("EMPTYRETURN", StringComparison.Ordinal)
@@ -677,7 +638,7 @@ public static class OwnLclDestinationAutomationEndpoints
             .Select(cost =>
             {
                 var emptyReturn = IsEmptyReturn(cost);
-                var optional = cost.CostType == CostType.Optional || emptyReturn;
+                var optional = string.Equals(cost.CostType, "Optional", StringComparison.OrdinalIgnoreCase) || emptyReturn;
                 var included = !emptyReturn || useEmptyReturn;
                 return new AutomaticDestinationChargeDto(
                     $"COST-{cost.Id:N}",
@@ -725,7 +686,7 @@ public static class OwnLclDestinationAutomationEndpoints
                 bunkerCost ?? DefaultBunkerCost,
                 DefaultCostaRicaTransferBaseCbm),
             true,
-            "Pricing: Matriz de costos (naviera + POE)");
+            "Pricing: costs/wizard-bundle (naviera + POE)");
     }
 
     private static AutomaticDestinationProfileDto BuildEmptyMatrixProfile(
