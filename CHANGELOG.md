@@ -1,3 +1,7 @@
+## [1.31.0] - 2026-11-24
+
+- Extend the accepted Pricing snapshot with persisted warehouse, route codes, pickup locations, cargo and contractual terms, consolidation agent references and canonical commercial cost quantities/subtotals while preserving original detail values. No changes to customer pricing calculations or acceptance conditions. CI and staging pending.
+
 ## [1.30.0] - 2026-11-24
 
 - Publish one durable accepted-quote event per explicit IDTRA in comma-separated historical and newly accepted quotations. Preserve identifiers and revision; reject ambiguity.
