@@ -59,6 +59,33 @@ public static class OwnLclDestinationCostPolicy
         return selected.ToArray();
     }
 
+    // The original approved project reference was verified in migration
+    // 20261025185000. It is deliberately independent of live row IDs and
+    // never writes to the cost matrix or to an existing project.
+    public static AutomaticDestinationProfileDto? BuildApprovedMaerskBalboaReference(
+        IEnumerable<string?> carrierValues, string? arrivalPortCode, decimal maximumCbm,
+        bool? includeEmptyReturn, decimal? bunkerCost)
+    {
+        if (!IsMaerskBalboaSelection(carrierValues, arrivalPortCode))
+            return null;
+
+        var charges = new AutomaticDestinationChargeDto[]
+        {
+            new("COST-396edf7694d34d92a533aa6b8501044b", "Cargos en destino de la Linea Naviera", 342m, "PerContainer", true, false, true, ["ApprovedReference"]),
+            new("COST-19cec538ca344ddd8e5660b45a1272e4", "Pase Vacio", 80m, "PerContainer", true, false, true, ["ApprovedReference"]),
+            new("COST-523029b29303499cbb76c7d48c697709", "Doc Fee Balboa, Panama", 90m, "PerContainer", true, false, true, ["ApprovedReference"]),
+            new("COST-fd5dd670ba9044b9b491ce78d9480b8", "Inland Balboa -> Colon Free Zone", 400m, "PerContainer", true, false, true, ["ApprovedReference"]),
+        };
+        var total = charges.Sum(charge => charge.Amount);
+        return new AutomaticDestinationProfileDto(
+            "MATRIX-MAERSK-POE2026003", "MATRIX-APPROVED-REFERENCE",
+            "Referencia autorizada Maersk / Balboa", "USD",
+            (arrivalPortCode ?? string.Empty).Trim().ToUpperInvariant(), "CFZ", "Colón Free Zone",
+            includeEmptyReturn ?? true, charges, total, total / Math.Max(0.01m, maximumCbm),
+            new CostaRicaTransferDto(2140m, bunkerCost ?? 476m, 95m), true,
+            "Pricing: referencia autorizada Maersk/Balboa (matriz activa incompleta)");
+    }
+
     public static bool IsBalboaPort(string? value)
         => Normalize(value) is "POE2026003" or "BALBOA" or "BALBOAPANAMA";
 
