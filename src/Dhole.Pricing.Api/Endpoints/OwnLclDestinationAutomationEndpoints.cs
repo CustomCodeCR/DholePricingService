@@ -25,6 +25,8 @@ public static class OwnLclDestinationAutomationEndpoints
 
         group.MapGet("/destination-preview", PreviewAsync)
             .RequireAnyScope(PricingConstants.Scopes.OwnLclConsolidationView, PricingConstants.Scopes.RateView);
+        group.MapGet("/pricing-lines-preview", PreviewPricingLines)
+            .RequireAnyScope(PricingConstants.Scopes.OwnLclConsolidationView, PricingConstants.Scopes.RateView, PricingConstants.Scopes.OwnLclConsolidationCreate);
         group.MapPost("/consolidations", CreateAsync)
             .RequireIdempotency()
             .RequireScope(PricingConstants.Scopes.OwnLclConsolidationCreate);
@@ -34,6 +36,28 @@ public static class OwnLclDestinationAutomationEndpoints
             .RequireAnyScope(PricingConstants.Scopes.OwnLclConsolidationView, PricingConstants.Scopes.RateView);
 
         return app;
+    }
+
+    private static IResult PreviewPricingLines(string? polCode, string? polName, decimal? destinationCostPerCbm)
+    {
+        var destination = Math.Max(0m, destinationCostPerCbm ?? 0m);
+        return Results.Ok(OwnLclPricingLineCatalog.ForOrigin(polCode, polName)
+            .Select(line => new
+            {
+                lineKey = line.LineKey,
+                scope = line.Scope,
+                name = line.Name,
+                chargeBasis = line.ChargeBasis,
+                costUnit = line.LineKey switch
+                {
+                    "PA_DESTINATION_CHARGE" => destination,
+                    "CA_TRANSSHIPMENT" => destination + 9m,
+                    _ => line.DefaultCostUnit ?? 0m,
+                },
+                saleUnit = line.DefaultSaleUnit,
+                calculationBaseCbm = line.LineKey.StartsWith("CA_INLAND_", StringComparison.OrdinalIgnoreCase)
+                    ? (decimal?)70m : null,
+            }).ToArray());
     }
 
     private static async Task<IResult> PreviewAsync(
