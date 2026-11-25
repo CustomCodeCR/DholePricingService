@@ -1,5 +1,4 @@
 using System.Data;
-using System.Text.RegularExpressions;
 using CustomCodeFramework.Workers.Abstractions;
 using Dhole.Pricing.Application.Abstractions.Messaging;
 using Dhole.Pricing.Application.Features.Rates.SetRateStatus;
@@ -35,11 +34,9 @@ internal sealed class PricingHistoricalIdtraWorker(
             foreach (var rate in rates)
             {
                 ct.ThrowIfCancellationRequested();
-                var historical = rate.IdtraNumber!.Trim();
-                var match = Regex.Match(historical, @"^IDTRA(?:999\.)?([0-9]+)$", RegexOptions.CultureInvariant);
                 if (rate.Status != RateStatus.AcceptedByClient || rate.AcceptedAtUtc is null ||
-                    rate.AcceptedAtUtc.Value.Year < 2000 || !match.Success || historical.Length > 32 ||
-                    !long.TryParse(match.Groups[1].Value, out var number) || number is < 1 or > 999999999999L ||
+                    rate.AcceptedAtUtc.Value.Year < 2000 ||
+                    !AcceptedQuoteSnapshot.TryReadHistoricalIdtras(rate.IdtraNumber, out var idtras) ||
                     !Guid.TryParse(Convert.ToString(rate.UpdatedBy), out var actor) || actor == Guid.Empty ||
                     string.IsNullOrWhiteSpace(rate.QuoNumber))
                 {
@@ -55,11 +52,6 @@ internal sealed class PricingHistoricalIdtraWorker(
                         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
                         var key = "historical-idtra:" + rate.Id.ToString("N");
                         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0));", ct);
-                        if (await db.OutboxMessages.AnyAsync(x => x.EventName == "pricing.quote.accepted.v1" && x.CorrelationId == key, ct))
-                        {
-                            await transaction.CommitAsync(ct);
-                            return 0;
-                        }
                         var alternatives = await db.Database.SqlQueryRaw<Guid>(
                             """
                             SELECT parent_rate_id AS "Value" FROM pricing.rate_quote_alternatives
@@ -75,13 +67,21 @@ internal sealed class PricingHistoricalIdtraWorker(
                             return -1;
                         }
                         var parent = alternatives.Length == 1 ? alternatives[0] : rate.Id;
-                        await outbox.WriteAsync("pricing.quote.accepted.v1", "pricing.quote.accepted.v1",
-                            AcceptedQuoteSnapshot.Build(rate, parent, null, actor, historical), key, ct);
+                        var inserted = 0;
+                        foreach (var idtra in idtras)
+                        {
+                            var eventKey = idtras.Length == 1 ? key : key + ":" + idtra;
+                            if (await db.OutboxMessages.AnyAsync(x => x.EventName == "pricing.quote.accepted.v1" &&
+                                x.CorrelationId == eventKey, ct)) continue;
+                            await outbox.WriteAsync("pricing.quote.accepted.v1", "pricing.quote.accepted.v1",
+                                AcceptedQuoteSnapshot.Build(rate, parent, null, actor, idtra, idtras), eventKey, ct);
+                            inserted++;
+                        }
                         await db.SaveChangesAsync(ct);
                         await transaction.CommitAsync(ct);
-                        return 1;
+                        return inserted;
                     });
-                    if (result == 1) queued++;
+                    if (result > 0) queued += result;
                     else if (result == 0) alreadyQueued++;
                     else
                     {
