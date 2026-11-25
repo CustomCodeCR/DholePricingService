@@ -101,6 +101,7 @@ public static class WorkerServiceCollectionExtensions
         services.AddCustomCodeRedisStreamHandler<PricingImportFromExtractionRequestedStreamHandler>();
         services.AddCustomCodeRedisStreamHandler<AgentOceanFreightRatesExtractedStreamHandler>();
         services.AddCustomCodeRedisStreamHandler<OperationsPricingReviewRequestedStreamHandler>();
+        services.AddCustomCodeRedisStreamHandler<OperationsQuoteLinkRequestedStreamHandler>();
         return services;
     }
 

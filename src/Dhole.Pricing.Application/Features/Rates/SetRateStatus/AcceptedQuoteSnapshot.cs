@@ -33,7 +33,7 @@ public static class AcceptedQuoteSnapshot
         return true;
     }
 
-    public static object Build(RateHeader rate, Guid quoteId, Guid? acceptedActor, Guid? historicalActor = null, string? historicalIdtra = null, IReadOnlyList<string>? historicalIdtras = null)
+    public static object Build(RateHeader rate, Guid quoteId, Guid? acceptedActor, Guid? historicalActor = null, string? historicalIdtra = null, IReadOnlyList<string>? historicalIdtras = null, Guid? manualCaseId = null, Guid? quoteLinkRequestId = null)
     {
         var commercial = RateCommercialQuoteSnapshot.Create(rate);
         return new
@@ -46,6 +46,8 @@ public static class AcceptedQuoteSnapshot
                     historicalSourceActorId = historicalActor,
                     historicalIdtra = historicalIdtra,
                     historicalIdtras = historicalIdtras,
+                    manualCaseId,
+                    quoteLinkRequestId,
                     quoteNumber = rate.QuoNumber,
                     commercialRevision = rate.RevisionNumber,
                     acceptedAtUtc = rate.AcceptedAtUtc,

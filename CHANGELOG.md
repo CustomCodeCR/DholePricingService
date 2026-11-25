@@ -1,3 +1,7 @@
+## [1.33.0] - 2026-11-25
+
+- Process explicit Operations QUO link requests via Redis and transactional outbox, validate accepted alternative/customer/modality, append IDTRA without overwriting prior identifiers. CI/staging pending.
+
 ## [1.32.0] - 2026-11-25
 
 - MINOR: exportación comercial de todos los estados, selección múltiple y autofiltro Excel; conserva los reportes predeterminados y básico. CI y staging pendientes.

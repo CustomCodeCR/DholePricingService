@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.32.0",
-  "ecosystemVersion": "1.130.0",
-  "releaseId": "DH-20261125-ALL-STATUS-QUOTATION-EXPORT",
+  "version": "1.33.0",
+  "ecosystemVersion": "1.131.0",
+  "releaseId": "DH-20261125-OPS-SUMMARY-QUOTE-LINK",
   "releaseStatus": "candidate-ci-staging-pending",
-  "businessReleaseId": "DH-20261125-ALL-STATUS-QUOTATION-EXPORT"
+  "businessReleaseId": "DH-20261125-OPS-SUMMARY-QUOTE-LINK"
 }
