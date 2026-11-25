@@ -1,3 +1,7 @@
+## [1.29.13] - 2026-11-25
+
+- DH-20261125-OWN-LCL-WIZARD-BUNDLE: own LCL uses hydrated wizard bundle for preview/create/update; scoped approved reference for incomplete matrix and explicit provenance. CI/staging pending.
+
 ## [1.29.12] - 2026-11-25
 
 - DH-20261125-OWN-LCL-MAERSK-BALBOA: isolated backport of approved cost matching and draft pricing line preview; no Operations staging changes. CI and authenticated staging pending.
