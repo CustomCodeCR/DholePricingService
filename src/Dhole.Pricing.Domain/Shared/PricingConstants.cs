@@ -65,6 +65,7 @@ public static class PricingConstants
         public const string RateSelect = "pricing.rate.select";
         public const string RateApproveLowMargin = "pricing.rate.approve-low-margin";
         public const string RateApproveFreight = "pricing.rate.approve-freight";
+        public const string RateReportExport = "pricing.rate.report.export";
         public const string RateReportGenerate = "pricing.rate.report.generate";
         public const string FclRateDetailCreate = "pricing.fcl-rate-detail.create";
         public const string FclRateDetailUpdate = "pricing.fcl-rate-detail.update";
