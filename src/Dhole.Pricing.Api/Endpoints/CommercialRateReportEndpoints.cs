@@ -33,11 +33,11 @@ public static class CommercialRateReportEndpoints
     {
         var group = app.MapGroup("/api/pricing/rates")
             .WithTags("Commercial quotations")
-            .RequireAuthorization()
-            .RequireScope(PricingConstants.Scopes.RateRequestViewAll);
+            .RequireAuthorization();
 
-        group.MapGet("/commercial-report", GetAsync);
-        group.MapGet("/commercial-report.xlsx", ExportAsync);
+        group.MapGet("/commercial-report", GetAsync).RequireScope(PricingConstants.Scopes.RateRequestViewAll);
+        group.MapGet("/commercial-report.xlsx", ExportAsync)
+            .RequireAnyScope(PricingConstants.Scopes.RateRequestViewAll, PricingConstants.Scopes.RateReportExport);
         return app;
     }
 
@@ -81,6 +81,7 @@ public static class CommercialRateReportEndpoints
 
     private static async Task<IResult> ExportAsync(
         bool? includeAllStatuses,
+        bool? categoryReport,
         string? status,
         string? search,
         string? month,
@@ -94,10 +95,11 @@ public static class CommercialRateReportEndpoints
         HttpContext context,
         CancellationToken ct)
     {
-        if (!visibility.HasScope(context.User, PricingConstants.Scopes.RateRequestViewAll))
+        if (!CanExportReport(visibility, context.User, categoryReport == true))
             return Results.Forbid();
 
-        if (!(includeAllStatuses == true ? ValidExportStatuses(status) : ValidStatus(status)))
+        var allStatuses = categoryReport == true || includeAllStatuses == true;
+        if (!(allStatuses ? ValidExportStatuses(status) : ValidStatus(status)))
             return Results.BadRequest(new { message = "El estado indicado no es válido." });
 
         if (!TryParseMonth(month, out var monthStart))
@@ -115,12 +117,16 @@ public static class CommercialRateReportEndpoints
         if (!ValidDateType(dateType))
             return Results.BadRequest(new { message = "El tipo de fecha debe ser created o approved." });
 
-        var rows = await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, from, to, dateType, ct, includeAllStatuses == true);
+        var rows = await ReadRowsAsync(db, configCatalog, status, search, seller, monthStart, from, to, dateType, ct, allStatuses);
         return Results.File(
-            BuildWorkbook(rows),
+            categoryReport == true ? BuildCategoryWorkbook(rows) : BuildWorkbook(rows),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             $"reporte-cotizaciones-{DateTime.UtcNow:yyyyMMdd-HHmm}.xlsx");
     }
+
+    private static bool CanExportReport(SellerVisibilityService visibility, System.Security.Claims.ClaimsPrincipal user, bool categoryReport) =>
+        visibility.HasScope(user, PricingConstants.Scopes.RateRequestViewAll) ||
+        (categoryReport && visibility.HasScope(user, PricingConstants.Scopes.RateReportExport));
 
     private static bool ValidStatus(string? status) =>
         string.IsNullOrWhiteSpace(status) ||
@@ -461,7 +467,11 @@ public static class CommercialRateReportEndpoints
             .ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)
         : string.Empty;
 
-    private static byte[] BuildWorkbook(IReadOnlyList<CommercialQuote> rates)
+    private static byte[] BuildWorkbook(IReadOnlyList<CommercialQuote> rates) => BuildWorkbookCore(rates, false);
+
+    private static byte[] BuildCategoryWorkbook(IReadOnlyList<CommercialQuote> rates) => BuildWorkbookCore(rates, true);
+
+    private static byte[] BuildWorkbookCore(IReadOnlyList<CommercialQuote> rates, bool categoryReport)
     {
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
@@ -497,7 +507,11 @@ public static class CommercialRateReportEndpoints
             var xml = new StringBuilder();
             xml.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             xml.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>");
-            AppendRow(xml, 1, new[]
+            AppendRow(xml, 1, categoryReport ? new[]
+            {
+                "TARIFA", "IDTRA", "Cliente", "Vendedor", "Estado", "Vigente desde",
+                "Vigente hasta", "Fecha cierre", "Motivo cierre"
+            } : new[]
             {
                 "Código", "Cotización", "IDTRA", "Cliente", "Vendedor", "Modalidad",
                 "POL", "POE", "POD", "Equipo", "Cantidad", "Moneda", "Venta",
@@ -508,7 +522,14 @@ public static class CommercialRateReportEndpoints
             var rowNumber = 2;
             foreach (var rate in rates)
             {
-                AppendRow(xml, rowNumber++, new[]
+                AppendRow(xml, rowNumber++, categoryReport ? new[]
+                {
+                    string.IsNullOrWhiteSpace(rate.QuoNumber) ? rate.RateCode : rate.QuoNumber,
+                    rate.IdtraNumber ?? "", rate.ClientName ?? "", rate.ExecutiveName ?? "", StatusLabel(rate.Status),
+                    rate.ValidFrom.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    rate.ValidTo.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    BusinessDate(rate.ClosedAtUtc), rate.ClosedReason ?? ""
+                } : new[]
                 {
                     rate.RateCode, rate.QuoNumber ?? "", rate.IdtraNumber ?? "", rate.ClientName ?? "",
                     rate.ExecutiveName ?? "", rate.ShipmentMode, rate.PolName, rate.PoeName,
@@ -525,9 +546,9 @@ public static class CommercialRateReportEndpoints
                     rate.ValidTo.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                     rate.ClosedAtUtc?.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) ?? "",
                     rate.ClosedReason ?? ""
-                }, true);
+                }, !categoryReport);
             }
-            xml.Append("</sheetData><autoFilter ref=\"A1:W").Append(rowNumber - 1).Append("\"/></worksheet>");
+            xml.Append("</sheetData><autoFilter ref=\"A1:").Append(categoryReport ? "I" : "W").Append(rowNumber - 1).Append("\"/></worksheet>");
             Add(archive, "xl/worksheets/sheet1.xml", xml.ToString());
         }
 

@@ -1,3 +1,7 @@
+## [1.34.0] - 2026-11-26
+
+- MINOR: DH-20261126-PRICING-CATEGORY-REPORT. Reporte de categorías de nueve columnas y scope independiente; preserva el reporte comercial. Promoción selectiva; CI pendiente.
+
 ## [1.32.0] - 2026-11-25
 
 - Promote the staged all-status quotation export and regression tests to production without unrelated develop changes. Preserve the existing basic report and commercial defaults.

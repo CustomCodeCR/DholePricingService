@@ -37,6 +37,32 @@ public sealed class CommercialAllStatusExportTests
     }
 
     [TestMethod]
+    public void CategoryWorkbookHasExactlyNineColumns()
+    {
+        var quoteType = typeof(CommercialRateReportEndpoints).GetNestedType("CommercialQuote", BindingFlags.NonPublic)!;
+        var bytes = (byte[])Invoke("BuildCategoryWorkbook", Array.CreateInstance(quoteType, 0))!;
+        using var archive = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
+        using var stream = archive.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+        var xml = XDocument.Load(stream);
+        XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+        CollectionAssert.AreEqual(new[] { "TARIFA", "IDTRA", "Cliente", "Vendedor", "Estado", "Vigente desde", "Vigente hasta", "Fecha cierre", "Motivo cierre" }, xml.Descendants(ns + "c").Select(cell => cell.Value).ToArray());
+        Assert.AreEqual("A1:I1", xml.Root!.Element(ns + "autoFilter")!.Attribute("ref")!.Value);
+    }
+
+    [TestMethod]
+    [DataRow("pricing.rate.report.export", true, true)]
+    [DataRow("pricing.rate.report.export", false, false)]
+    [DataRow("pricing.rate-request.view-all", true, true)]
+    [DataRow("pricing.rate-request.view-all", false, true)]
+    [DataRow("pricing.rate.report.generate", true, false)]
+    public void CategoryScopeDoesNotGrantFullFinancialReport(string scope, bool category, bool expected)
+    {
+        var principal = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(new[] { new System.Security.Claims.Claim("scope", scope) }, "test"));
+        var visibility = new Dhole.Pricing.Api.Services.SellerVisibilityService(null!);
+        Assert.AreEqual(expected, (bool)Invoke("CanExportReport", visibility, principal, category)!);
+    }
+
+    [TestMethod]
     public void WorkbookKeepsAll23ColumnsAndFilterEvenWithNoMatches()
     {
         var quoteType = typeof(CommercialRateReportEndpoints)
