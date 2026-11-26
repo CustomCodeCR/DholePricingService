@@ -1,3 +1,7 @@
+## [1.34.0] - 2026-11-26
+
+- MINOR: DH-20261126-PRICING-CATEGORY-REPORT. Scope dedicado para exportar las nueve columnas del reporte por categorías; mantiene la protección y el formato detallado del reporte comercial. CI y staging pendientes.
+
 ## [1.33.0] - 2026-11-25
 
 - Process explicit Operations QUO link requests via Redis and transactional outbox, validate accepted alternative/customer/modality, append IDTRA without overwriting prior identifiers. CI/staging pending.
