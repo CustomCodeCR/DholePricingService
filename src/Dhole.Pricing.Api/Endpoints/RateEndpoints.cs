@@ -52,6 +52,8 @@ public static class RateEndpoints
         var operations = app.MapGroup("/api/pricing/operations-quotes").RequireAuthorization();
         operations.MapGet("/", SearchOperationsQuotesAsync)
             .RequireScope("operations.pricing.quote.read");
+        operations.MapGet("/consolidations", GetOperationsConsolidationsAsync)
+            .RequireScope("operations.pricing.quote.read");
         operations.MapGet("/{rateId:guid}", GetOperationsQuoteAsync)
             .RequireScope("operations.pricing.quote.read");
         group.MapGet("/realtime-access", () => Results.Ok())
@@ -986,6 +988,37 @@ public static class RateEndpoints
         return Results.Ok(new { items = rows });
     }
 
+    private sealed record OperationsConsolidation(Guid Id, int Number, string Name, bool IsActive);
+
+    private static async Task<OperationsConsolidation[]> ReadOperationsConsolidationsAsync(ServiceDbContext db, CancellationToken ct)
+    {
+        var connection = db.Database.GetDbConnection();
+        var wasOpen = connection.State == ConnectionState.Open;
+        if (!wasOpen) await connection.OpenAsync(ct);
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT id, consolidation_number, name, is_active
+                FROM pricing."OwnLclConsolidations"
+                ORDER BY consolidation_number DESC;
+                """;
+            var rows = new List<OperationsConsolidation>();
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+                rows.Add(new(reader.GetGuid(0), reader.GetInt32(1), reader.GetString(2), reader.GetBoolean(3)));
+            return rows.ToArray();
+        }
+        finally { if (!wasOpen) await connection.CloseAsync(); }
+    }
+
+    private static async Task<IResult> GetOperationsConsolidationsAsync(string? modality, ServiceDbContext db, CancellationToken ct)
+    {
+        if (!string.Equals(modality, "LCL", StringComparison.OrdinalIgnoreCase))
+            return Results.Ok(Array.Empty<OperationsConsolidation>());
+        return Results.Ok(await ReadOperationsConsolidationsAsync(db, ct));
+    }
+
     private static async Task<IResult> GetOperationsQuoteAsync(
         Guid rateId, ServiceDbContext db, IQueryDispatcher dispatcher, CancellationToken cancellationToken)
     {
@@ -996,7 +1029,19 @@ public static class RateEndpoints
         var rate = result.Value;
         // Explicit allowlist: no prices, margins, rate details, financial terms or attachments.
         if (rate.Status != "AcceptedByClient" || rate.ClientAccountId is null) return Results.NotFound();
+        var link = string.Equals(rate.ShipmentMode, "Lcl", StringComparison.OrdinalIgnoreCase)
+            ? OwnConsolidationReference.Read(rate.RateDetails.Select(detail => detail.Notes)) : ((Guid? Id, int? Number))(null, null);
+        OperationsConsolidation? consolidation = null;
+        if (string.Equals(rate.ShipmentMode, "Lcl", StringComparison.OrdinalIgnoreCase) && (link.Id.HasValue || link.Number.HasValue))
+        {
+            var rows = await ReadOperationsConsolidationsAsync(db, cancellationToken);
+            var matches = rows.Where(row => link.Id.HasValue ? row.Id == link.Id.Value : row.Number == link.Number).Take(2).ToArray();
+            consolidation = matches.Length == 1 ? matches[0] : null;
+        }
         return Results.Ok(new {
+            consolidationId = consolidation?.Id ?? link.Id,
+            consolidationNumber = consolidation?.Number ?? link.Number,
+            consolidationReference = consolidation?.Name,
             rate.Id, rate.RateCode, rate.QuoNumber, rate.ClientName, rate.ClientAccountId, rate.IdtraNumber,
             rate.Status, rate.ShipmentMode, rate.OperationType,
             rate.PolId, rate.PolCode, rate.PolName, rate.PoeId, rate.PoeCode, rate.PoeName,

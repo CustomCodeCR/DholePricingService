@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.35.0",
-  "ecosystemVersion": "1.144.0",
-  "releaseId": "DH-20261127-OPS-QUOTE-SCOPES",
+  "version": "1.35.1",
+  "ecosystemVersion": "1.145.6",
+  "releaseId": "DH-20261127-OPENING-ESSENTIAL-FIELDS",
   "releaseStatus": "candidate-ci-staging-pending",
-  "businessReleaseId": "DH-20261127-OPS-QUOTE-SCOPES"
+  "businessReleaseId": "DH-20261127-OPENING-ESSENTIAL-FIELDS"
 }

@@ -36,6 +36,8 @@ public static class AcceptedQuoteSnapshot
     public static object Build(RateHeader rate, Guid quoteId, Guid? acceptedActor, Guid? historicalActor = null, string? historicalIdtra = null, IReadOnlyList<string>? historicalIdtras = null, Guid? manualCaseId = null, Guid? quoteLinkRequestId = null)
     {
         var commercial = RateCommercialQuoteSnapshot.Create(rate);
+        var consolidation = rate.ShipmentMode.ToString().Equals("Lcl", StringComparison.OrdinalIgnoreCase)
+            ? OwnConsolidationReference.Read(rate.RateDetails.Select(detail => detail.Notes)) : ((Guid? Id, int? Number))(null, null);
         return new
                 {
                     schemaVersion = 1,
@@ -59,6 +61,8 @@ public static class AcceptedQuoteSnapshot
                     operationType = rate.OperationType.ToString(),
                     incoterm = rate.IncotermCode,
                     incotermName = rate.IncotermName,
+                    consolidationId = consolidation.Id,
+                    consolidationNumber = consolidation.Number,
                     pickupAddress = rate.PickupAddress,
                     warehouseId = rate.WarehouseId,
                     pickupLocationsJson = rate.PickupLocationsJson,
@@ -85,7 +89,8 @@ public static class AcceptedQuoteSnapshot
                         pallets = rate.TotalPallets,
                         chargeableQuantity = rate.ChargeableQuantity,
                         cargoValue = rate.CargoValue,
-                        cargoLinesJson = rate.CargoLinesJson
+                        cargoLinesJson = rate.CargoLinesJson,
+                        overweight = rate.RateContainers.Any(item => RateContainerOverweightPolicy.CountOverweight(rate.PoeName, item.UnitWeightsKg) > 0) ? (bool?)true : null
                     },
                     providers = new {
                         carrierId = rate.CarrierId, carrierName = rate.CarrierName,
