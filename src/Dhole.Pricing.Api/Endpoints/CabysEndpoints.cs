@@ -13,7 +13,7 @@ public static class CabysEndpoints
         app.MapGet("/api/pricing/cabys", SearchCabysAsync)
             .WithTags("Pricing CABYS")
             .RequireAuthorization()
-            .RequireScope(PricingConstants.Scopes.WorkspaceAccess);
+            .RequireAnyScope(PricingConstants.Scopes.WorkspaceAccess, "operations.catalog.cabys.read");
 
         return app;
     }
