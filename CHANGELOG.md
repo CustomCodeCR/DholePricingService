@@ -1,3 +1,7 @@
+## [1.35.2] - 2026-11-27
+
+- DH-20261127-DYNAMICS-FTL-26-7TON: Map the 26-foot / 7-ton FTL source to the existing 26-inch-labelled FTL category explicitly; preserve original equipment description, totals and idempotency. Add environment regression coverage. CI and staging pending.
+
 ## [1.35.1] - 2026-11-27
 - Expose a cost-free Operations consolidation catalog and resolve the exact own-LCL name from accepted QUO markers in the transactional outbox.
 - Include positively identified equipment overweight in accepted quote snapshots; unknown data remains null. Candidate CI and staging pending.
