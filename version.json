@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "ecosystem": "Dhole",
   "component": "DholePricingService",
-  "version": "1.35.2",
-  "ecosystemVersion": "1.146.4",
-  "releaseId": "DH-20261127-DYNAMICS-FTL-26-7TON",
+  "version": "1.35.3",
+  "ecosystemVersion": "1.146.5",
+  "releaseId": "DH-20261127-PRICING-HOSTED-BUILD",
   "releaseStatus": "candidate-ci-staging-pending",
-  "businessReleaseId": "DH-20261127-DYNAMICS-FTL-26-7TON"
+  "businessReleaseId": "DH-20261127-PRICING-HOSTED-BUILD"
 }

@@ -1,3 +1,7 @@
+## [1.35.3] - 2026-11-27
+
+- DH-20261127-PRICING-HOSTED-BUILD: move EF validation, NuGet restore and container builds to GitHub-hosted runners; transfer checksum-verified commit-tagged images to self-hosted deployment, retaining production credential, FTL mapping and health checks. CI/staging pending.
+
 ## [1.35.2] - 2026-11-27
 
 - DH-20261127-DYNAMICS-FTL-26-7TON: Map the 26-foot / 7-ton FTL source to the existing 26-inch-labelled FTL category explicitly; preserve original equipment description, totals and idempotency. Add environment regression coverage. CI and staging pending.

@@ -17,18 +17,67 @@ env:
   DHOLE_NETWORK: dhole
   COMPOSE_PROJECT: dhole
 jobs:
-  deploy:
-    runs-on: [self-hosted, linux, x64, dhole]
+  build:
+    runs-on: ubuntu-latest
     steps:
-      - name: Normalize runner workspace permissions
+      - uses: actions/checkout@v4
+      - name: Verify EF migrations are synchronized
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -d "$GITHUB_WORKSPACE" ]; then
-            RUNNER_UID="$(id -u)"
-            RUNNER_GID="$(id -g)"
-            docker run --rm -v "$GITHUB_WORKSPACE:/workspace" alpine:3.22 \
-              sh -c "chown -R ${RUNNER_UID}:${RUNNER_GID} /workspace"
-          fi
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/src" \
+            -w /src \
+            -e HOME=/tmp \
+            -e DOTNET_CLI_HOME=/tmp \
+            -e GITHUB_ACTOR="$GITHUB_ACTOR" \
+            -e GITHUB_TOKEN="$GITHUB_TOKEN" \
+            mcr.microsoft.com/dotnet/sdk:10.0 \
+            bash -lc '
+              set -euo pipefail
+              export NuGetPackageSourceCredentials_github="Username=$GITHUB_ACTOR;Password=$GITHUB_TOKEN;ValidAuthenticationTypes=Basic"
+              dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile /src/NuGet.Config
+              # Compilar explícitamente para que Actions muestre los errores reales de C#
+              # en vez del mensaje opaco de dotnet-ef "Build failed".
+              dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
+                --no-restore \
+                --configuration Release \
+                --verbosity minimal
+              dotnet tool install --tool-path /tmp/ef dotnet-ef --version 10.0.9
+              /tmp/ef/dotnet-ef migrations has-pending-model-changes \
+                --no-build \
+                --configuration Release \
+                --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
+                --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj
+            '
+      - name: Build images
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          SHA_TAG="${GITHUB_SHA::12}"
+          docker build --pull --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-api:latest -t "dhole/pricing-api:$SHA_TAG" .
+          docker build --pull --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Workers/Dockerfile -t dhole/pricing-workers:latest -t "dhole/pricing-workers:$SHA_TAG" .
+      - name: Export commit-specific Pricing images
+        run: |
+          set -euo pipefail
+          mkdir -p image-bundle
+          SHA_TAG="${GITHUB_SHA::12}"
+          docker save dhole/pricing-api:latest "dhole/pricing-api:$SHA_TAG" dhole/pricing-workers:latest "dhole/pricing-workers:$SHA_TAG" | gzip -1 > image-bundle/images.tar.gz
+          (cd image-bundle && sha256sum images.tar.gz > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pricing-images-${{ github.sha }}
+          path: image-bundle/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+  deploy:
+    needs: build
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
       - uses: actions/checkout@v4
       - name: Load Dhole deployment infrastructure
         run: |
@@ -93,45 +142,20 @@ jobs:
           PY
           # Only the canonical key is sent to the read-only Dynamics preflight.
           bash scripts/check-dynamics-pricing-credential.sh /opt/dhole/.env "$DHOLE_ENV_FILE"
-      - name: Verify EF migrations are synchronized
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: pricing-images-${{ github.sha }}
+          path: image-bundle
+      - name: Load verified Pricing images
         run: |
           set -euo pipefail
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            -v "$GITHUB_WORKSPACE:/src" \
-            -w /src \
-            -e HOME=/tmp \
-            -e DOTNET_CLI_HOME=/tmp \
-            -e GITHUB_ACTOR="$GITHUB_ACTOR" \
-            -e GITHUB_TOKEN="$GITHUB_TOKEN" \
-            mcr.microsoft.com/dotnet/sdk:10.0 \
-            bash -lc '
-              set -euo pipefail
-              export NuGetPackageSourceCredentials_github="Username=$GITHUB_ACTOR;Password=$GITHUB_TOKEN;ValidAuthenticationTypes=Basic"
-              dotnet restore src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj --configfile /src/NuGet.Config
-              # Compilar explícitamente para que Actions muestre los errores reales de C#
-              # en vez del mensaje opaco de dotnet-ef "Build failed".
-              dotnet build src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj \
-                --no-restore \
-                --configuration Release \
-                --verbosity minimal
-              dotnet tool install --tool-path /tmp/ef dotnet-ef --version 10.0.9
-              /tmp/ef/dotnet-ef migrations has-pending-model-changes \
-                --no-build \
-                --configuration Release \
-                --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
-                --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj
-            '
-      - name: Build images
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
+          (cd image-bundle && sha256sum -c SHA256SUMS)
+          docker load -i image-bundle/images.tar.gz
           SHA_TAG="${GITHUB_SHA::12}"
-          docker build --pull --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-api:latest -t "dhole/pricing-api:$SHA_TAG" .
-          docker build --pull --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Workers/Dockerfile -t dhole/pricing-workers:latest -t "dhole/pricing-workers:$SHA_TAG" .
+          for service in api workers; do
+            test "$(docker image inspect -f '{{.Id}}' "dhole/pricing-$service:latest")" = "$(docker image inspect -f '{{.Id}}' "dhole/pricing-$service:$SHA_TAG")"
+          done
+          rm -rf image-bundle
       - name: Verify production image FTL mapping before container replacement
         shell: bash
         run: |
@@ -140,6 +164,8 @@ jobs:
           import json, sys
           configuration = json.load(sys.stdin)
           actual = configuration.get("DynamicsQuoteSync", {}).get("EquipmentMappings", {}).get("24PIES5TONFTL")
+          if configuration.get("DynamicsQuoteSync", {}).get("EquipmentMappings", {}).get("26PIES7TONFTL") != ("26" + chr(34) + " FTL"):
+              raise SystemExit("::error::Production image missing 26PIES7TONFTL mapping.")
           if actual != "7 Ton / 24 pies":
               raise SystemExit("::error::Production image is missing the approved 24PIES5TONFTL category mapping. Deployment aborted.")
           print("Production image contains the approved 24-foot FTL mapping.")
@@ -151,6 +177,8 @@ jobs:
           if isinstance(environment, list):
               environment = dict(x.split("=", 1) for x in environment if "=" in x)
           override = environment.get("DynamicsQuoteSync__EquipmentMappings__24PIES5TONFTL")
+          if environment.get("DynamicsQuoteSync__EquipmentMappings__26PIES7TONFTL") not in (None, "", "26" + chr(34) + " FTL"):
+              raise SystemExit("::error::Conflicting 26PIES7TONFTL override.")
           if override not in (None, "", "7 Ton / 24 pies"):
               raise SystemExit("::error::Pricing production environment overrides the approved FTL mapping. Deployment aborted.")
           print("No conflicting Docker Compose equipment override found.")
