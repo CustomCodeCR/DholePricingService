@@ -4,6 +4,11 @@ on:
   push:
     branches: [develop]
   workflow_dispatch:
+  pull_request:
+    branches: [develop, master]
+    paths:
+      - '.github/workflows/deploy-staging.yml'
+      - '.github/workflows/deploy-production.yml'
 permissions:
   contents: read
   packages: read
@@ -17,47 +22,10 @@ env:
   DHOLE_NETWORK: dhole-staging
   COMPOSE_PROJECT: dhole-staging
 jobs:
-  deploy:
-    runs-on: [self-hosted, linux, x64, dhole]
+  build:
+    runs-on: ubuntu-latest
     steps:
-      - name: Normalize runner workspace permissions
-        run: |
-          set -euo pipefail
-          if [ -d "$GITHUB_WORKSPACE" ]; then
-            RUNNER_UID="$(id -u)"
-            RUNNER_GID="$(id -g)"
-            docker run --rm -v "$GITHUB_WORKSPACE:/workspace" alpine:3.22 \
-              sh -c "chown -R ${RUNNER_UID}:${RUNNER_GID} /workspace"
-          fi
       - uses: actions/checkout@v4
-      - name: Load Dhole deployment infrastructure
-        run: |
-          set -euo pipefail
-          clone_ok=0
-          for attempt in 1 2 3 4 5; do
-            rm -rf .dhole-system
-            if git clone --depth 1 --branch develop https://github.com/CustomCodeCR/DholeSystem.git .dhole-system; then
-              clone_ok=1
-              break
-            fi
-
-            echo "::warning::No se pudo clonar DholeSystem (intento $attempt/5). Verificando DNS antes de reintentar..."
-            getent ahosts github.com || true
-            sleep $((attempt * 5))
-          done
-
-          if [ "$clone_ok" -ne 1 ]; then
-            echo "::error::No fue posible resolver/conectar con github.com después de 5 intentos."
-            exit 1
-          fi
-          mkdir -p "$RUNNER_TEMP/dhole-env"
-          bash .dhole-system/deploy/prepare-environments.sh /opt/dhole/.env "$RUNNER_TEMP/dhole-env"
-          echo "DHOLE_ENV_FILE=$RUNNER_TEMP/dhole-env/.env.staging" >> "$GITHUB_ENV"
-      - name: Verify staging server
-        run: docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -f "$COMPOSE_OVERRIDE" -p "$COMPOSE_PROJECT" config -q
-      - name: Test Dynamics credential preflight without network
-        shell: bash
-        run: bash scripts/tests/test-check-dynamics-pricing-credential.sh
       - name: Verify EF migrations are synchronized
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -89,16 +57,6 @@ jobs:
                 --project src/Dhole.Pricing.Persistence/Dhole.Pricing.Persistence.csproj \
                 --startup-project src/Dhole.Pricing.Api/Dhole.Pricing.Api.csproj
             '
-      - name: Reclaim Docker build space
-        run: |
-          set -euo pipefail
-          echo "Disk before cleanup:"
-          df -h /
-          docker builder prune -af || true
-          docker container prune -f || true
-          docker image prune -af || true
-          echo "Disk after cleanup:"
-          df -h /
       - name: Build images
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -107,6 +65,68 @@ jobs:
           SHA_TAG="${GITHUB_SHA::12}"
           docker build --pull --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Api/Dockerfile -t dhole/pricing-api:staging -t "dhole/pricing-api:staging-$SHA_TAG" .
           docker build --pull --build-arg GITHUB_ACTOR="$GITHUB_ACTOR" --secret id=github_token,env=GITHUB_TOKEN -f src/Dhole.Pricing.Workers/Dockerfile -t dhole/pricing-workers:staging -t "dhole/pricing-workers:staging-$SHA_TAG" .
+      - name: Export commit-specific Pricing images
+        run: |
+          set -euo pipefail
+          mkdir -p image-bundle
+          SHA_TAG="${GITHUB_SHA::12}"
+          docker save dhole/pricing-api:staging "dhole/pricing-api:staging-$SHA_TAG" dhole/pricing-workers:staging "dhole/pricing-workers:staging-$SHA_TAG" | gzip -1 > image-bundle/images.tar.gz
+          (cd image-bundle && sha256sum images.tar.gz > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pricing-images-${{ github.sha }}
+          path: image-bundle/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 3
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: [self-hosted, linux, x64, dhole]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Load Dhole deployment infrastructure
+        run: |
+          set -euo pipefail
+          clone_ok=0
+          for attempt in 1 2 3 4 5; do
+            rm -rf .dhole-system
+            if git clone --depth 1 --branch develop https://github.com/CustomCodeCR/DholeSystem.git .dhole-system; then
+              clone_ok=1
+              break
+            fi
+
+            echo "::warning::No se pudo clonar DholeSystem (intento $attempt/5). Verificando DNS antes de reintentar..."
+            getent ahosts github.com || true
+            sleep $((attempt * 5))
+          done
+
+          if [ "$clone_ok" -ne 1 ]; then
+            echo "::error::No fue posible resolver/conectar con github.com después de 5 intentos."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/dhole-env"
+          bash .dhole-system/deploy/prepare-environments.sh /opt/dhole/.env "$RUNNER_TEMP/dhole-env"
+          echo "DHOLE_ENV_FILE=$RUNNER_TEMP/dhole-env/.env.staging" >> "$GITHUB_ENV"
+      - name: Verify staging server
+        run: docker compose --env-file "$DHOLE_ENV_FILE" -f "$COMPOSE_FILE" -f "$COMPOSE_OVERRIDE" -p "$COMPOSE_PROJECT" config -q
+      - name: Test Dynamics credential preflight without network
+        shell: bash
+        run: bash scripts/tests/test-check-dynamics-pricing-credential.sh
+      - uses: actions/download-artifact@v4
+        with:
+          name: pricing-images-${{ github.sha }}
+          path: image-bundle
+      - name: Load verified Pricing images
+        run: |
+          set -euo pipefail
+          (cd image-bundle && sha256sum -c SHA256SUMS)
+          docker load -i image-bundle/images.tar.gz
+          SHA_TAG="${GITHUB_SHA::12}"
+          for service in api workers; do
+            test "$(docker image inspect -f '{{.Id}}' "dhole/pricing-$service:staging")" = "$(docker image inspect -f '{{.Id}}' "dhole/pricing-$service:staging-$SHA_TAG")"
+          done
+          rm -rf image-bundle
       - name: Deploy Pricing staging
         run: |
           set -euo pipefail
