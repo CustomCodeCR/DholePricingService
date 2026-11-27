@@ -357,6 +357,45 @@ public sealed class DynamicsQuotePayloadBuilderTests
     }
 
     [TestMethod]
+    public void PublishedEnvironmentMappingsResolveSevenTonTwentySixFootFTLWithoutChangingTotals()
+    {
+        // Explicit category alias: original tonnage remains in the text field.
+        var schema = WithEquipmentOptions("26\" FTL", "7 Ton / 24 pies", "24 TON FTL");
+        var snapshot = WithEquipment("26 pies / 7 TON", "Ftl");
+        Assert.ThrowsExactly<InvalidOperationException>(() => BuildForTest(snapshot, schema));
+        foreach (var environment in new[] { "Development", "Staging", "Production" })
+        {
+            var folder = new DirectoryInfo(AppContext.BaseDirectory);
+            string? filename = null;
+            while (folder is not null)
+            {
+                var candidate = Path.Combine(folder.FullName,
+                    "src", "Dhole.Pricing.Api", "appsettings." + environment + ".json");
+                if (File.Exists(candidate))
+                {
+                    filename = candidate;
+                    break;
+                }
+                folder = folder.Parent;
+            }
+            Assert.IsNotNull(filename, "Missing Pricing config for " + environment);
+            using var stream = File.OpenRead(filename);
+            var configuration = new ConfigurationBuilder().AddJsonStream(stream).Build();
+            using var mapped = JsonDocument.Parse(JsonSerializer.Serialize(
+                BuildForTest(snapshot, schema, configuration)));
+            var inputs = mapped.RootElement.GetProperty("inputs");
+            Assert.AreEqual(100000010, inputs.GetProperty("new_equipo").GetInt32(),
+                environment);
+            Assert.AreEqual("2 x 26 pies / 7 TON",
+                inputs.GetProperty("new_cantidadequipos").GetString(), environment);
+            Assert.AreEqual(2400.25m, inputs.GetProperty("new_flete").GetDecimal(),
+                environment);
+            Assert.AreEqual(0m, inputs.GetProperty("new_monto9").GetDecimal(),
+                environment);
+        }
+    }
+
+    [TestMethod]
     public void DuplicateDataverseEquipmentChoicesNeverSelectAnArbitraryValue()
     {
         var schema = WithEquipmentOptions("40 HC FCL", "40HC FCL");
