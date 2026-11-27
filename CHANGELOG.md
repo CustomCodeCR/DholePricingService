@@ -1,3 +1,6 @@
+## [1.35.1] - 2026-11-27
+- Include positively identified equipment overweight in accepted quote snapshots; unknown data remains null. Candidate CI and staging pending.
+
 ## [1.35.0] - 2026-11-27
 
 - MINOR: lectura dedicada de QUO aceptadas para Operations, con proyección logística explícita sin importes, costos ni márgenes. CABYS acepta scope operativo independiente. Las rutas comerciales conservan autorización original. CI y staging pendientes.

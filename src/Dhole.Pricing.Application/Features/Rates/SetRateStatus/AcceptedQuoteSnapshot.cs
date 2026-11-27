@@ -85,7 +85,8 @@ public static class AcceptedQuoteSnapshot
                         pallets = rate.TotalPallets,
                         chargeableQuantity = rate.ChargeableQuantity,
                         cargoValue = rate.CargoValue,
-                        cargoLinesJson = rate.CargoLinesJson
+                        cargoLinesJson = rate.CargoLinesJson,
+                        overweight = rate.RateContainers.Any(item => RateContainerOverweightPolicy.CountOverweight(rate.PoeName, item.UnitWeightsKg) > 0) ? (bool?)true : null
                     },
                     providers = new {
                         carrierId = rate.CarrierId, carrierName = rate.CarrierName,
