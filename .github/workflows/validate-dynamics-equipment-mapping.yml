@@ -5,6 +5,7 @@ on:
     branches: [develop, master]
     paths:
       - 'src/Dhole.Pricing.Api/Services/DynamicsQuotePayloadBuilder.cs'
+      - 'src/Dhole.Pricing.Api/appsettings.*.json'
       - 'tests/Dhole.Pricing.IntegrationTests/DynamicsQuotePayloadBuilderTests.cs'
       - '.github/workflows/validate-dynamics-equipment-mapping.yml'
 

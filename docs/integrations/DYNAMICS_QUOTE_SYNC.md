@@ -215,3 +215,7 @@ Para QUO-00000-000546, validar primero el estado de Dynamics (cabecera y línea)
 y reintentar la **misma** revisión y clave de idempotencia; no crear una cotización
 nueva si la existencia de la anterior es incierta. El arreglo no cambia montos,
 IDTRA ni datos comerciales de la QUO.
+
+## FTL: 26 pies / 7 TON (QUO-00000-000800)
+
+The explicit source key `26PIES7TONFTL` maps to the existing `26" FTL` Dataverse category in Development, Staging and Production. This is a length category, not a physical capacity equivalence. The original 26 pies / 7 TON remains in `new_cantidadequipos`. No change to totals or retry identity. If the exact option is later available, remove the override and refresh metadata. Validate in staging before promotion; retry the same revision only after deployment.
