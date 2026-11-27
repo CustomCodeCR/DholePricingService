@@ -1029,12 +1029,14 @@ public static class RateEndpoints
         var rate = result.Value;
         // Explicit allowlist: no prices, margins, rate details, financial terms or attachments.
         if (rate.Status != "AcceptedByClient" || rate.ClientAccountId is null) return Results.NotFound();
-        var link = OwnConsolidationReference.Read(rate.RateDetails.Select(detail => detail.Notes));
+        var link = string.Equals(rate.ShipmentMode, "Lcl", StringComparison.OrdinalIgnoreCase)
+            ? OwnConsolidationReference.Read(rate.RateDetails.Select(detail => detail.Notes)) : ((Guid? Id, int? Number))(null, null);
         OperationsConsolidation? consolidation = null;
         if (string.Equals(rate.ShipmentMode, "Lcl", StringComparison.OrdinalIgnoreCase) && (link.Id.HasValue || link.Number.HasValue))
         {
             var rows = await ReadOperationsConsolidationsAsync(db, cancellationToken);
-            consolidation = rows.SingleOrDefault(row => link.Id.HasValue ? row.Id == link.Id.Value : row.Number == link.Number);
+            var matches = rows.Where(row => link.Id.HasValue ? row.Id == link.Id.Value : row.Number == link.Number).Take(2).ToArray();
+            consolidation = matches.Length == 1 ? matches[0] : null;
         }
         return Results.Ok(new {
             consolidationId = consolidation?.Id ?? link.Id,

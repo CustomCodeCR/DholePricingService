@@ -36,7 +36,8 @@ public static class AcceptedQuoteSnapshot
     public static object Build(RateHeader rate, Guid quoteId, Guid? acceptedActor, Guid? historicalActor = null, string? historicalIdtra = null, IReadOnlyList<string>? historicalIdtras = null, Guid? manualCaseId = null, Guid? quoteLinkRequestId = null)
     {
         var commercial = RateCommercialQuoteSnapshot.Create(rate);
-        var consolidation = OwnConsolidationReference.Read(rate.RateDetails.Select(detail => detail.Notes));
+        var consolidation = rate.ShipmentMode.ToString().Equals("Lcl", StringComparison.OrdinalIgnoreCase)
+            ? OwnConsolidationReference.Read(rate.RateDetails.Select(detail => detail.Notes)) : ((Guid? Id, int? Number))(null, null);
         return new
                 {
                     schemaVersion = 1,

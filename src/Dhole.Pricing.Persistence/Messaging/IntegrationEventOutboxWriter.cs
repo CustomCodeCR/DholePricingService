@@ -1,4 +1,8 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using System.Text;
 using System.Security.Cryptography;
 using CustomCodeFramework.Messaging.Outbox;
@@ -30,6 +34,42 @@ public sealed class IntegrationEventOutboxWriter(ServiceDbContext dbContext)
         return "sha256:" + Convert.ToHexString(hash).ToLowerInvariant();
     }
 
+    private async Task<string> ResolveConsolidationNameAsync(string payloadJson, CancellationToken ct)
+    {
+        if (JsonNode.Parse(payloadJson) is not JsonObject payload ||
+            !string.Equals(payload["shipmentMode"]?.ToString(), "Lcl", StringComparison.OrdinalIgnoreCase))
+            return payloadJson;
+        var byId = Guid.TryParse(payload["consolidationId"]?.ToString(), out var id) && id != Guid.Empty;
+        var byNumber = int.TryParse(payload["consolidationNumber"]?.ToString(), out var number) && number > 0;
+        if (!byId && !byNumber) return payloadJson;
+        var connection = dbContext.Database.GetDbConnection();
+        var wasOpen = connection.State == ConnectionState.Open;
+        if (!wasOpen) await connection.OpenAsync(ct);
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = dbContext.Database.CurrentTransaction?.GetDbTransaction();
+            command.CommandText = byId
+                ? "SELECT id, consolidation_number, name FROM pricing.\"OwnLclConsolidations\" WHERE id = @identity"
+                : "SELECT id, consolidation_number, name FROM pricing.\"OwnLclConsolidations\" WHERE consolidation_number = @identity";
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "identity";
+            parameter.Value = byId ? (object)id : number;
+            command.Parameters.Add(parameter);
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            if (!await reader.ReadAsync(ct)) return payloadJson;
+            var resolvedId = reader.GetGuid(0);
+            var resolvedNumber = reader.GetInt32(1);
+            var name = reader.GetString(2);
+            if (await reader.ReadAsync(ct)) return payloadJson; // Ambiguous legacy number.
+            payload["consolidationId"] = resolvedId.ToString("D");
+            payload["consolidationNumber"] = resolvedNumber;
+            payload["consolidationReference"] = name;
+            return payload.ToJsonString();
+        }
+        finally { if (!wasOpen) await connection.CloseAsync(); }
+    }
+
     public async Task WriteAsync(
         string eventType,
         string eventName,
@@ -43,6 +83,8 @@ public sealed class IntegrationEventOutboxWriter(ServiceDbContext dbContext)
         // EventId); consumers must not interpret those deliveries as new emails.
         var normalizedCorrelationId = NormalizeCorrelationId(correlationId);
         var payloadJson = JsonSerializer.Serialize(payload);
+        if (eventName is "pricing.quote.accepted.v1" or "pricing.quote.linked.v1")
+            payloadJson = await ResolveConsolidationNameAsync(payloadJson, cancellationToken);
         if (string.Equals(eventType, "notifications.notification.requested", StringComparison.Ordinal)
             && normalizedCorrelationId is not null)
         {
