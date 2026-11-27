@@ -47,6 +47,13 @@ public static class RateEndpoints
         var group = app.MapGroup("/api/pricing/rates").WithTags("Rates").RequireAuthorization();
 
         group.MapGet("/", GetRatesAsync).RequireScope(PricingConstants.Scopes.RateView);
+
+        // A separate read-only operational contract; never authorize commercial RateDto routes.
+        var operations = app.MapGroup("/api/pricing/operations-quotes").RequireAuthorization();
+        operations.MapGet("/", SearchOperationsQuotesAsync)
+            .RequireScope("operations.pricing.quote.read");
+        operations.MapGet("/{rateId:guid}", GetOperationsQuoteAsync)
+            .RequireScope("operations.pricing.quote.read");
         group.MapGet("/realtime-access", () => Results.Ok())
             .RequireScope(PricingConstants.Scopes.RateView);
 
@@ -947,6 +954,61 @@ public static class RateEndpoints
         );
 
         return EndpointResults.FromPaged(page);
+    }
+
+    private static IQueryable<RateHeader> OperationsAcceptedQuotes(ServiceDbContext db)
+    {
+        // The worker revalidates the chosen alternative under its transaction at link time.
+        var alternatives = db.Database.SqlQueryRaw<Guid>("SELECT rate_id AS \"Value\" FROM pricing.rate_quote_alternatives");
+        var selected = db.Database.SqlQueryRaw<Guid>("SELECT rate_id AS \"Value\" FROM pricing.rate_quote_alternatives WHERE status = 'Selected'");
+        return db.RateHeaders.AsNoTracking().Where(x => !x.IsDeleted &&
+            x.Status == RateStatus.AcceptedByClient && x.AcceptedAtUtc.HasValue &&
+            x.ClientAccountId.HasValue && x.QuoNumber != null && x.QuoNumber != "" &&
+            !(x.RateType == RateType.Tariff && x.ClientName != null && x.ClientName.ToLower().Contains("tarifario")) &&
+            (!alternatives.Contains(x.Id) || selected.Contains(x.Id)));
+    }
+
+    private static async Task<IResult> SearchOperationsQuotesAsync(
+        string? search, Guid? accountId, ServiceDbContext db, CancellationToken cancellationToken)
+    {
+        var term = search?.Trim().ToUpperInvariant();
+        if (term is null || term.Length < 3 || term.Length > 100)
+            return Results.BadRequest(new { code = "OPERATIONS_QUOTE_SEARCH_REQUIRED" });
+        var query = OperationsAcceptedQuotes(db)
+            .Where(x => x.QuoNumber!.ToUpper().Contains(term));
+        if (accountId.HasValue) query = query.Where(x => x.ClientAccountId == accountId.Value);
+        var rows = await query.OrderByDescending(x => x.AcceptedAtUtc).ThenBy(x => x.Id)
+            .Take(50).Select(x => new {
+                x.Id, x.RateCode, x.QuoNumber, x.ClientName, x.ClientAccountId, x.IdtraNumber,
+                x.PolName, x.PoeName, x.PodName, shipmentMode = x.ShipmentMode.ToString(),
+                status = "AcceptedByClient"
+            }).ToArrayAsync(cancellationToken);
+        return Results.Ok(new { items = rows });
+    }
+
+    private static async Task<IResult> GetOperationsQuoteAsync(
+        Guid rateId, ServiceDbContext db, IQueryDispatcher dispatcher, CancellationToken cancellationToken)
+    {
+        if (!await OperationsAcceptedQuotes(db).AnyAsync(x => x.Id == rateId, cancellationToken))
+            return Results.NotFound();
+        var result = await dispatcher.DispatchAsync(new GetRateByIdQuery(rateId), cancellationToken);
+        if (result.IsFailure) return Results.NotFound();
+        var rate = result.Value;
+        // Explicit allowlist: no prices, margins, rate details, financial terms or attachments.
+        if (rate.Status != "AcceptedByClient" || rate.ClientAccountId is null) return Results.NotFound();
+        return Results.Ok(new {
+            rate.Id, rate.RateCode, rate.QuoNumber, rate.ClientName, rate.ClientAccountId, rate.IdtraNumber,
+            rate.Status, rate.ShipmentMode, rate.OperationType,
+            rate.PolId, rate.PolCode, rate.PolName, rate.PoeId, rate.PoeCode, rate.PoeName,
+            rate.PodId, rate.PodCode, rate.PodName, rate.IncotermCode, rate.IncotermName,
+            rate.CarrierId, rate.CarrierCode, rate.CarrierName, rate.AgentId, rate.AgentCode, rate.AgentName,
+            rate.WarehouseId, rate.TotalPackages, rate.TotalWeightKg, rate.TotalVolumeCbm,
+            rate.ContainerTypeId, rate.ContainerTypeName, rate.ContainerTypeCode, rate.ContainerQuantity,
+            rate.Containers, rate.Services, rate.CargoLines,
+            rate.InlandPickupLocations, rate.InlandPickupLocation, rate.PickupLocations,
+            rate.PickupAddress, rate.PickupLatitude, rate.PickupLongitude,
+            rate.InlandDeliveryLocations, rate.InlandDeliveryLocation
+        });
     }
 
     private static async Task<IResult> GetRateByIdAsync(

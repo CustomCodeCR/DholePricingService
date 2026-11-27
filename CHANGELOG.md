@@ -1,3 +1,7 @@
+## [1.35.0] - 2026-11-27
+
+- MINOR: lectura dedicada de QUO aceptadas para Operations, con proyección logística explícita sin importes, costos ni márgenes. CABYS acepta scope operativo independiente. Las rutas comerciales conservan autorización original. CI y staging pendientes.
+
 ## [1.34.0] - 2026-11-26
 
 - MINOR: DH-20261126-PRICING-CATEGORY-REPORT. Scope dedicado para exportar las nueve columnas del reporte por categorías; mantiene la protección y el formato detallado del reporte comercial. CI y staging pendientes.
