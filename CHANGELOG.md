@@ -1,3 +1,7 @@
+## [1.35.3] - 2026-11-27
+
+- DH-20261127-PRICING-HOSTED-BUILD: move EF validation, NuGet restore and builds to GitHub-hosted runner; verify commit-tagged image artifacts before local deployment. Retain Dynamics safeguards. CI/staging pending.
+
 ## [1.35.2] - 2026-11-27
 
 - DH-20261127-DYNAMICS-FTL-26-7TON: explicit 26 pies / 7 TON FTL category alias; retain original equipment text, totals and idempotency. Selective promotion; CI and staging pending.
